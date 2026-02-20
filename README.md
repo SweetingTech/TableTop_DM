@@ -1,6 +1,26 @@
 # Headless Multi-Agent AI-Driven VTT Engine
 Production-oriented, headless VTT + RPG engine with deterministic state, append-only event ledger, strict visibility filtering, and multi-agent LLM layer (DM, NPCs, Gods, Factions) that can only propose schema-validated actions.
 
+
+## Implementation Status
+- Current progress: **Phase 0 complete** from `todo.md`.
+- Repository scaffolding initialized:
+  - `infra/`
+  - `services/`
+  - `frontend/`
+  - `docs/`
+- Phase 0 placeholder docs created and tracked:
+  - `docs/SPEC_MASTER.md`
+  - `docs/DATA_MODEL.md`
+  - `docs/STATE_DB_SCHEMA.md`
+  - `docs/LEDGER_SCHEMA.md`
+  - `docs/EVENT_ENVELOPE.md`
+  - `docs/INTERVENTION_CONTRACT.md`
+  - `docs/DOMAIN_TAGS.md`
+  - `docs/SECURITY_VISIBILITY.md`
+  - `docs/CONTENT_RATING.md`
+  - `docs/REPLAY_DEBUG.md`
+
 ## 1) Prime Directives (Non-Negotiable)
 - **LLMs are text engines only.**
   - No dice, no math, no inventory truth, no spatial truth, no direct state mutation.

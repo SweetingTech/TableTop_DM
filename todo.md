@@ -5,20 +5,20 @@ Rule: follow the Mandatory Build Order. No re-architecture. No shortcuts.
 
 ## Phase 0: Repo + Contracts
 ### 0.0 Create repo structure
-- [ ] Create /infra, /services/*, /frontend, /docs
-- [ ] Add README.md (from this repo)
-- [ ] Add TODO.md (this file)
-- [ ] Add /docs placeholders:
-  - [ ] SPEC_MASTER.md
-  - [ ] DATA_MODEL.md
-  - [ ] STATE_DB_SCHEMA.md
-  - [ ] LEDGER_SCHEMA.md
-  - [ ] EVENT_ENVELOPE.md
-  - [ ] INTERVENTION_CONTRACT.md
-  - [ ] DOMAIN_TAGS.md
-  - [ ] SECURITY_VISIBILITY.md
-  - [ ] CONTENT_RATING.md
-  - [ ] REPLAY_DEBUG.md
+- [x] Create /infra, /services/*, /frontend, /docs
+- [x] Add README.md (from this repo)
+- [x] Add TODO.md (this file)
+- [x] Add /docs placeholders:
+  - [x] SPEC_MASTER.md
+  - [x] DATA_MODEL.md
+  - [x] STATE_DB_SCHEMA.md
+  - [x] LEDGER_SCHEMA.md
+  - [x] EVENT_ENVELOPE.md
+  - [x] INTERVENTION_CONTRACT.md
+  - [x] DOMAIN_TAGS.md
+  - [x] SECURITY_VISIBILITY.md
+  - [x] CONTENT_RATING.md
+  - [x] REPLAY_DEBUG.md
 
 Acceptance:
 - Repo boots with no code yet; docs exist; no ambiguity in naming.
