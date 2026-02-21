@@ -6,7 +6,14 @@ from services.mechanics.dice import roll_dice, roll_d20, roll_advantage, roll_di
 from services.mechanics.engine import MechanicsEngine
 from services.spatial.engine import SpatialEngine, GridCell
 from services.domain.content_rating.gate import ContentRatingGate
-from shared.schemas.enums import ContentRating
+from services.domain.karma.router import KarmaRouter, DOMAIN_TAG_WEIGHTS
+from services.domain.divine.system import DivineAPSystem, AuthoritySystem, GrudgeTracker
+from services.domain.social.system import SocialSystem, AmbushPipeline
+from services.domain.factions.system import FactionSystem
+from services.domain.economy.system import EconomySystem
+from services.domain.maps.system import MapSystem
+from services.export.exporter import ReplayEngine
+from shared.schemas.enums import ContentRating, TensionLevel
 import uuid
 
 
@@ -149,6 +156,82 @@ def test_content_rating_hard_block():
     print(f"  content gate HARD_BLOCK: pass")
 
 
+def test_karma_domain_tags():
+    assert "violence" in DOMAIN_TAG_WEIGHTS["damage"]
+    assert "mercy" in DOMAIN_TAG_WEIGHTS["healing"]
+    assert "trickery" in DOMAIN_TAG_WEIGHTS["theft"]
+    print("  karma domain tags: valid")
+
+
+def test_karma_threshold():
+    router = KarmaRouter()
+    t = router._check_threshold(5, 15)
+    assert t == 10
+    t2 = router._check_threshold(5, 8)
+    assert t2 is None
+    print(f"  karma threshold: cross=10, none=None")
+
+
+def test_authority_ranks():
+    auth = AuthoritySystem()
+    assert auth.AUTHORITY_RANKS["ELDER"] > auth.AUTHORITY_RANKS["LESSER"]
+    assert auth.AUTHORITY_RANKS["GREATER"] > auth.AUTHORITY_RANKS["MINOR"]
+    print("  authority ranks: valid hierarchy")
+
+
+def test_social_tension_escalate():
+    social = SocialSystem()
+    result = social.escalate_tension(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.CALM)
+    assert result["success"] == True
+    assert result["new"] == TensionLevel.SUSPICIOUS.value
+    print(f"  tension escalate: CALM -> {result['new']}")
+
+
+def test_social_tension_deescalate():
+    social = SocialSystem()
+    result = social.deescalate_tension(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.HOSTILE)
+    assert result["success"] == True
+    print(f"  tension deescalate: HOSTILE -> {result['new']}")
+
+
+def test_social_tension_max():
+    social = SocialSystem()
+    result = social.escalate_tension(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.COMBAT)
+    assert result["success"] == False
+    print("  tension max: cannot escalate past COMBAT")
+
+
+def test_ambush_pipeline():
+    pipeline = AmbushPipeline()
+    targets = [
+        {"entity_id": uuid.uuid4(), "name": "Guard", "perception_modifier": 2},
+        {"entity_id": uuid.uuid4(), "name": "Merchant", "perception_modifier": -1},
+    ]
+    result = pipeline.resolve_stealth(uuid.uuid4(), 5, targets)
+    assert "surprised" in result
+    assert "aware" in result
+    assert len(result["surprised"]) + len(result["aware"]) == 2
+    print(f"  ambush: surprised={len(result['surprised'])}, aware={len(result['aware'])}")
+
+
+def test_content_rating_mature():
+    gate = ContentRatingGate(ContentRating.MATURE)
+    ok = gate.check_content("The warrior strikes with explosive force")
+    assert ok["allowed"] == True
+    mature_ok = gate.check_content("gruesome torture scene")
+    assert mature_ok["allowed"] == True
+    print("  content gate MATURE: allows mature content")
+
+
+def test_content_rating_filter_llm():
+    gate = ContentRatingGate(ContentRating.SAFE)
+    result = gate.filter_llm_output("A gruesome torture scene unfolds")
+    assert result["filtered"] == True
+    result2 = gate.filter_llm_output("The knight raises his sword")
+    assert result2["filtered"] == False
+    print("  content LLM filter: pass")
+
+
 if __name__ == "__main__":
     tests = [
         ("Dice Roll", test_dice_roll),
@@ -165,6 +248,15 @@ if __name__ == "__main__":
         ("Spatial Threat Radius", test_spatial_threat),
         ("Content Rating SAFE", test_content_rating_safe),
         ("Content Rating Hard Block", test_content_rating_hard_block),
+        ("Karma Domain Tags", test_karma_domain_tags),
+        ("Karma Threshold", test_karma_threshold),
+        ("Authority Ranks", test_authority_ranks),
+        ("Social Tension Escalate", test_social_tension_escalate),
+        ("Social Tension Deescalate", test_social_tension_deescalate),
+        ("Social Tension Max", test_social_tension_max),
+        ("Ambush Pipeline", test_ambush_pipeline),
+        ("Content Rating MATURE", test_content_rating_mature),
+        ("Content LLM Filter", test_content_rating_filter_llm),
     ]
 
     passed = 0

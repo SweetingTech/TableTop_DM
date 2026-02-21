@@ -8,7 +8,7 @@ import psycopg2
 import psycopg2.extras
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "tabletop-dm-dev-key")
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 
