@@ -32,7 +32,7 @@ for migration in "$ROOT_DIR"/infra/sql/migrations/*.sql; do
   [[ -e "$migration" ]] || continue
 
   version="$(basename "$migration")"
-  checksum="$(sha256sum "$migration" | awk '{print $1}')"
+  checksum="$(sha256sum "$migration" | cut -d ' ' -f 1)"
 
   applied_checksum=$(docker compose exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
     -c "SELECT checksum FROM infra_meta.schema_migrations WHERE version = '$version';")
