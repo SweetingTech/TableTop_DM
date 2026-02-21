@@ -24,6 +24,13 @@ for i in {1..60}; do
   sleep 2
 done
 
+if ! docker inspect -f '{{.State.Health.Status}}' tabletop_postgres 2>/dev/null | grep -q healthy \
+  || ! docker inspect -f '{{.State.Health.Status}}' tabletop_redis 2>/dev/null | grep -q healthy \
+  || ! docker inspect -f '{{.State.Health.Status}}' tabletop_qdrant 2>/dev/null | grep -q healthy; then
+  echo "Error: One or more containers did not become healthy within the expected time." >&2
+  exit 1
+fi
+
 echo "Postgres check..."
 docker compose -f "$COMPOSE_FILE" exec -T postgres sh -lc 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 

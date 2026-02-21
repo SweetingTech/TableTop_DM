@@ -25,10 +25,9 @@ def integration_stack() -> Iterator[None]:
         example = ROOT / ".env.example"
         env_path.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
 
-    _run(["docker", "compose", "-f", str(COMPOSE_FILE), "up", "-d"])
-    _run(["bash", "-lc", "./infra/scripts/db_reset.sh"])
-    _run(["bash", "-lc", "./infra/scripts/migrate.sh"])
-    _run(["bash", "-lc", "./infra/scripts/seed_demo.sh"])
+    _run(["bash", str(ROOT / "infra/scripts/db_reset.sh")])
+    _run(["bash", str(ROOT / "infra/scripts/migrate.sh")])
+    _run(["bash", str(ROOT / "infra/scripts/seed_demo.sh")])
 
     try:
         yield

@@ -88,7 +88,10 @@ def test_event_envelope_rejects_empty_visibility() -> None:
     }
 
     validator = jsonschema.Draft202012Validator(schema)
-    errors = sorted(
-        validator.iter_errors(invalid_envelope), key=lambda error: error.path
+    errors = list(validator.iter_errors(invalid_envelope))
+
+    assert any(
+        list(error.path) == ["visibility", "visible_to"]
+        and error.validator == "minItems"
+        for error in errors
     )
-    assert any("should be non-empty" in error.message for error in errors)
