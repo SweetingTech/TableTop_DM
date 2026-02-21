@@ -1,7 +1,7 @@
 import os
 import json
 import uuid
-from typing import Optional
+from typing import Any, Optional
 from openai import OpenAI
 
 from shared.schemas.events import EventEnvelope
@@ -35,7 +35,7 @@ class LLMAdapter:
             {"role": "user", "content": user_prompt},
         ]
 
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
@@ -58,6 +58,8 @@ class LLMAdapter:
             try:
                 response = self.client.chat.completions.create(**kwargs)
                 content = response.choices[0].message.content
+                if not content:
+                    raise json.JSONDecodeError("Empty response", "", 0)
                 parsed = json.loads(content)
                 return parsed
             except json.JSONDecodeError:
