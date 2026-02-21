@@ -8,6 +8,7 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 - 3 SQL migrations applied with checksum tracking
 - Demo campaign "Eclipse Keep" seeded with sample entities, encounters, and combat data
 - Flask web dashboard + game console frontend on port 5000
+- Docker Compose support (Dockerfile, docker-compose.yml, entrypoint with auto-migrate/seed)
 - Full mechanics engine (dice, HP, conditions, attacks, saves)
 - Spatial engine (A* pathfinding, line-of-sight, movement validation)
 - Orchestrator pipeline (validation, auth, tool execution, ledger append)

@@ -8,7 +8,7 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 0 | Repo structure + contracts/specs | Done |
-| 1 | Infrastructure (PostgreSQL via Replit) | Done |
+| 1 | Infrastructure (PostgreSQL via Docker Compose or Replit) | Done |
 | 2 | Data model + schemas (state, ledger, security) | Done |
 | 3 | Event envelope + intervention contracts | Done |
 | 4 | Migrations + seed data (Eclipse Keep demo) | Done |
@@ -31,18 +31,48 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 
 
 ## Quickstart
+
+### Option A: Docker Compose (recommended for local development)
+```bash
+cp .env.example .env        # edit values as needed
+docker compose up --build   # starts Postgres + app
+```
+On first boot the entrypoint automatically:
+1. Waits for Postgres to be healthy
+2. Runs all SQL migrations (`infra/sql/migrations/`)
+3. Seeds the "Eclipse Keep" demo campaign (`infra/sql/seed/`)
+
+Once running:
+- **Dashboard:** `http://localhost:5000/`
+- **Game Console:** `http://localhost:5000/game`
+- **Tests:** `docker compose exec app python tests/test_mechanics.py`
+
+To stop: `docker compose down` (add `-v` to also wipe the database volume).
+
+### Option B: Replit
+The project runs on Replit out of the box. The built-in PostgreSQL database is automatically available via `DATABASE_URL`, and migrations/seeds are already applied.
 ```bash
 python app.py
 ```
-This starts the Flask + SocketIO server on port 5000. The database (Replit built-in PostgreSQL) is automatically available via `DATABASE_URL`.
 
+### Option C: Manual (no Docker)
+Requires Python 3.11+ and a running Postgres instance.
+```bash
+pip install -r pyproject.toml   # or: uv pip install -r pyproject.toml
+export DATABASE_URL=postgresql://user:pass@localhost:5432/tabletop_dm
+python infra/migrate.py         # apply migrations
+python infra/seed.py            # seed demo data
+python app.py                   # start server on port 5000
+```
+
+All options provide the same endpoints:
 - **Dashboard:** `http://localhost:5000/` — view campaigns, entities, encounters, maps, schema
 - **Game Console:** `http://localhost:5000/game` — interactive game interface with event feed, commands, map viewer
 - **Tests:** `python tests/test_mechanics.py` — runs 23 unit tests
 
 
 ## Database
-Uses Replit's built-in PostgreSQL with three schemas:
+Uses PostgreSQL with three schemas (Replit built-in or Docker Compose):
 - **`state`** — canonical world truth (campaigns, entities, encounters, maps, factions, economy, etc.)
 - **`ledger`** — append-only event log with `visible_to[]` principal filtering
 - **`infra_meta`** — migration tracking with SHA-256 checksums
