@@ -30,9 +30,9 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 - `make seed-demo`
 - `./infra/scripts/phase2_verify_schema.sh`
 
-Postgres auto-loads SQL init scripts from `infra/sql/init/` on first boot to create `state` and `ledger` schemas plus visibility RLS policies.
+Postgres auto-loads SQL init scripts from `infra/sql/init/` on first boot to create `state` and `ledger` schemas plus visibility RLS policies. These init scripts are **only** for Docker Compose first-boot/bootstrap so a fresh dev database starts in a sane state.
 
-Migrations are additionally available through an explicit migration toolchain in `infra/sql/migrations/` with checksum tracking (`infra_meta.schema_migrations`). Demo data for Phase 4.1 lives in `infra/sql/seed/001_demo_campaign.sql`.
+Migrations in `infra/sql/migrations/` are the **source of truth** for all schema definitions and subsequent changes, tracked via checksums in `infra_meta.schema_migrations`. Any schema change must be expressed as a migration; if needed, the init scripts should be regenerated to match the current baseline produced by running all migrations. In the event of any discrepancy between init and migrations, **migrations take precedence**. Demo data for Phase 4.1 lives in `infra/sql/seed/001_demo_campaign.sql`.
 
 ## 1) Prime Directives (Non-Negotiable)
 - **LLMs are text engines only.**

@@ -56,4 +56,5 @@ WHERE id IN (
 )
 ORDER BY entity_type, name;"
 
-echo "\nDemo seed complete."
+echo ""
+echo "Demo seed complete."

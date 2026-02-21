@@ -64,7 +64,8 @@ Every event produced by any service must conform to this envelope. No alternate 
     "sender",
     "payload",
     "visibility",
-    "trace"
+    "trace",
+    "integrity"
   ],
   "properties": {
     "event_id": { "type": "string", "format": "uuid" },
