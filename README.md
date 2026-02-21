@@ -21,6 +21,15 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
   - `docs/CONTENT_RATING.md`
   - `docs/REPLAY_DEBUG.md`
 
+
+## Quickstart (Phase 1 + Phase 2 executable assets)
+- `cp .env.example .env`
+- `./infra/scripts/phase1_up.sh`
+- `./infra/scripts/phase1_healthcheck.sh`
+- `./infra/scripts/phase2_verify_schema.sh`
+
+Postgres auto-loads SQL init scripts from `infra/sql/init/` on first boot to create `state` and `ledger` schemas plus visibility RLS policies.
+
 ## 1) Prime Directives (Non-Negotiable)
 - **LLMs are text engines only.**
   - No dice, no math, no inventory truth, no spatial truth, no direct state mutation.
