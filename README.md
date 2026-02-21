@@ -30,46 +30,73 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 | 20 | Observability + CI/testing (23 unit tests) | Done |
 
 
+## Canonical Run Commands
+
+Use these commands everywhere (local + CI) so behavior stays deterministic:
+
+| Task | Canonical command |
+|---|---|
+| Install deps | `make install` |
+| Lint | `make lint` |
+| Typecheck | `make typecheck` |
+| Unit tests | `make unit` |
+| Contract tests | `make contracts` |
+| Integration tests | `make integration` |
+| Build image | `make build` |
+| Start stack (dev) | `make start` |
+| Stop stack | `make stop` |
+| Full CI gate locally | `make ci` |
+
 ## Quickstart
 
-### Option A: Docker Compose (recommended for local development)
+1. Copy environment defaults and adjust if needed:
 ```bash
-cp .env.example .env        # edit values as needed
-docker compose up --build   # starts Postgres + app
+cp .env.example .env
 ```
-On first boot the entrypoint automatically:
-1. Waits for Postgres to be healthy
-2. Runs all SQL migrations (`infra/sql/migrations/`)
-3. Seeds the "Eclipse Keep" demo campaign (`infra/sql/seed/`)
-
-Once running:
-- **Dashboard:** `http://localhost:5000/`
-- **Game Console:** `http://localhost:5000/game`
-- **Tests:** `docker compose exec app pytest tests`
-
-To stop: `docker compose down` (add `-v` to also wipe the database volume).
-
-### Option B: Replit
-The project runs on Replit out of the box. The built-in PostgreSQL database is automatically available via `DATABASE_URL`, and migrations/seeds are already applied.
+2. Start the full stack (Postgres/Redis/Qdrant + migrations + seed + app):
 ```bash
-python app.py
+make start
+```
+3. Open:
+   - Dashboard: `http://localhost:5000/`
+   - Game UI: `http://localhost:5000/game`
+4. Stop everything:
+```bash
+make stop
 ```
 
-### Option C: Manual (no Docker)
-Requires Python 3.11+ and a running Postgres instance.
+### Hello Session Scenario
+
+After `make start`:
+
 ```bash
-pip install -r pyproject.toml   # or: uv pip install -r pyproject.toml
-export DATABASE_URL=postgresql://user:pass@localhost:5432/tabletop_dm
-python infra/migrate.py         # apply migrations
-python infra/seed.py            # seed demo data
-python app.py                   # start server on port 5000
+# health check
+curl -s http://localhost:5000/api/health
+
+# list campaigns (seed provides Eclipse Keep)
+curl -s http://localhost:5000/api/campaigns
+
+# deterministic mechanics call
+curl -s -X POST http://localhost:5000/api/dice/roll \
+  -H "Content-Type: application/json" \
+  -d '{"dice":"1d20","modifier":2}'
 ```
 
-All options provide the same endpoints:
-- **Dashboard:** `http://localhost:5000/` — view campaigns, entities, encounters, maps, schema
-- **Game Console:** `http://localhost:5000/game` — interactive game interface with event feed, commands, map viewer
-- **Tests:** `pytest tests` — runs 23 unit tests
+If you need foreground execution for local debugging, run:
+```bash
+RUN_FOREGROUND=1 bash scripts/start.sh
+```
 
+## Environment Variables
+
+Defaults are in `.env.example`:
+
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`
+- `DATABASE_URL`
+- `REDIS_PASSWORD`, `REDIS_PORT`
+- `QDRANT_HTTP_PORT`, `QDRANT_GRPC_PORT`
+- `OPENAI_API_KEY` (optional for local non-LLM flows)
+- `CONTENT_MODE` (`SAFE`, `MATURE`, `EXPLICIT`)
 
 ## Database
 Uses PostgreSQL with three schemas (Replit built-in or Docker Compose):
