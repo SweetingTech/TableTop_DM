@@ -130,7 +130,7 @@ Acceptance:
 - `make migrate` or equivalent fully bootstraps DB from scratch.
 
 ### 4.1 Seed a demo campaign
-- [x] Create campaign + session
+- [x] Create campaign (session tracking is a uuid reference; no sessions table yet)
 - [x] Create principals: DM, PlayerA, PlayerB, God1, NPCAgent
 - [x] Create entities: 2 PCs, 1 NPC, 1 map room
 - [x] Create an encounter template for testing

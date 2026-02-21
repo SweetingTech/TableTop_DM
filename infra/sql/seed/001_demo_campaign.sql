@@ -130,6 +130,8 @@ ON CONFLICT (map_id, tier, x, y) DO UPDATE
 SET collision_mask = EXCLUDED.collision_mask,
     terrain = EXCLUDED.terrain;
 
+-- NOTE: session_id is a logical UUID reference. There is no state.sessions table or FK constraint
+-- yet; session tracking is planned for a future phase. The value below is a stable demo identifier.
 INSERT INTO state.encounters (id, session_id, campaign_id, status, round_number, active_slot)
 VALUES (
   '55555555-5555-5555-5555-555555555551',
