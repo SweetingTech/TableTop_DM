@@ -93,7 +93,8 @@ def index():
     cur.close()
     conn.close()
 
-    return render_template("index.html",
+    return render_template(
+        "index.html",
         campaigns=campaigns,
         principals=principals,
         entities=entities,
@@ -129,6 +130,7 @@ def health():
 @app.route("/api/campaigns")
 def api_campaigns():
     from shared.db.connection import execute_query
+
     rows = execute_query("SELECT * FROM state.campaigns ORDER BY created_at DESC")
     return jsonify([_serialize(r) for r in rows])
 
@@ -136,6 +138,7 @@ def api_campaigns():
 @app.route("/api/campaigns/<campaign_id>")
 def api_campaign(campaign_id):
     from shared.db.connection import execute_one
+
     row = execute_one("SELECT * FROM state.campaigns WHERE id = %s", (campaign_id,))
     if not row:
         return jsonify({"error": "Not found"}), 404
@@ -145,21 +148,29 @@ def api_campaign(campaign_id):
 @app.route("/api/campaigns/<campaign_id>/entities")
 def api_entities(campaign_id):
     from shared.db.connection import execute_query
-    rows = execute_query("""
+
+    rows = execute_query(
+        """
         SELECT e.*, p.display_name as controller_name
         FROM state.entities e
         LEFT JOIN state.principals p ON e.controller_principal_id = p.id
         WHERE e.campaign_id = %s ORDER BY e.entity_type, e.name
-    """, (campaign_id,))
+    """,
+        (campaign_id,),
+    )
     return jsonify([_serialize(r) for r in rows])
 
 
 @app.route("/api/campaigns/<campaign_id>/encounters")
 def api_encounters(campaign_id):
     from shared.db.connection import execute_query
-    rows = execute_query("""
+
+    rows = execute_query(
+        """
         SELECT * FROM state.encounters WHERE campaign_id = %s ORDER BY created_at DESC
-    """, (campaign_id,))
+    """,
+        (campaign_id,),
+    )
     return jsonify([_serialize(r) for r in rows])
 
 
@@ -167,6 +178,7 @@ def api_encounters(campaign_id):
 def api_campaign_mode(campaign_id):
     from services.orchestrator.state_machine import StateMachine
     from shared.schemas.enums import GameMode
+
     sm = StateMachine()
 
     if request.method == "GET":
@@ -182,6 +194,7 @@ def api_campaign_mode(campaign_id):
 @app.route("/api/campaigns/<campaign_id>/maps")
 def api_maps(campaign_id):
     from shared.db.connection import execute_query
+
     rows = execute_query(
         "SELECT * FROM state.maps WHERE campaign_id = %s", (campaign_id,)
     )
@@ -191,6 +204,7 @@ def api_maps(campaign_id):
 @app.route("/api/maps/<map_id>")
 def api_map_detail(map_id):
     from services.domain.maps.system import MapSystem
+
     ms = MapSystem()
     data = ms.get_map_data(uuid.UUID(map_id))
     return jsonify(_serialize(data))
@@ -209,8 +223,12 @@ def api_propose():
             params=data.get("params", {}),
             proposer_principal_id=uuid.UUID(data["principal_id"]),
             campaign_id=uuid.UUID(data["campaign_id"]),
-            session_id=uuid.UUID(data.get("session_id", "66666666-6666-6666-6666-666666666661")),
-            encounter_id=uuid.UUID(data["encounter_id"]) if data.get("encounter_id") else None,
+            session_id=uuid.UUID(
+                data.get("session_id", "66666666-6666-6666-6666-666666666661")
+            ),
+            encounter_id=uuid.UUID(data["encounter_id"])
+            if data.get("encounter_id")
+            else None,
             idempotency_key=data.get("idempotency_key"),
             domain_tags=data.get("domain_tags", []),
         )
@@ -235,6 +253,7 @@ def api_propose():
 def api_roll_dice():
     data = request.get_json()
     from services.mechanics.dice import roll_dice
+
     try:
         result = roll_dice(data["notation"], data.get("modifier", 0))
         return jsonify(result.model_dump())
@@ -245,6 +264,7 @@ def api_roll_dice():
 @app.route("/api/encounters/<encounter_id>/advance", methods=["POST"])
 def api_advance_turn(encounter_id):
     from services.orchestrator.state_machine import StateMachine
+
     sm = StateMachine()
     result = sm.advance_turn(uuid.UUID(encounter_id))
     socketio.emit("turn_advanced", result, room="encounter_" + encounter_id)
@@ -254,6 +274,7 @@ def api_advance_turn(encounter_id):
 @app.route("/api/encounters/<encounter_id>/slots")
 def api_encounter_slots(encounter_id):
     from services.orchestrator.state_machine import StateMachine
+
     sm = StateMachine()
     slots = sm.get_encounter_slots(uuid.UUID(encounter_id))
     return jsonify([_serialize(s) for s in slots])
@@ -264,23 +285,33 @@ def api_chat():
     data = request.get_json()
     try:
         from services.conversations.manager import ConversationManager
+
         cm = ConversationManager()
         events = cm.handle_proximity_chat(
             campaign_id=uuid.UUID(data["campaign_id"]),
-            session_id=uuid.UUID(data.get("session_id", "66666666-6666-6666-6666-666666666661")),
+            session_id=uuid.UUID(
+                data.get("session_id", "66666666-6666-6666-6666-666666666661")
+            ),
             speaker_entity_id=uuid.UUID(data["speaker_entity_id"]),
             speaker_principal_id=uuid.UUID(data["speaker_principal_id"]),
             message=data["message"],
-            target_entity_id=uuid.UUID(data["target_entity_id"]) if data.get("target_entity_id") else None,
+            target_entity_id=uuid.UUID(data["target_entity_id"])
+            if data.get("target_entity_id")
+            else None,
         )
 
         from services.ledger.writer import LedgerWriter
+
         ledger = LedgerWriter()
         results = []
         for event in events:
             r = ledger.append_event(event)
             results.append(r)
-            socketio.emit("game_event", _serialize(event.model_dump()), room=str(data["campaign_id"]))
+            socketio.emit(
+                "game_event",
+                _serialize(event.model_dump()),
+                room=str(data["campaign_id"]),
+            )
 
         return jsonify({"events_created": len(results), "results": results})
     except Exception as e:
@@ -292,6 +323,7 @@ def api_narrate():
     data = request.get_json()
     try:
         from services.llm.adapter import DMNarrationAgent
+
         dm = DMNarrationAgent()
         narration = dm.narrate_event(
             tool_result=data.get("event_data", {}),
@@ -307,6 +339,7 @@ def api_content_check():
     data = request.get_json()
     from services.domain.content_rating.gate import ContentRatingGate
     from shared.schemas.enums import ContentRating
+
     rating = ContentRating(data.get("rating", "SAFE"))
     gate = ContentRatingGate(rating)
     result = gate.check_content(data.get("text", ""))
@@ -321,13 +354,19 @@ def api_export(session_id):
         return jsonify({"error": "principal_id and campaign_id required"}), 400
 
     from services.export.exporter import SessionExporter
+
     exporter = SessionExporter()
     try:
         md = exporter.export_to_markdown(
             uuid.UUID(session_id), uuid.UUID(principal_id), uuid.UUID(campaign_id)
         )
-        return Response(md, mimetype="text/markdown",
-                        headers={"Content-Disposition": f"attachment; filename=session_{session_id}.md"})
+        return Response(
+            md,
+            mimetype="text/markdown",
+            headers={
+                "Content-Disposition": f"attachment; filename=session_{session_id}.md"
+            },
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -364,8 +403,12 @@ def handle_submit_intent(data):
             params=data.get("params", {}),
             proposer_principal_id=uuid.UUID(data["principal_id"]),
             campaign_id=uuid.UUID(data["campaign_id"]),
-            session_id=uuid.UUID(data.get("session_id", "66666666-6666-6666-6666-666666666661")),
-            encounter_id=uuid.UUID(data["encounter_id"]) if data.get("encounter_id") else None,
+            session_id=uuid.UUID(
+                data.get("session_id", "66666666-6666-6666-6666-666666666661")
+            ),
+            encounter_id=uuid.UUID(data["encounter_id"])
+            if data.get("encounter_id")
+            else None,
             idempotency_key=data.get("idempotency_key"),
         )
 

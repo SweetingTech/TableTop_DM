@@ -18,7 +18,6 @@ class GridCell:
 
 
 class SpatialEngine:
-
     def __init__(self):
         self._grids: dict[str, dict[tuple[int, int], GridCell]] = {}
 
@@ -29,19 +28,24 @@ class SpatialEngine:
             collision = cell.get("collision_mask", "0" * 16)
             walkable = collision[0] == "0" if isinstance(collision, str) else True
             terrain = cell.get("terrain", {})
-            difficult = terrain.get("difficult", False) if isinstance(terrain, dict) else False
+            difficult = (
+                terrain.get("difficult", False) if isinstance(terrain, dict) else False
+            )
             grid[(x, y)] = GridCell(x, y, walkable, difficult)
         self._grids[map_id] = grid
 
     def load_grid_from_db(self, map_id: str) -> None:
         from shared.db.connection import execute_query, execute_one
-        map_row = execute_one("SELECT width, height FROM state.maps WHERE id = %s", (map_id,))
+
+        map_row = execute_one(
+            "SELECT width, height FROM state.maps WHERE id = %s", (map_id,)
+        )
         if not map_row:
             return
 
         nodes = execute_query(
             "SELECT x, y, collision_mask, terrain FROM state.map_nodes WHERE map_id = %s",
-            (map_id,)
+            (map_id,),
         )
 
         cells = []
@@ -51,18 +55,23 @@ class SpatialEngine:
                 mask_str = format(int.from_bytes(bytes(mask), "big"), "016b")
             else:
                 mask_str = str(mask)
-            cells.append({
-                "x": n["x"], "y": n["y"],
-                "collision_mask": mask_str,
-                "terrain": n["terrain"],
-            })
+            cells.append(
+                {
+                    "x": n["x"],
+                    "y": n["y"],
+                    "collision_mask": mask_str,
+                    "terrain": n["terrain"],
+                }
+            )
 
         w, h = map_row["width"], map_row["height"]
         existing = {(c["x"], c["y"]) for c in cells}
         for x in range(w):
             for y in range(h):
                 if (x, y) not in existing:
-                    cells.append({"x": x, "y": y, "collision_mask": "0" * 16, "terrain": {}})
+                    cells.append(
+                        {"x": x, "y": y, "collision_mask": "0" * 16, "terrain": {}}
+                    )
 
         self.load_grid(map_id, cells)
 
@@ -80,8 +89,9 @@ class SpatialEngine:
                 result.append((nx, ny))
         return result
 
-    def compute_path(self, map_id: str, start_x: int, start_y: int,
-                     end_x: int, end_y: int) -> Optional[list[tuple[int, int]]]:
+    def compute_path(
+        self, map_id: str, start_x: int, start_y: int, end_x: int, end_y: int
+    ) -> Optional[list[tuple[int, int]]]:
         grid = self._get_grid(map_id)
         if not grid:
             return None
@@ -125,9 +135,17 @@ class SpatialEngine:
 
         return None
 
-    def move_entity(self, entity_id: uuid.UUID, map_id: str,
-                    from_x: int, from_y: int, to_x: int, to_y: int,
-                    max_speed: int, grid_size: int = 5) -> ToolCallPayload:
+    def move_entity(
+        self,
+        entity_id: uuid.UUID,
+        map_id: str,
+        from_x: int,
+        from_y: int,
+        to_x: int,
+        to_y: int,
+        max_speed: int,
+        grid_size: int = 5,
+    ) -> ToolCallPayload:
         path = self.compute_path(map_id, from_x, from_y, to_x, to_y)
 
         if path is None:
@@ -149,17 +167,27 @@ class SpatialEngine:
             return ToolCallPayload(
                 tool_name="move_entity",
                 arguments={"entity_id": str(entity_id), "to_x": to_x, "to_y": to_y},
-                result={"success": False, "reason": f"Path cost {total_cost}ft exceeds speed {max_distance}ft"},
+                result={
+                    "success": False,
+                    "reason": f"Path cost {total_cost}ft exceeds speed {max_distance}ft",
+                },
                 deltas=[],
             )
 
-        deltas = [StateDelta(
-            table="state.entity_positions",
-            operation="UPDATE",
-            entity_id=entity_id,
-            changes={"x": to_x, "y": to_y, "previous_x": from_x, "previous_y": from_y},
-            domain_tags=["movement"],
-        )]
+        deltas = [
+            StateDelta(
+                table="state.entity_positions",
+                operation="UPDATE",
+                entity_id=entity_id,
+                changes={
+                    "x": to_x,
+                    "y": to_y,
+                    "previous_x": from_x,
+                    "previous_y": from_y,
+                },
+                domain_tags=["movement"],
+            )
+        ]
 
         return ToolCallPayload(
             tool_name="move_entity",
@@ -173,8 +201,9 @@ class SpatialEngine:
             deltas=deltas,
         )
 
-    def check_line_of_sight(self, map_id: str, x1: int, y1: int,
-                            x2: int, y2: int) -> dict:
+    def check_line_of_sight(
+        self, map_id: str, x1: int, y1: int, x2: int, y2: int
+    ) -> dict:
         grid = self._get_grid(map_id)
         if not grid:
             return {"clear": False, "reason": "no_grid"}
@@ -213,8 +242,14 @@ class SpatialEngine:
             "distance": math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2),
         }
 
-    def check_threat_radius(self, map_id: str, entity_x: int, entity_y: int,
-                            trigger_x: int, trigger_y: int,
-                            radius: int = 1) -> bool:
+    def check_threat_radius(
+        self,
+        map_id: str,
+        entity_x: int,
+        entity_y: int,
+        trigger_x: int,
+        trigger_y: int,
+        radius: int = 1,
+    ) -> bool:
         distance = abs(entity_x - trigger_x) + abs(entity_y - trigger_y)
         return distance <= radius

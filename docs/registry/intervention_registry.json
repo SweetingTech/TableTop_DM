@@ -1,0 +1,20 @@
+{
+  "contract_version": 1,
+  "actions": {
+    "MOVE": {"params": ["entity_id", "destination_x", "destination_y"], "tool": "move_entity", "ap_cost": 1, "visibility": "party"},
+    "ATTACK": {"params": ["attacker_id", "target_id", "weapon"], "tool": "resolve_attack", "ap_cost": 1, "visibility": "encounter"},
+    "CAST_SPELL": {"params": ["caster_id", "spell_name", "target_id", "target_x", "target_y"], "tool": "resolve_spell", "ap_cost": 1, "visibility": "encounter"},
+    "USE_ITEM": {"params": ["user_id", "item_id", "target_id"], "tool": "modify_inventory", "ap_cost": 1, "visibility": "party"},
+    "TALK": {"params": ["speaker_id", "target_id", "message"], "tool": "social_interaction", "ap_cost": 0, "visibility": "proximity"},
+    "END_TURN": {"params": ["entity_id"], "tool": "end_turn", "ap_cost": 0, "visibility": "encounter"},
+    "OPPORTUNITY_ATTACK": {"params": ["attacker_id", "target_id", "weapon"], "tool": "resolve_attack", "ap_cost": 0, "visibility": "encounter"},
+    "DIVINE_BLESS": {"params": ["god_entity_id", "target_entity_id", "blessing_type", "magnitude"], "tool": "apply_divine_effect", "ap_cost": 2, "visibility": "gods_only"},
+    "DIVINE_CURSE": {"params": ["god_entity_id", "target_entity_id", "curse_type", "magnitude"], "tool": "apply_divine_effect", "ap_cost": 3, "visibility": "gods_only"},
+    "APPLY_CONDITION": {"params": ["entity_id", "condition", "duration_rounds", "source"], "tool": "apply_condition", "ap_cost": 0, "visibility": "encounter"},
+    "REMOVE_CONDITION": {"params": ["entity_id", "condition"], "tool": "remove_condition", "ap_cost": 0, "visibility": "encounter"},
+    "MODIFY_INVENTORY": {"params": ["entity_id", "item_id", "quantity_delta"], "tool": "modify_inventory", "ap_cost": 0, "visibility": "party"},
+    "SET_MODE": {"params": ["campaign_id", "new_mode"], "tool": "set_game_mode", "ap_cost": 0, "visibility": "all"},
+    "REVOKE_SPELL_ACCESS": {"params": ["entity_id", "spell_name", "reason"], "tool": "revoke_spell", "ap_cost": 1, "visibility": "gods_only"},
+    "SET_BOUNTY": {"params": ["target_entity_id", "amount", "faction_id", "reason"], "tool": "set_bounty", "ap_cost": 0, "visibility": "all"}
+  }
+}

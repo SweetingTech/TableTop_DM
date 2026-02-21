@@ -210,3 +210,12 @@ __marimo__/
 .pythonlibs/
 .cache/
 .local/
+
+# CI/CD and local artifact outputs
+artifacts/
+*.tar
+
+# Common local editor metadata
+.vscode/
+.idea/
+.DS_Store

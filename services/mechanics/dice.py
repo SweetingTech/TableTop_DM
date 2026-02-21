@@ -1,6 +1,5 @@
 import os
 import re
-import struct
 from shared.schemas.events import RollResult
 
 

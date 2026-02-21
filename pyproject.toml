@@ -12,3 +12,14 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "pydantic>=2.12.5",
 ]
+
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers --disable-warnings"
+testpaths = ["tests"]
+markers = [
+  "unit: fast deterministic unit tests",
+  "contracts: schema/contract tests (jsonschema/pydantic consistency)",
+  "integration: tests requiring docker compose dependencies",
+  "slow: long-running tests",
+]

@@ -1,20 +1,20 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from services.mechanics.dice import roll_dice, roll_d20, roll_advantage, roll_disadvantage
+from services.mechanics.dice import (
+    roll_dice,
+    roll_d20,
+    roll_advantage,
+    roll_disadvantage,
+)
 from services.mechanics.engine import MechanicsEngine
-from services.spatial.engine import SpatialEngine, GridCell
+from services.spatial.engine import SpatialEngine
 from services.domain.content_rating.gate import ContentRatingGate
 from services.domain.karma.router import KarmaRouter, DOMAIN_TAG_WEIGHTS
-from services.domain.divine.system import DivineAPSystem, AuthoritySystem, GrudgeTracker
+from services.domain.divine.system import AuthoritySystem
 from services.domain.social.system import SocialSystem, AmbushPipeline
-from services.domain.factions.system import FactionSystem
-from services.domain.economy.system import EconomySystem
-from services.domain.maps.system import MapSystem
-from services.export.exporter import ReplayEngine
 from shared.schemas.enums import ContentRating, TensionLevel
 import uuid
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 def test_dice_roll():
@@ -55,7 +55,7 @@ def test_update_hp():
     eid = uuid.uuid4()
     result = engine.update_hp(eid, -5, 20, 20, "test")
     assert result.result["hp_current"] == 15
-    assert result.result["is_down"] == False
+    assert not result.result["is_down"]
     print(f"  update_hp: {result.result}")
 
 
@@ -64,7 +64,7 @@ def test_update_hp_clamp():
     eid = uuid.uuid4()
     result = engine.update_hp(eid, -100, 20, 20, "overkill")
     assert result.result["hp_current"] == 0
-    assert result.result["is_down"] == True
+    assert result.result["is_down"]
     print(f"  update_hp clamp: {result.result}")
 
 
@@ -80,8 +80,9 @@ def test_resolve_attack():
     engine = MechanicsEngine()
     aid = uuid.uuid4()
     tid = uuid.uuid4()
-    result = engine.resolve_attack(aid, tid, 5, 15, "1d8", 3, "longsword",
-                                   target_hp=20, target_max_hp=20)
+    result = engine.resolve_attack(
+        aid, tid, 5, 15, "1d8", 3, "longsword", target_hp=20, target_max_hp=20
+    )
     print(f"  attack: hits={result.result['hits']}, damage={result.result['damage']}")
     assert isinstance(result.result["hits"], bool)
 
@@ -89,9 +90,20 @@ def test_resolve_attack():
 def test_resolve_save():
     engine = MechanicsEngine()
     eid = uuid.uuid4()
-    result = engine.resolve_save(eid, 3, 15, "DEX", "PRONE", "2d6",
-                                  half_on_save=True, entity_hp=20, entity_max_hp=20)
-    print(f"  save: success={result.result['success']}, damage={result.result['damage']}")
+    result = engine.resolve_save(
+        eid,
+        3,
+        15,
+        "DEX",
+        "PRONE",
+        "2d6",
+        half_on_save=True,
+        entity_hp=20,
+        entity_max_hp=20,
+    )
+    print(
+        f"  save: success={result.result['success']}, damage={result.result['damage']}"
+    )
 
 
 def test_spatial_pathfinding():
@@ -100,9 +112,14 @@ def test_spatial_pathfinding():
     for x in range(5):
         for y in range(5):
             walkable = not (x == 2 and y in (1, 2, 3))
-            cells.append({"x": x, "y": y,
-                          "collision_mask": "0" * 16 if walkable else "1" + "0" * 15,
-                          "terrain": {}})
+            cells.append(
+                {
+                    "x": x,
+                    "y": y,
+                    "collision_mask": "0" * 16 if walkable else "1" + "0" * 15,
+                    "terrain": {},
+                }
+            )
     engine.load_grid("test_map", cells)
 
     path = engine.compute_path("test_map", 0, 2, 4, 2)
@@ -119,9 +136,14 @@ def test_spatial_los():
     for x in range(5):
         for y in range(5):
             walkable = not (x == 2 and y == 2)
-            cells.append({"x": x, "y": y,
-                          "collision_mask": "0" * 16 if walkable else "1" + "0" * 15,
-                          "terrain": {}})
+            cells.append(
+                {
+                    "x": x,
+                    "y": y,
+                    "collision_mask": "0" * 16 if walkable else "1" + "0" * 15,
+                    "terrain": {},
+                }
+            )
     engine.load_grid("los_map", cells)
 
     los_clear = engine.check_line_of_sight("los_map", 0, 0, 4, 4)
@@ -133,27 +155,27 @@ def test_spatial_los():
 
 def test_spatial_threat():
     engine = SpatialEngine()
-    assert engine.check_threat_radius("m", 5, 5, 5, 6, radius=1) == True
-    assert engine.check_threat_radius("m", 5, 5, 7, 7, radius=1) == False
+    assert engine.check_threat_radius("m", 5, 5, 5, 6, radius=1)
+    assert not engine.check_threat_radius("m", 5, 5, 7, 7, radius=1)
     print("  threat radius: passed")
 
 
 def test_content_rating_safe():
     gate = ContentRatingGate(ContentRating.SAFE)
     ok = gate.check_content("The knight raises his sword")
-    assert ok["allowed"] == True
+    assert ok["allowed"]
 
     blocked = gate.check_content("gruesome torture scene")
-    assert blocked["allowed"] == False
-    print(f"  content gate SAFE: pass")
+    assert not blocked["allowed"]
+    print("  content gate SAFE: pass")
 
 
 def test_content_rating_hard_block():
     gate = ContentRatingGate(ContentRating.EXPLICIT)
     blocked = gate.check_content("non-consensual sexual content")
-    assert blocked["allowed"] == False
+    assert not blocked["allowed"]
     assert blocked["category"] == "HARD_BLOCK"
-    print(f"  content gate HARD_BLOCK: pass")
+    print("  content gate HARD_BLOCK: pass")
 
 
 def test_karma_domain_tags():
@@ -169,7 +191,7 @@ def test_karma_threshold():
     assert t == 10
     t2 = router._check_threshold(5, 8)
     assert t2 is None
-    print(f"  karma threshold: cross=10, none=None")
+    print("  karma threshold: cross=10, none=None")
 
 
 def test_authority_ranks():
@@ -181,23 +203,29 @@ def test_authority_ranks():
 
 def test_social_tension_escalate():
     social = SocialSystem()
-    result = social.escalate_tension(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.CALM)
-    assert result["success"] == True
+    result = social.escalate_tension(
+        uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.CALM
+    )
+    assert result["success"]
     assert result["new"] == TensionLevel.SUSPICIOUS.value
     print(f"  tension escalate: CALM -> {result['new']}")
 
 
 def test_social_tension_deescalate():
     social = SocialSystem()
-    result = social.deescalate_tension(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.HOSTILE)
-    assert result["success"] == True
+    result = social.deescalate_tension(
+        uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.HOSTILE
+    )
+    assert result["success"]
     print(f"  tension deescalate: HOSTILE -> {result['new']}")
 
 
 def test_social_tension_max():
     social = SocialSystem()
-    result = social.escalate_tension(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.COMBAT)
-    assert result["success"] == False
+    result = social.escalate_tension(
+        uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), TensionLevel.COMBAT
+    )
+    assert not result["success"]
     print("  tension max: cannot escalate past COMBAT")
 
 
@@ -211,24 +239,26 @@ def test_ambush_pipeline():
     assert "surprised" in result
     assert "aware" in result
     assert len(result["surprised"]) + len(result["aware"]) == 2
-    print(f"  ambush: surprised={len(result['surprised'])}, aware={len(result['aware'])}")
+    print(
+        f"  ambush: surprised={len(result['surprised'])}, aware={len(result['aware'])}"
+    )
 
 
 def test_content_rating_mature():
     gate = ContentRatingGate(ContentRating.MATURE)
     ok = gate.check_content("The warrior strikes with explosive force")
-    assert ok["allowed"] == True
+    assert ok["allowed"]
     mature_ok = gate.check_content("gruesome torture scene")
-    assert mature_ok["allowed"] == True
+    assert mature_ok["allowed"]
     print("  content gate MATURE: allows mature content")
 
 
 def test_content_rating_filter_llm():
     gate = ContentRatingGate(ContentRating.SAFE)
     result = gate.filter_llm_output("A gruesome torture scene unfolds")
-    assert result["filtered"] == True
+    assert result["filtered"]
     result2 = gate.filter_llm_output("The knight raises his sword")
-    assert result2["filtered"] == False
+    assert not result2["filtered"]
     print("  content LLM filter: pass")
 
 
@@ -270,7 +300,7 @@ if __name__ == "__main__":
             failed += 1
             print(f"  FAIL: {name} - {e}")
 
-    print(f"\n{'='*40}")
+    print(f"\n{'=' * 40}")
     print(f"Results: {passed} passed, {failed} failed out of {len(tests)}")
     if failed > 0:
         exit(1)

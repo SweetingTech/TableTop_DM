@@ -39,7 +39,12 @@ ACTION_REGISTRY = {
     },
     "CAST_SPELL": {
         "params": ["caster_id", "spell_name", "target_id", "target_x", "target_y"],
-        "proposers": [PrincipalType.HUMAN, PrincipalType.AI_DM, PrincipalType.AI_NPC, PrincipalType.AI_GOD],
+        "proposers": [
+            PrincipalType.HUMAN,
+            PrincipalType.AI_DM,
+            PrincipalType.AI_NPC,
+            PrincipalType.AI_GOD,
+        ],
         "committers": [PrincipalType.HUMAN, PrincipalType.AI_DM, PrincipalType.SYSTEM],
         "tool": "resolve_spell",
         "ap_cost": 1,
@@ -144,7 +149,9 @@ ACTION_REGISTRY = {
 }
 
 
-def validate_proposal(proposal: InterventionProposal, principal_type: PrincipalType) -> tuple[bool, str]:
+def validate_proposal(
+    proposal: InterventionProposal, principal_type: PrincipalType
+) -> tuple[bool, str]:
     if proposal.action_type not in ACTION_REGISTRY:
         return False, f"Unknown action_type: {proposal.action_type}"
 
@@ -155,7 +162,12 @@ def validate_proposal(proposal: InterventionProposal, principal_type: PrincipalT
 
     required_params = entry["params"]
     for p in required_params:
-        if p not in proposal.params and p not in ("target_x", "target_y", "target_id", "message"):
+        if p not in proposal.params and p not in (
+            "target_x",
+            "target_y",
+            "target_id",
+            "message",
+        ):
             return False, f"Missing required param: {p}"
 
     return True, "valid"
