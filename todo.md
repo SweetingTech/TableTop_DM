@@ -136,7 +136,7 @@ Acceptance:
 - [x] Create an encounter template for testing
 
 Acceptance:
-- Seed script prints IDs and a ready-to-run test scenario.
+- Seed script prints IDs and a ready-to-run test scenario. (Verified and fixed)
 
 ---
 
