@@ -3,7 +3,7 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 
 
 ## Implementation Status
-- Current progress: **Phase 0 complete** from `todo.md`.
+- Current progress: **Phases 0, 1, and 2 complete** from `todo.md`.
 - Repository scaffolding initialized:
   - `infra/`
   - `services/`
@@ -20,6 +20,19 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
   - `docs/SECURITY_VISIBILITY.md`
   - `docs/CONTENT_RATING.md`
   - `docs/REPLAY_DEBUG.md`
+
+
+## Quickstart (Phase 1 + Phase 2 executable assets)
+- One-command setup:
+  - macOS/Linux: `./setup.sh`
+  - Windows PowerShell: `./setup.ps1`
+- Manual steps (if you want to run each phase separately):
+  - `cp .env.example .env`
+  - `./infra/scripts/phase1_up.sh`
+  - `./infra/scripts/phase1_healthcheck.sh`
+  - `./infra/scripts/phase2_verify_schema.sh`
+
+Postgres auto-loads SQL init scripts from `infra/sql/init/` on first boot to create `state` and `ledger` schemas plus visibility RLS policies.
 
 ## 1) Prime Directives (Non-Negotiable)
 - **LLMs are text engines only.**

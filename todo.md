@@ -27,10 +27,10 @@ Acceptance:
 
 ## Phase 1: Infra (Docker)
 ### 1.0 Docker compose for dependencies
-- [ ] Postgres (State + Ledger; separate schemas or separate DBs)
-- [ ] Redis (pubsub + presence + job queues)
-- [ ] Qdrant (vector DB)
-- [ ] Add env.example with all required vars
+- [x] Postgres (State + Ledger; separate schemas or separate DBs)
+- [x] Redis (pubsub + presence + job queues)
+- [x] Qdrant (vector DB)
+- [x] Add env.example with all required vars
 
 Acceptance:
 - `docker compose up` starts cleanly
@@ -41,47 +41,47 @@ Acceptance:
 
 ## Phase 2: Data Model (Lock semantics before code)
 ### 2.0 Write canonical object definitions
-- [ ] Principal vs Entity rules
-- [ ] Campaign/Session/Encounter hierarchy
-- [ ] Mode state machine rules
-- [ ] Controlled_By handoff semantics
+- [x] Principal vs Entity rules
+- [x] Campaign/Session/Encounter hierarchy
+- [x] Mode state machine rules
+- [x] Controlled_By handoff semantics
 
 Acceptance:
 - DATA_MODEL.md defines every term once.
 
 ### 2.1 State DB schema spec
-- [ ] campaigns, principals, campaign_members
-- [ ] entities (universal sheet: tags, public_sheet, secret_sheet, typed perf fields)
-- [ ] spatial: maps, map_nodes (tier), collision masks, terrain chunks
-- [ ] encounters, encounter_slots (initiative), conditions
-- [ ] intents, reactions (combat/social)
-- [ ] interventions (active blessings/curses with authority and stack rules)
-- [ ] divine standings (player↔god)
-- [ ] reaction_triggers (pre-registered AI reactions)
-- [ ] factions/guilds, membership, bounties, wars
-- [ ] economy: locations metrics, shops, inventory, price modifiers, property ownership
+- [x] campaigns, principals, campaign_members
+- [x] entities (universal sheet: tags, public_sheet, secret_sheet, typed perf fields)
+- [x] spatial: maps, map_nodes (tier), collision masks, terrain chunks
+- [x] encounters, encounter_slots (initiative), conditions
+- [x] intents, reactions (combat/social)
+- [x] interventions (active blessings/curses with authority and stack rules)
+- [x] divine standings (player↔god)
+- [x] reaction_triggers (pre-registered AI reactions)
+- [x] factions/guilds, membership, bounties, wars
+- [x] economy: locations metrics, shops, inventory, price modifiers, property ownership
 
 Acceptance:
 - STATE_DB_SCHEMA.md lists columns, PK/FK, indexes, and constraints.
 
 ### 2.2 Ledger DB schema spec
-- [ ] session_ledger append-only table with:
-  - [ ] event_id, event_version, type, sender, payload
-  - [ ] visible_to[] of principal UUIDs
-  - [ ] trace fields: parent_event_id, domain_tags, contract_version
-- [ ] session_summaries table (visibility scoped)
-- [ ] redaction overlay mechanism (append-only redaction events)
+- [x] session_ledger append-only table with:
+  - [x] event_id, event_version, type, sender, payload
+  - [x] visible_to[] of principal UUIDs
+  - [x] trace fields: parent_event_id, domain_tags, contract_version
+- [x] session_summaries table (visibility scoped)
+- [x] redaction overlay mechanism (append-only redaction events)
 
 Acceptance:
 - LEDGER_SCHEMA.md includes replay expectations and RLS/filter approach.
 
 ### 2.3 Security and visibility enforcement spec
-- [ ] Define how `visible_to` is assigned
-- [ ] Define DM-only, gods-only, party-only, telepathy scopes
-- [ ] Define DB-level enforcement strategy:
-  - [ ] RLS using `app.principal_id` OR
-  - [ ] mandatory query filters in data layer
-- [ ] Define how services authenticate principals
+- [x] Define how `visible_to` is assigned
+- [x] Define DM-only, gods-only, party-only, telepathy scopes
+- [x] Define DB-level enforcement strategy:
+  - [x] RLS using `app.principal_id` OR
+  - [x] mandatory query filters in data layer
+- [x] Define how services authenticate principals
 
 Acceptance:
 - SECURITY_VISIBILITY.md describes enforcement and test plan.
