@@ -3,7 +3,7 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 
 
 ## Implementation Status
-- Current progress: **Phase 0 complete** from `todo.md`.
+- Current progress: **Phases 0, 1, and 2 complete** from `todo.md`.
 - Repository scaffolding initialized:
   - `infra/`
   - `services/`
