@@ -38,9 +38,7 @@ VALUES
   ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222224', 'GOD_OPERATOR'),
   ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222225', 'OBSERVER')
 ON CONFLICT (campaign_id, principal_id) DO UPDATE
-SET role = EXCLUDED.role,
-    joined_at = now();
-
+SET role = EXCLUDED.role;
 INSERT INTO state.entities (
   id, campaign_id, entity_type, name, tags, public_sheet, secret_sheet,
   hp_current, hp_max, ac, speed, controlled_by, controller_principal_id
