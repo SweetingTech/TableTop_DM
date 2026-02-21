@@ -51,8 +51,11 @@ jobs:
       - name: Typecheck
         run: make typecheck
 
-      - name: Unit + contracts
-        run: pytest tests -m "not integration" --cov=. --cov-report=term-missing --cov-report=xml --cov-fail-under=50
+      - name: Unit tests with coverage gate
+        run: make unit
+
+      - name: Contract tests
+        run: make contracts
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
