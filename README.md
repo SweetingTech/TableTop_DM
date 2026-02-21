@@ -3,7 +3,7 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 
 
 ## Implementation Status
-- Current progress: **Phases 0, 1, and 2 complete** from `todo.md`.
+- Current progress: **Phases 0, 1, 2, 3, and 4 complete** from `todo.md`.
 - Repository scaffolding initialized:
   - `infra/`
   - `services/`
@@ -22,13 +22,17 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
   - `docs/REPLAY_DEBUG.md`
 
 
-## Quickstart (Phase 1 + Phase 2 executable assets)
+## Quickstart (Phase 1 through Phase 4 executable assets)
 - `cp .env.example .env`
 - `./infra/scripts/phase1_up.sh`
 - `./infra/scripts/phase1_healthcheck.sh`
+- `make migrate`
+- `make seed-demo`
 - `./infra/scripts/phase2_verify_schema.sh`
 
 Postgres auto-loads SQL init scripts from `infra/sql/init/` on first boot to create `state` and `ledger` schemas plus visibility RLS policies.
+
+Migrations are additionally available through an explicit migration toolchain in `infra/sql/migrations/` with checksum tracking (`infra_meta.schema_migrations`). Demo data for Phase 4.1 lives in `infra/sql/seed/001_demo_campaign.sql`.
 
 ## 1) Prime Directives (Non-Negotiable)
 - **LLMs are text engines only.**
