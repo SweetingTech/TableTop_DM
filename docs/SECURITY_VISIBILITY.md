@@ -33,12 +33,12 @@ Primary strategy: Postgres RLS.
 ### RLS contract
 - Each request/connection sets `SET app.principal_id = '<principal_uuid>'`.
 - Tables with visibility arrays enforce policy:
-  - `USING (visible_to::text[] @> ARRAY[current_setting('app.principal_id', true)])`
+  - `USING (current_setting('app.principal_id', true)::uuid = ANY(visible_to))`
   - `WITH CHECK` variant for service-managed inserts (only trusted service role writes)
 
 ### Data-layer mandatory filters (fallback)
 If a service cannot use RLS (e.g., analytics replica), every query must include:
-- `WHERE visible_to @> ARRAY[$principal_id]`
+- `WHERE $principal_id = ANY(visible_to)`
 
 This fallback is allowed only for read paths and must be covered by integration tests.
 

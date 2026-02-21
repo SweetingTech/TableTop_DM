@@ -3,6 +3,7 @@ name: tabletop-dm
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: tabletop_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -22,6 +23,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: tabletop_redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     ports:
@@ -37,6 +39,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.9.6
+    container_name: tabletop_qdrant
     restart: unless-stopped
     ports:
       - "${QDRANT_HTTP_PORT:-6333}:6333"

@@ -23,14 +23,10 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 
 
 ## Quickstart (Phase 1 + Phase 2 executable assets)
-- One-command setup:
-  - macOS/Linux: `./setup.sh`
-  - Windows PowerShell: `./setup.ps1`
-- Manual steps (if you want to run each phase separately):
-  - `cp .env.example .env`
-  - `./infra/scripts/phase1_up.sh`
-  - `./infra/scripts/phase1_healthcheck.sh`
-  - `./infra/scripts/phase2_verify_schema.sh`
+- `cp .env.example .env`
+- `./infra/scripts/phase1_up.sh`
+- `./infra/scripts/phase1_healthcheck.sh`
+- `./infra/scripts/phase2_verify_schema.sh`
 
 Postgres auto-loads SQL init scripts from `infra/sql/init/` on first boot to create `state` and `ledger` schemas plus visibility RLS policies.
 
