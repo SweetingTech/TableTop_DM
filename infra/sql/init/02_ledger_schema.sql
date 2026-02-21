@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS ledger.session_ledger (
   domain_tags text[] NOT NULL DEFAULT '{}'::text[],
   idempotency_key text,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (array_length(visible_to, 1) >= 1),
+  CHECK (cardinality(visible_to) > 0),
   UNIQUE (session_id, sender_principal_id, idempotency_key),
   FOREIGN KEY (parent_event_id) REFERENCES ledger.session_ledger(event_id) DEFERRABLE INITIALLY DEFERRED
 );

@@ -3,6 +3,7 @@ Status: Phase 2.1 logical schema specification (Postgres, `state` schema).
 
 ## Conventions
 - UUID primary keys use `gen_random_uuid()`.
+- Requires Postgres extension `pgcrypto` (`CREATE EXTENSION IF NOT EXISTS pgcrypto;`).
 - `created_at`/`updated_at` are `timestamptz` (UTC).
 - Soft-delete omitted for v1; deletions are explicit and audited in ledger.
 - JSONB columns validated in service layer with strict schemas.
@@ -22,7 +23,8 @@ Indexes: `(status)`, `(mode)`.
 - `display_name` text NOT NULL
 - `auth_subject` text UNIQUE NOT NULL
 - `is_active` boolean NOT NULL default true
-- timestamps
+- `created_at` timestamptz NOT NULL default now()
+- `updated_at` timestamptz NOT NULL default now()
 Indexes: `(principal_type, is_active)`.
 
 ## campaign_members
@@ -42,8 +44,9 @@ Indexes: `(principal_id, campaign_id)`.
 - `public_sheet` jsonb NOT NULL default '{}'::jsonb
 - `secret_sheet` jsonb NOT NULL default '{}'::jsonb
 - perf fields: `hp_current` int, `hp_max` int, `ac` int, `speed` int
-- control: `controlled_by` text NOT NULL, `controller_principal_id` UUID NULL FK -> principals(id), `control_version` bigint NOT NULL default 0
-- timestamps
+- control: `controlled_by` text NOT NULL CHECK in ('HUMAN','AI_DM','AI_NPC','AI_GOD','SYSTEM','NONE'), `controller_principal_id` UUID NULL FK -> principals(id), `control_version` bigint NOT NULL default 0
+- `created_at` timestamptz NOT NULL default now()
+- `updated_at` timestamptz NOT NULL default now()
 Constraints: `hp_current <= hp_max` when both non-null.
 Indexes: `(campaign_id, entity_type)`, GIN on `tags`, GIN on `public_sheet`, `(controller_principal_id)`.
 
@@ -54,7 +57,8 @@ Indexes: `(campaign_id, entity_type)`, GIN on `tags`, GIN on `public_sheet`, `(c
 - `width` int NOT NULL
 - `height` int NOT NULL
 - `grid_size` int NOT NULL
-- timestamps
+- `created_at` timestamptz NOT NULL default now()
+- `updated_at` timestamptz NOT NULL default now()
 Indexes: `(campaign_id)`.
 
 ## map_nodes
@@ -68,6 +72,10 @@ Indexes: `(campaign_id)`.
 UNIQUE: `(map_id, tier, x, y)`
 Indexes: `(map_id, tier)`, `(map_id, x, y)`.
 
+## Session identifier note
+- `session_id` is currently an orchestrator-issued UUID identifier.
+- In Phase 4 migrations, add `state.sessions` and promote all `session_id` references to explicit FKs.
+
 ## encounters
 - `id` UUID PK
 - `session_id` UUID NOT NULL
@@ -75,7 +83,8 @@ Indexes: `(map_id, tier)`, `(map_id, x, y)`.
 - `status` text NOT NULL CHECK in ('PENDING','ACTIVE','COMPLETED','ABORTED')
 - `round_number` int NOT NULL default 0
 - `active_slot` int NULL
-- timestamps
+- `created_at` timestamptz NOT NULL default now()
+- `updated_at` timestamptz NOT NULL default now()
 Indexes: `(campaign_id, status)`, `(session_id, status)`.
 
 ## encounter_slots
@@ -110,7 +119,8 @@ Indexes: `(entity_id, condition_type)`, `(encounter_id, entity_id)`.
 - `payload` jsonb NOT NULL
 - `status` text NOT NULL CHECK in ('RECEIVED','VALIDATED','REJECTED','COMMITTED')
 - `idempotency_key` text NOT NULL
-- timestamps
+- `created_at` timestamptz NOT NULL default now()
+- `updated_at` timestamptz NOT NULL default now()
 UNIQUE: `(session_id, principal_id, idempotency_key)`
 Indexes: `(encounter_id, status)`, GIN `(payload)`.
 

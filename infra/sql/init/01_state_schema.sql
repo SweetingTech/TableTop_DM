@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS state.entities (
   hp_max int,
   ac int,
   speed int,
-  controlled_by text NOT NULL,
+  controlled_by text NOT NULL CHECK (controlled_by IN ('HUMAN','AI_DM','AI_NPC','AI_GOD','SYSTEM','NONE')),
   controller_principal_id uuid REFERENCES state.principals(id),
   control_version bigint NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
