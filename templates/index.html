@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tabletop DM - VTT Engine Dashboard</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #232736;
+      --border: #2e3345;
+      --text: #e1e4ed;
+      --muted: #8b90a0;
+      --accent: #7c5cff;
+      --accent2: #5c9fff;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --orange: #fb923c;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .header {
+      background: linear-gradient(135deg, #1a1030 0%, #0f1117 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header .subtitle { color: var(--muted); font-size: 0.85rem; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem;
+    }
+    .stat-card .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; margin-top: 0.3rem; }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 0.6rem 1.2rem;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .card h3 { font-size: 1.1rem; margin-bottom: 0.8rem; color: var(--accent2); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th {
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      background: var(--surface2);
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+    }
+    td { padding: 0.6rem 0.8rem; border-top: 1px solid var(--border); }
+    tr:hover td { background: rgba(124, 92, 255, 0.05); }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-green { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+    .badge-yellow { background: rgba(251, 191, 36, 0.15); color: var(--yellow); }
+    .badge-red { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+    .badge-blue { background: rgba(92, 159, 255, 0.15); color: var(--accent2); }
+    .badge-purple { background: rgba(124, 92, 255, 0.15); color: var(--accent); }
+    .badge-orange { background: rgba(251, 146, 60, 0.15); color: var(--orange); }
+    .json-block {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 0.5rem;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.78rem;
+      max-width: 300px;
+      overflow: auto;
+      max-height: 120px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .entity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+    .entity-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .entity-card .name { font-weight: 700; font-size: 1rem; }
+    .entity-card .type { color: var(--muted); font-size: 0.8rem; }
+    .entity-card .stats { display: flex; gap: 0.8rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .entity-card .stat { text-align: center; }
+    .entity-card .stat .val { font-weight: 700; font-size: 1.1rem; }
+    .entity-card .stat .lbl { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+    .hp-bar {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 3px;
+      margin-top: 0.5rem;
+      overflow: hidden;
+    }
+    .hp-bar-fill { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.3s; }
+    .map-grid {
+      display: inline-grid;
+      gap: 2px;
+      margin-top: 0.5rem;
+    }
+    .map-cell {
+      width: 24px;
+      height: 24px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+    }
+    .initiative-list { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .init-slot {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.8rem;
+      text-align: center;
+      min-width: 100px;
+    }
+    .init-slot.active-turn { border-color: var(--green); background: rgba(74, 222, 128, 0.1); }
+    .init-slot .init-val { font-size: 1.2rem; font-weight: 700; }
+    .init-slot .init-name { font-size: 0.78rem; color: var(--muted); }
+    .init-slot .init-ap { font-size: 0.7rem; color: var(--yellow); }
+    @media (max-width: 768px) {
+      .container { padding: 1rem; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .entity-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Tabletop DM Engine</h1>
+      <div class="subtitle">Headless Multi-Agent AI-Driven VTT</div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="label">Campaigns</div>
+        <div class="value">{{ campaigns|length }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Principals</div>
+        <div class="value">{{ principals|length }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Entities</div>
+        <div class="value">{{ entities|length }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Active Encounters</div>
+        <div class="value">{{ encounters|selectattr('status', 'equalto', 'ACTIVE')|list|length }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">DB Tables</div>
+        <div class="value">{{ all_tables|length }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Migrations Applied</div>
+        <div class="value">{{ migrations|length }}</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="campaigns">Campaigns</div>
+      <div class="tab" data-tab="entities">Entities</div>
+      <div class="tab" data-tab="combat">Combat</div>
+      <div class="tab" data-tab="maps">Maps</div>
+      <div class="tab" data-tab="schema">Schema</div>
+    </div>
+
+    <!-- Campaigns Tab -->
+    <div class="panel active" id="tab-campaigns">
+      {% for c in campaigns %}
+      <div class="card">
+        <h3>{{ c.name }} <span class="badge badge-green">{{ c.status }}</span> <span class="badge badge-blue">{{ c.mode }}</span></h3>
+        <p style="color: var(--muted); font-size: 0.85rem; margin-bottom: 0.8rem;">Slug: {{ c.slug }} | Created: {{ c.created_at.strftime('%Y-%m-%d') }}</p>
+
+        <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem;">Members</h4>
+        <table>
+          <tr><th>Name</th><th>Type</th><th>Role</th></tr>
+          {% for m in members if m.campaign_id == c.id %}
+          <tr>
+            <td>{{ m.display_name }}</td>
+            <td><span class="badge {% if m.principal_type == 'HUMAN' %}badge-green{% elif m.principal_type == 'AI_DM' %}badge-purple{% elif m.principal_type == 'AI_GOD' %}badge-yellow{% else %}badge-blue{% endif %}">{{ m.principal_type }}</span></td>
+            <td>{{ m.role }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Entities Tab -->
+    <div class="panel" id="tab-entities">
+      <div class="entity-grid">
+        {% for e in entities %}
+        <div class="entity-card">
+          <div class="name">{{ e.name }}</div>
+          <div class="type">
+            <span class="badge {% if e.entity_type == 'PC' %}badge-green{% elif e.entity_type == 'NPC' %}badge-red{% elif e.entity_type == 'LOCATION' %}badge-blue{% else %}badge-purple{% endif %}">{{ e.entity_type }}</span>
+            {% if e.controller_name %}<span style="color: var(--muted); font-size: 0.8rem;"> controlled by {{ e.controller_name }}</span>{% endif %}
+          </div>
+          {% if e.hp_max %}
+          <div class="stats">
+            <div class="stat"><div class="val" style="color: {% if e.hp_current < e.hp_max * 0.3 %}var(--red){% elif e.hp_current < e.hp_max * 0.7 %}var(--yellow){% else %}var(--green){% endif %}">{{ e.hp_current }}/{{ e.hp_max }}</div><div class="lbl">HP</div></div>
+            {% if e.ac %}<div class="stat"><div class="val">{{ e.ac }}</div><div class="lbl">AC</div></div>{% endif %}
+            {% if e.speed %}<div class="stat"><div class="val">{{ e.speed }}</div><div class="lbl">Speed</div></div>{% endif %}
+          </div>
+          <div class="hp-bar"><div class="hp-bar-fill" style="width: {{ (e.hp_current / e.hp_max * 100)|int }}%"></div></div>
+          {% endif %}
+          {% if e.tags %}
+          <div style="margin-top: 0.5rem;">
+            {% for tag in e.tags %}<span class="badge badge-purple" style="margin-right: 0.3rem;">{{ tag }}</span>{% endfor %}
+          </div>
+          {% endif %}
+          <div style="margin-top: 0.5rem;">
+            <div class="json-block">{{ json.dumps(e.public_sheet, indent=2) if e.public_sheet else '{}' }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Combat Tab -->
+    <div class="panel" id="tab-combat">
+      {% for enc in encounters %}
+      <div class="card">
+        <h3>Encounter in {{ enc.campaign_name }} <span class="badge {% if enc.status == 'ACTIVE' %}badge-green{% else %}badge-yellow{% endif %}">{{ enc.status }}</span></h3>
+        <p style="color: var(--muted); font-size: 0.85rem; margin-bottom: 0.8rem;">Round {{ enc.round_number }} | Active Slot: {{ enc.active_slot }}</p>
+
+        <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem;">Initiative Order</h4>
+        <div class="initiative-list">
+          {% for s in encounter_slots if s.encounter_id == enc.id %}
+          <div class="init-slot {% if s.is_active %}active-turn{% endif %}">
+            <div class="init-val">{{ s.initiative }}</div>
+            <div class="init-name">{{ s.entity_name }}</div>
+            <div class="init-ap">AP: {{ s.ap_current }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if triggers %}
+      <div class="card">
+        <h3>Reaction Triggers</h3>
+        <table>
+          <tr><th>Entity</th><th>Type</th><th>Filter</th><th>Action</th><th>Enabled</th></tr>
+          {% for t in triggers %}
+          <tr>
+            <td>{{ t.entity_name }}</td>
+            <td><span class="badge badge-orange">{{ t.trigger_type }}</span></td>
+            <td><div class="json-block">{{ json.dumps(t.trigger_filter, indent=2) if t.trigger_filter else '{}' }}</div></td>
+            <td><div class="json-block">{{ json.dumps(t.action_template, indent=2) if t.action_template else '{}' }}</div></td>
+            <td>{% if t.is_enabled %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Maps Tab -->
+    <div class="panel" id="tab-maps">
+      {% for m in maps %}
+      <div class="card">
+        <h3>{{ m.name }}</h3>
+        <p style="color: var(--muted); font-size: 0.85rem;">{{ m.width }}x{{ m.height }} grid (cell size: {{ m.grid_size }}ft) | Campaign: {{ m.campaign_name }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Schema Tab -->
+    <div class="panel" id="tab-schema">
+      <div class="card">
+        <h3>Database Tables</h3>
+        <table>
+          <tr><th>Schema</th><th>Table</th></tr>
+          {% for t in all_tables %}
+          <tr>
+            <td><span class="badge {% if t.table_schema == 'state' %}badge-green{% elif t.table_schema == 'ledger' %}badge-purple{% else %}badge-blue{% endif %}">{{ t.table_schema }}</span></td>
+            <td>{{ t.table_name }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Applied Migrations</h3>
+        <table>
+          <tr><th>Version</th><th>Checksum</th><th>Applied At</th></tr>
+          {% for m in migrations %}
+          <tr>
+            <td>{{ m.version }}</td>
+            <td style="font-family: monospace; font-size: 0.75rem;">{{ m.checksum[:16] }}...</td>
+            <td>{{ m.applied_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
