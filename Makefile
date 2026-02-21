@@ -1,5 +1,18 @@
-.PHONY: up healthcheck verify-schema migrate seed-demo db-reset compose-smoke build-images \
+.PHONY: install build start stop up healthcheck verify-schema migrate seed-demo db-reset compose-smoke build-images \
 	lint format typecheck test unit contracts integration ci-fast ci-integration ci gates
+
+install:
+	python -m pip install -r requirements-dev.txt
+	python -c "import tomllib, pathlib, subprocess; data=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8')); deps=data.get('project', {}).get('dependencies', []); subprocess.check_call(['python','-m','pip','install',*deps]) if deps else None"
+
+build:
+	docker build -t tabletop-dm:local .
+
+start:
+	bash scripts/start.sh
+
+stop:
+	bash scripts/stop.sh
 
 up:
 	./infra/scripts/phase1_up.sh
@@ -54,7 +67,7 @@ contracts:
 integration:
 	pytest -m "integration"
 
-ci-fast: lint format typecheck unit contracts
+ci-fast: install lint format typecheck unit contracts
 
 ci-integration: migrate seed-demo
 	pytest -m "integration"

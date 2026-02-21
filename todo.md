@@ -3,6 +3,28 @@ Rule: follow the Mandatory Build Order. No re-architecture. No shortcuts.
 
 ---
 
+## Build Order Snapshot (Canonical)
+1. Contracts + schemas (`shared/schemas`, `docs/*contract*`).
+2. DB migrations and seed (`infra/sql/migrations`, `infra/sql/seed`).
+3. Deterministic engines (`services/mechanics`, `services/spatial`).
+4. Orchestrator pipeline (`services/orchestrator`).
+5. Visibility + ledger enforcement (`services/visibility`, `services/ledger`).
+6. Domain systems (social, karma/divine, NPC/maps/content).
+7. UI + WebSocket consumption (`templates`, `static`).
+8. CI gates (`.github/workflows/ci.yml`, `make ci`).
+
+## Feature Gates
+- **Playable now:** deterministic mechanics/spatial, orchestrator proposal pipeline, append-only ledger, visibility-filtered broadcasts, seeded campaign, web UI map/feed/console, CI lint/type/unit/contracts/integration.
+- **In-progress/next:** richer map authoring UX, broader scenario seeds, expanded replay/debug tooling ergonomics.
+
+## Known Limitations + Next Priorities
+- Start scripts currently target Docker-first local setup; manual non-Docker flow is secondary.
+- Integration coverage focuses on schema/visibility/migration paths; add full multi-client combat round automation next.
+- Content and divine systems are contract-bound but should gain more balancing fixtures in tests.
+
+---
+
+
 ## Phase 0: Repo + Contracts
 ### 0.0 Create repo structure
 - [x] Create /infra, /services/*, /frontend, /docs

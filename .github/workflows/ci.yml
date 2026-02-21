@@ -25,37 +25,11 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements-dev.txt
 
-      - name: Install dev tooling
-        run: |
-          python -m pip install -U pip
-          python -m pip install -r requirements-dev.txt
-          python - <<'PY'
-          import tomllib
-          from pathlib import Path
-          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-          deps = data.get("project", {}).get("dependencies", [])
-          if deps:
-              print("Installing runtime dependencies from pyproject.toml")
-          else:
-              print("No runtime dependencies found in pyproject.toml")
-          Path(".runtime-deps.txt").write_text("\n".join(deps), encoding="utf-8")
-          PY
-          if [ -s .runtime-deps.txt ]; then python -m pip install -r .runtime-deps.txt; fi
+      - name: Install dependencies
+        run: make install
 
-      - name: Lint
-        run: make lint
-
-      - name: Format check
-        run: make format
-
-      - name: Typecheck
-        run: make typecheck
-
-      - name: Unit tests with coverage gate
-        run: make unit
-
-      - name: Contract tests
-        run: make contracts
+      - name: Fast CI gates
+        run: make ci-fast
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -107,30 +81,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install test deps
-        run: |
-          python -m pip install -U pip
-          python -m pip install -r requirements-dev.txt
-          python - <<'PY'
-          import tomllib
-          from pathlib import Path
-          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-          deps = data.get("project", {}).get("dependencies", [])
-          if deps:
-              print("Installing runtime dependencies from pyproject.toml")
-          else:
-              print("No runtime dependencies found in pyproject.toml")
-          Path(".runtime-deps.txt").write_text("\n".join(deps), encoding="utf-8")
-          PY
-          if [ -s .runtime-deps.txt ]; then python -m pip install -r .runtime-deps.txt; fi
+      - name: Install dependencies
+        run: make install
 
-      - name: Migrate + seed
-        run: |
-          bash infra/scripts/migrate.sh
-          bash infra/scripts/seed_demo.sh
-
-      - name: Run integration tests
-        run: pytest tests -m "integration" -q
+      - name: Integration gate
+        run: make ci-integration
 
       - name: Dump compose logs on failure
         if: failure()
