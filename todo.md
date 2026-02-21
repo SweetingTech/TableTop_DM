@@ -143,27 +143,27 @@ Acceptance:
 ## Phase 5: Deterministic Engines (Mechanics + Spatial)
 ### 5.0 Mechanics Engine service
 Implement deterministic endpoints (strict schemas):
-- [ ] roll_dice (crypto RNG; log breakdown)
-- [ ] update_hp
-- [ ] apply_condition / remove_condition
-- [ ] modify_inventory
-- [ ] resolve_attack (hit check + damage)
-- [ ] resolve_save
-- [ ] compute_state_deltas output format
+- [x] roll_dice (crypto RNG; log breakdown)
+- [x] update_hp
+- [x] apply_condition / remove_condition
+- [x] modify_inventory
+- [x] resolve_attack (hit check + damage)
+- [x] resolve_save
+- [x] compute_state_deltas output format
 
 Rules:
-- [ ] No narration
-- [ ] Always returns deltas + roll logs + engine events
+- [x] No narration
+- [x] Always returns deltas + roll logs + engine events
 
 Acceptance:
 - Unit tests validate deterministic results and audit logging structure.
 
 ### 5.1 Spatial Engine service
 Implement deterministic endpoints:
-- [ ] move_entity (collision + max move validation)
-- [ ] compute_path (A*)
-- [ ] check_line_of_sight (raycast vs blockers)
-- [ ] threat_radius_triggers (opportunity triggers)
+- [x] move_entity (collision + max move validation)
+- [x] compute_path (A*)
+- [x] check_line_of_sight (raycast vs blockers)
+- [x] threat_radius_triggers (opportunity triggers)
 
 Acceptance:
 - Unit tests on a small collision grid and LoS cases.
@@ -172,38 +172,38 @@ Acceptance:
 
 ## Phase 6: Orchestrator/Router Core
 ### 6.0 Orchestrator skeleton
-- [ ] REST + WebSocket interfaces
-- [ ] Loads principal identity for each request
-- [ ] Provides “submit intent” endpoints
-- [ ] Streams events to clients
+- [x] REST + WebSocket interfaces
+- [x] Loads principal identity for each request
+- [x] Provides “submit intent” endpoints
+- [x] Streams events to clients
 
 Acceptance:
 - Can broadcast a CHAT event to a connected client.
 
 ### 6.1 Mode + encounter loop
-- [ ] Implement mode state machine (GM-controlled)
-- [ ] Implement COMBAT loop:
-  - [ ] turn start → controlled_by gate
-  - [ ] intent window
-  - [ ] reaction stack LIFO
-  - [ ] deterministic tool calls
-  - [ ] commit deltas
-  - [ ] write ledger events
-  - [ ] broadcast filtered results
+- [x] Implement mode state machine (GM-controlled)
+- [x] Implement COMBAT loop:
+  - [x] turn start → controlled_by gate
+  - [x] intent window
+  - [x] reaction stack LIFO
+  - [x] deterministic tool calls
+  - [x] commit deltas
+  - [x] write ledger events
+  - [x] broadcast filtered results
 
 Acceptance:
 - Full encounter can complete with two PCs vs one NPC.
 
 ### 6.2 Validation pipeline (hard reject hallucinations)
 Implement the synchronous pipeline:
-- [ ] schema validation
-- [ ] auth/resource check (AP, permissions, contract allowlist)
-- [ ] authority/override check (divine conflicts)
-- [ ] translation to tool calls
-- [ ] transactional commit:
-  - [ ] state updates + AP deductions
-  - [ ] ledger append(s)
-- [ ] broadcast
+- [x] schema validation
+- [x] auth/resource check (AP, permissions, contract allowlist)
+- [x] authority/override check (divine conflicts)
+- [x] translation to tool calls
+- [x] transactional commit:
+  - [x] state updates + AP deductions
+  - [x] ledger append(s)
+- [x] broadcast
 
 Acceptance:
 - Invalid proposal causes:
@@ -212,9 +212,9 @@ Acceptance:
   - observable error response
 
 ### 6.3 Concurrency + idempotency
-- [ ] Encounter/session locks on commit
-- [ ] Idempotency keys for proposals and commits
-- [ ] Retry-safe tool application
+- [x] Encounter/session locks on commit
+- [x] Idempotency keys for proposals and commits
+- [x] Retry-safe tool application
 
 Acceptance:
 - Resending the same proposal does not double-apply deltas.
@@ -223,13 +223,13 @@ Acceptance:
 
 ## Phase 7: Visibility Enforcement End-to-End
 ### 7.0 Ledger writes always include visible_to[]
-- [ ] DM-only events
-- [ ] gods-only events
-- [ ] party-only events
-- [ ] telepathy pair events
+- [x] DM-only events
+- [x] gods-only events
+- [x] party-only events
+- [x] telepathy pair events
 
 ### 7.1 Context assembly filtering
-- [ ] Agent context queries return only visible events for that principal
+- [x] Agent context queries return only visible events for that principal
 
 Acceptance:
 - Tests prove player cannot retrieve DM-only content even via direct API calls.
@@ -238,22 +238,22 @@ Acceptance:
 
 ## Phase 8: LLM Adapter Layer (Text Only)
 ### 8.0 LLM adapter
-- [ ] Direct HTTP calls to inference server
-- [ ] Structured output mode for proposals (JSON schema validation)
-- [ ] Timeouts, retries, circuit breaker
-- [ ] Token budgeting hooks
+- [x] Direct HTTP calls to inference server
+- [x] Structured output mode for proposals (JSON schema validation)
+- [x] Timeouts, retries, circuit breaker
+- [x] Token budgeting hooks
 
 Acceptance:
 - LLM output that fails schema is rejected and logged.
 
 ### 8.1 DM agent (narration only)
-- [ ] Input: visible deltas + cited RAG chunks (optional)
-- [ ] Output: NARRATION event only
+- [x] Input: visible deltas + cited RAG chunks (optional)
+- [x] Output: NARRATION event only
 
 ### 8.2 NPC agent (directed proximity only)
-- [ ] Triggered only when a human can hear it
-- [ ] Uses emotional state + local context
-- [ ] Output: DIALOGUE event only
+- [x] Triggered only when a human can hear it
+- [x] Uses emotional state + local context
+- [x] Output: DIALOGUE event only
 
 Acceptance:
 - NPC dialogue never runs off-screen.
@@ -262,18 +262,18 @@ Acceptance:
 
 ## Phase 9: Schrödinger’s Conversation
 ### 9.0 Olympus loop (gods chat)
-- [ ] Pub/Sub subscription to committed STATE_DELTA
-- [ ] Gods chat is event-driven, not constant
-- [ ] Logged as gods-only visibility
+- [x] Pub/Sub subscription to committed STATE_DELTA
+- [x] Gods chat is event-driven, not constant
+- [x] Logged as gods-only visibility
 
 ### 9.1 On-screen proximity chat
-- [ ] Room/chunk subscriptions
-- [ ] Directed chat requests
-- [ ] Ambient barks from cache/scripted list (no LLM)
+- [x] Room/chunk subscriptions
+- [x] Directed chat requests
+- [x] Ambient barks from cache/scripted list (no LLM)
 
 ### 9.2 Off-screen simulation
-- [ ] Off-screen interactions generate only typed state deltas
-- [ ] Dialogue lazy-load when asked
+- [x] Off-screen interactions generate only typed state deltas
+- [x] Dialogue lazy-load when asked
 
 Acceptance:
 - Token usage stays stable with large NPC population.
@@ -282,17 +282,17 @@ Acceptance:
 
 ## Phase 10: Deterministic Karma Router + Divine Standing
 ### 10.0 Domain tag stamping
-- [ ] Mechanics engine stamps domain_tags onto STATE_DELTA events
-- [ ] Enforce taxonomy allowlist
+- [x] Mechanics engine stamps domain_tags onto STATE_DELTA events
+- [x] Enforce taxonomy allowlist
 
 ### 10.1 Standing updates (no LLM)
-- [ ] Update Player↔God standings deterministically from tags
-- [ ] Write updates as state deltas + ledger
+- [x] Update Player↔God standings deterministically from tags
+- [x] Write updates as state deltas + ledger
 
 ### 10.2 Threshold wakes (LLM only on boiling points)
-- [ ] Threshold config (±10, ±50, etc.)
-- [ ] When crossed, wake specific god agent with last 5 relevant deltas
-- [ ] God agent returns an Intervention Proposal (schema locked)
+- [x] Threshold config (±10, ±50, etc.)
+- [x] When crossed, wake specific god agent with last 5 relevant deltas
+- [x] God agent returns an Intervention Proposal (schema locked)
 
 Acceptance:
 - Gods remain quiet until threshold crossings.
@@ -301,19 +301,19 @@ Acceptance:
 
 ## Phase 11: Divine System (Equal AP, Authority Overrides, Grudges)
 ### 11.0 Divine AP system
-- [ ] Equal AP pools and regen for all gods
-- [ ] Per-encounter and per-session global caps
+- [x] Equal AP pools and regen for all gods
+- [x] Per-encounter and per-session global caps
 
 ### 11.1 Authority system
-- [ ] Authority rank gates intervention tier and effect magnitude
-- [ ] Override rules:
-  - [ ] Elder can erase minor only if acting after and spending AP
-  - [ ] If elder acted first, minor action can stick unless later countered
+- [x] Authority rank gates intervention tier and effect magnitude
+- [x] Override rules:
+  - [x] Elder can erase minor only if acting after and spending AP
+  - [x] If elder acted first, minor action can stick unless later countered
 
 ### 11.2 Grudges + factions
-- [ ] Countered interventions increase rivalry
-- [ ] Gods form factions and coordinate in Olympus chat
-- [ ] Still bounded by AP and contract
+- [x] Countered interventions increase rivalry
+- [x] Gods form factions and coordinate in Olympus chat
+- [x] Still bounded by AP and contract
 
 Acceptance:
 - Ordering tests confirm “thousand cuts” balance dynamic.
@@ -322,19 +322,19 @@ Acceptance:
 
 ## Phase 12: NPC Persistence + Consequence Engine
 ### 12.0 Seeded NPC population and instantiation
-- [ ] Location seeds
-- [ ] Instantiate NPCs on first interaction
-- [ ] Persist individuals forever
+- [x] Location seeds
+- [x] Instantiate NPCs on first interaction
+- [x] Persist individuals forever
 
 ### 12.1 Death tracking
-- [ ] Record killer, location, time, cause, witnesses
-- [ ] Emit consequences:
-  - [ ] investigation
-  - [ ] bounties
-  - [ ] faction hostility shifts
-  - [ ] rumor propagation
-  - [ ] economy modifiers
-  - [ ] divine tag triggers
+- [x] Record killer, location, time, cause, witnesses
+- [x] Emit consequences:
+  - [x] investigation
+  - [x] bounties
+  - [x] faction hostility shifts
+  - [x] rumor propagation
+  - [x] economy modifiers
+  - [x] divine tag triggers
 
 Acceptance:
 - Murder hobo causes systemic fallout without DM manual intervention.
@@ -343,14 +343,14 @@ Acceptance:
 
 ## Phase 13: Social System + Ambush
 ### 13.0 SOCIAL mode implementation
-- [ ] Tension ladder state deltas
-- [ ] Deterministic social checks
-- [ ] De-escalation and escalation triggers
+- [x] Tension ladder state deltas
+- [x] Deterministic social checks
+- [x] De-escalation and escalation triggers
 
 ### 13.1 Ambush pipeline
-- [ ] Stealth intent + awareness checks
-- [ ] Surprise rules
-- [ ] GM commits COMBAT mode transition explicitly
+- [x] Stealth intent + awareness checks
+- [x] Surprise rules
+- [x] GM commits COMBAT mode transition explicitly
 
 Acceptance:
 - Talking can prevent fights; ambush can start fights.
@@ -359,18 +359,18 @@ Acceptance:
 
 ## Phase 14: Guilds/Factions/Patrons
 ### 14.0 Guild and faction mechanics
-- [ ] Create/join/raid guilds
-- [ ] Membership gates
-- [ ] Internal politics metrics
-- [ ] War declarations and retaliation
+- [x] Create/join/raid guilds
+- [x] Membership gates
+- [x] Internal politics metrics
+- [x] War declarations and retaliation
 
 ### 14.1 Patron/tenet enforcement
-- [ ] Tenet templates
-- [ ] Violations cause:
-  - [ ] REVOKE_SPELL_ACCESS
-  - [ ] APPLY_CURSE
-  - [ ] SET_BOUNTY
-- [ ] All toggleable via campaign rules
+- [x] Tenet templates
+- [x] Violations cause:
+  - [x] REVOKE_SPELL_ACCESS
+  - [x] APPLY_CURSE
+  - [x] SET_BOUNTY
+- [x] All toggleable via campaign rules
 
 Acceptance:
 - Priest killing triggers enforcement deterministically.
@@ -379,13 +379,13 @@ Acceptance:
 
 ## Phase 15: Economy + Property
 ### 15.0 Reactive pricing
-- [ ] Location metrics drive multipliers
-- [ ] War + demon control + scarcity + reputation affects prices and stock
+- [x] Location metrics drive multipliers
+- [x] War + demon control + scarcity + reputation affects prices and stock
 
 ### 15.1 Property system
-- [ ] Buy property
-- [ ] Income/upkeep cycle
-- [ ] Raid risk tied to stability and reputation
+- [x] Buy property
+- [x] Income/upkeep cycle
+- [x] Raid risk tied to stability and reputation
 
 Acceptance:
 - War town makes potions expensive; demon region makes human goods expensive.
@@ -394,11 +394,11 @@ Acceptance:
 
 ## Phase 16: Content Rating Gate
 ### 16.0 Content mode enforcement
-- [ ] SAFE / MATURE / EXPLICIT
-- [ ] Enforced at generation and pre-broadcast
-- [ ] Hard blocks always:
-  - [ ] minors
-  - [ ] non-consensual sexual content
+- [x] SAFE / MATURE / EXPLICIT
+- [x] Enforced at generation and pre-broadcast
+- [x] Hard blocks always:
+  - [x] minors
+  - [x] non-consensual sexual content
 
 Acceptance:
 - Attempted disallowed content is blocked and logged as SYSTEM_WARNING.
@@ -407,15 +407,15 @@ Acceptance:
 
 ## Phase 17: Maps
 ### 17.0 Upload 2D maps
-- [ ] Asset upload storage
-- [ ] Grid mapping + scale
-- [ ] Collision mask authoring stub (manual tool later)
-- [ ] Server-side movement validation
+- [x] Asset upload storage
+- [x] Grid mapping + scale
+- [x] Collision mask authoring stub (manual tool later)
+- [x] Server-side movement validation
 
 ### 17.1 Procedural voxel maps
-- [ ] Backend seed + chunk data + blockers
-- [ ] Destruction as deltas
-- [ ] Frontend renders from seed, never authoritative
+- [x] Backend seed + chunk data + blockers
+- [x] Destruction as deltas
+- [x] Frontend renders from seed, never authoritative
 
 Acceptance:
 - Player movement is server-valid only.
@@ -424,19 +424,19 @@ Acceptance:
 
 ## Phase 18: Frontend MVP
 ### 18.0 Event feed (Narrative Board)
-- [ ] WebSocket client
-- [ ] Threaded feed rendering
-- [ ] Redactions respected
+- [x] WebSocket client
+- [x] Threaded feed rendering
+- [x] Redactions respected
 
 ### 18.1 Command console
-- [ ] Slash commands
-- [ ] Structured intent builder for move/attack/cast/talk
-- [ ] Reaction window UI
+- [x] Slash commands
+- [x] Structured intent builder for move/attack/cast/talk
+- [x] Reaction window UI
 
 ### 18.2 three.js map viewer
-- [ ] Render tokens from backend XYZ
-- [ ] Map scale switching (world/region/city/room)
-- [ ] Apply deltas only
+- [x] Render tokens from backend XYZ
+- [x] Map scale switching (world/region/city/room)
+- [x] Apply deltas only
 
 Acceptance:
 - UI is a viewer; backend is truth.
@@ -445,13 +445,13 @@ Acceptance:
 
 ## Phase 19: Export + Replay + Debugging
 ### 19.0 Export
-- [ ] Export session ledger to Markdown (visibility filtered)
-- [ ] Optional PDF
+- [x] Export session ledger to Markdown (visibility filtered)
+- [x] Optional PDF
 
 ### 19.1 Replay
-- [ ] Load checkpoint
-- [ ] Replay deltas from ledger
-- [ ] Verify state matches current truth or fail loud
+- [x] Load checkpoint
+- [x] Replay deltas from ledger
+- [x] Verify state matches current truth or fail loud
 
 Acceptance:
 - Replay mismatch produces a deterministic diff report.
@@ -460,14 +460,14 @@ Acceptance:
 
 ## Phase 20: Hardening + Ops
 ### 20.0 Observability
-- [ ] trace_id everywhere
-- [ ] metrics: turn duration, tool latency, LLM latency, token count
-- [ ] health endpoints
+- [x] trace_id everywhere
+- [x] metrics: turn duration, tool latency, LLM latency, token count
+- [x] health endpoints
 
 ### 20.1 CI
-- [ ] lint + unit tests + integration tests
-- [ ] schema validation tests for contracts
-- [ ] docker compose smoke test
+- [x] lint + unit tests + integration tests
+- [x] schema validation tests for contracts
+- [x] docker compose smoke test
 
 Acceptance:
 - CI fails on any deterministic or visibility regression.
