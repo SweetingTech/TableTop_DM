@@ -27,7 +27,7 @@ UNION ALL
 SELECT 'encounter_id', id::text FROM state.encounters WHERE id = '55555555-5555-5555-5555-555555555551'
 UNION ALL
 SELECT 'map_id', id::text FROM state.maps WHERE id = '44444444-4444-4444-4444-444444444441'
-ORDER BY key;"
+ORDER BY CASE key WHEN 'campaign_id' THEN 1 WHEN 'session_id' THEN 2 WHEN 'encounter_id' THEN 3 WHEN 'map_id' THEN 4 ELSE 5 END;
 
 echo ""
 echo "Principals"
