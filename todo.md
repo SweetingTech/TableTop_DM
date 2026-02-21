@@ -90,29 +90,29 @@ Acceptance:
 
 ## Phase 3: Event Envelope + Contracts
 ### 3.0 Event envelope definition (single canonical format)
-- [ ] EVENT_ENVELOPE.md: JSON schema, event types, examples
-- [ ] Must include: event_version, contract_version, idempotency_key
+- [x] EVENT_ENVELOPE.md: JSON schema, event types, examples
+- [x] Must include: event_version, contract_version, idempotency_key
 
 Acceptance:
 - Every system uses the same envelope and types.
 
 ### 3.1 Intervention contract registry spec
-- [ ] INTERVENTION_CONTRACT.md registry:
-  - [ ] action_type allowlist
-  - [ ] strict params per action_type
-  - [ ] who can propose
-  - [ ] who can commit
-  - [ ] deterministic tool mapping target
-  - [ ] stacking rules and override rules
-  - [ ] visibility defaults per action
-  - [ ] AP costs and caps policy hooks
+- [x] INTERVENTION_CONTRACT.md registry:
+  - [x] action_type allowlist
+  - [x] strict params per action_type
+  - [x] who can propose
+  - [x] who can commit
+  - [x] deterministic tool mapping target
+  - [x] stacking rules and override rules
+  - [x] visibility defaults per action
+  - [x] AP costs and caps policy hooks
 
 Acceptance:
 - No action exists without registry entry and deterministic mapping.
 
 ### 3.2 Domain tags taxonomy spec
-- [ ] DOMAIN_TAGS.md: canonical tags + examples + routing implications
-- [ ] Weight mapping config structure (tag→delta) per god/faction
+- [x] DOMAIN_TAGS.md: canonical tags + examples + routing implications
+- [x] Weight mapping config structure (tag→delta) per god/faction
 
 Acceptance:
 - Every STATE_DELTA emits tags from this list only.
@@ -121,19 +121,19 @@ Acceptance:
 
 ## Phase 4: Migrations + Seed Data
 ### 4.0 Implement migrations
-- [ ] Create migration toolchain
-- [ ] Implement State DB schema
-- [ ] Implement Ledger DB schema
-- [ ] Add indexes (GIN for arrays, compound indexes for campaign/time, etc.)
+- [x] Create migration toolchain
+- [x] Implement State DB schema
+- [x] Implement Ledger DB schema
+- [x] Add indexes (GIN for arrays, compound indexes for campaign/time, etc.)
 
 Acceptance:
 - `make migrate` or equivalent fully bootstraps DB from scratch.
 
 ### 4.1 Seed a demo campaign
-- [ ] Create campaign + session
-- [ ] Create principals: DM, PlayerA, PlayerB, God1, NPCAgent
-- [ ] Create entities: 2 PCs, 1 NPC, 1 map room
-- [ ] Create an encounter template for testing
+- [x] Create campaign (session tracking is a uuid reference; no sessions table yet)
+- [x] Create principals: DM, PlayerA, PlayerB, God1, NPCAgent
+- [x] Create entities: 2 PCs, 1 NPC, 1 map room
+- [x] Create an encounter template for testing
 
 Acceptance:
 - Seed script prints IDs and a ready-to-run test scenario.

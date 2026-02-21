@@ -2,6 +2,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+if [[ ! -f ../.env ]]; then
+  cp ../.env.example ../.env
+  echo "Created .env from .env.example"
+fi
+
 source ../.env
 
 read -r -d '' SQL <<'EOSQL' || true
@@ -13,7 +19,9 @@ EOSQL
 
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$SQL"
 
-echo "\nVerifying RLS enabled on ledger tables..."
+echo ""
+echo "Verifying RLS enabled on ledger tables..."
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT schemaname, tablename, rowsecurity FROM pg_tables WHERE schemaname='ledger' ORDER BY tablename;"
 
-echo "\nPhase 2 schema verification complete."
+echo ""
+echo "Phase 2 schema verification complete."

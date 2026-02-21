@@ -9,13 +9,19 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[1/3] Starting infrastructure..."
+echo "[1/5] Starting infrastructure..."
 ./infra/scripts/phase1_up.sh
 
-echo "[2/3] Running dependency health checks..."
+echo "[2/5] Running dependency health checks..."
 ./infra/scripts/phase1_healthcheck.sh
 
-echo "[3/3] Verifying Phase 2 schemas and RLS..."
+echo "[3/5] Applying schema migrations..."
+./infra/scripts/migrate.sh
+
+echo "[4/5] Seeding demo campaign data..."
+./infra/scripts/seed_demo.sh
+
+echo "[5/5] Verifying schemas and RLS..."
 ./infra/scripts/phase2_verify_schema.sh
 
-echo "Setup complete: Phase 1 and Phase 2 infrastructure are up and verified."
+echo "Setup complete: Phases 1-4 infrastructure, migrations, and demo seed are ready."
