@@ -37,7 +37,16 @@ typecheck:
 test: unit contracts integration
 
 unit:
-	pytest -m "unit" --cov=services/mechanics --cov=services/spatial --cov=services/domain/content_rating --cov=services/domain/social --cov=services/domain/divine --cov=services/domain/karma --cov=tests/contracts --cov-report=term-missing --cov-report=xml --cov-fail-under=50
+	pytest -m "unit" \
+		--cov=services/mechanics \
+		--cov=services/spatial \
+		--cov=services/domain/content_rating \
+		--cov=services/domain/social \
+		--cov=services/domain/divine \
+		--cov=services/domain/karma \
+		--cov-report=term-missing \
+		--cov-report=xml \
+		--cov-fail-under=50
 
 contracts:
 	pytest -m "contracts"

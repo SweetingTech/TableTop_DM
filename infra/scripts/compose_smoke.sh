@@ -9,8 +9,6 @@ if [[ ! -f "$ROOT_DIR/.env" ]]; then
   echo "Created .env from .env.example"
 fi
 
-source "$ROOT_DIR/.env"
-
 COMPOSE_FILE="infra/docker-compose.yml"
 
 echo "Starting dependency stack..."
@@ -27,10 +25,10 @@ for i in {1..60}; do
 done
 
 echo "Postgres check..."
-docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"
+docker compose -f "$COMPOSE_FILE" exec -T postgres sh -lc 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 
 echo "Redis check..."
-docker compose -f "$COMPOSE_FILE" exec -T redis redis-cli -a "${REDIS_PASSWORD}" ping
+docker compose -f "$COMPOSE_FILE" exec -T redis sh -lc 'redis-cli -a "$REDIS_PASSWORD" ping'
 
 echo "Qdrant check..."
 curl -fsS "http://localhost:${QDRANT_HTTP_PORT:-6333}/healthz" >/dev/null

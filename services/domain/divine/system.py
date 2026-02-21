@@ -1,3 +1,4 @@
+import json
 import uuid
 from shared.db.connection import execute_one, get_connection
 
@@ -200,7 +201,7 @@ class GrudgeTracker:
                 WHERE id = %s
             """,
                 (
-                    f'[{{"target": "{god_b_id}", "reason": "{reason}"}}]',
+                    json.dumps([{"target": str(god_b_id), "reason": reason}]),
                     str(god_a_id),
                 ),
             )
