@@ -7,7 +7,9 @@ import psycopg2
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
-MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sql", "migrations")
+MIGRATIONS_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "sql", "migrations"
+)
 
 
 def run_migrations():
@@ -25,10 +27,14 @@ def run_migrations():
     """)
     conn.commit()
 
-    cur.execute("SELECT version, checksum FROM infra_meta.schema_migrations ORDER BY applied_at")
+    cur.execute(
+        "SELECT version, checksum FROM infra_meta.schema_migrations ORDER BY applied_at"
+    )
     applied = {row[0]: row[1] for row in cur.fetchall()}
 
-    migration_files = sorted(f for f in os.listdir(MIGRATIONS_DIR) if f.endswith(".sql"))
+    migration_files = sorted(
+        f for f in os.listdir(MIGRATIONS_DIR) if f.endswith(".sql")
+    )
     applied_count = 0
 
     for filename in migration_files:
@@ -40,7 +46,9 @@ def run_migrations():
 
         if filename in applied:
             if applied[filename] != checksum:
-                print(f"  WARNING: Checksum mismatch for {filename} (applied: {applied[filename][:12]}, current: {checksum[:12]})")
+                print(
+                    f"  WARNING: Checksum mismatch for {filename} (applied: {applied[filename][:12]}, current: {checksum[:12]})"
+                )
             continue
 
         print(f"  Applying migration: {filename}")

@@ -1,11 +1,13 @@
 import uuid
-import json
-from typing import Optional
 from shared.schemas.events import EventEnvelope, ToolCallPayload
 from shared.schemas.enums import EventType, GameMode
-from shared.schemas.contracts import InterventionProposal, validate_proposal, ACTION_REGISTRY
+from shared.schemas.contracts import (
+    InterventionProposal,
+    validate_proposal,
+    ACTION_REGISTRY,
+)
 from shared.auth.principal import PrincipalContext
-from shared.db.connection import get_connection, transaction
+from shared.db.connection import get_connection
 from services.ledger.writer import LedgerWriter
 from services.visibility.filter import VisibilityResolver
 from services.orchestrator.state_machine import StateMachine
@@ -21,7 +23,6 @@ class ValidationError(Exception):
 
 
 class OrchestratorPipeline:
-
     def __init__(self):
         self.ledger = LedgerWriter()
         self.visibility = VisibilityResolver()
@@ -29,9 +30,12 @@ class OrchestratorPipeline:
         self.mechanics = MechanicsEngine()
         self.spatial = SpatialEngine()
 
-    def process_proposal(self, proposal: InterventionProposal,
-                         principal: PrincipalContext,
-                         session_id: uuid.UUID) -> dict:
+    def process_proposal(
+        self,
+        proposal: InterventionProposal,
+        principal: PrincipalContext,
+        session_id: uuid.UUID,
+    ) -> dict:
         valid, reason = validate_proposal(proposal, principal.principal_type)
         if not valid:
             self._log_warning(proposal, principal, session_id, reason)
@@ -53,17 +57,23 @@ class OrchestratorPipeline:
 
         return result
 
-    def _check_auth(self, proposal: InterventionProposal,
-                    principal: PrincipalContext) -> bool:
-        entity_id = proposal.params.get("entity_id") or proposal.params.get("attacker_id")
+    def _check_auth(
+        self, proposal: InterventionProposal, principal: PrincipalContext
+    ) -> bool:
+        entity_id = proposal.params.get("entity_id") or proposal.params.get(
+            "attacker_id"
+        )
         if entity_id:
-            entity_uuid = uuid.UUID(entity_id) if isinstance(entity_id, str) else entity_id
+            entity_uuid = (
+                uuid.UUID(entity_id) if isinstance(entity_id, str) else entity_id
+            )
             if not principal.can_control_entity(entity_uuid):
                 return False
         return True
 
-    def _check_ap(self, proposal: InterventionProposal,
-                  principal: PrincipalContext) -> bool:
+    def _check_ap(
+        self, proposal: InterventionProposal, principal: PrincipalContext
+    ) -> bool:
         entry = ACTION_REGISTRY.get(proposal.action_type, {})
         ap_cost = entry.get("ap_cost", 0)
         if ap_cost == 0:
@@ -74,19 +84,23 @@ class OrchestratorPipeline:
             return True
 
         from shared.db.connection import execute_one
-        entity_id = proposal.params.get("entity_id") or proposal.params.get("attacker_id")
+
+        entity_id = proposal.params.get("entity_id") or proposal.params.get(
+            "attacker_id"
+        )
         if entity_id:
             slot = execute_one(
                 "SELECT ap_current FROM state.encounter_slots WHERE encounter_id = %s AND entity_id = %s",
-                (str(encounter["id"]), str(entity_id))
+                (str(encounter["id"]), str(entity_id)),
             )
             if slot and slot["ap_current"] < ap_cost:
                 return False
 
         return True
 
-    def _execute_tool(self, proposal: InterventionProposal,
-                      principal: PrincipalContext) -> ToolCallPayload:
+    def _execute_tool(
+        self, proposal: InterventionProposal, principal: PrincipalContext
+    ) -> ToolCallPayload:
         action = proposal.action_type
         params = proposal.params
 
@@ -123,38 +137,50 @@ class OrchestratorPipeline:
                     arguments=params,
                     result=result,
                 )
-            return ToolCallPayload(tool_name="end_turn", arguments=params,
-                                   result={"success": False, "reason": "No active encounter"})
+            return ToolCallPayload(
+                tool_name="end_turn",
+                arguments=params,
+                result={"success": False, "reason": "No active encounter"},
+            )
         elif action == "SET_MODE":
             new_mode = GameMode(params["new_mode"])
-            result = self.state_machine.set_campaign_mode(proposal.campaign_id, new_mode)
-            return ToolCallPayload(tool_name="set_game_mode", arguments=params, result=result)
+            result = self.state_machine.set_campaign_mode(
+                proposal.campaign_id, new_mode
+            )
+            return ToolCallPayload(
+                tool_name="set_game_mode", arguments=params, result=result
+            )
         elif action == "TALK":
             return ToolCallPayload(
                 tool_name="social_interaction",
                 arguments=params,
-                result={"speaker_id": params.get("speaker_id"), "message": params.get("message", "")},
+                result={
+                    "speaker_id": params.get("speaker_id"),
+                    "message": params.get("message", ""),
+                },
             )
         else:
+            fallback = ACTION_REGISTRY.get(action, {}).get("tool", action.lower())
+            tool_name = str(fallback)
             return ToolCallPayload(
-                tool_name=ACTION_REGISTRY.get(action, {}).get("tool", action.lower()),
+                tool_name=tool_name,
                 arguments=params,
                 result={"action": action, "params": params},
             )
 
     def _handle_attack(self, params: dict, campaign_id: uuid.UUID) -> ToolCallPayload:
         from shared.db.connection import execute_one
+
         attacker = execute_one(
-            "SELECT * FROM state.entities WHERE id = %s",
-            (params["attacker_id"],)
+            "SELECT * FROM state.entities WHERE id = %s", (params["attacker_id"],)
         )
         target = execute_one(
-            "SELECT * FROM state.entities WHERE id = %s",
-            (params["target_id"],)
+            "SELECT * FROM state.entities WHERE id = %s", (params["target_id"],)
         )
         if not attacker or not target:
             return ToolCallPayload(
-                tool_name="resolve_attack", arguments=params,
+                tool_name="resolve_attack",
+                arguments=params,
                 result={"success": False, "reason": "Entity not found"},
             )
 
@@ -175,13 +201,14 @@ class OrchestratorPipeline:
 
     def _handle_move(self, params: dict, campaign_id: uuid.UUID) -> ToolCallPayload:
         from shared.db.connection import execute_one
+
         entity = execute_one(
-            "SELECT * FROM state.entities WHERE id = %s",
-            (params["entity_id"],)
+            "SELECT * FROM state.entities WHERE id = %s", (params["entity_id"],)
         )
         if not entity:
             return ToolCallPayload(
-                tool_name="move_entity", arguments=params,
+                tool_name="move_entity",
+                arguments=params,
                 result={"success": False, "reason": "Entity not found"},
             )
 
@@ -196,8 +223,13 @@ class OrchestratorPipeline:
             },
         )
 
-    def _commit(self, proposal: InterventionProposal, principal: PrincipalContext,
-                session_id: uuid.UUID, tool_result: ToolCallPayload) -> dict:
+    def _commit(
+        self,
+        proposal: InterventionProposal,
+        principal: PrincipalContext,
+        session_id: uuid.UUID,
+        tool_result: ToolCallPayload,
+    ) -> dict:
         conn = get_connection()
         try:
             visible_to = self.visibility.resolve_visible_to(
@@ -272,50 +304,59 @@ class OrchestratorPipeline:
             if "hp_current" in changes and delta.entity_id:
                 cur.execute(
                     "UPDATE state.entities SET hp_current = %s, updated_at = now() WHERE id = %s",
-                    (changes["hp_current"], str(delta.entity_id))
+                    (changes["hp_current"], str(delta.entity_id)),
                 )
         elif delta.table == "state.conditions" and delta.operation == "INSERT":
             changes = delta.changes
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO state.conditions (entity_id, encounter_id, condition_type, duration_rounds, source)
                 VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
-            """, (
-                str(delta.entity_id),
-                changes.get("encounter_id"),
-                changes.get("condition_type"),
-                changes.get("duration_rounds", -1),
-                changes.get("source", "unknown"),
-            ))
+            """,
+                (
+                    str(delta.entity_id),
+                    changes.get("encounter_id"),
+                    changes.get("condition_type"),
+                    changes.get("duration_rounds", -1),
+                    changes.get("source", "unknown"),
+                ),
+            )
         elif delta.table == "state.conditions" and delta.operation == "DELETE":
             changes = delta.changes
             cur.execute(
                 "DELETE FROM state.conditions WHERE entity_id = %s AND condition_type = %s",
-                (str(delta.entity_id), changes.get("condition_type"))
+                (str(delta.entity_id), changes.get("condition_type")),
             )
         cur.close()
 
     def _deduct_ap(self, proposal, ap_cost, conn):
-        entity_id = proposal.params.get("entity_id") or proposal.params.get("attacker_id")
+        entity_id = proposal.params.get("entity_id") or proposal.params.get(
+            "attacker_id"
+        )
         if not entity_id:
             return
         encounter = self.state_machine.get_active_encounter(proposal.campaign_id)
         if not encounter:
             return
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE state.encounter_slots
             SET ap_current = GREATEST(0, ap_current - %s)
             WHERE encounter_id = %s AND entity_id = %s
-        """, (ap_cost, str(encounter["id"]), str(entity_id)))
+        """,
+            (ap_cost, str(encounter["id"]), str(entity_id)),
+        )
         cur.close()
 
     def _log_warning(self, proposal, principal, session_id, reason):
         try:
             from shared.db.connection import execute_query
+
             rows = execute_query(
                 "SELECT principal_id FROM state.campaign_members WHERE campaign_id = %s AND role = 'GM'",
-                (str(proposal.campaign_id),)
+                (str(proposal.campaign_id),),
             )
             visible_to = [r["principal_id"] for r in rows]
             if not visible_to:

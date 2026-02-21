@@ -5,28 +5,27 @@ from shared.schemas.events import EventEnvelope
 
 
 HARD_BLOCKED_PATTERNS = [
-    r'\bminor[s]?\b.*\bsexual\b',
-    r'\bchild\b.*\bsexual\b',
-    r'\bunder.?age\b.*\bsexual\b',
-    r'\bnon.?consensual\s+sexual\b',
+    r"\bminor[s]?\b.*\bsexual\b",
+    r"\bchild\b.*\bsexual\b",
+    r"\bunder.?age\b.*\bsexual\b",
+    r"\bnon.?consensual\s+sexual\b",
 ]
 
 MATURE_PATTERNS = [
-    r'\bgore\b',
-    r'\btorture\b',
-    r'\bgruesome\b',
-    r'\bexplicit\s+violence\b',
+    r"\bgore\b",
+    r"\btorture\b",
+    r"\bgruesome\b",
+    r"\bexplicit\s+violence\b",
 ]
 
 EXPLICIT_PATTERNS = [
-    r'\bsexual\b',
-    r'\bnudity\b',
-    r'\berotic\b',
+    r"\bsexual\b",
+    r"\bnudity\b",
+    r"\berotic\b",
 ]
 
 
 class ContentRatingGate:
-
     def __init__(self, campaign_rating: ContentRating = ContentRating.SAFE):
         self.campaign_rating = campaign_rating
 

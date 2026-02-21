@@ -1,7 +1,6 @@
+import json
 import uuid
-from typing import Optional
-from shared.db.connection import execute_query, execute_one, get_connection
-from shared.schemas.events import StateDelta
+from shared.db.connection import execute_one, get_connection
 
 
 DEFAULT_AP_PER_SESSION = 10
@@ -9,13 +8,15 @@ DEFAULT_AP_PER_ENCOUNTER = 5
 
 
 class DivineAPSystem:
-
     def get_god_ap(self, god_entity_id: uuid.UUID, campaign_id: uuid.UUID) -> dict:
-        row = execute_one("""
+        row = execute_one(
+            """
             SELECT e.id, e.name, e.public_sheet
             FROM state.entities e
             WHERE e.id = %s AND e.campaign_id = %s
-        """, (str(god_entity_id), str(campaign_id)))
+        """,
+            (str(god_entity_id), str(campaign_id)),
+        )
 
         if not row:
             return {"error": "God entity not found"}
@@ -31,8 +32,9 @@ class DivineAPSystem:
             "ap_used_session": sheet.get("ap_used_session", 0),
         }
 
-    def deduct_divine_ap(self, god_entity_id: uuid.UUID, ap_cost: int,
-                          campaign_id: uuid.UUID, conn=None) -> dict:
+    def deduct_divine_ap(
+        self, god_entity_id: uuid.UUID, ap_cost: int, campaign_id: uuid.UUID, conn=None
+    ) -> dict:
         info = self.get_god_ap(god_entity_id, campaign_id)
         if "error" in info:
             return info
@@ -54,7 +56,8 @@ class DivineAPSystem:
 
         try:
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE state.entities
                 SET public_sheet = jsonb_set(
                     jsonb_set(
@@ -68,7 +71,9 @@ class DivineAPSystem:
                 ),
                 updated_at = now()
                 WHERE id = %s
-            """, (DEFAULT_AP_PER_SESSION, ap_cost, ap_cost, ap_cost, str(god_entity_id)))
+            """,
+                (DEFAULT_AP_PER_SESSION, ap_cost, ap_cost, ap_cost, str(god_entity_id)),
+            )
 
             if own_conn:
                 conn.commit()
@@ -89,12 +94,15 @@ class DivineAPSystem:
 
         try:
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE state.entities
                 SET public_sheet = jsonb_set(public_sheet, '{ap_used_encounter}', '0'::jsonb),
                     updated_at = now()
                 WHERE campaign_id = %s AND controlled_by = 'AI_GOD'
-            """, (str(campaign_id),))
+            """,
+                (str(campaign_id),),
+            )
             count = cur.rowcount
             if own_conn:
                 conn.commit()
@@ -110,7 +118,6 @@ class DivineAPSystem:
 
 
 class AuthoritySystem:
-
     AUTHORITY_RANKS = {
         "ELDER": 3,
         "GREATER": 2,
@@ -121,7 +128,7 @@ class AuthoritySystem:
     def get_authority_rank(self, god_entity_id: uuid.UUID) -> int:
         row = execute_one(
             "SELECT public_sheet FROM state.entities WHERE id = %s",
-            (str(god_entity_id),)
+            (str(god_entity_id),),
         )
         if not row:
             return 0
@@ -138,7 +145,9 @@ class AuthoritySystem:
             "can_override": can,
             "overrider_rank": overrider_rank,
             "target_rank": target_rank,
-            "reason": "Higher authority can override" if can else "Insufficient authority rank",
+            "reason": "Higher authority can override"
+            if can
+            else "Insufficient authority rank",
         }
 
     def resolve_divine_conflict(self, interventions: list[dict]) -> list[dict]:
@@ -150,8 +159,12 @@ class AuthoritySystem:
         for i, intervention in enumerate(sorted_interventions):
             overridden = False
             for higher in sorted_interventions[:i]:
-                if higher.get("authority_rank", 0) > intervention.get("authority_rank", 0):
-                    if higher.get("target_entity_id") == intervention.get("target_entity_id"):
+                if higher.get("authority_rank", 0) > intervention.get(
+                    "authority_rank", 0
+                ):
+                    if higher.get("target_entity_id") == intervention.get(
+                        "target_entity_id"
+                    ):
                         overridden = True
                         break
 
@@ -162,16 +175,22 @@ class AuthoritySystem:
 
 
 class GrudgeTracker:
-
-    def record_grudge(self, god_a_id: uuid.UUID, god_b_id: uuid.UUID,
-                      reason: str, campaign_id: uuid.UUID, conn=None) -> dict:
+    def record_grudge(
+        self,
+        god_a_id: uuid.UUID,
+        god_b_id: uuid.UUID,
+        reason: str,
+        campaign_id: uuid.UUID,
+        conn=None,
+    ) -> dict:
         own_conn = conn is None
         if own_conn:
             conn = get_connection()
 
         try:
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE state.entities
                 SET public_sheet = jsonb_set(
                     public_sheet,
@@ -180,10 +199,12 @@ class GrudgeTracker:
                 ),
                 updated_at = now()
                 WHERE id = %s
-            """, (
-                f'[{{"target": "{god_b_id}", "reason": "{reason}"}}]',
-                str(god_a_id),
-            ))
+            """,
+                (
+                    json.dumps([{"target": str(god_b_id), "reason": reason}]),
+                    str(god_a_id),
+                ),
+            )
             if own_conn:
                 conn.commit()
             cur.close()

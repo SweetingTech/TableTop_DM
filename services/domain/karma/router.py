@@ -1,9 +1,7 @@
 import uuid
-import json
 from typing import Optional
-from shared.db.connection import execute_query, execute_one, get_connection
-from shared.schemas.events import EventEnvelope, StateDelta
-from shared.schemas.enums import EventType
+from shared.db.connection import execute_query, get_connection
+from shared.schemas.events import StateDelta
 
 
 DOMAIN_TAG_WEIGHTS = {
@@ -29,24 +27,30 @@ STANDING_THRESHOLDS = [-50, -25, -10, 10, 25, 50]
 
 
 class KarmaRouter:
-
-    def process_domain_tags(self, campaign_id: uuid.UUID, entity_id: uuid.UUID,
-                            domain_tags: list[str]) -> list[dict]:
+    def process_domain_tags(
+        self, campaign_id: uuid.UUID, entity_id: uuid.UUID, domain_tags: list[str]
+    ) -> list[dict]:
         standings_changes = []
 
-        gods = execute_query("""
+        gods = execute_query(
+            """
             SELECT e.id, e.name, e.public_sheet, ds.standing
             FROM state.entities e
             LEFT JOIN state.divine_standings ds ON ds.god_entity_id = e.id AND ds.entity_id = %s
             WHERE e.campaign_id = %s AND e.entity_type = 'GOD'
-        """, (str(entity_id), str(campaign_id)))
+        """,
+            (str(entity_id), str(campaign_id)),
+        )
 
         if not gods:
-            gods = execute_query("""
+            gods = execute_query(
+                """
                 SELECT e.id, e.name, e.public_sheet
                 FROM state.entities e
                 WHERE e.campaign_id = %s AND e.controlled_by = 'AI_GOD'
-            """, (str(campaign_id),))
+            """,
+                (str(campaign_id),),
+            )
 
         for god in gods:
             god_sheet = god.get("public_sheet", {})
@@ -66,15 +70,19 @@ class KarmaRouter:
 
             if delta != 0:
                 new_standing = current_standing + delta
-                standings_changes.append({
-                    "god_id": str(god["id"]),
-                    "god_name": god["name"],
-                    "entity_id": str(entity_id),
-                    "previous_standing": current_standing,
-                    "new_standing": new_standing,
-                    "delta": delta,
-                    "threshold_crossed": self._check_threshold(current_standing, new_standing),
-                })
+                standings_changes.append(
+                    {
+                        "god_id": str(god["id"]),
+                        "god_name": god["name"],
+                        "entity_id": str(entity_id),
+                        "previous_standing": current_standing,
+                        "new_standing": new_standing,
+                        "delta": delta,
+                        "threshold_crossed": self._check_threshold(
+                            current_standing, new_standing
+                        ),
+                    }
+                )
 
         return standings_changes
 
@@ -84,9 +92,9 @@ class KarmaRouter:
                 return t
         return None
 
-    def apply_standing_changes(self, changes: list[dict], campaign_id: uuid.UUID,
-                               conn=None) -> list[StateDelta]:
-        from shared.db.connection import get_connection
+    def apply_standing_changes(
+        self, changes: list[dict], campaign_id: uuid.UUID, conn=None
+    ) -> list[StateDelta]:
         own_conn = conn is None
         if own_conn:
             conn = get_connection()
@@ -95,24 +103,34 @@ class KarmaRouter:
         try:
             cur = conn.cursor()
             for change in changes:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO state.divine_standings (god_entity_id, entity_id, standing, campaign_id)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT (god_entity_id, entity_id) DO UPDATE
                     SET standing = EXCLUDED.standing
-                """, (change["god_id"], change["entity_id"], change["new_standing"], str(campaign_id)))
+                """,
+                    (
+                        change["god_id"],
+                        change["entity_id"],
+                        change["new_standing"],
+                        str(campaign_id),
+                    ),
+                )
 
-                deltas.append(StateDelta(
-                    table="state.divine_standings",
-                    operation="UPSERT",
-                    entity_id=uuid.UUID(change["entity_id"]),
-                    changes={
-                        "god_id": change["god_id"],
-                        "previous_standing": change["previous_standing"],
-                        "new_standing": change["new_standing"],
-                    },
-                    domain_tags=["karma", "standing_change"],
-                ))
+                deltas.append(
+                    StateDelta(
+                        table="state.divine_standings",
+                        operation="UPSERT",
+                        entity_id=uuid.UUID(change["entity_id"]),
+                        changes={
+                            "god_id": change["god_id"],
+                            "previous_standing": change["previous_standing"],
+                            "new_standing": change["new_standing"],
+                        },
+                        domain_tags=["karma", "standing_change"],
+                    )
+                )
 
             if own_conn:
                 conn.commit()

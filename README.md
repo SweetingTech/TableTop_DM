@@ -45,7 +45,7 @@ On first boot the entrypoint automatically:
 Once running:
 - **Dashboard:** `http://localhost:5000/`
 - **Game Console:** `http://localhost:5000/game`
-- **Tests:** `docker compose exec app python tests/test_mechanics.py`
+- **Tests:** `docker compose exec app pytest tests`
 
 To stop: `docker compose down` (add `-v` to also wipe the database volume).
 
@@ -68,7 +68,7 @@ python app.py                   # start server on port 5000
 All options provide the same endpoints:
 - **Dashboard:** `http://localhost:5000/` — view campaigns, entities, encounters, maps, schema
 - **Game Console:** `http://localhost:5000/game` — interactive game interface with event feed, commands, map viewer
-- **Tests:** `python tests/test_mechanics.py` — runs 23 unit tests
+- **Tests:** `pytest tests` — runs 23 unit tests
 
 
 ## Database
@@ -124,7 +124,7 @@ services/
   export/
     exporter.py                     Session export (Markdown) + replay engine
 tests/
-  test_mechanics.py                 23 unit tests
+  services/test_mechanics.py        deterministic unit tests (mechanics/spatial/domain)
 infra/sql/                          SQL migrations and seed data
 docs/                               Architecture specs
 ```

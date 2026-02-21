@@ -20,11 +20,36 @@ class GameMode(str, Enum):
 
 
 VALID_MODE_TRANSITIONS = {
-    GameMode.EXPLORATION: {GameMode.SOCIAL, GameMode.COMBAT, GameMode.CUTSCENE, GameMode.PAUSED},
-    GameMode.SOCIAL: {GameMode.EXPLORATION, GameMode.COMBAT, GameMode.CUTSCENE, GameMode.PAUSED},
-    GameMode.COMBAT: {GameMode.EXPLORATION, GameMode.SOCIAL, GameMode.CUTSCENE, GameMode.PAUSED},
-    GameMode.CUTSCENE: {GameMode.EXPLORATION, GameMode.SOCIAL, GameMode.COMBAT, GameMode.PAUSED},
-    GameMode.PAUSED: {GameMode.EXPLORATION, GameMode.SOCIAL, GameMode.COMBAT, GameMode.CUTSCENE},
+    GameMode.EXPLORATION: {
+        GameMode.SOCIAL,
+        GameMode.COMBAT,
+        GameMode.CUTSCENE,
+        GameMode.PAUSED,
+    },
+    GameMode.SOCIAL: {
+        GameMode.EXPLORATION,
+        GameMode.COMBAT,
+        GameMode.CUTSCENE,
+        GameMode.PAUSED,
+    },
+    GameMode.COMBAT: {
+        GameMode.EXPLORATION,
+        GameMode.SOCIAL,
+        GameMode.CUTSCENE,
+        GameMode.PAUSED,
+    },
+    GameMode.CUTSCENE: {
+        GameMode.EXPLORATION,
+        GameMode.SOCIAL,
+        GameMode.COMBAT,
+        GameMode.PAUSED,
+    },
+    GameMode.PAUSED: {
+        GameMode.EXPLORATION,
+        GameMode.SOCIAL,
+        GameMode.COMBAT,
+        GameMode.CUTSCENE,
+    },
 }
 
 
