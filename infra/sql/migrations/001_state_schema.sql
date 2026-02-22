@@ -83,21 +83,9 @@ CREATE TABLE IF NOT EXISTS state.map_nodes (
 CREATE INDEX IF NOT EXISTS idx_map_nodes_map_tier ON state.map_nodes(map_id, tier);
 CREATE INDEX IF NOT EXISTS idx_map_nodes_map_xy ON state.map_nodes(map_id, x, y);
 
-CREATE TABLE IF NOT EXISTS state.sessions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  campaign_id uuid NOT NULL REFERENCES state.campaigns(id),
-  status text NOT NULL CHECK (status IN ('ACTIVE','PAUSED','ENDED')),
-  started_at timestamptz NOT NULL DEFAULT now(),
-  ended_at timestamptz,
-  checkpoint_seq_id bigint NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_campaign_status ON state.sessions(campaign_id, status);
-
 CREATE TABLE IF NOT EXISTS state.encounters (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id uuid NOT NULL REFERENCES state.sessions(id),
+  session_id uuid NOT NULL,
   campaign_id uuid NOT NULL REFERENCES state.campaigns(id),
   status text NOT NULL CHECK (status IN ('PENDING','ACTIVE','COMPLETED','ABORTED')),
   round_number int NOT NULL DEFAULT 0,
@@ -138,7 +126,7 @@ CREATE INDEX IF NOT EXISTS idx_conditions_encounter_entity ON state.conditions(e
 CREATE TABLE IF NOT EXISTS state.intents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   campaign_id uuid NOT NULL REFERENCES state.campaigns(id),
-  session_id uuid NOT NULL REFERENCES state.sessions(id),
+  session_id uuid NOT NULL,
   encounter_id uuid REFERENCES state.encounters(id),
   principal_id uuid NOT NULL REFERENCES state.principals(id),
   entity_id uuid REFERENCES state.entities(id),
@@ -169,7 +157,7 @@ CREATE INDEX IF NOT EXISTS idx_reactions_trigger_event ON state.reactions(trigge
 CREATE TABLE IF NOT EXISTS state.interventions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   campaign_id uuid NOT NULL REFERENCES state.campaigns(id),
-  session_id uuid NOT NULL REFERENCES state.sessions(id),
+  session_id uuid NOT NULL,
   source_principal_id uuid NOT NULL REFERENCES state.principals(id),
   target_entity_id uuid NOT NULL REFERENCES state.entities(id),
   action_type text NOT NULL,
