@@ -20,3 +20,8 @@
 2. `make migrate`
 3. `make seed-demo`
 4. `./infra/scripts/phase2_verify_schema.sh`
+
+## Local Mode (No Docker)
+- For local mode, use `python infra/migrate.py` and `python infra/seed.py`.
+- These are wrapped by `make local-up` (which runs migrations and seeds automatically).
+- Requires `DATABASE_URL` in `.env` to point to a running Postgres instance.
