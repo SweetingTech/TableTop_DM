@@ -47,13 +47,13 @@ Acceptance:
 - This is the minimum definition of “play”.
 
 ### RG2: CI Green on main
-- [ ] CI runs with zero secrets (MockLLM in CI)
-- [ ] CI boots infra, migrates, seeds, runs tests, runs smoke checks
-- [ ] CI fails if:
-  - ledger is mutable
-  - visibility filtering bypassed
-  - unknown action_type not rejected
-  - deterministic engines nondeterministic under seeded RNG tests
+- [x] CI runs with zero secrets (MockLLM in CI)
+- [x] CI boots infra, migrates, seeds, runs tests, runs smoke checks
+- [x] CI fails if:
+  - [x] ledger is mutable
+  - [x] visibility filtering bypassed
+  - [x] unknown action_type not rejected
+  - [x] deterministic engines nondeterministic under seeded RNG tests
 
 Acceptance:
 - GitHub Actions shows green on default branch.
