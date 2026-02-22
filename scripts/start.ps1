@@ -12,7 +12,7 @@ if (-not (Test-Path ".env")) {
 }
 
 Write-Host "[start] Starting infrastructure services"
-docker compose -f infra/docker-compose.yml up -d db redis qdrant
+docker compose -f infra/docker-compose.yml up -d postgres redis qdrant
 
 Write-Host "[start] Running migrations"
 bash infra/scripts/migrate.sh
