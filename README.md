@@ -60,8 +60,8 @@ cp .env.example .env
 make up
 ```
 3. Open:
-   - Dashboard: `http://localhost:5000/`
-   - Game UI: `http://localhost:5000/game`
+   - Dashboard: `http://localhost:8000/`
+   - Game UI: `http://localhost:8000/game`
 4. Stop everything:
 ```bash
 make down
@@ -73,13 +73,13 @@ After `make up`:
 
 ```bash
 # health check
-curl -s http://localhost:5000/api/health
+curl -s http://localhost:8000/api/health
 
 # list campaigns (seed provides Eclipse Keep)
-curl -s http://localhost:5000/api/campaigns
+curl -s http://localhost:8000/api/campaigns
 
 # deterministic mechanics call
-curl -s -X POST http://localhost:5000/api/dice/roll \
+curl -s -X POST http://localhost:8000/api/dice/roll \
   -H "Content-Type: application/json" \
   -d '{"dice":"1d20","modifier":2}'
 ```
@@ -105,7 +105,7 @@ Defaults are in `.env.example`:
 
 Default local ports (also mirrored in `.env.example`):
 
-- App UI/API: `5000`
+- App UI/API: `8000`
 - PostgreSQL: `5432`
 - Redis: `6379`
 - Qdrant HTTP: `6333`
@@ -122,7 +122,7 @@ Migrations are in `infra/sql/migrations/`. Seed data for the "Eclipse Keep" demo
 
 ## Project Structure
 ```
-app.py                              Flask + SocketIO server (port 5000)
+app.py                              Flask + SocketIO server (port 8000)
 templates/
   index.html                        Dashboard template
   game.html                         Game console template

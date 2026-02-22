@@ -18,12 +18,13 @@ services:
   app:
     build: .
     ports:
-      - "${APP_PORT:-5000}:5000"
+      - "${APP_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tabletop}:${POSTGRES_PASSWORD:-tabletop_dev_password}@postgres:5432/${POSTGRES_DB:-tabletop_dm}
       APP_ENV: ${APP_ENV:-development}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SECRET_KEY: ${SECRET_KEY:-}
+      PORT: 8000
     depends_on:
       postgres:
         condition: service_healthy

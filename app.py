@@ -115,6 +115,7 @@ def game():
 
 
 @app.route("/api/health")
+@app.route("/health")
 def health():
     try:
         conn = get_db()
@@ -124,7 +125,7 @@ def health():
         conn.close()
         return jsonify({"status": "ok", "database": "connected"})
     except Exception as e:
-        return jsonify({"status": "error", "database": str(e)}), 500
+        return jsonify({"status": "degraded", "database": str(e)})
 
 
 @app.route("/api/campaigns")
@@ -541,4 +542,5 @@ def _serialize(obj):
 
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get("PORT", "8000"))
+    socketio.run(app, host="0.0.0.0", port=port, debug=True, allow_unsafe_werkzeug=True)

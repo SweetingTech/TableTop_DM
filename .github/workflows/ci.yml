@@ -91,6 +91,9 @@ jobs:
       - name: Integration gate
         run: make ci-integration
 
+      - name: Release-candidate verification
+        run: make verify-rc
+
       - name: Dump compose logs on failure
         if: failure()
         run: docker compose -f infra/docker-compose.yml logs --no-color
