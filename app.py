@@ -174,6 +174,98 @@ def api_encounters(campaign_id):
     return jsonify([_serialize(r) for r in rows])
 
 
+
+
+@app.route("/api/campaigns/<campaign_id>/session")
+def api_campaign_session(campaign_id):
+    from shared.db.connection import execute_one
+    from shared.auth.principal import load_principal
+
+    principal_id = request.args.get("principal_id")
+    if not principal_id:
+        return jsonify({"error": "principal_id is required"}), 400
+
+    try:
+        campaign_uuid = uuid.UUID(campaign_id)
+        principal_uuid = uuid.UUID(principal_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid campaign_id or principal_id format"}), 400
+
+    principal = load_principal(principal_uuid, campaign_uuid)
+    if not principal or not principal.role:
+        return jsonify({"error": "Principal is not a campaign member"}), 403
+    if not principal.is_gm():
+        return jsonify({"error": "Only GM can load session"}), 403
+
+    encounter = execute_one(
+        """
+        SELECT id AS encounter_id, session_id, status, round_number
+        FROM state.encounters
+        WHERE campaign_id = %s AND status = 'ACTIVE'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (str(campaign_uuid),),
+    )
+    if not encounter:
+        return jsonify({"error": "No session found for campaign"}), 404
+
+    return jsonify(
+        {
+            "campaign_id": str(campaign_uuid),
+            "session_id": str(encounter["session_id"]),
+            "encounter_id": str(encounter["encounter_id"]),
+            "encounter_status": encounter["status"],
+            "round_number": encounter["round_number"],
+        }
+    )
+
+
+@app.route("/api/sessions/<session_id>/join", methods=["POST"])
+def api_join_session(session_id):
+    from shared.db.connection import execute_one
+    from shared.auth.principal import load_principal
+
+    data = request.get_json(silent=True) or {}
+    principal_id = data.get("principal_id")
+    if not principal_id:
+        return jsonify({"error": "principal_id is required"}), 400
+
+    try:
+        session_uuid = uuid.UUID(session_id)
+        principal_uuid = uuid.UUID(principal_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid id format"}), 400
+
+    session_record = execute_one(
+        """
+        SELECT campaign_id
+        FROM state.encounters
+        WHERE session_id = %s AND status = 'ACTIVE'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (str(session_uuid),),
+    )
+    if not session_record:
+        return jsonify({"error": "Session not found"}), 404
+
+    campaign_uuid = uuid.UUID(str(session_record["campaign_id"]))
+    principal = load_principal(principal_uuid, campaign_uuid)
+    if not principal or not principal.role:
+        return jsonify({"error": "Principal is not a campaign member"}), 403
+
+    return jsonify(
+        {
+            "joined": True,
+            "session_id": str(session_uuid),
+            "campaign_id": str(campaign_uuid),
+            "principal_id": str(principal_uuid),
+            "role": principal.role,
+        }
+    )
+
+
 @app.route("/api/campaigns/<campaign_id>/mode", methods=["GET", "POST"])
 def api_campaign_mode(campaign_id):
     from services.orchestrator.state_machine import StateMachine
