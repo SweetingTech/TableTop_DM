@@ -210,10 +210,12 @@ __marimo__/
 .pythonlibs/
 .cache/
 .local/
+.run/
 
 # CI/CD and local artifact outputs
 artifacts/
 *.tar
+burn-bag/
 
 # Common local editor metadata
 .vscode/

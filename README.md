@@ -47,6 +47,8 @@ Use these commands everywhere (local + CI) so behavior stays deterministic:
 | Build image | `make build` |
 | Start stack (dev) | `make up` |
 | Stop stack | `make down` |
+| Start stack (local) | `make local-up` |
+| Stop stack (local) | `make local-down` |
 | Full CI gate locally | `make ci` |
 
 ## Quickstart
@@ -65,6 +67,20 @@ make up
 4. Stop everything:
 ```bash
 make down
+```
+
+### Local Mode (No Docker)
+
+If you cannot run Docker, you can run the application using a local Postgres instance:
+
+1. Ensure Postgres is running locally and `DATABASE_URL` in `.env` points to it.
+2. Run:
+```bash
+make local-up
+```
+3. Stop:
+```bash
+make local-down
 ```
 
 ### Hello Session Scenario
