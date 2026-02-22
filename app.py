@@ -2,6 +2,7 @@ import os
 import uuid
 import json
 import traceback
+import socket
 from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import psycopg2
@@ -116,20 +117,59 @@ def game():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "alive"})
+
+
+def _tcp_reachable(host: str, port: int, timeout: float = 1.5) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+    return True
+
+
+@app.route("/readyz")
+def readyz():
+    checks = {}
+    ok = True
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM infra_meta.schema_migrations")
+        _ = cur.fetchone()
+        cur.close()
+        conn.close()
+        checks["database"] = "ok"
+    except Exception as exc:
+        checks["database"] = str(exc)
+        ok = False
+
+    try:
+        _tcp_reachable(
+            os.environ.get("REDIS_HOST", "localhost"),
+            int(os.environ.get("REDIS_PORT", "6379")),
+        )
+        checks["redis"] = "ok"
+    except Exception as exc:
+        checks["redis"] = str(exc)
+        ok = False
+
+    try:
+        qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
+        qdrant_port = int(os.environ.get("QDRANT_HTTP_PORT", "6333"))
+        _tcp_reachable(qdrant_host, qdrant_port)
+        checks["qdrant"] = "ok"
+    except Exception as exc:
+        checks["qdrant"] = str(exc)
+        ok = False
+
+    code = 200 if ok else 503
+    return jsonify({"status": "ready" if ok else "not_ready", "checks": checks}), code
 
 
 @app.route("/api/health")
 def api_health():
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT 1")
-        cur.close()
-        conn.close()
-        return jsonify({"status": "ok", "database": "connected"})
-    except Exception as e:
-        return jsonify({"status": "degraded", "database": str(e)}), 503
+    return readyz()
 
 
 @app.route("/api/campaigns")

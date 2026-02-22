@@ -4,65 +4,157 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+MODE="docker"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      MODE="$2"
+      shift 2
+      ;;
+    *)
+      echo "[start] Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "$MODE" != "docker" && "$MODE" != "local" ]]; then
+  echo "[start] Invalid --mode '$MODE' (expected docker|local)" >&2
+  exit 1
+fi
+
 if [[ ! -f .env ]]; then
-  if [[ -f .env.example ]]; then
-    cp .env.example .env
-    echo "[start] Created .env from .env.example"
-  else
-    echo "[start] ERROR: .env is missing and .env.example was not found." >&2
-    exit 1
-  fi
+  cp .env.example .env
+  echo "[start] Created .env from .env.example"
 fi
 
-export PYTHONUNBUFFERED=1
-export PORT="${PORT:-8000}"
+mkdir -p burn-bag/local-run .local-run
+APP_PID_FILE=".local-run/app.pid"
+APP_LOG_FILE="burn-bag/local-run/app.log"
+DEPS_PROVIDER_FILE=".local-run/deps-provider"
+DEPS_STARTED_FILE=".local-run/deps-started-by-start"
 
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  echo "[start] Starting infrastructure services"
-  docker compose -f infra/docker-compose.yml up -d postgres redis qdrant
-
-  echo "[start] Running migrations"
-  bash infra/scripts/migrate.sh
-
-  echo "[start] Seeding demo campaign"
-  bash infra/scripts/seed_demo.sh
-else
-  echo "[start] docker compose unavailable; skipping infra start/migrate/seed" >&2
-fi
-
-echo "[start] Installing Python dependencies"
-python -m pip install -r requirements-dev.txt >/dev/null
-python - <<'PY'
+ensure_python_deps() {
+  python -m pip install -r requirements-dev.txt >/dev/null
+  python - <<'PY'
+import subprocess
 import tomllib
 from pathlib import Path
-import subprocess
 
 data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
 deps = data.get('project', {}).get('dependencies', [])
 if deps:
-    subprocess.check_call(['python', '-m', 'pip', 'install', *deps])
+    subprocess.check_call(['python', '-m', 'pip', 'install', *deps], stdout=subprocess.DEVNULL)
 PY
+}
 
-if [[ "${RUN_FOREGROUND:-0}" == "1" ]]; then
-  echo "[start] Running app in foreground at http://localhost:${PORT:-8000}"
-  exec python app.py
-fi
+wait_ready() {
+  local url="${VTT_READY_URL:-http://localhost:${PORT:-8000}/readyz}"
+  for _ in $(seq 1 60); do
+    if curl -fsS --max-time 3 "$url" >/dev/null; then
+      echo "[start] Ready at $url"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "[start] ERROR: readiness check failed at $url" >&2
+  return 1
+}
 
-mkdir -p .run
-if [[ -f .run/app.pid ]] && kill -0 "$(cat .run/app.pid)" >/dev/null 2>&1; then
-  echo "[start] App already running with PID $(cat .run/app.pid)"
-  exit 0
-fi
+start_host_app() {
+  export PYTHONUNBUFFERED=1
+  export PORT="${PORT:-8000}"
+  if [[ -f "$APP_PID_FILE" ]] && kill -0 "$(cat "$APP_PID_FILE")" >/dev/null 2>&1; then
+    echo "[start] App already running with PID $(cat "$APP_PID_FILE")"
+    return 0
+  fi
+  nohup python app.py > "$APP_LOG_FILE" 2>&1 &
+  echo $! > "$APP_PID_FILE"
+}
 
-echo "[start] Launching app in background"
-nohup python app.py > .run/app.log 2>&1 &
-echo $! > .run/app.pid
+docker_runtime_available() {
+  bash scripts/docker_runtime_available.sh
+}
 
-sleep 2
-if kill -0 "$(cat .run/app.pid)" >/dev/null 2>&1; then
-  echo "[start] Stack is up. Dashboard: http://localhost:${PORT:-8000}"
-  echo "[start] Use scripts/stop.sh to stop all services."
+start_deps_docker() {
+  if ! docker_runtime_available; then
+    echo "[start] ERROR: docker runtime is unavailable for docker dependency provider" >&2
+    return 1
+  fi
+  docker compose -f infra/docker-compose.yml up -d postgres redis qdrant
+  echo docker > "$DEPS_PROVIDER_FILE"
+  echo "1" > "$DEPS_STARTED_FILE"
+}
+
+check_host_dep() {
+  local host="$1"; local port="$2"; local name="$3"
+  python - "$host" "$port" "$name" <<'PY'
+import socket,sys
+h,p,n=sys.argv[1],int(sys.argv[2]),sys.argv[3]
+s=socket.socket(); s.settimeout(1.5)
+try:
+    s.connect((h,p))
+    print(f"ok:{n}")
+except Exception:
+    print(f"fail:{n}")
+    sys.exit(1)
+finally:
+    s.close()
+PY
+}
+
+run_migrate_seed_and_app() {
+  bash infra/scripts/migrate.sh
+  bash infra/scripts/seed_demo.sh
+  ensure_python_deps
+  start_host_app
+  wait_ready
+}
+
+start_local_mode() {
+  local provider="${DEPS_PROVIDER:-auto}"
+  if [[ "$provider" == "auto" ]]; then
+    if docker_runtime_available; then
+      provider="docker"
+    else
+      provider="host"
+    fi
+  fi
+
+  if [[ "$provider" == "docker" ]]; then
+    start_deps_docker
+  elif [[ "$provider" == "host" ]]; then
+    check_host_dep "${POSTGRES_HOST:-localhost}" "${POSTGRES_PORT:-5432}" "postgres" || {
+      echo "[start] Host Postgres unavailable. Run: ./scripts/setup.sh --mode local" >&2
+      return 1
+    }
+    check_host_dep "${REDIS_HOST:-localhost}" "${REDIS_PORT:-6379}" "redis" || {
+      echo "[start] Host Redis unavailable. Run: ./scripts/setup.sh --mode local" >&2
+      return 1
+    }
+    check_host_dep "${QDRANT_HOST:-localhost}" "${QDRANT_HTTP_PORT:-6333}" "qdrant" || {
+      echo "[start] Host Qdrant unavailable. Run: ./scripts/setup.sh --mode local" >&2
+      return 1
+    }
+    echo host > "$DEPS_PROVIDER_FILE"
+    rm -f "$DEPS_STARTED_FILE"
+  else
+    echo "[start] ERROR: DEPS_PROVIDER must be auto|docker|host" >&2
+    return 1
+  fi
+
+  run_migrate_seed_and_app
+}
+
+start_docker_mode() {
+  start_deps_docker
+  run_migrate_seed_and_app
+}
+
+if [[ "$MODE" == "docker" ]]; then
+  start_docker_mode
 else
-  echo "[start] ERROR: app failed to start. Check .run/app.log" >&2
-  exit 1
+  start_local_mode
 fi
+
+echo "[start] Started in $MODE mode"

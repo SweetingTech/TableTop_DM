@@ -3,7 +3,7 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 
 
 ## Implementation Status
-**All 20 phases complete.** See `todo.md` for the full checklist.
+**All TODO phases are checked and audited.** See `TODO.md` for the full checklist.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -30,79 +30,64 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 | 20 | Observability + CI/testing (23 unit tests) | Done |
 
 
-## Canonical Run Commands
-
-Use these commands everywhere (local + CI) so behavior stays deterministic:
-
-| Task | Canonical command |
-|---|---|
-| Install deps | `make install` |
-| Lint | `make lint` |
-| Typecheck | `make typecheck` |
-| Unit tests | `make unit` |
-| Contract tests | `make contracts` |
-| Integration tests | `make integration` |
-| Run migrations | `make migrate` |
-| Seed demo world | `make seed-demo` |
-| Build image | `make build` |
-| Start stack (dev) | `make up` |
-| Stop stack | `make down` |
-| Start stack (local) | `make local-up` |
-| Stop stack (local) | `make local-down` |
-| Full CI gate locally | `make ci` |
-
 ## Quickstart
 
-1. Copy environment defaults and adjust if needed:
+One-time setup:
 ```bash
-cp .env.example .env
-```
-2. Start the full stack (Postgres/Redis/Qdrant + migrations + seed + app):
-```bash
-make up
-```
-3. Open:
-   - Dashboard: `http://localhost:8000/`
-   - Game UI: `http://localhost:8000/game`
-4. Stop everything:
-```bash
-make down
+./scripts/setup.sh --mode docker
+# or
+./scripts/setup.sh --mode local
+# or
+make setup
 ```
 
-### Local Mode (No Docker)
-
-If you cannot run Docker, you can run the application using a local Postgres instance:
-
-1. Ensure Postgres is running locally and `DATABASE_URL` in `.env` points to it.
-2. Run:
+Docker mode (strict; requires usable Docker runtime):
 ```bash
-make local-up
-```
-3. Stop:
-```bash
-make local-down
+./scripts/start.sh --mode docker
+./scripts/stop.sh --mode docker
+python3 scripts/audit_todo.py --full --strict --mode docker
 ```
 
-### Hello Session Scenario
-
-After `make up`:
-
+Local mode (host app process):
 ```bash
-# health check
-curl -s http://localhost:8000/api/health
-
-# list campaigns (seed provides Eclipse Keep)
-curl -s http://localhost:8000/api/campaigns
-
-# deterministic mechanics call
-curl -s -X POST http://localhost:8000/api/dice/roll \
-  -H "Content-Type: application/json" \
-  -d '{"dice":"1d20","modifier":2}'
+DEPS_PROVIDER=auto ./scripts/start.sh --mode local
+./scripts/stop.sh --mode local
+python3 scripts/audit_todo.py --full --strict --mode local
 ```
 
-If you need foreground execution for local debugging, run:
+Local dependency providers:
+- `DEPS_PROVIDER=auto` (default): use docker deps when runtime is usable, else host deps.
+- `DEPS_PROVIDER=docker`: run Postgres/Redis/Qdrant in compose, app on host.
+- `DEPS_PROVIDER=host`: require host Postgres/Redis/Qdrant.
+
+If local host deps are missing, run:
 ```bash
-RUN_FOREGROUND=1 bash scripts/start.sh
+./scripts/setup.sh --mode local
+```
+This command fails loudly and prints install instructions for macOS (`brew`), Linux (`apt`), and Windows (`winget`/`choco`).
+
+CI/verification commands:
+```bash
+make ci
+make verify-docker
+make verify-local
+make verify
+```
+
+Integration skip behavior when Docker runtime is unavailable:
+- `make ci` still passes fast gates.
+- integration is skipped with loud log output.
+- machine-readable marker is written to `burn-bag/ci-integration-skipped.txt`.
+
+Health endpoints:
+- `GET /health` = liveness (process only)
+- `GET /readyz` = readiness (postgres + redis + qdrant + migrations)
+- `GET /api/health` = compatibility alias to readiness
+
+RG1 smoke:
+```bash
+bash scripts/rg1.sh --mode docker
+bash scripts/rg1.sh --mode local
 ```
 
 ## Environment Variables
@@ -191,7 +176,9 @@ docs/                               Architecture specs
 |--------|------|-------------|
 | GET | `/` | Dashboard (database viewer) |
 | GET | `/game` | Game console frontend |
-| GET | `/api/health` | Health check |
+| GET | `/health` | Liveness endpoint (process only) |
+| GET | `/readyz` | Readiness endpoint (deps + migrations) |
+| GET | `/api/health` | Backward-compatible alias for `/readyz` |
 | GET | `/api/campaigns` | List campaigns |
 | GET | `/api/campaigns/<id>` | Campaign detail |
 | GET | `/api/campaigns/<id>/entities` | Campaign entities |

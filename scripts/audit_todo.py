@@ -191,7 +191,7 @@ def resolve_compose_file(root: Path, override: Optional[str]) -> Optional[Path]:
 def resolve_health_url(override: Optional[str]) -> str:
     if override:
         return override
-    return os.environ.get("VTT_HEALTH_URL", "http://localhost:8000/health")
+    return os.environ.get("VTT_HEALTH_URL", "http://localhost:8000/readyz")
 
 
 def http_get(url: str, timeout_s: int = 5) -> Tuple[bool, str]:
@@ -208,6 +208,13 @@ def http_get(url: str, timeout_s: int = 5) -> Tuple[bool, str]:
 
 def fmt_cmd(cmd: Optional[List[str]]) -> str:
     return " ".join(cmd) if cmd else "(none)"
+
+
+def docker_runtime_usable() -> bool:
+    rc, _ = run_cmd(
+        ["bash", "scripts/docker_runtime_available.sh"], cwd=repo_root(), timeout_s=20
+    )
+    return rc == 0
 
 
 def pick_command(
@@ -231,7 +238,12 @@ def pick_command(
             if not pwsh:
                 return None
             return [pwsh, "-ExecutionPolicy", "Bypass", "-File", str(script_fallback)]
-        return [str(script_fallback)]
+        cmd = [str(script_fallback)]
+        if script_fallback.name in {"start.sh", "stop.sh", "rg1.sh"}:
+            mode = os.environ.get("AUDIT_MODE_HINT")
+            if mode in {"docker", "local"}:
+                cmd += ["--mode", mode]
+        return cmd
 
     return None
 
@@ -325,6 +337,8 @@ def main() -> int:
         "--skip-rg1", action="store_true", help="Skip RG1 smoke in full mode."
     )
     args = ap.parse_args()
+
+    os.environ["AUDIT_MODE_HINT"] = args.mode
 
     todo_path = (root / args.todo).resolve()
     if not todo_path.exists():
@@ -523,8 +537,8 @@ def main() -> int:
     health_url = resolve_health_url(args.health_url)
 
     if args.mode == "local":
-        start_target, start_script_name = "local-up", "start_local"
-        stop_target, stop_script_name = "local-down", "stop_local"
+        start_target, start_script_name = "up-local", "start"
+        stop_target, stop_script_name = "down-local", "stop"
     else:
         start_target, start_script_name = "up", "start"
         stop_target, stop_script_name = "down", "stop"
@@ -552,19 +566,14 @@ def main() -> int:
     seed_cmd = pick_command(root, targets, prefer_make, "seed", None)
 
     if args.mode == "local":
-        # In local mode, check for ci-fast first as it avoids docker dependencies
-        ci_cmd = pick_command(root, targets, prefer_make, "ci-fast", None)
-        if not ci_cmd:
-            ci_cmd = pick_command(
-                root,
-                targets,
-                prefer_make,
-                "ci",
-                root / "scripts/test.sh"
-                if (root / "scripts/test.sh").exists()
-                else None,
-            )
-        rg1_cmd = None  # RG1 requires full stack orchestration; skipped in local unless specifically supported
+        ci_cmd = pick_command(root, targets, prefer_make, "ci", None)
+        rg1_cmd = pick_command(
+            root,
+            targets,
+            prefer_make,
+            "rg1-local",
+            (root / "scripts/rg1.sh") if (root / "scripts/rg1.sh").exists() else None,
+        )
     else:
         ci_cmd = pick_command(
             root,
@@ -635,7 +644,7 @@ def main() -> int:
     if args.full:
         # Docker compose validation/build (skip in local mode)
         if args.mode == "docker":
-            if compose_file and which("docker"):
+            if compose_file and docker_runtime_usable():
                 # config
                 rc, out, lp = log_run(
                     "docker-compose-config",
@@ -685,8 +694,8 @@ def main() -> int:
                 findings.append(
                     AuditFinding(
                         name="Docker checks",
-                        status="WARN",
-                        details="Docker or compose file not found. Skipping docker validation/build.",
+                        status="FAIL",
+                        details="Docker mode requires docker and infra/docker-compose.yml.",
                     )
                 )
         else:
@@ -717,6 +726,45 @@ def main() -> int:
                         details=f"Local CI command passed: {' '.join(ci_cmd)}\nLog: {lp}",
                     )
                 )
+
+        ci_skip_marker = root / "burn-bag" / "ci-integration-skipped.txt"
+        if ci_cmd:
+            if args.mode == "docker":
+                if ci_skip_marker.exists():
+                    findings.append(
+                        AuditFinding(
+                            name="CI integration skip marker (docker mode)",
+                            status="FAIL",
+                            details=f"Skip marker must not exist in docker mode: {ci_skip_marker}",
+                        )
+                    )
+            else:
+                if docker_runtime_usable():
+                    if ci_skip_marker.exists():
+                        findings.append(
+                            AuditFinding(
+                                name="CI integration skip marker (local mode, docker usable)",
+                                status="FAIL",
+                                details="Docker runtime is usable, so integration must not be skipped.",
+                            )
+                        )
+                else:
+                    if ci_skip_marker.exists():
+                        findings.append(
+                            AuditFinding(
+                                name="CI integration skip marker (local mode, docker unavailable)",
+                                status="PASS",
+                                details=f"Detected expected skip marker: {ci_skip_marker}",
+                            )
+                        )
+                    else:
+                        findings.append(
+                            AuditFinding(
+                                name="CI integration skip marker (local mode, docker unavailable)",
+                                status="FAIL",
+                                details="Expected integration skip marker was not produced.",
+                            )
+                        )
 
         # RG0: up -> health -> down
         if start_cmd and stop_cmd:
@@ -777,7 +825,7 @@ def main() -> int:
                 )
 
             # Optional: confirm compose ps shows nothing running
-            if compose_file and which("docker"):
+            if compose_file and docker_runtime_usable():
                 rc, out, lp = log_run(
                     "docker-compose-ps",
                     ["docker", "compose", "-f", str(compose_file), "ps"],
@@ -804,22 +852,13 @@ def main() -> int:
         # RG1 smoke
         if not args.skip_rg1:
             if rg1_cmd is None:
-                if args.mode == "local":
-                    findings.append(
-                        AuditFinding(
-                            name="RG1 smoke",
-                            status="PASS",  # Skipped for local unless specifically supported
-                            details="Skipped RG1 smoke for local mode (focus on RG0 + unit tests).",
-                        )
+                findings.append(
+                    AuditFinding(
+                        name="RG1 smoke",
+                        status="FAIL" if args.strict else "WARN",
+                        details="No RG1 runner found (expected make rg1/rg1-local target or scripts/rg1.sh).",
                     )
-                else:
-                    findings.append(
-                        AuditFinding(
-                            name="RG1 smoke",
-                            status="FAIL" if args.strict else "WARN",
-                            details="No RG1 runner found (expected `make rg1` target or scripts/rg1.sh or scripts/smoke_rg1.sh).",
-                        )
-                    )
+                )
             else:
                 # Bring stack up again for rg1
                 if start_cmd:
