@@ -58,3 +58,11 @@ ORDER BY entity_type, name;"
 
 echo ""
 echo "Demo seed complete."
+
+TOKENS_FILE="$ROOT_DIR/.run/smoke_join_tokens.txt"
+mkdir -p "$ROOT_DIR/.run"
+cat > "$TOKENS_FILE" <<EOF
+DM=dm-smoke-join-22222222-2222-2222-2222-222222222221
+PLAYER=player-smoke-join-22222222-2222-2222-2222-222222222222
+EOF
+echo "Smoke join tokens written to $TOKENS_FILE"

@@ -68,9 +68,19 @@ Indexes: `(campaign_id)`.
 UNIQUE: `(map_id, tier, x, y)`
 Indexes: `(map_id, tier)`, `(map_id, x, y)`.
 
+## sessions
+- `id` UUID PK
+- `campaign_id` UUID FK -> campaigns(id)
+- `status` text NOT NULL CHECK in ('ACTIVE','PAUSED','ENDED')
+- `started_at` timestamptz NOT NULL default now()
+- `ended_at` timestamptz NULL
+- `checkpoint_seq_id` bigint NOT NULL default 0
+- timestamps
+Indexes: `(campaign_id, status)`.
+
 ## encounters
 - `id` UUID PK
-- `session_id` UUID NOT NULL
+- `session_id` UUID NOT NULL FK -> sessions(id)
 - `campaign_id` UUID FK -> campaigns(id)
 - `status` text NOT NULL CHECK in ('PENDING','ACTIVE','COMPLETED','ABORTED')
 - `round_number` int NOT NULL default 0
@@ -102,7 +112,7 @@ Indexes: `(entity_id, condition_type)`, `(encounter_id, entity_id)`.
 ## intents
 - `id` UUID PK
 - `campaign_id` UUID FK -> campaigns(id)
-- `session_id` UUID NOT NULL
+- `session_id` UUID NOT NULL FK -> sessions(id)
 - `encounter_id` UUID NULL FK -> encounters(id)
 - `principal_id` UUID FK -> principals(id)
 - `entity_id` UUID NULL FK -> entities(id)
@@ -128,7 +138,7 @@ Indexes: `(intent_id, stack_position)`, `(trigger_event_id)`.
 ## interventions
 - `id` UUID PK
 - `campaign_id` UUID FK -> campaigns(id)
-- `session_id` UUID NOT NULL
+- `session_id` UUID NOT NULL FK -> sessions(id)
 - `source_principal_id` UUID FK -> principals(id)
 - `target_entity_id` UUID FK -> entities(id)
 - `action_type` text NOT NULL

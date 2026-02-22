@@ -15,6 +15,11 @@ def test_seeded_demo_ids_exist(integration_stack, postgres_dsn: str) -> None:
             assert cur.fetchone()[0] == 1
 
             cur.execute(
+                "SELECT COUNT(*) FROM state.sessions WHERE id = '66666666-6666-6666-6666-666666666661'"
+            )
+            assert cur.fetchone()[0] == 1
+
+            cur.execute(
                 "SELECT COUNT(*) FROM state.encounters WHERE id = '55555555-5555-5555-5555-555555555551'"
             )
             assert cur.fetchone()[0] == 1
