@@ -288,7 +288,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--todo",
-        default="todo.md",
+        default="TODO.md",
         help="Path to todo.md/TODO.md relative to repo root.",
     )
     ap.add_argument(

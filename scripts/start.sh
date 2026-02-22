@@ -19,7 +19,7 @@ export PORT="${PORT:-8000}"
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   echo "[start] Starting infrastructure services"
-  docker compose -f infra/docker-compose.yml up -d db redis qdrant
+  docker compose -f infra/docker-compose.yml up -d postgres redis qdrant
 
   echo "[start] Running migrations"
   bash infra/scripts/migrate.sh
