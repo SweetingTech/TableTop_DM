@@ -15,20 +15,20 @@ if [[ ! -f .env ]]; then
 fi
 
 export PYTHONUNBUFFERED=1
+export PORT="${PORT:-8000}"
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   echo "[start] Starting infrastructure services"
   docker compose -f infra/docker-compose.yml up -d db redis qdrant
+
+  echo "[start] Running migrations"
+  bash infra/scripts/migrate.sh
+
+  echo "[start] Seeding demo campaign"
+  bash infra/scripts/seed_demo.sh
 else
-  echo "[start] ERROR: docker compose is required for canonical start." >&2
-  exit 1
+  echo "[start] docker compose unavailable; skipping infra start/migrate/seed" >&2
 fi
-
-echo "[start] Running migrations"
-bash infra/scripts/migrate.sh
-
-echo "[start] Seeding demo campaign"
-bash infra/scripts/seed_demo.sh
 
 echo "[start] Installing Python dependencies"
 python -m pip install -r requirements-dev.txt >/dev/null
@@ -44,7 +44,7 @@ if deps:
 PY
 
 if [[ "${RUN_FOREGROUND:-0}" == "1" ]]; then
-  echo "[start] Running app in foreground at http://localhost:5000"
+  echo "[start] Running app in foreground at http://localhost:${PORT:-8000}"
   exec python app.py
 fi
 
@@ -60,7 +60,7 @@ echo $! > .run/app.pid
 
 sleep 2
 if kill -0 "$(cat .run/app.pid)" >/dev/null 2>&1; then
-  echo "[start] Stack is up. Dashboard: http://localhost:5000"
+  echo "[start] Stack is up. Dashboard: http://localhost:${PORT:-8000}"
   echo "[start] Use scripts/stop.sh to stop all services."
 else
   echo "[start] ERROR: app failed to start. Check .run/app.log" >&2

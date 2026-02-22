@@ -1,5 +1,5 @@
 .PHONY: install build start stop up down healthcheck verify-schema migrate seed-demo db-reset compose-smoke build-images \
-	lint format typecheck test unit contracts integration ci-fast ci-integration ci gates
+	lint format typecheck test unit contracts integration rg1 verify-rc ci-fast ci-integration ci gates
 
 install:
 	python -m pip install -r requirements-dev.txt
@@ -72,8 +72,25 @@ integration:
 
 ci-fast: install lint format typecheck unit contracts
 
-ci-integration: migrate seed-demo
-	pytest -m "integration"
+ci-integration:
+	@if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
+		$(MAKE) migrate; \
+		$(MAKE) seed-demo; \
+		pytest -m "integration"; \
+	else \
+		if [ -n "$$CI" ]; then \
+			echo "[ci-integration] docker compose unavailable in CI; failing ci-integration target"; \
+			exit 1; \
+		else \
+			echo "[ci-integration] docker compose unavailable; skipping integration tests"; \
+		fi; \
+	fi
+
+rg1:
+	bash scripts/rg1.sh
+
+verify-rc:
+	bash scripts/verify_rc.sh
 
 ci: ci-fast ci-integration
 
