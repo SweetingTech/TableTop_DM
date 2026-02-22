@@ -20,7 +20,6 @@ PLAYER_ENTITY_ID = uuid.UUID("33333333-3333-3333-3333-333333333331")
 def test_unknown_action_type_rejected_and_warning_logged(
     integration_stack, postgres_dsn: str
 ) -> None:
-    del integration_stack
     pipeline = OrchestratorPipeline()
     principal = PrincipalContext(
         principal_id=PLAYER_ID,
@@ -62,7 +61,6 @@ def test_unknown_action_type_rejected_and_warning_logged(
 
 
 def test_ledger_is_append_only_via_rls(integration_stack, postgres_dsn: str) -> None:
-    del integration_stack
     event_id = uuid.uuid4()
     conn = psycopg2.connect(postgres_dsn)
     conn.autocommit = True
@@ -98,7 +96,6 @@ def test_ledger_is_append_only_via_rls(integration_stack, postgres_dsn: str) -> 
 def test_visibility_cannot_be_bypassed_without_principal(
     integration_stack, postgres_dsn: str
 ) -> None:
-    del integration_stack
     viewer = str(PLAYER_ID)
     hidden = "22222222-2222-2222-2222-222222222223"
     event_id = uuid.uuid4()

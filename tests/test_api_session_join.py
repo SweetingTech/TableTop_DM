@@ -17,7 +17,9 @@ def test_player_can_join_session(monkeypatch):
     )
     monkeypatch.setattr(
         "shared.db.connection.execute_one",
-        lambda *_args, **_kwargs: {"campaign_id": "11111111-1111-1111-1111-111111111111"},
+        lambda *_args, **_kwargs: {
+            "campaign_id": "11111111-1111-1111-1111-111111111111"
+        },
     )
 
     with app.test_client() as client:
@@ -38,7 +40,9 @@ def test_non_member_cannot_join_session(monkeypatch):
     )
     monkeypatch.setattr(
         "shared.db.connection.execute_one",
-        lambda *_args, **_kwargs: {"campaign_id": "11111111-1111-1111-1111-111111111111"},
+        lambda *_args, **_kwargs: {
+            "campaign_id": "11111111-1111-1111-1111-111111111111"
+        },
     )
 
     with app.test_client() as client:

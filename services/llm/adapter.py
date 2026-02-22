@@ -1,13 +1,16 @@
 import os
 import json
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from shared.schemas.events import EventEnvelope
 from shared.schemas.enums import EventType
 
+if TYPE_CHECKING:
+    from openai import OpenAI
 
-def get_openai_client():
+
+def get_openai_client() -> "OpenAI":
     from openai import OpenAI
 
     return OpenAI(
@@ -21,7 +24,9 @@ def get_openai_client():
 class LLMAdapter:
     def __init__(self, model: str = "gpt-4o-mini"):
         self.mode = os.environ.get("TTDM_LLM_MODE", "live").lower()
-        self.client = None if self.mode == "mock" else get_openai_client()
+        self.client: Optional["OpenAI"] = (
+            None if self.mode == "mock" else get_openai_client()
+        )
         self.model = model
         self.max_retries = 2
         self.timeout = 30
@@ -47,6 +52,9 @@ class LLMAdapter:
     ) -> dict:
         if self.mode == "mock":
             return self._mock_response(response_schema)
+
+        if self.client is None:
+            return {"error": "LLM client unavailable"}
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -95,6 +103,9 @@ class LLMAdapter:
     def generate_text(self, system_prompt: str, user_prompt: str) -> str:
         if self.mode == "mock":
             return "[MockLLM] Deterministic text response."
+
+        if self.client is None:
+            return "[LLM Error: client unavailable]"
 
         try:
             response = self.client.chat.completions.create(

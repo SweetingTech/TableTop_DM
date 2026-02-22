@@ -68,11 +68,11 @@ Acceptance:
 - [x] Add /docs placeholders (all present)
 
 NEW REQUIRED FILES:
-- [ ] Add start/stop scripts:
-  - [ ] `scripts/start.sh`, `scripts/stop.sh`
-  - [ ] `scripts/start.ps1`, `scripts/stop.ps1`
-- [ ] Add `scripts/test.sh` that CI calls
-- [ ] Add `.env.example` and ensure start scripts copy it if missing
+- [x] Add start/stop scripts:
+  - [x] `scripts/start.sh`, `scripts/stop.sh`
+  - [x] `scripts/start.ps1`, `scripts/stop.ps1`
+- [x] Add `scripts/test.sh` that CI calls
+- [x] Add `.env.example` and ensure start scripts copy it if missing
 
 Acceptance:
 - Repo boots with canonical scripts and consistent commands.

@@ -174,8 +174,6 @@ def api_encounters(campaign_id):
     return jsonify([_serialize(r) for r in rows])
 
 
-
-
 @app.route("/api/campaigns/<campaign_id>/session")
 def api_campaign_session(campaign_id):
     from shared.db.connection import execute_one

@@ -15,7 +15,8 @@ class Principal:
 
 def test_campaign_session_load_for_gm(monkeypatch):
     monkeypatch.setattr(
-        "shared.auth.principal.load_principal", lambda *_args, **_kwargs: Principal("GM")
+        "shared.auth.principal.load_principal",
+        lambda *_args, **_kwargs: Principal("GM"),
     )
 
     def fake_execute_one(_query, _params):
@@ -41,7 +42,8 @@ def test_campaign_session_load_for_gm(monkeypatch):
 
 def test_campaign_session_load_for_non_gm_forbidden(monkeypatch):
     monkeypatch.setattr(
-        "shared.auth.principal.load_principal", lambda *_args, **_kwargs: Principal("PLAYER")
+        "shared.auth.principal.load_principal",
+        lambda *_args, **_kwargs: Principal("PLAYER"),
     )
 
     with app.test_client() as client:

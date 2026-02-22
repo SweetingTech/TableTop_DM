@@ -21,11 +21,17 @@ class DummyProposal:
 
 def test_player_move_token_proposal_returns_state_delta(monkeypatch):
     monkeypatch.setattr("shared.schemas.contracts.InterventionProposal", DummyProposal)
-    monkeypatch.setattr("shared.auth.principal.load_principal", lambda *_args, **_kwargs: DummyPrincipal())
+    monkeypatch.setattr(
+        "shared.auth.principal.load_principal",
+        lambda *_args, **_kwargs: DummyPrincipal(),
+    )
 
     class Pipeline:
         def process_proposal(self, *_args, **_kwargs):
-            return {"event_type": "STATE_DELTA", "payload": {"deltas": [{"table": "state.entities"}]}}
+            return {
+                "event_type": "STATE_DELTA",
+                "payload": {"deltas": [{"table": "state.entities"}]},
+            }
 
     monkeypatch.setattr("services.orchestrator.pipeline.OrchestratorPipeline", Pipeline)
 
@@ -37,7 +43,11 @@ def test_player_move_token_proposal_returns_state_delta(monkeypatch):
                 "principal_id": "22222222-2222-2222-2222-222222222222",
                 "campaign_id": "11111111-1111-1111-1111-111111111111",
                 "session_id": "66666666-6666-6666-6666-666666666661",
-                "params": {"entity_id": "33333333-3333-3333-3333-333333333331", "destination_x": 6, "destination_y": 5},
+                "params": {
+                    "entity_id": "33333333-3333-3333-3333-333333333331",
+                    "destination_x": 6,
+                    "destination_y": 5,
+                },
             },
         )
 
@@ -58,7 +68,9 @@ def test_player_talk_to_npc_creates_dialogue_event(monkeypatch):
         def append_event(self, _event):
             return {"seq_id": 1}
 
-    monkeypatch.setattr("services.conversations.manager.ConversationManager", ConversationManager)
+    monkeypatch.setattr(
+        "services.conversations.manager.ConversationManager", ConversationManager
+    )
     monkeypatch.setattr("services.ledger.writer.LedgerWriter", LedgerWriter)
 
     with app.test_client() as client:
@@ -83,7 +95,9 @@ def test_gm_switches_mode_to_combat(monkeypatch):
         def set_campaign_mode(self, _campaign_id, new_mode):
             return {"mode": new_mode.value}
 
-    monkeypatch.setattr("services.orchestrator.state_machine.StateMachine", StateMachine)
+    monkeypatch.setattr(
+        "services.orchestrator.state_machine.StateMachine", StateMachine
+    )
 
     with app.test_client() as client:
         response = client.post(
@@ -97,7 +111,10 @@ def test_gm_switches_mode_to_combat(monkeypatch):
 
 def test_combat_round_intent_and_advance(monkeypatch):
     monkeypatch.setattr("shared.schemas.contracts.InterventionProposal", DummyProposal)
-    monkeypatch.setattr("shared.auth.principal.load_principal", lambda *_args, **_kwargs: DummyPrincipal())
+    monkeypatch.setattr(
+        "shared.auth.principal.load_principal",
+        lambda *_args, **_kwargs: DummyPrincipal(),
+    )
 
     class Pipeline:
         def process_proposal(self, *_args, **_kwargs):
@@ -116,7 +133,9 @@ def test_combat_round_intent_and_advance(monkeypatch):
             return {"current_turn_order": 2}
 
     monkeypatch.setattr("services.orchestrator.pipeline.OrchestratorPipeline", Pipeline)
-    monkeypatch.setattr("services.orchestrator.state_machine.StateMachine", StateMachine)
+    monkeypatch.setattr(
+        "services.orchestrator.state_machine.StateMachine", StateMachine
+    )
 
     with app.test_client() as client:
         propose = client.post(
@@ -134,7 +153,9 @@ def test_combat_round_intent_and_advance(monkeypatch):
                 },
             },
         )
-        advance = client.post("/api/encounters/55555555-5555-5555-5555-555555555551/advance")
+        advance = client.post(
+            "/api/encounters/55555555-5555-5555-5555-555555555551/advance"
+        )
 
     assert propose.status_code == 200
     payload = propose.get_json()["payload"]
@@ -177,16 +198,34 @@ def test_replay_engine_verify_state_success(monkeypatch):
                 {
                     "seq_id": 1,
                     "type": "STATE_DELTA",
-                    "payload": {"deltas": [{"table": "state.entities", "operation": "UPDATE", "entity_id": "e1", "changes": {"hp_current": 20}}]},
+                    "payload": {
+                        "deltas": [
+                            {
+                                "table": "state.entities",
+                                "operation": "UPDATE",
+                                "entity_id": "e1",
+                                "changes": {"hp_current": 20},
+                            }
+                        ]
+                    },
                 }
             ]
         },
     )
-    monkeypatch.setattr("services.export.exporter.execute_one", lambda *_args, **_kwargs: {"hp_current": 20, "hp_max": 28, "ac": 16})
+    monkeypatch.setattr(
+        "services.export.exporter.execute_one",
+        lambda *_args, **_kwargs: {"hp_current": 20, "hp_max": 28, "ac": 16},
+    )
 
     result = engine.verify_state(
         uuid.UUID("66666666-6666-6666-6666-666666666661"),
-        {"33333333-3333-3333-3333-333333333331": {"hp_current": 20, "hp_max": 28, "ac": 16}},
+        {
+            "33333333-3333-3333-3333-333333333331": {
+                "hp_current": 20,
+                "hp_max": 28,
+                "ac": 16,
+            }
+        },
     )
 
     assert result["verified"] is True
