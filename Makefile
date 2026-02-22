@@ -1,4 +1,4 @@
-.PHONY: install build start stop up healthcheck verify-schema migrate seed-demo db-reset compose-smoke build-images \
+.PHONY: install build start stop up down healthcheck verify-schema migrate seed-demo db-reset compose-smoke build-images \
 	lint format typecheck test unit contracts integration ci-fast ci-integration ci gates
 
 install:
@@ -15,7 +15,10 @@ stop:
 	bash scripts/stop.sh
 
 up:
-	./infra/scripts/phase1_up.sh
+	bash scripts/start.sh
+
+down:
+	bash scripts/stop.sh
 
 healthcheck:
 	./infra/scripts/phase1_healthcheck.sh

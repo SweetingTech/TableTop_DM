@@ -19,29 +19,29 @@ Rule: [x] means implemented AND verified by tests or smoke gates. Not “written
 
 ## Reality Gates (NEW, REQUIRED)
 ### RG0: One-command local boot and shutdown
-- [ ] `make up` (or `./scripts/start.*`) starts infra + services + UI
-- [ ] migrations run automatically on start (or `make migrate` is required step)
-- [ ] seed demo world runs automatically (or `make seed` is required step)
-- [ ] `make down` (or `./scripts/stop.*`) stops cleanly
+- [x] `make up` (or `./scripts/start.*`) starts infra + services + UI
+- [x] migrations run automatically on start (or `make migrate` is required step)
+- [x] seed demo world runs automatically (or `make seed` is required step)
+- [x] `make down` (or `./scripts/stop.*`) stops cleanly
 
 Acceptance:
 - Fresh clone → run start → open UI → stop → no orphan containers, no stuck ports.
 
 ### RG1: Playable Smoke Gate (DM + Player)
-- [ ] DM can create/load a seeded campaign + session
-- [ ] Player can join session (principal auth stub ok)
-- [ ] Load a demo map (2D upload OR seeded procedural)
-- [ ] Spawn tokens and render them
-- [ ] Player moves token → server validates → broadcast delta → UI updates
-- [ ] Player talks to NPC (directed) → NPC responds (only when audible)
-- [ ] GM switches mode to COMBAT explicitly
-- [ ] Run 1 full combat round with:
-  - intent broadcast
-  - pre-registered reaction trigger firing with zero LLM calls
-  - deterministic tool calls
-  - STATE_DELTA ledger events
-- [ ] Export session log (visibility filtered) produces Markdown
-- [ ] Replay from checkpoint reproduces same state (bit-for-bit or loud fail)
+- [x] DM can create/load a seeded campaign + session
+- [x] Player can join session (principal auth stub ok)
+- [x] Load a demo map (2D upload OR seeded procedural)
+- [x] Spawn tokens and render them
+- [x] Player moves token → server validates → broadcast delta → UI updates
+- [x] Player talks to NPC (directed) → NPC responds (only when audible)
+- [x] GM switches mode to COMBAT explicitly
+- [x] Run 1 full combat round with:
+  - [x] intent broadcast
+  - [x] pre-registered reaction trigger firing with zero LLM calls
+  - [x] deterministic tool calls
+  - [x] STATE_DELTA ledger events
+- [x] Export session log (visibility filtered) produces Markdown
+- [x] Replay from checkpoint reproduces same state (bit-for-bit or loud fail)
 
 Acceptance:
 - This is the minimum definition of “play”.

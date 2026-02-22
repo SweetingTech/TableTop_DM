@@ -43,8 +43,8 @@ Use these commands everywhere (local + CI) so behavior stays deterministic:
 | Contract tests | `make contracts` |
 | Integration tests | `make integration` |
 | Build image | `make build` |
-| Start stack (dev) | `make start` |
-| Stop stack | `make stop` |
+| Start stack (dev) | `make up` |
+| Stop stack | `make down` |
 | Full CI gate locally | `make ci` |
 
 ## Quickstart
@@ -55,19 +55,19 @@ cp .env.example .env
 ```
 2. Start the full stack (Postgres/Redis/Qdrant + migrations + seed + app):
 ```bash
-make start
+make up
 ```
 3. Open:
    - Dashboard: `http://localhost:5000/`
    - Game UI: `http://localhost:5000/game`
 4. Stop everything:
 ```bash
-make stop
+make down
 ```
 
 ### Hello Session Scenario
 
-After `make start`:
+After `make up`:
 
 ```bash
 # health check
@@ -167,9 +167,11 @@ docs/                               Architecture specs
 | GET | `/api/campaigns/<id>` | Campaign detail |
 | GET | `/api/campaigns/<id>/entities` | Campaign entities |
 | GET | `/api/campaigns/<id>/encounters` | Campaign encounters |
+| GET | `/api/campaigns/<id>/session` | GM loads current campaign session record |
 | GET/POST | `/api/campaigns/<id>/mode` | Get/set game mode |
 | GET | `/api/campaigns/<id>/maps` | Campaign maps |
 | GET | `/api/maps/<id>` | Map detail with nodes |
+| POST | `/api/sessions/<session_id>/join` | Join a seeded session (membership/auth stub) |
 | POST | `/api/propose` | Submit intervention proposal |
 | POST | `/api/dice/roll` | Roll dice |
 | POST | `/api/encounters/<id>/advance` | Advance combat turn |
