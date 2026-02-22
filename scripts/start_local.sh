@@ -46,21 +46,17 @@ fi
 # Install dependencies if needed
 echo "[start_local] Ensuring dependencies..."
 if ! python -m pip install -r requirements-dev.txt >/dev/null 2>&1; then
-    echo "[start_local] WARNING: Failed to install requirements-dev.txt. Assuming already installed or handled externally."
-fi
-
-# Check pyproject.toml dependencies (requires python 3.11+ for tomllib)
-python - <<'PY'
-import subprocess
-import sys
-from pathlib import Path
+import tomllib
 
 try:
-    import tomllib
     data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
     deps = data.get('project', {}).get('dependencies', [])
     if deps:
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', *deps], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.check_call(
+            [sys.executable, '-m', 'pip', 'install', *deps],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 except ImportError:
     print("Warning: tomllib not found (python < 3.11?), skipping pyproject.toml dependency check.")
 except Exception as e:
