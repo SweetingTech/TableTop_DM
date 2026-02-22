@@ -523,36 +523,37 @@ def main() -> int:
     health_url = resolve_health_url(args.health_url)
 
     if args.mode == "local":
-        start_cmd = pick_command(
-            root,
-            targets,
-            prefer_make,
-            "local-up",
-            root / "scripts/start_local.sh"
-            if (root / "scripts/start_local.sh").exists()
-            else (root / "scripts/start_local.ps1"),
-        )
-        stop_cmd = pick_command(
-            root,
-            targets,
-            prefer_make,
-            "local-down",
-            root / "scripts/stop_local.sh"
-            if (root / "scripts/stop_local.sh").exists()
-            else (root / "scripts/stop_local.ps1"),
-        )
-        # Local migrate/seed are handled inside start_local.sh usually, but we check availability
-        migrate_cmd = pick_command(root, targets, prefer_make, "migrate", None)
-        seed_cmd = pick_command(root, targets, prefer_make, "seed", None)
+        start_target, start_script_name = "local-up", "start_local"
+        stop_target, stop_script_name = "local-down", "stop_local"
+    else:
+        start_target, start_script_name = "up", "start"
+        stop_target, stop_script_name = "down", "stop"
 
+    start_cmd = pick_command(
+        root,
+        targets,
+        prefer_make,
+        start_target,
+        root / f"scripts/{start_script_name}.sh"
+        if (root / f"scripts/{start_script_name}.sh").exists()
+        else (root / f"scripts/{start_script_name}.ps1"),
+    )
+    stop_cmd = pick_command(
+        root,
+        targets,
+        prefer_make,
+        stop_target,
+        root / f"scripts/{stop_script_name}.sh"
+        if (root / f"scripts/{stop_script_name}.sh").exists()
+        else (root / f"scripts/{stop_script_name}.ps1"),
+    )
+
+    migrate_cmd = pick_command(root, targets, prefer_make, "migrate", None)
+    seed_cmd = pick_command(root, targets, prefer_make, "seed", None)
+
+    if args.mode == "local":
         # In local mode, check for ci-fast first as it avoids docker dependencies
-        ci_cmd = pick_command(
-            root,
-            targets,
-            prefer_make,
-            "ci-fast",
-            None,
-        )
+        ci_cmd = pick_command(root, targets, prefer_make, "ci-fast", None)
         if not ci_cmd:
             ci_cmd = pick_command(
                 root,
@@ -563,29 +564,8 @@ def main() -> int:
                 if (root / "scripts/test.sh").exists()
                 else None,
             )
-
         rg1_cmd = None  # RG1 requires full stack orchestration; skipped in local unless specifically supported
     else:
-        start_cmd = pick_command(
-            root,
-            targets,
-            prefer_make,
-            "up",
-            root / "scripts/start.sh"
-            if (root / "scripts/start.sh").exists()
-            else (root / "scripts/start.ps1"),
-        )
-        stop_cmd = pick_command(
-            root,
-            targets,
-            prefer_make,
-            "down",
-            root / "scripts/stop.sh"
-            if (root / "scripts/stop.sh").exists()
-            else (root / "scripts/stop.ps1"),
-        )
-        migrate_cmd = pick_command(root, targets, prefer_make, "migrate", None)
-        seed_cmd = pick_command(root, targets, prefer_make, "seed", None)
         ci_cmd = pick_command(
             root,
             targets,
