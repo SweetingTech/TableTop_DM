@@ -87,9 +87,9 @@ Acceptance:
 - [x] Add env.example with all required vars
 
 NEW REQUIRED:
-- [ ] Compose healthcheck gate in scripts/CI (wait until healthy)
-- [ ] Explicit ports documented in README
-- [ ] `make up/down/migrate/seed/test/ci` (or equivalent) is canonical and documented
+- [x] Compose healthcheck gate in scripts/CI (wait until healthy)
+- [x] Explicit ports documented in README
+- [x] `make up/down/migrate/seed/test/ci` (or equivalent) is canonical and documented
 
 ---
 
@@ -101,7 +101,7 @@ NEW REQUIRED:
 - [x] Security and visibility spec
 
 NEW REQUIRED:
-- [ ] Confirm the implementation matches docs (schema drift test in CI)
+- [x] Confirm the implementation matches docs (schema drift test in CI)
 
 ---
 
@@ -112,9 +112,9 @@ NEW REQUIRED:
 - [x] Domain tags spec
 
 NEW REQUIRED:
-- [ ] Contract schema tests in CI:
-  - [ ] invalid envelope rejected
-  - [ ] unknown action_type rejected + SYSTEM_WARNING logged
+- [x] Contract schema tests in CI:
+  - [x] invalid envelope rejected
+  - [x] unknown action_type rejected + SYSTEM_WARNING logged
 
 ---
 
@@ -126,15 +126,15 @@ NEW REQUIRED:
 - [x] Add indexes
 
 ### 4.1 Seed a demo campaign
-- [ ] Create sessions table OR equivalent canonical session record (REQUIRED)
-- [ ] Seed must create:
-  - [ ] campaign
-  - [ ] session row
-  - [ ] principals
-  - [ ] entities (2 PCs, 1 NPC)
-  - [ ] one map room
-  - [ ] encounter template
-- [ ] Seed prints IDs and writes a “smoke join token” for DM and Player
+- [x] Create sessions table OR equivalent canonical session record (REQUIRED)
+- [x] Seed must create:
+  - [x] campaign
+  - [x] session row
+  - [x] principals
+  - [x] entities (2 PCs, 1 NPC)
+  - [x] one map room
+  - [x] encounter template
+- [x] Seed prints IDs and writes a “smoke join token” for DM and Player
 
 Acceptance:
 - RG1 can be executed from seed output alone.
@@ -147,7 +147,7 @@ Acceptance:
 - [x] Spatial endpoints + tests
 
 NEW REQUIRED:
-- [ ] Integration test: Orchestrator calls mechanics + spatial and commits deltas atomically
+- [x] Integration test: Orchestrator calls mechanics + spatial and commits deltas atomically
 
 ---
 
@@ -159,8 +159,8 @@ NEW REQUIRED:
 - [x] Concurrency + idempotency
 
 NEW REQUIRED:
-- [ ] “Unknown action_type” rejection writes SYSTEM_WARNING ledger entry (assert in integration test)
-- [ ] Encounter/session locks proven by concurrency test
+- [x] “Unknown action_type” rejection writes SYSTEM_WARNING ledger entry (assert in integration test)
+- [x] Encounter/session locks proven by concurrency test
 
 ---
 
@@ -170,7 +170,7 @@ NEW REQUIRED:
 - [x] Context assembly filtering
 
 NEW REQUIRED:
-- [ ] WebSocket broadcast filtering test (server-side filtering, not client filtering)
+- [x] WebSocket broadcast filtering test (server-side filtering, not client filtering)
 
 ---
 
@@ -181,9 +181,9 @@ NEW REQUIRED:
 - [x] NPC agent directed only
 
 NEW REQUIRED:
-- [ ] MockLLM adapter mode for CI and local dev:
-  - [ ] no external inference calls
-  - [ ] deterministic fixture proposals and dialogue
+- [x] MockLLM adapter mode for CI and local dev:
+  - [x] no external inference calls
+  - [x] deterministic fixture proposals and dialogue
 
 ---
 
@@ -194,7 +194,7 @@ NEW REQUIRED:
 - [x] Off-screen simulation deltas only
 
 NEW REQUIRED:
-- [ ] Test: off-screen simulation produces no LLM calls (assert call count = 0)
+- [x] Test: off-screen simulation produces no LLM calls (assert call count = 0)
 
 ---
 
@@ -205,7 +205,7 @@ NEW REQUIRED:
 - [x] Threshold wakes
 
 NEW REQUIRED:
-- [ ] Test: threshold wake triggers only on crossings, not on every tagged event
+- [x] Test: threshold wake triggers only on crossings, not on every tagged event
 
 ---
 
@@ -216,54 +216,54 @@ NEW REQUIRED:
 - [x] Grudges
 
 NEW REQUIRED:
-- [ ] Integration test: elder-first then minor-second effect sticks until countered (ordering proof)
+- [x] Integration test: elder-first then minor-second effect sticks until countered (ordering proof)
 
 ---
 
 ## Phase 12–16: NPC, Social, Guilds, Economy, Content
 (Claimed done; verify consequence chains and toggles)
 NEW REQUIRED:
-- [ ] Campaign toggles integration tests (content mode, divine enabled/disabled, etc.)
-- [ ] Murder-hobo consequence smoke test from RG1 (kill villager → bounty/investigation event)
+- [x] Campaign toggles integration tests (content mode, divine enabled/disabled, etc.)
+- [x] Murder-hobo consequence smoke test from RG1 (kill villager → bounty/investigation event)
 
 ---
 
 ## Phase 17: Maps
 (Claimed done; must prove in RG1)
 NEW REQUIRED:
-- [ ] “Map truth” test:
-  - [ ] collision mask blocks movement server-side
-  - [ ] UI reflects blocked move as rejection
+- [x] “Map truth” test:
+  - [x] collision mask blocks movement server-side
+  - [x] UI reflects blocked move as rejection
 
 ---
 
 ## Phase 18: Frontend MVP
 (Claimed done; must prove in RG1)
 NEW REQUIRED:
-- [ ] Two-client test harness (DM + Player) for WS feed differences (visible_to proven)
+- [x] Two-client test harness (DM + Player) for WS feed differences (visible_to proven)
 
 ---
 
 ## Phase 19: Export + Replay + Debugging
 (Claimed done; must prove state reproduction)
 NEW REQUIRED:
-- [ ] Replay test:
-  - [ ] checkpoint + ledger replay reproduces state exactly OR fails loud with diff output
+- [x] Replay test:
+  - [x] checkpoint + ledger replay reproduces state exactly OR fails loud with diff output
 
 ---
 
 ## Phase 20: Hardening + Ops
 (Claimed done; CI proves it)
 NEW REQUIRED:
-- [ ] CI uses canonical scripts (`scripts/test.sh` or `make ci`)
-- [ ] CI executes RG-lite smoke:
-  - [ ] /health OK
-  - [ ] migrations OK
-  - [ ] seed OK
-  - [ ] 1 proposal → tool call → delta → ledger append
+- [x] CI uses canonical scripts (`scripts/test.sh` or `make ci`)
+- [x] CI executes RG-lite smoke:
+  - [x] /health OK
+  - [x] migrations OK
+  - [x] seed OK
+  - [x] 1 proposal → tool call → delta → ledger append
 
 ---
 
 ## Burn Bag (Optional but you requested it)
-- [ ] Create `burn-bag/` for temporary smoke tests only
-- [ ] Permanent unit/integration tests stay in normal test folders
+- [x] Create `burn-bag/` for temporary smoke tests only
+- [x] Permanent unit/integration tests stay in normal test folders

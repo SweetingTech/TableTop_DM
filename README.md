@@ -42,6 +42,8 @@ Use these commands everywhere (local + CI) so behavior stays deterministic:
 | Unit tests | `make unit` |
 | Contract tests | `make contracts` |
 | Integration tests | `make integration` |
+| Run migrations | `make migrate` |
+| Seed demo world | `make seed-demo` |
 | Build image | `make build` |
 | Start stack (dev) | `make up` |
 | Stop stack | `make down` |
@@ -97,6 +99,17 @@ Defaults are in `.env.example`:
 - `QDRANT_HTTP_PORT`, `QDRANT_GRPC_PORT`
 - `OPENAI_API_KEY` (optional for local non-LLM flows)
 - `CONTENT_MODE` (`SAFE`, `MATURE`, `EXPLICIT`)
+
+
+## Service Ports
+
+Default local ports (also mirrored in `.env.example`):
+
+- App UI/API: `5000`
+- PostgreSQL: `5432`
+- Redis: `6379`
+- Qdrant HTTP: `6333`
+- Qdrant gRPC: `6334`
 
 ## Database
 Uses PostgreSQL with three schemas (Replit built-in or Docker Compose):

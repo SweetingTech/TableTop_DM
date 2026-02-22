@@ -19,10 +19,11 @@ def test_campaign_session_load_for_gm(monkeypatch):
         lambda *_args, **_kwargs: Principal("GM"),
     )
 
-    def fake_execute_one(_query, _params):
+    def fake_execute_one(query, _params):
+        if "FROM state.sessions" in query:
+            return {"id": "66666666-6666-6666-6666-666666666661", "status": "ACTIVE"}
         return {
             "encounter_id": "55555555-5555-5555-5555-555555555551",
-            "session_id": "66666666-6666-6666-6666-666666666661",
             "status": "ACTIVE",
             "round_number": 1,
         }

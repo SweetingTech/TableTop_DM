@@ -195,26 +195,37 @@ def api_campaign_session(campaign_id):
     if not principal.is_gm():
         return jsonify({"error": "Only GM can load session"}), 403
 
-    encounter = execute_one(
+    session_record = execute_one(
         """
-        SELECT id AS encounter_id, session_id, status, round_number
-        FROM state.encounters
+        SELECT id, status
+        FROM state.sessions
         WHERE campaign_id = %s AND status = 'ACTIVE'
         ORDER BY created_at DESC
         LIMIT 1
         """,
         (str(campaign_uuid),),
     )
-    if not encounter:
+    if not session_record:
         return jsonify({"error": "No session found for campaign"}), 404
+
+    encounter = execute_one(
+        """
+        SELECT id AS encounter_id, status, round_number
+        FROM state.encounters
+        WHERE session_id = %s AND status = 'ACTIVE'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (str(session_record["id"]),),
+    )
 
     return jsonify(
         {
             "campaign_id": str(campaign_uuid),
-            "session_id": str(encounter["session_id"]),
-            "encounter_id": str(encounter["encounter_id"]),
-            "encounter_status": encounter["status"],
-            "round_number": encounter["round_number"],
+            "session_id": str(session_record["id"]),
+            "encounter_id": str(encounter["encounter_id"]) if encounter else None,
+            "encounter_status": encounter["status"] if encounter else None,
+            "round_number": encounter["round_number"] if encounter else 0,
         }
     )
 
@@ -238,9 +249,8 @@ def api_join_session(session_id):
     session_record = execute_one(
         """
         SELECT campaign_id
-        FROM state.encounters
-        WHERE session_id = %s AND status = 'ACTIVE'
-        ORDER BY created_at DESC
+        FROM state.sessions
+        WHERE id = %s AND status = 'ACTIVE'
         LIMIT 1
         """,
         (str(session_uuid),),
