@@ -78,7 +78,12 @@ ci-integration:
 		$(MAKE) seed-demo; \
 		pytest -m "integration"; \
 	else \
-		echo "[ci-integration] docker compose unavailable; skipping integration tests"; \
+		if [ -n "$$CI" ]; then \
+			echo "[ci-integration] docker compose unavailable in CI; failing ci-integration target"; \
+			exit 1; \
+		else \
+			echo "[ci-integration] docker compose unavailable; skipping integration tests"; \
+		fi; \
 	fi
 
 rg1:
