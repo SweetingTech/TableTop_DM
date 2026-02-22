@@ -114,9 +114,13 @@ def game():
     return render_template("game.html")
 
 
-@app.route("/api/health")
 @app.route("/health")
 def health():
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/health")
+def api_health():
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -125,7 +129,7 @@ def health():
         conn.close()
         return jsonify({"status": "ok", "database": "connected"})
     except Exception as e:
-        return jsonify({"status": "degraded", "database": str(e)})
+        return jsonify({"status": "degraded", "database": str(e)}), 503
 
 
 @app.route("/api/campaigns")

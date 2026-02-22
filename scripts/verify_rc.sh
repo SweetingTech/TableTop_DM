@@ -10,6 +10,10 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
 fi
 
 COMPOSE_FILE="infra/docker-compose.yml"
+cleanup() {
+  make down || true
+}
+trap cleanup EXIT
 
 python3 scripts/audit_todo.py --full --strict
 
@@ -18,12 +22,14 @@ docker compose -f "$COMPOSE_FILE" build
 
 make up
 curl -fsS http://localhost:8000/health
+
+make ci
+python3 scripts/audit_todo.py --full --strict
+
 make down
+trap - EXIT
 
 if docker compose -f "$COMPOSE_FILE" ps | grep -q "Up"; then
   echo "[verify-rc] ERROR: orphan containers still running after shutdown." >&2
   exit 1
 fi
-
-make ci
-python3 scripts/audit_todo.py --full --strict
