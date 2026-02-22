@@ -47,13 +47,13 @@ Acceptance:
 - This is the minimum definition of “play”.
 
 ### RG2: CI Green on main
-- [ ] CI runs with zero secrets (MockLLM in CI)
-- [ ] CI boots infra, migrates, seeds, runs tests, runs smoke checks
-- [ ] CI fails if:
-  - ledger is mutable
-  - visibility filtering bypassed
-  - unknown action_type not rejected
-  - deterministic engines nondeterministic under seeded RNG tests
+- [x] CI runs with zero secrets (MockLLM in CI)
+- [x] CI boots infra, migrates, seeds, runs tests, runs smoke checks
+- [x] CI fails if:
+  - [x] ledger is mutable
+  - [x] visibility filtering bypassed
+  - [x] unknown action_type not rejected
+  - [x] deterministic engines nondeterministic under seeded RNG tests
 
 Acceptance:
 - GitHub Actions shows green on default branch.
@@ -68,11 +68,11 @@ Acceptance:
 - [x] Add /docs placeholders (all present)
 
 NEW REQUIRED FILES:
-- [ ] Add start/stop scripts:
-  - [ ] `scripts/start.sh`, `scripts/stop.sh`
-  - [ ] `scripts/start.ps1`, `scripts/stop.ps1`
-- [ ] Add `scripts/test.sh` that CI calls
-- [ ] Add `.env.example` and ensure start scripts copy it if missing
+- [x] Add start/stop scripts:
+  - [x] `scripts/start.sh`, `scripts/stop.sh`
+  - [x] `scripts/start.ps1`, `scripts/stop.ps1`
+- [x] Add `scripts/test.sh` that CI calls
+- [x] Add `.env.example` and ensure start scripts copy it if missing
 
 Acceptance:
 - Repo boots with canonical scripts and consistent commands.

@@ -1,14 +1,18 @@
 import os
 import json
 import uuid
-from typing import Any, Optional
-from openai import OpenAI
+from typing import TYPE_CHECKING, Any, Optional
 
 from shared.schemas.events import EventEnvelope
 from shared.schemas.enums import EventType
 
+if TYPE_CHECKING:
+    from openai import OpenAI
 
-def get_openai_client() -> OpenAI:
+
+def get_openai_client() -> "OpenAI":
+    from openai import OpenAI
+
     return OpenAI(
         api_key=os.environ.get(
             "AI_INTEGRATIONS_OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", "")
@@ -19,10 +23,26 @@ def get_openai_client() -> OpenAI:
 
 class LLMAdapter:
     def __init__(self, model: str = "gpt-4o-mini"):
-        self.client = get_openai_client()
+        self.mode = os.environ.get("TTDM_LLM_MODE", "live").lower()
+        self.client: Optional["OpenAI"] = (
+            None if self.mode == "mock" else get_openai_client()
+        )
         self.model = model
         self.max_retries = 2
         self.timeout = 30
+
+    def _mock_response(self, response_schema: Optional[dict] = None) -> dict:
+        properties = (response_schema or {}).get("properties", {})
+        if "narration" in properties:
+            return {
+                "narration": "A deterministic narration describes the resolved outcome."
+            }
+        if "dialogue" in properties:
+            return {
+                "dialogue": "Understood. We proceed with caution.",
+                "action": "The NPC nods.",
+            }
+        return {"message": "deterministic mock response"}
 
     def generate_structured(
         self,
@@ -30,6 +50,12 @@ class LLMAdapter:
         user_prompt: str,
         response_schema: Optional[dict] = None,
     ) -> dict:
+        if self.mode == "mock":
+            return self._mock_response(response_schema)
+
+        if self.client is None:
+            return {"error": "LLM client unavailable"}
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -75,6 +101,12 @@ class LLMAdapter:
         return {"error": "Max retries exceeded"}
 
     def generate_text(self, system_prompt: str, user_prompt: str) -> str:
+        if self.mode == "mock":
+            return "[MockLLM] Deterministic text response."
+
+        if self.client is None:
+            return "[LLM Error: client unavailable]"
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,

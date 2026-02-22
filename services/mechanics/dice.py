@@ -1,9 +1,29 @@
 import os
+import random
 import re
 from shared.schemas.events import RollResult
 
 
+_DETERMINISTIC_SEED = os.getenv("TTDM_RNG_SEED")
+
+
+def _build_seeded_rng(seed_raw: str | None) -> random.Random | None:
+    if not seed_raw:
+        return None
+
+    try:
+        return random.Random(int(seed_raw))
+    except ValueError:
+        return None
+
+
+_SEEDED_RNG = _build_seeded_rng(_DETERMINISTIC_SEED)
+
+
 def crypto_randint(low: int, high: int) -> int:
+    if _SEEDED_RNG is not None:
+        return _SEEDED_RNG.randint(low, high)
+
     span = high - low + 1
     return low + int.from_bytes(os.urandom(4), "big") % span
 
