@@ -1,6 +1,10 @@
 import uuid
+
+import pytest
 from app import app
 from services.export.exporter import ReplayEngine
+
+pytestmark = pytest.mark.unit
 
 
 class DummyPrincipal:
@@ -150,7 +154,11 @@ def test_export_session_log_markdown(monkeypatch):
 
     with app.test_client() as client:
         response = client.get(
-            "/api/export/66666666-6666-6666-6666-666666666661?principal_id=22222222-2222-2222-2222-222222222222&campaign_id=11111111-1111-1111-1111-111111111111"
+            "/api/export/66666666-6666-6666-6666-666666666661",
+            query_string={
+                "principal_id": "22222222-2222-2222-2222-222222222222",
+                "campaign_id": "11111111-1111-1111-1111-111111111111",
+            },
         )
 
     assert response.status_code == 200

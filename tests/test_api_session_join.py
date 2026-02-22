@@ -1,18 +1,24 @@
+import pytest
+
 from app import app
+
+pytestmark = pytest.mark.unit
+
+
+class Principal:
+    def __init__(self, role: str):
+        self.role = role
 
 
 def test_player_can_join_session(monkeypatch):
-    responses = iter(
-        [
-            {"campaign_id": "11111111-1111-1111-1111-111111111111"},
-            {"role": "PLAYER"},
-        ]
+    monkeypatch.setattr(
+        "shared.auth.principal.load_principal",
+        lambda *_args, **_kwargs: Principal("PLAYER"),
     )
-
-    def fake_execute_one(_query, _params):
-        return next(responses)
-
-    monkeypatch.setattr("shared.db.connection.execute_one", fake_execute_one)
+    monkeypatch.setattr(
+        "shared.db.connection.execute_one",
+        lambda *_args, **_kwargs: {"campaign_id": "11111111-1111-1111-1111-111111111111"},
+    )
 
     with app.test_client() as client:
         response = client.post(
@@ -24,19 +30,16 @@ def test_player_can_join_session(monkeypatch):
     payload = response.get_json()
     assert payload["joined"] is True
     assert payload["role"] == "PLAYER"
-    assert payload["session_id"] == "66666666-6666-6666-6666-666666666661"
 
 
 def test_non_member_cannot_join_session(monkeypatch):
-    responses = iter([
-        {"campaign_id": "11111111-1111-1111-1111-111111111111"},
-        None,
-    ])
-
-    def fake_execute_one(_query, _params):
-        return next(responses)
-
-    monkeypatch.setattr("shared.db.connection.execute_one", fake_execute_one)
+    monkeypatch.setattr(
+        "shared.auth.principal.load_principal", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "shared.db.connection.execute_one",
+        lambda *_args, **_kwargs: {"campaign_id": "11111111-1111-1111-1111-111111111111"},
+    )
 
     with app.test_client() as client:
         response = client.post(

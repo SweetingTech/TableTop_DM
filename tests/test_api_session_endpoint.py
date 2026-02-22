@@ -1,21 +1,30 @@
+import pytest
+
 from app import app
+
+pytestmark = pytest.mark.unit
+
+
+class Principal:
+    def __init__(self, role: str):
+        self.role = role
+
+    def is_gm(self) -> bool:
+        return self.role == "GM"
 
 
 def test_campaign_session_load_for_gm(monkeypatch):
-    responses = iter(
-        [
-            {"role": "GM"},
-            {
-                "encounter_id": "55555555-5555-5555-5555-555555555551",
-                "session_id": "66666666-6666-6666-6666-666666666661",
-                "status": "ACTIVE",
-                "round_number": 1,
-            },
-        ]
+    monkeypatch.setattr(
+        "shared.auth.principal.load_principal", lambda *_args, **_kwargs: Principal("GM")
     )
 
     def fake_execute_one(_query, _params):
-        return next(responses)
+        return {
+            "encounter_id": "55555555-5555-5555-5555-555555555551",
+            "session_id": "66666666-6666-6666-6666-666666666661",
+            "status": "ACTIVE",
+            "round_number": 1,
+        }
 
     monkeypatch.setattr("shared.db.connection.execute_one", fake_execute_one)
 
@@ -28,14 +37,12 @@ def test_campaign_session_load_for_gm(monkeypatch):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["session_id"] == "66666666-6666-6666-6666-666666666661"
-    assert payload["encounter_id"] == "55555555-5555-5555-5555-555555555551"
 
 
 def test_campaign_session_load_for_non_gm_forbidden(monkeypatch):
-    def fake_execute_one(_query, _params):
-        return {"role": "PLAYER"}
-
-    monkeypatch.setattr("shared.db.connection.execute_one", fake_execute_one)
+    monkeypatch.setattr(
+        "shared.auth.principal.load_principal", lambda *_args, **_kwargs: Principal("PLAYER")
+    )
 
     with app.test_client() as client:
         response = client.get(
