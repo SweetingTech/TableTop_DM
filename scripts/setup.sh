@@ -9,12 +9,17 @@ INSTALL_DEPS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode)
-      MODE="$2"; shift 2 ;;
+      MODE="$2"
+      shift 2
+      ;;
     --install-deps)
-      INSTALL_DEPS=1; shift ;;
+      INSTALL_DEPS=1
+      shift
+      ;;
     *)
       echo "[setup] Unknown argument: $1" >&2
-      exit 1 ;;
+      exit 1
+      ;;
   esac
 done
 
@@ -47,7 +52,7 @@ PY
 
 if [[ "$MODE" == "docker" ]]; then
   echo "[setup] Running docker setup flow"
-  bash setup.sh
+  bash ./setup.sh
   exit 0
 fi
 
@@ -57,7 +62,7 @@ if [[ "$MODE" != "local" ]]; then
 fi
 
 if [[ "$INSTALL_DEPS" == "1" ]]; then
-  echo "[setup] --install-deps requested. Automatic installation is not performed for safety."
+  echo "[setup] --install-deps requested. Automatic installation is not performed for safety." >&2
 fi
 
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
@@ -68,9 +73,18 @@ QDRANT_HOST="${QDRANT_HOST:-localhost}"
 QDRANT_HTTP_PORT="${QDRANT_HTTP_PORT:-6333}"
 
 missing=0
-check_port "$POSTGRES_HOST" "$POSTGRES_PORT" || { echo "[setup] Missing dependency: Postgres at ${POSTGRES_HOST}:${POSTGRES_PORT}"; missing=1; }
-check_port "$REDIS_HOST" "$REDIS_PORT" || { echo "[setup] Missing dependency: Redis at ${REDIS_HOST}:${REDIS_PORT}"; missing=1; }
-check_port "$QDRANT_HOST" "$QDRANT_HTTP_PORT" || { echo "[setup] Missing dependency: Qdrant at ${QDRANT_HOST}:${QDRANT_HTTP_PORT}"; missing=1; }
+check_port "$POSTGRES_HOST" "$POSTGRES_PORT" || {
+  echo "[setup] Missing dependency: Postgres at ${POSTGRES_HOST}:${POSTGRES_PORT}"
+  missing=1
+}
+check_port "$REDIS_HOST" "$REDIS_PORT" || {
+  echo "[setup] Missing dependency: Redis at ${REDIS_HOST}:${REDIS_PORT}"
+  missing=1
+}
+check_port "$QDRANT_HOST" "$QDRANT_HTTP_PORT" || {
+  echo "[setup] Missing dependency: Qdrant at ${QDRANT_HOST}:${QDRANT_HTTP_PORT}"
+  missing=1
+}
 
 if [[ "$missing" == "1" ]]; then
   echo "[setup] Local dependency check failed."

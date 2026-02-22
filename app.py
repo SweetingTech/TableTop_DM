@@ -12,6 +12,11 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
+REDIS_DEFAULT_HOST = "localhost"
+REDIS_DEFAULT_PORT = 6379
+QDRANT_DEFAULT_HOST = "localhost"
+QDRANT_DEFAULT_HTTP_PORT = 6333
+
 
 def get_db():
     return psycopg2.connect(os.environ["DATABASE_URL"])
@@ -121,6 +126,7 @@ def health():
 
 
 def _tcp_reachable(host: str, port: int, timeout: float = 1.5) -> bool:
+    """Return True when a TCP endpoint is reachable within timeout."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
         sock.connect((host, port))
@@ -129,6 +135,7 @@ def _tcp_reachable(host: str, port: int, timeout: float = 1.5) -> bool:
 
 @app.route("/readyz")
 def readyz():
+    """Readiness probe: verifies DB+migrations and Redis/Qdrant reachability."""
     checks = {}
     ok = True
 
@@ -146,8 +153,8 @@ def readyz():
 
     try:
         _tcp_reachable(
-            os.environ.get("REDIS_HOST", "localhost"),
-            int(os.environ.get("REDIS_PORT", "6379")),
+            os.environ.get("REDIS_HOST", REDIS_DEFAULT_HOST),
+            int(os.environ.get("REDIS_PORT", str(REDIS_DEFAULT_PORT))),
         )
         checks["redis"] = "ok"
     except Exception as exc:
@@ -155,8 +162,10 @@ def readyz():
         ok = False
 
     try:
-        qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
-        qdrant_port = int(os.environ.get("QDRANT_HTTP_PORT", "6333"))
+        qdrant_host = os.environ.get("QDRANT_HOST", QDRANT_DEFAULT_HOST)
+        qdrant_port = int(
+            os.environ.get("QDRANT_HTTP_PORT", str(QDRANT_DEFAULT_HTTP_PORT))
+        )
         _tcp_reachable(qdrant_host, qdrant_port)
         checks["qdrant"] = "ok"
     except Exception as exc:

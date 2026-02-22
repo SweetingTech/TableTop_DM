@@ -28,6 +28,24 @@ if [[ ! -f .env ]]; then
   echo "[start] Created .env from .env.example"
 fi
 
+load_env_file() {
+  python - <<'PY'
+from pathlib import Path
+
+p = Path('.env')
+if p.exists():
+    for line in p.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        print(f'export {k.strip()}={v.strip()}')
+PY
+}
+
+# Load .env into current shell so app.py sees DATABASE_URL and dependency host/port vars.
+eval "$(load_env_file)"
+
 mkdir -p burn-bag/local-run .local-run
 APP_PID_FILE=".local-run/app.pid"
 APP_LOG_FILE="burn-bag/local-run/app.log"
@@ -104,8 +122,10 @@ PY
 }
 
 run_migrate_seed_and_app() {
-  bash infra/scripts/migrate.sh
-  bash infra/scripts/seed_demo.sh
+  local migrate_cmd="$1"
+  local seed_cmd="$2"
+  bash "$migrate_cmd"
+  bash "$seed_cmd"
   ensure_python_deps
   start_host_app
   wait_ready
@@ -123,6 +143,7 @@ start_local_mode() {
 
   if [[ "$provider" == "docker" ]]; then
     start_deps_docker
+    run_migrate_seed_and_app "infra/scripts/migrate.sh" "infra/scripts/seed_demo.sh"
   elif [[ "$provider" == "host" ]]; then
     check_host_dep "${POSTGRES_HOST:-localhost}" "${POSTGRES_PORT:-5432}" "postgres" || {
       echo "[start] Host Postgres unavailable. Run: ./scripts/setup.sh --mode local" >&2
@@ -138,17 +159,16 @@ start_local_mode() {
     }
     echo host > "$DEPS_PROVIDER_FILE"
     rm -f "$DEPS_STARTED_FILE"
+    run_migrate_seed_and_app "infra/scripts/migrate_host.sh" "infra/scripts/seed_demo_host.sh"
   else
     echo "[start] ERROR: DEPS_PROVIDER must be auto|docker|host" >&2
     return 1
   fi
-
-  run_migrate_seed_and_app
 }
 
 start_docker_mode() {
   start_deps_docker
-  run_migrate_seed_and_app
+  run_migrate_seed_and_app "infra/scripts/migrate.sh" "infra/scripts/seed_demo.sh"
 }
 
 if [[ "$MODE" == "docker" ]]; then

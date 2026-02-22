@@ -695,7 +695,10 @@ def main() -> int:
                     AuditFinding(
                         name="Docker checks",
                         status="FAIL",
-                        details="Docker mode requires docker and infra/docker-compose.yml.",
+                        details=(
+                            f"Docker mode requires usable Docker runtime and compose file. "
+                            f"docker={which('docker') is not None}, compose_file_exists={bool(compose_file and compose_file.exists())}, runtime_usable={docker_runtime_usable()}"
+                        ),
                     )
                 )
         else:
@@ -745,7 +748,10 @@ def main() -> int:
                             AuditFinding(
                                 name="CI integration skip marker (local mode, docker usable)",
                                 status="FAIL",
-                                details="Docker runtime is usable, so integration must not be skipped.",
+                                details=(
+                                    "Docker runtime is usable, so integration must not be skipped; "
+                                    f"unexpected marker present at {ci_skip_marker}."
+                                ),
                             )
                         )
                 else:
@@ -762,7 +768,10 @@ def main() -> int:
                             AuditFinding(
                                 name="CI integration skip marker (local mode, docker unavailable)",
                                 status="FAIL",
-                                details="Expected integration skip marker was not produced.",
+                                details=(
+                                    "Expected integration skip marker was not produced. "
+                                    "Check Makefile ci-integration target and scripts/docker_runtime_available.sh."
+                                ),
                             )
                         )
 

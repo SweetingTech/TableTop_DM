@@ -1,4 +1,6 @@
-.PHONY: setup up down up-local down-local migrate seed test ci ci-fast ci-integration rg1 rg1-local verify-docker verify-local verify install lint format typecheck unit contracts integration
+.PHONY: setup up down up-local down-local migrate seed test ci ci-fast ci-integration \
+	rg1 rg1-local verify-docker verify-local verify install lint format typecheck \
+	unit contracts integration
 
 setup:
 	bash scripts/setup.sh
@@ -35,7 +37,7 @@ typecheck:
 	mypy .
 
 unit:
-	pytest -m "unit"
+	pytest -m "unit" --cov=services/mechanics --cov=services/spatial --cov=services/domain/content_rating --cov=services/domain/social --cov=services/domain/divine --cov=services/domain/karma --cov-report=term-missing --cov-report=xml --cov-fail-under=50
 
 contracts:
 	pytest -m "contracts"
@@ -57,7 +59,9 @@ ci-integration:
 		rm -f burn-bag/ci-integration-skipped.txt; \
 		echo "[ci-integration] Docker runtime available; running integration tests"; \
 		$(MAKE) up; \
+		trap 'make down' EXIT; \
 		pytest -m "integration"; \
+		trap - EXIT; \
 		$(MAKE) down; \
 	else \
 		echo "[ci-integration] SKIP: Docker runtime unavailable; integration tests skipped"; \

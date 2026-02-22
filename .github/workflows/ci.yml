@@ -35,11 +35,14 @@ jobs:
           DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tabletop_dm
           EOF_ENV
 
-      - name: Bring up dependencies
-        run: docker compose -f infra/docker-compose.yml up -d
-
-      - name: Compose smoke
-        run: bash infra/scripts/compose_smoke.sh
+      - name: Optional compose smoke (runtime-gated)
+        run: |
+          if bash scripts/docker_runtime_available.sh; then
+            docker compose -f infra/docker-compose.yml up -d
+            bash infra/scripts/compose_smoke.sh
+          else
+            echo "[workflow] Docker runtime unavailable; skipping pre-ci compose smoke"
+          fi
 
       - name: Integration gate
         run: make ci-integration
@@ -55,4 +58,7 @@ jobs:
 
       - name: Tear down
         if: always()
-        run: docker compose -f infra/docker-compose.yml down --remove-orphans
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            docker compose -f infra/docker-compose.yml down --remove-orphans || true
+          fi

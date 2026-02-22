@@ -7,16 +7,17 @@ $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
+if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
+  Write-Error "bash is required to run setup scripts on Windows (install Git Bash or WSL)."
+}
+
 if ($Mode -eq 'docker') {
-  if (Get-Command bash -ErrorAction SilentlyContinue) {
-    bash scripts/setup.sh --mode docker
-  } else {
-    pwsh -ExecutionPolicy Bypass -File ./setup.ps1
-  }
+  bash scripts/setup.sh --mode docker
+  exit $LASTEXITCODE
+}
+
+if ($InstallDeps) {
+  bash scripts/setup.sh --mode local --install-deps
 } else {
-  if (Get-Command bash -ErrorAction SilentlyContinue) {
-    if ($InstallDeps) { bash scripts/setup.sh --mode local --install-deps } else { bash scripts/setup.sh --mode local }
-  } else {
-    Write-Error "bash is required to run local setup checks"
-  }
+  bash scripts/setup.sh --mode local
 }
