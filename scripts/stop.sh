@@ -27,7 +27,9 @@ if [[ -f "$APP_PID_FILE" ]]; then
   if kill -0 "$PID" >/dev/null 2>&1; then
     kill "$PID" || true
     sleep 1
-    kill -9 "$PID" >/dev/null 2>&1 || true
+    if kill -0 "$PID" >/dev/null 2>&1; then
+      kill -9 "$PID" >/dev/null 2>&1 || true
+    fi
   fi
   rm -f "$APP_PID_FILE"
 fi

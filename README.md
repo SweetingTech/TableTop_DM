@@ -3,7 +3,7 @@ Production-oriented, headless VTT + RPG engine with deterministic state, append-
 
 
 ## Implementation Status
-**All TODO phases are checked and audited.** See `TODO.md` for the full checklist.
+**TODO phases are tracked and regularly audited.** See `TODO.md` for the full checklist.
 
 | Phase | Description | Status |
 |-------|-------------|--------|

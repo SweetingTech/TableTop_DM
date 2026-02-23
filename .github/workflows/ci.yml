@@ -35,6 +35,13 @@ jobs:
           DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tabletop_dm
           EOF_ENV
 
+      - name: Export .env to workflow env
+        run: |
+          grep -E '^[A-Za-z_][A-Za-z0-9_]*=' .env >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: make install
+
       - name: Optional compose smoke (runtime-gated)
         run: |
           if bash scripts/docker_runtime_available.sh; then

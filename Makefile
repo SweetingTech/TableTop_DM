@@ -58,6 +58,7 @@ ci-integration:
 	@if bash scripts/docker_runtime_available.sh; then \
 		rm -f burn-bag/ci-integration-skipped.txt; \
 		echo "[ci-integration] Docker runtime available; running integration tests"; \
+		set -e; \
 		$(MAKE) up; \
 		trap 'make down' EXIT; \
 		pytest -m "integration"; \

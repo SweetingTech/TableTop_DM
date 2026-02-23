@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
 MODE="docker"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode)
-      MODE="$2"; shift 2 ;;
-    *) echo "[rg1] Unknown arg: $1" >&2; exit 1 ;;
+      MODE="$2"
+      shift 2
+      ;;
+    *)
+      echo "[rg1] Unknown arg: $1" >&2
+      exit 1
+      ;;
   esac
 done
 
