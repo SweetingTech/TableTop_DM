@@ -1,85 +1,166 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TableTop DM Control Plane</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0; background: #0f1117; color: #e5e7eb; }
-    header { padding: 16px; border-bottom: 1px solid #2e3345; display:flex; gap:12px; align-items:center; }
-    a { color:#93c5fd; }
-    .container { padding: 16px; }
-    .tabs { display:flex; gap:8px; margin-bottom:12px; }
-    .tabs button { background:#1f2937; color:#e5e7eb; border:1px solid #374151; padding:6px 10px; cursor:pointer; }
-    .tab { display:none; }
-    .tab.active { display:block; }
-    input, select, textarea, button { margin:4px; padding:6px; }
-    .panel { border:1px solid #374151; padding:12px; margin-bottom:12px; }
-    pre { white-space: pre-wrap; background:#111827; padding:8px; }
-    .error { color:#fca5a5; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabletop DM - Control Plane</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="/static/css/control.css">
 </head>
 <body>
-<header>
-  <h2>Control Plane</h2>
-  <a href="/">Dashboard</a>
-  <a href="/game">Game</a>
-</header>
-<div class="container">
-  <label>Campaign Context</label><select id="campaignContext"></select><button id="refreshAll">Refresh</button>
-  <div class="tabs">
-    <button data-tab="campaigns">Campaigns</button>
-    <button data-tab="sessions">Sessions</button>
-    <button data-tab="characters">Characters</button>
-    <button data-tab="kb">Knowledge Base</button>
-    <button data-tab="ai">AI Settings</button>
-  </div>
+    <div class="control-layout">
+        <div class="top-bar">
+            <h1>TABLETOP DM</h1>
+            <span class="nav-separator">|</span>
+            <a href="/" class="control-link">Dashboard</a>
+            <a href="/game" class="control-link">Game Console</a>
+            <span class="page-title">Control Plane</span>
+            <div class="campaign-selector">
+                <label>Campaign:</label>
+                <select id="campaignContext" class="select-input"></select>
+                <button id="refreshAll" class="btn btn-secondary btn-sm">Refresh</button>
+            </div>
+        </div>
 
-  <section id="campaigns" class="tab active">
-    <div class="panel">
-      <h3>Create Campaign</h3>
-      <input id="campName" placeholder="name"><input id="campSlug" placeholder="slug">
-      <select id="campStatus"><option>ACTIVE</option><option>DRAFT</option></select>
-      <select id="campMode"><option>EXPLORATION</option><option>SOCIAL</option><option>COMBAT</option></select>
-      <button id="createCampaign">Create</button>
+        <div class="control-content">
+            <div class="tabs">
+                <button class="tab active" data-tab="campaigns">Campaigns</button>
+                <button class="tab" data-tab="sessions">Sessions</button>
+                <button class="tab" data-tab="characters">Characters</button>
+                <button class="tab" data-tab="kb">Knowledge Base</button>
+                <button class="tab" data-tab="ai">AI Settings</button>
+            </div>
+
+            <div class="tab-panels">
+                <!-- Campaigns Tab -->
+                <section id="campaigns" class="tab-panel active">
+                    <div class="panel">
+                        <h3>Create Campaign</h3>
+                        <div class="form-row">
+                            <input type="text" id="campName" class="input-field" placeholder="Campaign Name">
+                            <input type="text" id="campSlug" class="input-field" placeholder="slug">
+                            <select id="campStatus" class="select-input">
+                                <option value="ACTIVE">ACTIVE</option>
+                                <option value="DRAFT">DRAFT</option>
+                            </select>
+                            <select id="campMode" class="select-input">
+                                <option value="EXPLORATION">EXPLORATION</option>
+                                <option value="SOCIAL">SOCIAL</option>
+                                <option value="COMBAT">COMBAT</option>
+                                <option value="CUTSCENE">CUTSCENE</option>
+                                <option value="DOWNTIME">DOWNTIME</option>
+                            </select>
+                            <button id="createCampaign" class="btn btn-primary">Create</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Campaign List</h3>
+                        <div id="campaignList" class="item-list"></div>
+                    </div>
+                </section>
+
+                <!-- Sessions Tab -->
+                <section id="sessions" class="tab-panel">
+                    <div class="panel">
+                        <h3>Session Actions</h3>
+                        <div class="form-row">
+                            <button id="createSession" class="btn btn-primary">Create Session (soft restart)</button>
+                            <button id="resumeCampaign" class="btn btn-secondary">Resume Campaign</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Sessions</h3>
+                        <div id="sessionList" class="item-list"></div>
+                    </div>
+                </section>
+
+                <!-- Characters Tab -->
+                <section id="characters" class="tab-panel">
+                    <div class="panel">
+                        <h3>Create / Import Character</h3>
+                        <textarea id="characterJson" class="textarea-field" rows="6" placeholder='{"name":"Aria","entity_type":"PC","public_sheet":{}}'></textarea>
+                        <div class="form-row">
+                            <button id="createCharacter" class="btn btn-primary">Create from JSON</button>
+                        </div>
+                        <div class="form-row" style="margin-top: 12px;">
+                            <input type="text" id="charConcept" class="input-field" placeholder="Character concept (e.g., 'elven ranger')">
+                            <button id="generateCharacter" class="btn btn-secondary">Generate Character</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Characters</h3>
+                        <div id="characterList" class="item-list"></div>
+                    </div>
+                </section>
+
+                <!-- Knowledge Base Tab -->
+                <section id="kb" class="tab-panel">
+                    <div class="panel">
+                        <h3>Upload Document</h3>
+                        <div class="form-row">
+                            <input type="file" id="ragFile" class="file-input">
+                            <button id="uploadRag" class="btn btn-primary">Upload</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Documents</h3>
+                        <div id="docList" class="item-list"></div>
+                    </div>
+                    <div class="panel">
+                        <h3>Test Retrieval</h3>
+                        <div class="form-row">
+                            <input type="text" id="ragQuery" class="input-field input-wide" placeholder="Search query...">
+                            <button id="testRetrieval" class="btn btn-secondary">Test Retrieval</button>
+                        </div>
+                        <pre id="retrievalOut" class="output-pre"></pre>
+                    </div>
+                </section>
+
+                <!-- AI Settings Tab -->
+                <section id="ai" class="tab-panel">
+                    <div class="panel">
+                        <h3>LLM Provider Configuration</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Provider</label>
+                                <select id="provider" class="select-input">
+                                    <option value="mock">Mock (Testing)</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="ollama">Ollama</option>
+                                    <option value="lmstudio">LM Studio</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Base URL</label>
+                                <input type="text" id="baseUrl" class="input-field" placeholder="http://localhost:11434/v1">
+                            </div>
+                            <div class="form-group">
+                                <label>DM Model</label>
+                                <input type="text" id="dmModel" class="input-field" placeholder="gpt-4">
+                            </div>
+                            <div class="form-group">
+                                <label>NPC Model</label>
+                                <input type="text" id="npcModel" class="input-field" placeholder="gpt-3.5-turbo">
+                            </div>
+                            <div class="form-group">
+                                <label>Embedding Model</label>
+                                <input type="text" id="embedModel" class="input-field" placeholder="text-embedding-3-small">
+                            </div>
+                        </div>
+                        <div class="form-row" style="margin-top: 16px;">
+                            <button id="saveAi" class="btn btn-primary">Save Settings</button>
+                            <button id="listModels" class="btn btn-secondary">List Models</button>
+                            <button id="testProvider" class="btn btn-secondary">Test Provider</button>
+                        </div>
+                        <pre id="aiOut" class="output-pre"></pre>
+                    </div>
+                </section>
+            </div>
+
+            <div id="error" class="error-banner"></div>
+        </div>
     </div>
-    <div class="panel"><h3>Campaign List</h3><div id="campaignList"></div></div>
-  </section>
 
-  <section id="sessions" class="tab">
-    <div class="panel"><button id="createSession">Create Session (soft restart)</button><button id="resumeCampaign">Resume Campaign</button></div>
-    <div class="panel"><h3>Sessions</h3><div id="sessionList"></div></div>
-  </section>
-
-  <section id="characters" class="tab">
-    <div class="panel">
-      <h3>Create / Import</h3>
-      <textarea id="characterJson" rows="8" cols="80" placeholder='{"name":"Aria","entity_type":"PC","public_sheet":{}}'></textarea><br>
-      <button id="createCharacter">Create from JSON</button>
-      <input id="charConcept" placeholder="concept"><button id="generateCharacter">Generate Character</button>
-    </div>
-    <div class="panel"><h3>Characters</h3><div id="characterList"></div></div>
-  </section>
-
-  <section id="kb" class="tab">
-    <div class="panel"><input type="file" id="ragFile"><button id="uploadRag">Upload</button></div>
-    <div class="panel"><h3>Documents</h3><div id="docList"></div></div>
-    <div class="panel"><input id="ragQuery" placeholder="query"><button id="testRetrieval">Test Retrieval</button><pre id="retrievalOut"></pre></div>
-  </section>
-
-  <section id="ai" class="tab">
-    <div class="panel">
-      <select id="provider"><option value="mock">Mock</option><option value="openai">OpenAI</option><option value="ollama">Ollama</option><option value="lmstudio">LM Studio</option></select>
-      <input id="baseUrl" placeholder="base url">
-      <input id="dmModel" placeholder="dm model">
-      <input id="npcModel" placeholder="npc model">
-      <input id="embedModel" placeholder="embedding model">
-      <button id="saveAi">Save</button><button id="listModels">List Models</button><button id="testProvider">Test Provider</button>
-      <pre id="aiOut"></pre>
-    </div>
-  </section>
-  <div id="error" class="error"></div>
-</div>
-<script src="{{ url_for('static', filename='js/control.js') }}"></script>
+    <script src="/static/js/control.js"></script>
 </body>
 </html>
