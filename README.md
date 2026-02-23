@@ -301,6 +301,23 @@ Death triggers cascading consequences: investigations, bounties, faction hostili
 ### Combat Pre-Registered Triggers
 AI entities register deterministic reaction triggers (ON_MOVEMENT, ON_ATTACKED, ON_CAST) executed with zero LLM calls.
 
+## User Interface
+
+All three UI pages share a unified dark theme with consistent styling:
+
+| Route | Purpose |
+|-------|---------|
+| `/` | **Dashboard** - Database viewer with stats, entity cards, combat status, maps, schema info |
+| `/game` | **Game Console** - Real-time gameplay with event feed, map, commands, initiative tracker |
+| `/control` | **Control Plane** - Campaign/session/character lifecycle, RAG ingestion, AI provider config |
+
+The interface uses a dark blue/purple color scheme with:
+- CSS variables for consistent theming
+- Responsive layouts for desktop and mobile
+- Visual indicators for entity types, status, and control
+- Real-time WebSocket updates in the game console
+
+
 ## Control Plane UI
 - Route: `GET /control`
 - Purpose: campaign/session/character lifecycle, RAG ingestion, and per-campaign AI provider config.
@@ -331,15 +348,40 @@ AI entities register deterministic reaction triggers (ON_MOVEMENT, ON_ATTACKED, 
 - Storage path: `data/rag/<campaign_id>/<doc_id>/<original_filename>`.
 
 ### AI provider settings (per campaign)
-- Save/load config: `GET/PUT /api/campaigns/<id>/ai_config`.
-- Provider test: `POST /api/ai/test_provider` (`/v1/models` + tiny chat completion).
-- Model discovery proxy: `GET /api/ai/models`.
 
-Supported OpenAI-compatible local endpoints:
-- Ollama: `http://localhost:11434/v1/`
-- LM Studio: `http://localhost:1234/v1`
+Each campaign can have its own LLM configuration, allowing different models for different campaigns or testing scenarios.
 
-Security note:
-- Prefer `OPENAI_API_KEY` from environment for OpenAI.
-- Local Ollama/LM Studio can use dummy API key.
-- DB-stored AI settings are intended for dev/local control-plane MVP and should not be treated as secret storage.
+**Configuration via Control Plane UI (AI Settings tab):**
+| Setting | Purpose |
+|---------|---------|
+| Provider | `mock`, `openai`, `ollama`, `lmstudio` |
+| Base URL | Custom endpoint (auto-populated for ollama/lmstudio) |
+| DM Model | Model for DM narration agent (e.g., `gpt-4o`, `llama3`) |
+| NPC Model | Model for NPC dialogue agent (can be smaller/faster) |
+| Embedding Model | Model for RAG embeddings (e.g., `text-embedding-3-small`) |
+
+**API endpoints:**
+- `GET /api/campaigns/<id>/ai_config` - Load current settings
+- `PUT /api/campaigns/<id>/ai_config` - Save settings
+- `POST /api/ai/test_provider` - Test connection (`/v1/models` + chat completion)
+- `GET /api/ai/models` - List available models from provider
+
+**Per-Agent Model Selection:**
+The system uses different models for different AI agents:
+- **DMNarrationAgent**: Uses `dm_model` for combat narration and event descriptions
+- **NPCDialogueAgent**: Uses `npc_model` for NPC conversations (can use a smaller, faster model)
+- Both agents respect the per-campaign configuration
+
+**Supported Providers:**
+
+| Provider | Base URL | Notes |
+|----------|----------|-------|
+| OpenAI | (default) | Uses `OPENAI_API_KEY` from environment |
+| Ollama | `http://localhost:11434/v1/` | Local, free, supports many open models |
+| LM Studio | `http://localhost:1234/v1` | Local GUI with model management |
+| Mock | N/A | Deterministic responses for testing |
+
+**Security notes:**
+- Prefer `OPENAI_API_KEY` from environment for OpenAI
+- Local Ollama/LM Studio can use dummy API key
+- DB-stored AI settings are for dev/local use; do not store production secrets

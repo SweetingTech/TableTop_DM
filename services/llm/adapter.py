@@ -181,8 +181,8 @@ You NEVER determine mechanical outcomes (damage, hits, saves, etc.) - those are 
 You receive state deltas and roll results, and produce vivid, atmospheric narration.
 Respond in JSON format with a single "narration" field containing your narrative text."""
 
-    def __init__(self):
-        self.llm = LLMAdapter(role="dm")
+    def __init__(self, campaign_id: Optional[uuid.UUID] = None):
+        self.llm = LLMAdapter(role="dm", campaign_id=campaign_id)
 
     def narrate_event(self, tool_result: dict, context: str = "") -> str:
         prompt = f"""Narrate the following game event result:
@@ -237,8 +237,8 @@ You NEVER determine mechanical outcomes.
 You only produce dialogue and brief action descriptions.
 Respond in JSON with "dialogue" (what the NPC says) and "action" (brief physical action, optional)."""
 
-    def __init__(self):
-        self.llm = LLMAdapter(role="npc")
+    def __init__(self, campaign_id: Optional[uuid.UUID] = None):
+        self.llm = LLMAdapter(role="npc", campaign_id=campaign_id)
 
     def generate_dialogue(
         self,

@@ -506,6 +506,24 @@ def api_encounters(campaign_id):
     return jsonify([_serialize(r) for r in rows])
 
 
+@app.route("/api/campaigns/<campaign_id>/members")
+def api_campaign_members(campaign_id):
+    """List all principals who are members of this campaign."""
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        """
+        SELECT cm.principal_id, cm.role, p.display_name, p.principal_type
+        FROM state.campaign_members cm
+        JOIN state.principals p ON cm.principal_id = p.id
+        WHERE cm.campaign_id = %s AND p.is_active = true
+        ORDER BY cm.role, p.display_name
+        """,
+        (campaign_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
 @app.route("/api/campaigns/<campaign_id>/session")
 def api_campaign_session(campaign_id):
     from shared.db.connection import execute_one
@@ -712,13 +730,71 @@ def api_encounter_slots(encounter_id):
     return jsonify([_serialize(s) for s in slots])
 
 
+@app.route("/api/encounters/<encounter_id>/auto_advance", methods=["POST"])
+def api_auto_advance(encounter_id):
+    """Process AI-controlled entity turns automatically."""
+    from services.orchestrator.npc_autonomy import NPCAutonomy
+    from services.orchestrator.state_machine import StateMachine
+    from shared.db.connection import execute_one
+
+    sm = StateMachine()
+    autonomy = NPCAutonomy()
+
+    encounter = execute_one(
+        "SELECT * FROM state.encounters WHERE id = %s",
+        (encounter_id,)
+    )
+    if not encounter:
+        return jsonify({"error": "Encounter not found"}), 404
+
+    active_slot = sm.get_active_slot(uuid.UUID(encounter_id))
+    if not active_slot:
+        return jsonify({"error": "No active slot"}), 400
+
+    # Check if current entity is AI-controlled
+    entity = execute_one(
+        "SELECT * FROM state.entities WHERE id = %s",
+        (str(active_slot.get("entity_id")),)
+    )
+
+    if not entity or entity.get("controlled_by") not in ("AI", "AI_NPC"):
+        return jsonify({
+            "processed": False,
+            "reason": "Human-controlled entity",
+            "entity_name": entity.get("name") if entity else "Unknown",
+        })
+
+    # Process AI turn
+    campaign_id = uuid.UUID(str(encounter["campaign_id"]))
+    session_id = uuid.UUID(str(encounter.get("session_id", "66666666-6666-6666-6666-666666666661")))
+
+    results = autonomy.process_npc_turn(
+        campaign_id=campaign_id,
+        session_id=session_id,
+        encounter_id=uuid.UUID(encounter_id),
+        entity_id=uuid.UUID(str(active_slot.get("entity_id"))),
+    )
+
+    # Broadcast results
+    for result in results:
+        socketio.emit("game_event", result, room=str(campaign_id))
+
+    return jsonify({
+        "processed": True,
+        "entity_name": entity.get("name"),
+        "actions": len(results),
+        "results": results,
+    })
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     data = request.get_json()
     try:
         from services.conversations.manager import ConversationManager
 
-        cm = ConversationManager()
+        campaign_uuid = uuid.UUID(data["campaign_id"])
+        cm = ConversationManager(campaign_id=campaign_uuid)
         events = cm.handle_proximity_chat(
             campaign_id=uuid.UUID(data["campaign_id"]),
             session_id=uuid.UUID(
@@ -755,8 +831,11 @@ def api_narrate():
     data = request.get_json()
     try:
         from services.llm.adapter import DMNarrationAgent
+        import uuid as uuid_mod
 
-        dm = DMNarrationAgent()
+        campaign_id = data.get("campaign_id")
+        campaign_uuid = uuid_mod.UUID(campaign_id) if campaign_id else None
+        dm = DMNarrationAgent(campaign_id=campaign_uuid)
         narration = dm.narrate_event(
             tool_result=data.get("event_data", {}),
             context=data.get("context", ""),
