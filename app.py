@@ -1161,35 +1161,70 @@ def api_ai_config_put(campaign_id):
 @app.route("/api/ai/models")
 def api_ai_models():
     provider = request.args.get("provider", "mock")
-    base_url = request.args.get("base_url")
+    base_url = request.args.get("base_url") or None  # Convert empty string to None
     if provider == "mock":
         return jsonify({"data": [{"id": "mock-model"}]})
-    client = _openai_client_for(provider, base_url)
-    models = client.models.list()
-    return jsonify({"data": [{"id": m.id} for m in models.data]})
+    try:
+        client = _openai_client_for(provider, base_url)
+        models = client.models.list()
+        return jsonify({"data": [{"id": m.id} for m in models.data]})
+    except Exception as e:
+        error_msg = str(e)
+        if "Connection refused" in error_msg or "connect" in error_msg.lower():
+            return jsonify({
+                "error": f"Cannot connect to {provider}. Is it running?",
+                "detail": error_msg,
+                "hint": f"Start {provider} and try again."
+            }), 503
+        return jsonify({"error": error_msg}), 500
 
 
 @app.route("/api/ai/test_provider", methods=["POST"])
 def api_ai_test_provider():
     data = request.get_json(silent=True) or {}
     provider = data.get("provider", "mock")
-    base_url = data.get("base_url")
+    base_url = data.get("base_url") or None  # Convert empty string to None
     model = data.get("model") or "gpt-4o-mini"
     if provider == "mock":
         return jsonify({"ok": True, "models": ["mock-model"], "completion": "mock ok"})
-    client = _openai_client_for(provider, base_url)
-    models = client.models.list()
-    completion = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": "Reply with: ok"}],
-        temperature=0,
-        max_tokens=10,
-    )
-    return jsonify({
-        "ok": True,
-        "models": [m.id for m in models.data],
-        "completion": completion.choices[0].message.content,
-    })
+    try:
+        client = _openai_client_for(provider, base_url)
+        # First try to list models
+        try:
+            models = client.models.list()
+            model_list = [m.id for m in models.data]
+        except Exception:
+            model_list = ["(unable to list models)"]
+
+        # Try a simple completion
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "Reply with: ok"}],
+            temperature=0,
+            max_tokens=10,
+        )
+        return jsonify({
+            "ok": True,
+            "models": model_list,
+            "completion": completion.choices[0].message.content,
+        })
+    except Exception as e:
+        error_msg = str(e)
+        if "Connection refused" in error_msg or "connect" in error_msg.lower():
+            return jsonify({
+                "ok": False,
+                "error": f"Cannot connect to {provider}. Is it running?",
+                "detail": error_msg,
+                "hint": f"Start {provider} at the expected URL and try again."
+            }), 503
+        if "model" in error_msg.lower() and "not found" in error_msg.lower():
+            return jsonify({
+                "ok": False,
+                "error": f"Model '{model}' not found",
+                "detail": error_msg,
+                "hint": "Check the model name or use 'List Models' to see available models."
+            }), 400
+        return jsonify({"ok": False, "error": error_msg}), 500
 
 
 @app.route("/api/campaigns/<campaign_id>/rag/upload", methods=["POST"])
