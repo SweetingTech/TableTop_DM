@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from shared.schemas.events import EventEnvelope
@@ -20,6 +21,9 @@ def get_campaign_ai_config(campaign_id: Optional[uuid.UUID]) -> dict:
         row = execute_one("SELECT * FROM state.campaign_settings WHERE campaign_id=%s", (str(campaign_id),))
         return row or {}
     except Exception:
+        logging.exception(
+            "Failed to retrieve campaign AI config for campaign_id=%s", campaign_id
+        )
         return {}
 
 
@@ -55,7 +59,11 @@ class LLMAdapter:
         )
         if self.client is not None and base_url:
             self.client.base_url = base_url
-        self.model = cfg.get("npc_model") if role == "npc" else cfg.get("dm_model", model)
+        default_model = model
+        if role == "npc":
+            self.model = cfg.get("npc_model") or default_model
+        else:
+            self.model = cfg.get("dm_model") or default_model
         self.embedding_model = cfg.get("embedding_model", "text-embedding-3-small")
         self.max_retries = 2
         self.timeout = 30

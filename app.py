@@ -4,12 +4,15 @@ import json
 import traceback
 import socket
 import hashlib
+import logging
 from pathlib import Path
-from urllib.parse import urljoin
+from concurrent.futures import ThreadPoolExecutor
+from urllib import request as urllib_request, error as urllib_error
 from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import psycopg2
 import psycopg2.extras
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
@@ -21,6 +24,8 @@ QDRANT_DEFAULT_HOST = "localhost"
 QDRANT_DEFAULT_HTTP_PORT = 6333
 RAG_CHUNK_SIZE = 1000
 RAG_CHUNK_OVERLAP = 150
+RAG_WORKERS = int(os.environ.get("RAG_WORKERS", "2"))
+RAG_EXECUTOR = ThreadPoolExecutor(max_workers=max(1, RAG_WORKERS))
 
 
 def get_db():
@@ -217,15 +222,6 @@ def _validate_campaign_payload(data, partial=False):
     return None
 
 
-def _provider_defaults(provider: str):
-    provider = (provider or "mock").lower()
-    if provider == "ollama":
-        return "http://localhost:11434/v1/"
-    if provider == "lmstudio":
-        return "http://localhost:1234/v1"
-    return None
-
-
 def _get_ai_config(campaign_id: str):
     from shared.db.connection import execute_one
 
@@ -247,9 +243,10 @@ def _get_ai_config(campaign_id: str):
 
 
 def _openai_client_for(provider: str, base_url: str | None):
+    from services.llm.adapter import resolve_provider_base_url
     from openai import OpenAI
 
-    final_base_url = base_url or _provider_defaults(provider)
+    final_base_url = resolve_provider_base_url(provider, base_url)
     api_key = os.environ.get("OPENAI_API_KEY", "dev-local")
     return OpenAI(api_key=api_key, base_url=final_base_url)
 
@@ -285,15 +282,181 @@ def _extract_text_chunks(storage_path: str):
     return chunks
 
 
-def _embed_texts(campaign_id: str, texts: list[str]):
-    cfg = _get_ai_config(campaign_id)
-    provider = cfg.get("llm_provider", "mock")
-    model = cfg.get("embedding_model") or "text-embedding-3-small"
-    if provider == "mock" or os.environ.get("TTDM_LLM_MODE", "").lower() == "mock":
-        return [[float((i + 1) % 7) for i in range(16)] for _ in texts]
-    client = _openai_client_for(provider, cfg.get("embedding_base_url") or cfg.get("llm_base_url"))
-    response = client.embeddings.create(model=model, input=texts)
-    return [item.embedding for item in response.data]
+def _qdrant_base_url() -> str:
+    host = os.environ.get("QDRANT_HOST", QDRANT_DEFAULT_HOST)
+    port = int(os.environ.get("QDRANT_HTTP_PORT", str(QDRANT_DEFAULT_HTTP_PORT)))
+    return f"http://{host}:{port}"
+
+
+def _qdrant_collection_name(campaign_id: str) -> str:
+    return f"ttdm_{campaign_id}_rag".replace("-", "_")
+
+
+def _qdrant_request(method: str, path: str, payload: dict | None = None) -> dict:
+    url = f"{_qdrant_base_url()}{path}"
+    data = None
+    headers = {"Content-Type": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+    req = urllib_request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib_request.urlopen(req, timeout=15) as resp:
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except urllib_error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Qdrant HTTP {exc.code}: {body}") from exc
+
+
+def _ensure_qdrant_collection(campaign_id: str, vector_size: int) -> str:
+    collection = _qdrant_collection_name(campaign_id)
+    if vector_size <= 0:
+        raise ValueError("vector_size must be > 0")
+    try:
+        _qdrant_request("GET", f"/collections/{collection}")
+        return collection
+    except RuntimeError:
+        _qdrant_request(
+            "PUT",
+            f"/collections/{collection}",
+            {"vectors": {"size": vector_size, "distance": "Cosine"}},
+        )
+        return collection
+
+
+def _upsert_qdrant_points(campaign_id: str, points: list[dict], vector_size: int):
+    collection = _ensure_qdrant_collection(campaign_id, vector_size)
+    _qdrant_request(
+        "PUT",
+        f"/collections/{collection}/points",
+        {"points": points},
+    )
+
+
+def _delete_qdrant_doc_points(campaign_id: str, doc_id: str):
+    collection = _qdrant_collection_name(campaign_id)
+    _qdrant_request(
+        "POST",
+        f"/collections/{collection}/points/delete",
+        {"filter": {"must": [{"key": "doc_id", "match": {"value": doc_id}}]}},
+    )
+
+
+def _search_qdrant(campaign_id: str, query_vector: list[float], top_k: int) -> list[dict]:
+    collection = _qdrant_collection_name(campaign_id)
+    response = _qdrant_request(
+        "POST",
+        f"/collections/{collection}/points/search",
+        {"vector": query_vector, "limit": top_k, "with_payload": True},
+    )
+    return response.get("result", [])
+
+
+def _create_entity_record(campaign_id: str, data: dict):
+    from shared.db.connection import execute_one
+
+    return execute_one(
+        """
+        INSERT INTO state.entities (campaign_id, entity_type, name, tags, public_sheet, secret_sheet, hp_current, hp_max, ac, speed, controlled_by, controller_principal_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        RETURNING *
+        """,
+        (
+            campaign_id,
+            data["entity_type"],
+            data["name"],
+            data.get("tags", []),
+            json.dumps(data.get("public_sheet", {})),
+            json.dumps(data.get("secret_sheet", {})),
+            data.get("hp_current"),
+            data.get("hp_max"),
+            data.get("ac"),
+            data.get("speed"),
+            data.get("controlled_by", "HUMAN"),
+            data.get("controller_principal_id"),
+        ),
+    )
+
+
+def _queue_rag_processing(doc_id: str):
+    RAG_EXECUTOR.submit(_process_rag_document, doc_id)
+
+
+def _process_rag_document(doc_id: str):
+    from shared.db.connection import execute_one, execute_query
+    from services.llm.adapter import LLMAdapter
+
+    doc = execute_one("SELECT * FROM state.rag_documents WHERE id=%s", (doc_id,))
+    if not doc:
+        return
+
+    campaign_id = str(doc["campaign_id"])
+    try:
+        execute_one(
+            "UPDATE state.rag_documents SET status='PROCESSING', error_text=NULL, updated_at=now() WHERE id=%s RETURNING id",
+            (doc_id,),
+        )
+        chunks = _extract_text_chunks(doc["storage_path"])
+        llm = LLMAdapter(campaign_id=uuid.UUID(campaign_id), role="dm")
+        embedding_result = llm.embed_texts([c["text"] for c in chunks]) if chunks else {"vectors": [], "dimensions": 0}
+        vectors = embedding_result["vectors"]
+        dims = embedding_result["dimensions"]
+
+        execute_query("DELETE FROM state.rag_chunks WHERE doc_id=%s", (doc_id,), fetch=False)
+        if dims > 0:
+            try:
+                _delete_qdrant_doc_points(campaign_id, doc_id)
+            except Exception:
+                logging.exception("Failed deleting prior qdrant points for doc_id=%s", doc_id)
+
+        points = []
+        for i, chunk in enumerate(chunks):
+            qid = f"{doc_id}:{chunk['chunk_id']}"
+            execute_one(
+                """
+                INSERT INTO state.rag_chunks (doc_id, campaign_id, chunk_id, page, text, qdrant_point_id, metadata)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                RETURNING id
+                """,
+                (
+                    doc_id,
+                    campaign_id,
+                    chunk["chunk_id"],
+                    chunk["page"],
+                    chunk["text"],
+                    qid,
+                    json.dumps({"source_filename": doc["filename"], "vector_dim": len(vectors[i]) if vectors else 0}),
+                ),
+            )
+            if vectors:
+                points.append(
+                    {
+                        "id": qid,
+                        "vector": vectors[i],
+                        "payload": {
+                            "campaign_id": campaign_id,
+                            "doc_id": doc_id,
+                            "chunk_id": chunk["chunk_id"],
+                            "page": chunk["page"],
+                            "source_filename": doc["filename"],
+                            "text": chunk["text"],
+                        },
+                    }
+                )
+
+        if points and dims > 0:
+            _upsert_qdrant_points(campaign_id, points, dims)
+
+        execute_one(
+            "UPDATE state.rag_documents SET status='READY', error_text=NULL, updated_at=now() WHERE id=%s RETURNING id",
+            (doc_id,),
+        )
+    except Exception as exc:
+        logging.exception("RAG processing failed for doc_id=%s", doc_id)
+        execute_one(
+            "UPDATE state.rag_documents SET status='FAILED', error_text=%s, updated_at=now() WHERE id=%s RETURNING id",
+            (str(exc), doc_id),
+        )
 
 
 @app.route("/api/campaigns")
@@ -789,32 +952,10 @@ def api_session_end(session_id):
 
 @app.route("/api/campaigns/<campaign_id>/entities", methods=["POST"])
 def api_entity_create(campaign_id):
-    from shared.db.connection import execute_one
-
     data = request.get_json(silent=True) or {}
     if not data.get("name") or not data.get("entity_type"):
         return jsonify({"error": "name and entity_type are required"}), 400
-    row = execute_one(
-        """
-        INSERT INTO state.entities (campaign_id, entity_type, name, tags, public_sheet, secret_sheet, hp_current, hp_max, ac, speed, controlled_by, controller_principal_id)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        RETURNING *
-        """,
-        (
-            campaign_id,
-            data["entity_type"],
-            data["name"],
-            data.get("tags", []),
-            json.dumps(data.get("public_sheet", {})),
-            json.dumps(data.get("secret_sheet", {})),
-            data.get("hp_current"),
-            data.get("hp_max"),
-            data.get("ac"),
-            data.get("speed"),
-            data.get("controlled_by", "HUMAN"),
-            data.get("controller_principal_id"),
-        ),
-    )
+    row = _create_entity_record(campaign_id, data)
     return jsonify(_serialize(row)), 201
 
 
@@ -881,7 +1022,7 @@ def api_generate_character(campaign_id):
         "required": ["name", "entity_type", "hp_max", "ac", "speed", "public_sheet", "tags"],
         "additionalProperties": False,
     }
-    llm = LLMAdapter(model="gpt-4o-mini")
+    llm = LLMAdapter(model="gpt-4o-mini", campaign_id=uuid.UUID(campaign_id), role="dm")
     generated = llm.generate_structured(
         "Generate a JSON tabletop character sheet.",
         f"Concept: {concept}. Keep numeric values modest.",
@@ -891,8 +1032,8 @@ def api_generate_character(campaign_id):
         return jsonify(generated), 400
     generated["hp_current"] = generated["hp_max"]
     generated["controlled_by"] = "HUMAN"
-    with app.test_request_context(json=generated):
-        return api_entity_create(campaign_id)
+    created = _create_entity_record(campaign_id, generated)
+    return jsonify(_serialize(created)), 201
 
 
 @app.route("/api/campaigns/<campaign_id>/ai_config")
@@ -903,6 +1044,7 @@ def api_ai_config_get(campaign_id):
 @app.route("/api/campaigns/<campaign_id>/ai_config", methods=["PUT"])
 def api_ai_config_put(campaign_id):
     from shared.db.connection import execute_one
+    from services.llm.adapter import resolve_provider_base_url
 
     data = request.get_json(silent=True) or {}
     provider = (data.get("llm_provider") or "mock").lower()
@@ -926,8 +1068,8 @@ def api_ai_config_put(campaign_id):
         (
             campaign_id,
             provider,
-            data.get("llm_base_url") or _provider_defaults(provider),
-            data.get("embedding_base_url") or data.get("llm_base_url") or _provider_defaults(provider),
+            resolve_provider_base_url(provider, data.get("llm_base_url")),
+            resolve_provider_base_url(provider, data.get("embedding_base_url") or data.get("llm_base_url")),
             data.get("dm_model", "gpt-4o-mini"),
             data.get("npc_model", "gpt-4o-mini"),
             data.get("embedding_model", "text-embedding-3-small"),
@@ -981,60 +1123,32 @@ def api_rag_upload(campaign_id):
     if not upload.filename:
         return jsonify({"error": "empty filename"}), 400
 
+    safe_filename = secure_filename(upload.filename)
+    if not safe_filename:
+        return jsonify({"error": "invalid filename"}), 400
+
     row = execute_one(
         """
         INSERT INTO state.rag_documents (campaign_id, filename, storage_path, status)
         VALUES (%s, %s, %s, 'QUEUED')
         RETURNING *
         """,
-        (campaign_id, upload.filename, "pending"),
+        (campaign_id, safe_filename, "pending"),
     )
     doc_id = str(row["id"])
-    dest_dir = Path("data/rag") / campaign_id / doc_id
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / upload.filename
+    base_dir = (Path("data/rag") / campaign_id / doc_id).resolve()
+    base_dir.mkdir(parents=True, exist_ok=True)
+    dest = (base_dir / safe_filename).resolve()
+    if base_dir not in dest.parents:
+        return jsonify({"error": "invalid upload path"}), 400
     upload.save(dest)
 
-    execute_one(
-        "UPDATE state.rag_documents SET storage_path=%s, status='PROCESSING', updated_at=now() WHERE id=%s RETURNING id",
+    queued = execute_one(
+        "UPDATE state.rag_documents SET storage_path=%s, status='QUEUED', updated_at=now() WHERE id=%s RETURNING *",
         (str(dest), doc_id),
     )
-
-    try:
-        chunks = _extract_text_chunks(str(dest))
-        vectors = _embed_texts(campaign_id, [c["text"] for c in chunks]) if chunks else []
-        from shared.db.connection import execute_query
-        execute_query("DELETE FROM state.rag_chunks WHERE doc_id=%s", (doc_id,), fetch=False)
-        for i, chunk in enumerate(chunks):
-            qid = f"{doc_id}:{chunk['chunk_id']}"
-            execute_one(
-                """
-                INSERT INTO state.rag_chunks (doc_id, campaign_id, chunk_id, page, text, qdrant_point_id, metadata)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-                RETURNING id
-                """,
-                (
-                    doc_id,
-                    campaign_id,
-                    chunk["chunk_id"],
-                    chunk["page"],
-                    chunk["text"],
-                    qid,
-                    json.dumps({"source_filename": upload.filename, "vector_dim": len(vectors[i]) if vectors else 0}),
-                ),
-            )
-        execute_one(
-            "UPDATE state.rag_documents SET status='READY', error_text=NULL, updated_at=now() WHERE id=%s RETURNING id",
-            (doc_id,),
-        )
-    except Exception as exc:
-        execute_one(
-            "UPDATE state.rag_documents SET status='FAILED', error_text=%s, updated_at=now() WHERE id=%s RETURNING id",
-            (str(exc), doc_id),
-        )
-
-    latest = execute_one("SELECT * FROM state.rag_documents WHERE id=%s", (doc_id,))
-    return jsonify(_serialize(latest)), 201
+    _queue_rag_processing(doc_id)
+    return jsonify(_serialize(queued)), 202
 
 
 @app.route("/api/campaigns/<campaign_id>/rag/documents")
@@ -1066,31 +1180,55 @@ def api_rag_reindex(doc_id):
     doc = execute_one("SELECT campaign_id FROM state.rag_documents WHERE id=%s", (doc_id,))
     if not doc:
         return jsonify({"error": "Not found"}), 404
-    execute_one("UPDATE state.rag_documents SET status='QUEUED', updated_at=now() WHERE id=%s RETURNING id", (doc_id,))
+    execute_one(
+        "UPDATE state.rag_documents SET status='QUEUED', error_text=NULL, updated_at=now() WHERE id=%s RETURNING id",
+        (doc_id,),
+    )
+    _queue_rag_processing(doc_id)
     return jsonify({"status": "queued", "doc_id": doc_id})
 
 
 @app.route("/api/campaigns/<campaign_id>/rag/query", methods=["POST"])
 def api_rag_query(campaign_id):
-    from shared.db.connection import execute_query
+    from services.llm.adapter import LLMAdapter
 
     data = request.get_json(silent=True) or {}
-    query = data.get("query", "").strip().lower()
+    query = data.get("query", "").strip()
     if not query:
         return jsonify({"error": "query is required"}), 400
     top_k = int(data.get("top_k", 5))
-    rows = execute_query(
-        """
-        SELECT c.*, d.filename
-        FROM state.rag_chunks c
-        JOIN state.rag_documents d ON d.id = c.doc_id
-        WHERE c.campaign_id=%s AND d.enabled=true AND d.status='READY'
-        ORDER BY position(%s in lower(c.text)) DESC, c.created_at DESC
-        LIMIT %s
-        """,
-        (campaign_id, query, top_k),
-    )
-    return jsonify({"results": [_serialize(r) for r in rows]})
+    try:
+        llm = LLMAdapter(campaign_id=uuid.UUID(campaign_id), role="dm")
+        embedding = llm.embed_texts([query])
+        query_vector = embedding["vectors"][0] if embedding["vectors"] else []
+        if not query_vector:
+            return jsonify({"results": []})
+
+        hits = _search_qdrant(campaign_id, query_vector, top_k)
+        results = []
+        for hit in hits:
+            payload = hit.get("payload", {})
+            results.append(
+                {
+                    "score": hit.get("score"),
+                    "doc_id": payload.get("doc_id"),
+                    "chunk_id": payload.get("chunk_id"),
+                    "page": payload.get("page"),
+                    "filename": payload.get("source_filename"),
+                    "text": payload.get("text"),
+                    "metadata": {
+                        "campaign_id": payload.get("campaign_id"),
+                        "source_filename": payload.get("source_filename"),
+                    },
+                }
+            )
+        return jsonify({"results": results})
+    except RuntimeError as exc:
+        if "404" in str(exc):
+            return jsonify({"results": []})
+        return jsonify({"error": str(exc)}), 500
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @socketio.on("connect")

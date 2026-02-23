@@ -64,8 +64,8 @@ def test_control_plane_crud_and_rag(integration_stack):
                 data={"file": (fh, "rag_doc.txt")},
                 content_type="multipart/form-data",
             )
-        assert upload.status_code == 201
-        assert upload.get_json()["status"] in {"READY", "FAILED"}
+        assert upload.status_code == 202
+        assert upload.get_json()["status"] in {"QUEUED", "PROCESSING", "READY", "FAILED"}
 
         docs = client.get(f"/api/campaigns/{campaign_id}/rag/documents")
         assert docs.status_code == 200
