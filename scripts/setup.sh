@@ -26,6 +26,23 @@ done
 mkdir -p .local-run burn-bag/local-run
 [[ -f .env ]] || cp .env.example .env
 
+load_env_file() {
+  python - <<'PY'
+from pathlib import Path
+
+p = Path('.env')
+if p.exists():
+    for line in p.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        print(f'export {k.strip()}={v.strip()}')
+PY
+}
+
+eval "$(load_env_file)"
+
 print_install_help() {
   cat <<'TXT'
 Install dependencies:
@@ -92,4 +109,11 @@ if [[ "$missing" == "1" ]]; then
   exit 1
 fi
 
-echo "[setup] Local setup checks passed."
+echo "[setup] Local dependency check passed."
+echo "[setup] Applying migrations for local mode..."
+bash infra/scripts/migrate_host.sh
+
+echo "[setup] Applying demo seed for local mode..."
+bash infra/scripts/seed_demo_host.sh
+
+echo "[setup] Local setup complete (dependencies + migrations + seed)."

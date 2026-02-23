@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from shared.schemas.events import EventEnvelope
@@ -9,6 +10,32 @@ from shared.schemas.enums import EventType
 if TYPE_CHECKING:
     from openai import OpenAI
 
+
+
+
+def get_campaign_ai_config(campaign_id: Optional[uuid.UUID]) -> dict:
+    if campaign_id is None:
+        return {}
+    try:
+        from shared.db.connection import execute_one
+        row = execute_one("SELECT * FROM state.campaign_settings WHERE campaign_id=%s", (str(campaign_id),))
+        return row or {}
+    except Exception:
+        logging.exception(
+            "Failed to retrieve campaign AI config for campaign_id=%s", campaign_id
+        )
+        return {}
+
+
+def resolve_provider_base_url(provider: str, base_url: Optional[str]) -> Optional[str]:
+    provider = (provider or "mock").lower()
+    if base_url:
+        return base_url
+    if provider == "ollama":
+        return "http://localhost:11434/v1/"
+    if provider == "lmstudio":
+        return "http://localhost:1234/v1"
+    return None
 
 def get_openai_client() -> "OpenAI":
     from openai import OpenAI
@@ -22,12 +49,22 @@ def get_openai_client() -> "OpenAI":
 
 
 class LLMAdapter:
-    def __init__(self, model: str = "gpt-4o-mini"):
+    def __init__(self, model: str = "gpt-4o-mini", campaign_id: Optional[uuid.UUID] = None, role: str = "dm"):
         self.mode = os.environ.get("TTDM_LLM_MODE", "live").lower()
+        cfg = get_campaign_ai_config(campaign_id)
+        provider = cfg.get("llm_provider", os.environ.get("AI_PROVIDER", "mock"))
+        base_url = resolve_provider_base_url(provider, cfg.get("llm_base_url"))
         self.client: Optional["OpenAI"] = (
-            None if self.mode == "mock" else get_openai_client()
+            None if self.mode == "mock" or provider == "mock" else get_openai_client()
         )
-        self.model = model
+        if self.client is not None and base_url:
+            self.client.base_url = base_url
+        default_model = model
+        if role == "npc":
+            self.model = cfg.get("npc_model") or default_model
+        else:
+            self.model = cfg.get("dm_model") or default_model
+        self.embedding_model = cfg.get("embedding_model", "text-embedding-3-small")
         self.max_retries = 2
         self.timeout = 30
 
@@ -100,6 +137,21 @@ class LLMAdapter:
 
         return {"error": "Max retries exceeded"}
 
+    def list_models(self) -> list[str]:
+        if self.mode == "mock" or self.client is None:
+            return ["mock-model"]
+        models = self.client.models.list()
+        return [m.id for m in models.data]
+
+    def embed_texts(self, texts: list[str]) -> dict:
+        if self.mode == "mock" or self.client is None:
+            vectors = [[float((i + 1) % 7) for i in range(16)] for _ in texts]
+            return {"vectors": vectors, "dimensions": 16}
+        response = self.client.embeddings.create(model=self.embedding_model, input=texts)
+        vectors = [d.embedding for d in response.data]
+        dims = len(vectors[0]) if vectors else 0
+        return {"vectors": vectors, "dimensions": dims}
+
     def generate_text(self, system_prompt: str, user_prompt: str) -> str:
         if self.mode == "mock":
             return "[MockLLM] Deterministic text response."
@@ -130,7 +182,7 @@ You receive state deltas and roll results, and produce vivid, atmospheric narrat
 Respond in JSON format with a single "narration" field containing your narrative text."""
 
     def __init__(self):
-        self.llm = LLMAdapter()
+        self.llm = LLMAdapter(role="dm")
 
     def narrate_event(self, tool_result: dict, context: str = "") -> str:
         prompt = f"""Narrate the following game event result:
@@ -186,7 +238,7 @@ You only produce dialogue and brief action descriptions.
 Respond in JSON with "dialogue" (what the NPC says) and "action" (brief physical action, optional)."""
 
     def __init__(self):
-        self.llm = LLMAdapter()
+        self.llm = LLMAdapter(role="npc")
 
     def generate_dialogue(
         self,
