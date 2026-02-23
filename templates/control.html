@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TableTop DM Control Plane</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #0f1117; color: #e5e7eb; }
+    header { padding: 16px; border-bottom: 1px solid #2e3345; display:flex; gap:12px; align-items:center; }
+    a { color:#93c5fd; }
+    .container { padding: 16px; }
+    .tabs { display:flex; gap:8px; margin-bottom:12px; }
+    .tabs button { background:#1f2937; color:#e5e7eb; border:1px solid #374151; padding:6px 10px; cursor:pointer; }
+    .tab { display:none; }
+    .tab.active { display:block; }
+    input, select, textarea, button { margin:4px; padding:6px; }
+    .panel { border:1px solid #374151; padding:12px; margin-bottom:12px; }
+    pre { white-space: pre-wrap; background:#111827; padding:8px; }
+    .error { color:#fca5a5; }
+  </style>
+</head>
+<body>
+<header>
+  <h2>Control Plane</h2>
+  <a href="/">Dashboard</a>
+  <a href="/game">Game</a>
+</header>
+<div class="container">
+  <label>Campaign Context</label><select id="campaignContext"></select><button id="refreshAll">Refresh</button>
+  <div class="tabs">
+    <button data-tab="campaigns">Campaigns</button>
+    <button data-tab="sessions">Sessions</button>
+    <button data-tab="characters">Characters</button>
+    <button data-tab="kb">Knowledge Base</button>
+    <button data-tab="ai">AI Settings</button>
+  </div>
+
+  <section id="campaigns" class="tab active">
+    <div class="panel">
+      <h3>Create Campaign</h3>
+      <input id="campName" placeholder="name"><input id="campSlug" placeholder="slug">
+      <select id="campStatus"><option>ACTIVE</option><option>DRAFT</option></select>
+      <select id="campMode"><option>EXPLORATION</option><option>SOCIAL</option><option>COMBAT</option></select>
+      <button id="createCampaign">Create</button>
+    </div>
+    <div class="panel"><h3>Campaign List</h3><div id="campaignList"></div></div>
+  </section>
+
+  <section id="sessions" class="tab">
+    <div class="panel"><button id="createSession">Create Session (soft restart)</button><button id="resumeCampaign">Resume Campaign</button></div>
+    <div class="panel"><h3>Sessions</h3><div id="sessionList"></div></div>
+  </section>
+
+  <section id="characters" class="tab">
+    <div class="panel">
+      <h3>Create / Import</h3>
+      <textarea id="characterJson" rows="8" cols="80" placeholder='{"name":"Aria","entity_type":"PC","public_sheet":{}}'></textarea><br>
+      <button id="createCharacter">Create from JSON</button>
+      <input id="charConcept" placeholder="concept"><button id="generateCharacter">Generate Character</button>
+    </div>
+    <div class="panel"><h3>Characters</h3><div id="characterList"></div></div>
+  </section>
+
+  <section id="kb" class="tab">
+    <div class="panel"><input type="file" id="ragFile"><button id="uploadRag">Upload</button></div>
+    <div class="panel"><h3>Documents</h3><div id="docList"></div></div>
+    <div class="panel"><input id="ragQuery" placeholder="query"><button id="testRetrieval">Test Retrieval</button><pre id="retrievalOut"></pre></div>
+  </section>
+
+  <section id="ai" class="tab">
+    <div class="panel">
+      <select id="provider"><option value="mock">Mock</option><option value="openai">OpenAI</option><option value="ollama">Ollama</option><option value="lmstudio">LM Studio</option></select>
+      <input id="baseUrl" placeholder="base url">
+      <input id="dmModel" placeholder="dm model">
+      <input id="npcModel" placeholder="npc model">
+      <input id="embedModel" placeholder="embedding model">
+      <button id="saveAi">Save</button><button id="listModels">List Models</button><button id="testProvider">Test Provider</button>
+      <pre id="aiOut"></pre>
+    </div>
+  </section>
+  <div id="error" class="error"></div>
+</div>
+<script src="{{ url_for('static', filename='js/control.js') }}"></script>
+</body>
+</html>

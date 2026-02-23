@@ -279,3 +279,46 @@ Death triggers cascading consequences: investigations, bounties, faction hostili
 
 ### Combat Pre-Registered Triggers
 AI entities register deterministic reaction triggers (ON_MOVEMENT, ON_ATTACKED, ON_CAST) executed with zero LLM calls.
+
+## Control Plane UI
+- Route: `GET /control`
+- Purpose: campaign/session/character lifecycle, RAG ingestion, and per-campaign AI provider config.
+
+### Campaign lifecycle
+- Create/list/edit campaigns from the Campaigns tab.
+- Safe delete uses **TOMBSTONE** (`DELETE /api/campaigns/<id>`).
+- Explicit purge is separate (`POST /api/campaigns/<id>/purge`) and irreversible.
+- Resume action (`POST /api/campaigns/<id>/resume`) reuses latest ACTIVE session or creates one.
+
+### Session management
+- `GET/POST /api/campaigns/<id>/sessions` to list/create.
+- Session actions: `POST /api/sessions/<id>/pause|resume|end`.
+- Soft restart behavior: creating a new session ends prior ACTIVE session transactionally.
+
+### Character management
+- List per campaign: `GET /api/campaigns/<id>/entities`.
+- Create/import JSON: `POST /api/campaigns/<id>/entities`.
+- Generate character: `POST /api/campaigns/<id>/characters/generate` (strict JSON schema validated before deterministic commit).
+- Control handoff: `POST /api/entities/<id>/control` (`controlled_by` = `HUMAN` or `AI`, `control_version` increments).
+
+### RAG ingestion and retrieval
+- Upload: `POST /api/campaigns/<id>/rag/upload` (multipart).
+- Document status list: `GET /api/campaigns/<id>/rag/documents`.
+- Toggle indexing participation: `POST /api/rag/documents/<doc_id>/enable|disable`.
+- Reindex trigger: `POST /api/rag/documents/<doc_id>/reindex`.
+- Retrieval test: `POST /api/campaigns/<id>/rag/query` returns chunks + metadata.
+- Storage path: `data/rag/<campaign_id>/<doc_id>/<original_filename>`.
+
+### AI provider settings (per campaign)
+- Save/load config: `GET/PUT /api/campaigns/<id>/ai_config`.
+- Provider test: `POST /api/ai/test_provider` (`/v1/models` + tiny chat completion).
+- Model discovery proxy: `GET /api/ai/models`.
+
+Supported OpenAI-compatible local endpoints:
+- Ollama: `http://localhost:11434/v1/`
+- LM Studio: `http://localhost:1234/v1`
+
+Security note:
+- Prefer `OPENAI_API_KEY` from environment for OpenAI.
+- Local Ollama/LM Studio can use dummy API key.
+- DB-stored AI settings are intended for dev/local control-plane MVP and should not be treated as secret storage.

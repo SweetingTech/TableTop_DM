@@ -92,4 +92,11 @@ if [[ "$missing" == "1" ]]; then
   exit 1
 fi
 
-echo "[setup] Local setup checks passed."
+echo "[setup] Local dependency check passed."
+echo "[setup] Applying migrations for local mode..."
+bash infra/scripts/migrate_host.sh
+
+echo "[setup] Applying demo seed for local mode..."
+bash infra/scripts/seed_demo_host.sh
+
+echo "[setup] Local setup complete (dependencies + migrations + seed)."

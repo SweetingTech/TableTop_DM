@@ -3,6 +3,9 @@ import uuid
 import json
 import traceback
 import socket
+import hashlib
+from pathlib import Path
+from urllib.parse import urljoin
 from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import psycopg2
@@ -16,6 +19,8 @@ REDIS_DEFAULT_HOST = "localhost"
 REDIS_DEFAULT_PORT = 6379
 QDRANT_DEFAULT_HOST = "localhost"
 QDRANT_DEFAULT_HTTP_PORT = 6333
+RAG_CHUNK_SIZE = 1000
+RAG_CHUNK_OVERLAP = 150
 
 
 def get_db():
@@ -120,6 +125,11 @@ def game():
     return render_template("game.html")
 
 
+@app.route("/control")
+def control():
+    return render_template("control.html")
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "alive"})
@@ -179,6 +189,111 @@ def readyz():
 @app.route("/api/health")
 def api_health():
     return readyz()
+
+
+def _validate_campaign_payload(data, partial=False):
+    required = [] if partial else ["name", "slug", "status", "mode"]
+    for field in required:
+        if not data.get(field):
+            return f"{field} is required"
+    if data.get("status") and data["status"] not in {
+        "DRAFT",
+        "ACTIVE",
+        "PAUSED",
+        "ENDED",
+        "ARCHIVED",
+        "TOMBSTONED",
+        "PURGED",
+    }:
+        return "invalid status"
+    if data.get("mode") and data["mode"] not in {
+        "EXPLORATION",
+        "SOCIAL",
+        "COMBAT",
+        "CUTSCENE",
+        "PAUSED",
+    }:
+        return "invalid mode"
+    return None
+
+
+def _provider_defaults(provider: str):
+    provider = (provider or "mock").lower()
+    if provider == "ollama":
+        return "http://localhost:11434/v1/"
+    if provider == "lmstudio":
+        return "http://localhost:1234/v1"
+    return None
+
+
+def _get_ai_config(campaign_id: str):
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        "SELECT * FROM state.campaign_settings WHERE campaign_id=%s", (campaign_id,)
+    )
+    if row:
+        return _serialize(row)
+    return {
+        "campaign_id": campaign_id,
+        "llm_provider": "mock",
+        "llm_base_url": None,
+        "embedding_base_url": None,
+        "dm_model": "gpt-4o-mini",
+        "npc_model": "gpt-4o-mini",
+        "embedding_model": "text-embedding-3-small",
+        "settings": {},
+    }
+
+
+def _openai_client_for(provider: str, base_url: str | None):
+    from openai import OpenAI
+
+    final_base_url = base_url or _provider_defaults(provider)
+    api_key = os.environ.get("OPENAI_API_KEY", "dev-local")
+    return OpenAI(api_key=api_key, base_url=final_base_url)
+
+
+def _extract_text_chunks(storage_path: str):
+    suffix = Path(storage_path).suffix.lower()
+    pages: list[tuple[int, str]] = []
+    if suffix == ".pdf":
+        from pypdf import PdfReader
+
+        reader = PdfReader(storage_path)
+        for i, page in enumerate(reader.pages, 1):
+            pages.append((i, page.extract_text() or ""))
+    else:
+        pages.append((1, Path(storage_path).read_text(encoding="utf-8", errors="ignore")))
+
+    chunks = []
+    for page_num, text in pages:
+        clean = " ".join(text.split())
+        if not clean:
+            continue
+        start = 0
+        idx = 0
+        while start < len(clean):
+            end = min(start + RAG_CHUNK_SIZE, len(clean))
+            chunk_text = clean[start:end]
+            chunk_id = hashlib.sha1(f"{page_num}:{idx}:{chunk_text}".encode()).hexdigest()
+            chunks.append({"chunk_id": chunk_id, "page": page_num, "text": chunk_text})
+            if end >= len(clean):
+                break
+            start = max(end - RAG_CHUNK_OVERLAP, 0)
+            idx += 1
+    return chunks
+
+
+def _embed_texts(campaign_id: str, texts: list[str]):
+    cfg = _get_ai_config(campaign_id)
+    provider = cfg.get("llm_provider", "mock")
+    model = cfg.get("embedding_model") or "text-embedding-3-small"
+    if provider == "mock" or os.environ.get("TTDM_LLM_MODE", "").lower() == "mock":
+        return [[float((i + 1) % 7) for i in range(16)] for _ in texts]
+    client = _openai_client_for(provider, cfg.get("embedding_base_url") or cfg.get("llm_base_url"))
+    response = client.embeddings.create(model=model, input=texts)
+    return [item.embedding for item in response.data]
 
 
 @app.route("/api/campaigns")
@@ -523,6 +638,459 @@ def api_export(session_id):
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/campaigns", methods=["POST"])
+def api_campaigns_create():
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    err = _validate_campaign_payload(data)
+    if err:
+        return jsonify({"error": err}), 400
+
+    row = execute_one(
+        """
+        INSERT INTO state.campaigns (slug, name, status, mode)
+        VALUES (%s, %s, %s, %s)
+        RETURNING *
+        """,
+        (data["slug"], data["name"], data["status"], data["mode"]),
+    )
+    return jsonify(_serialize(row)), 201
+
+
+@app.route("/api/campaigns/<campaign_id>", methods=["PUT"])
+def api_campaign_update(campaign_id):
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    err = _validate_campaign_payload(data, partial=True)
+    if err:
+        return jsonify({"error": err}), 400
+
+    fields, params = [], []
+    for key in ("name", "slug", "status", "mode"):
+        if key in data:
+            fields.append(f"{key} = %s")
+            params.append(data[key])
+    if not fields:
+        return jsonify({"error": "no updatable fields provided"}), 400
+    params.append(campaign_id)
+
+    row = execute_one(
+        f"UPDATE state.campaigns SET {', '.join(fields)}, updated_at=now() WHERE id=%s RETURNING *",
+        tuple(params),
+    )
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/campaigns/<campaign_id>", methods=["DELETE"])
+def api_campaign_tombstone(campaign_id):
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        "UPDATE state.campaigns SET status='TOMBSTONED', updated_at=now() WHERE id=%s RETURNING *",
+        (campaign_id,),
+    )
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/campaigns/<campaign_id>/purge", methods=["POST"])
+def api_campaign_purge(campaign_id):
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        "UPDATE state.campaigns SET status='PURGED', updated_at=now() WHERE id=%s RETURNING *",
+        (campaign_id,),
+    )
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"warning": "PURGE is irreversible", "campaign": _serialize(row)})
+
+
+@app.route("/api/campaigns/<campaign_id>/resume", methods=["POST"])
+def api_campaign_resume(campaign_id):
+    from shared.db.connection import execute_one
+
+    active = execute_one(
+        "SELECT * FROM state.sessions WHERE campaign_id=%s AND status='ACTIVE' ORDER BY created_at DESC LIMIT 1",
+        (campaign_id,),
+    )
+    if active:
+        return jsonify({"session": _serialize(active), "created": False})
+    row = execute_one(
+        "INSERT INTO state.sessions (campaign_id, status) VALUES (%s, 'ACTIVE') RETURNING *",
+        (campaign_id,),
+    )
+    return jsonify({"session": _serialize(row), "created": True}), 201
+
+
+@app.route("/api/campaigns/<campaign_id>/sessions")
+def api_campaign_sessions(campaign_id):
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        "SELECT * FROM state.sessions WHERE campaign_id=%s ORDER BY created_at DESC",
+        (campaign_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/campaigns/<campaign_id>/sessions", methods=["POST"])
+def api_campaign_sessions_create(campaign_id):
+    from shared.db.connection import transaction
+
+    with transaction() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "UPDATE state.sessions SET status='ENDED', ended_at=now(), updated_at=now() WHERE campaign_id=%s AND status='ACTIVE'",
+                (campaign_id,),
+            )
+            cur.execute(
+                "INSERT INTO state.sessions (campaign_id, status) VALUES (%s, 'ACTIVE') RETURNING *",
+                (campaign_id,),
+            )
+            row = cur.fetchone()
+    return jsonify(_serialize(row)), 201
+
+
+def _set_session_status(session_id, status):
+    from shared.db.connection import execute_one
+
+    ended = ", ended_at=now()" if status == "ENDED" else ""
+    row = execute_one(
+        f"UPDATE state.sessions SET status=%s{ended}, updated_at=now() WHERE id=%s RETURNING *",
+        (status, session_id),
+    )
+    if not row:
+        return jsonify({"error": "Session not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/sessions/<session_id>/pause", methods=["POST"])
+def api_session_pause(session_id):
+    return _set_session_status(session_id, "PAUSED")
+
+
+@app.route("/api/sessions/<session_id>/resume", methods=["POST"])
+def api_session_resume(session_id):
+    return _set_session_status(session_id, "ACTIVE")
+
+
+@app.route("/api/sessions/<session_id>/end", methods=["POST"])
+def api_session_end(session_id):
+    return _set_session_status(session_id, "ENDED")
+
+
+@app.route("/api/campaigns/<campaign_id>/entities", methods=["POST"])
+def api_entity_create(campaign_id):
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    if not data.get("name") or not data.get("entity_type"):
+        return jsonify({"error": "name and entity_type are required"}), 400
+    row = execute_one(
+        """
+        INSERT INTO state.entities (campaign_id, entity_type, name, tags, public_sheet, secret_sheet, hp_current, hp_max, ac, speed, controlled_by, controller_principal_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        RETURNING *
+        """,
+        (
+            campaign_id,
+            data["entity_type"],
+            data["name"],
+            data.get("tags", []),
+            json.dumps(data.get("public_sheet", {})),
+            json.dumps(data.get("secret_sheet", {})),
+            data.get("hp_current"),
+            data.get("hp_max"),
+            data.get("ac"),
+            data.get("speed"),
+            data.get("controlled_by", "HUMAN"),
+            data.get("controller_principal_id"),
+        ),
+    )
+    return jsonify(_serialize(row)), 201
+
+
+@app.route("/api/entities/<entity_id>", methods=["PUT"])
+def api_entity_update(entity_id):
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    fields, params = [], []
+    for key in ("name", "tags", "public_sheet", "secret_sheet", "hp_current", "hp_max", "ac", "speed"):
+        if key in data:
+            fields.append(f"{key}=%s")
+            val = json.dumps(data[key]) if key in {"public_sheet", "secret_sheet"} else data[key]
+            params.append(val)
+    if not fields:
+        return jsonify({"error": "no fields provided"}), 400
+    params.append(entity_id)
+    row = execute_one(
+        f"UPDATE state.entities SET {', '.join(fields)}, updated_at=now() WHERE id=%s RETURNING *",
+        tuple(params),
+    )
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/entities/<entity_id>/control", methods=["POST"])
+def api_entity_control(entity_id):
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    if data.get("controlled_by") not in {"HUMAN", "AI"}:
+        return jsonify({"error": "controlled_by must be HUMAN or AI"}), 400
+    row = execute_one(
+        """
+        UPDATE state.entities
+        SET controlled_by=%s, controller_principal_id=%s, control_version=control_version+1, updated_at=now()
+        WHERE id=%s RETURNING *
+        """,
+        (data["controlled_by"], data.get("controller_principal_id"), entity_id),
+    )
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/campaigns/<campaign_id>/characters/generate", methods=["POST"])
+def api_generate_character(campaign_id):
+    from services.llm.adapter import LLMAdapter
+
+    data = request.get_json(silent=True) or {}
+    concept = data.get("concept", "A balanced adventurer")
+    schema = {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "entity_type": {"type": "string", "enum": ["PC", "NPC"]},
+            "hp_max": {"type": "integer", "minimum": 1},
+            "ac": {"type": "integer", "minimum": 1},
+            "speed": {"type": "integer", "minimum": 0},
+            "public_sheet": {"type": "object"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["name", "entity_type", "hp_max", "ac", "speed", "public_sheet", "tags"],
+        "additionalProperties": False,
+    }
+    llm = LLMAdapter(model="gpt-4o-mini")
+    generated = llm.generate_structured(
+        "Generate a JSON tabletop character sheet.",
+        f"Concept: {concept}. Keep numeric values modest.",
+        response_schema=schema,
+    )
+    if generated.get("error"):
+        return jsonify(generated), 400
+    generated["hp_current"] = generated["hp_max"]
+    generated["controlled_by"] = "HUMAN"
+    with app.test_request_context(json=generated):
+        return api_entity_create(campaign_id)
+
+
+@app.route("/api/campaigns/<campaign_id>/ai_config")
+def api_ai_config_get(campaign_id):
+    return jsonify(_get_ai_config(campaign_id))
+
+
+@app.route("/api/campaigns/<campaign_id>/ai_config", methods=["PUT"])
+def api_ai_config_put(campaign_id):
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    provider = (data.get("llm_provider") or "mock").lower()
+    if provider not in {"openai", "ollama", "lmstudio", "mock"}:
+        return jsonify({"error": "invalid provider"}), 400
+    row = execute_one(
+        """
+        INSERT INTO state.campaign_settings (campaign_id,llm_provider,llm_base_url,embedding_base_url,dm_model,npc_model,embedding_model,settings,updated_at)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now())
+        ON CONFLICT (campaign_id) DO UPDATE
+        SET llm_provider=EXCLUDED.llm_provider,
+            llm_base_url=EXCLUDED.llm_base_url,
+            embedding_base_url=EXCLUDED.embedding_base_url,
+            dm_model=EXCLUDED.dm_model,
+            npc_model=EXCLUDED.npc_model,
+            embedding_model=EXCLUDED.embedding_model,
+            settings=EXCLUDED.settings,
+            updated_at=now()
+        RETURNING *
+        """,
+        (
+            campaign_id,
+            provider,
+            data.get("llm_base_url") or _provider_defaults(provider),
+            data.get("embedding_base_url") or data.get("llm_base_url") or _provider_defaults(provider),
+            data.get("dm_model", "gpt-4o-mini"),
+            data.get("npc_model", "gpt-4o-mini"),
+            data.get("embedding_model", "text-embedding-3-small"),
+            json.dumps(data.get("settings", {})),
+        ),
+    )
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/ai/models")
+def api_ai_models():
+    provider = request.args.get("provider", "mock")
+    base_url = request.args.get("base_url")
+    if provider == "mock":
+        return jsonify({"data": [{"id": "mock-model"}]})
+    client = _openai_client_for(provider, base_url)
+    models = client.models.list()
+    return jsonify({"data": [{"id": m.id} for m in models.data]})
+
+
+@app.route("/api/ai/test_provider", methods=["POST"])
+def api_ai_test_provider():
+    data = request.get_json(silent=True) or {}
+    provider = data.get("provider", "mock")
+    base_url = data.get("base_url")
+    model = data.get("model") or "gpt-4o-mini"
+    if provider == "mock":
+        return jsonify({"ok": True, "models": ["mock-model"], "completion": "mock ok"})
+    client = _openai_client_for(provider, base_url)
+    models = client.models.list()
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": "Reply with: ok"}],
+        temperature=0,
+        max_tokens=10,
+    )
+    return jsonify({
+        "ok": True,
+        "models": [m.id for m in models.data],
+        "completion": completion.choices[0].message.content,
+    })
+
+
+@app.route("/api/campaigns/<campaign_id>/rag/upload", methods=["POST"])
+def api_rag_upload(campaign_id):
+    from shared.db.connection import execute_one
+
+    if "file" not in request.files:
+        return jsonify({"error": "file is required"}), 400
+    upload = request.files["file"]
+    if not upload.filename:
+        return jsonify({"error": "empty filename"}), 400
+
+    row = execute_one(
+        """
+        INSERT INTO state.rag_documents (campaign_id, filename, storage_path, status)
+        VALUES (%s, %s, %s, 'QUEUED')
+        RETURNING *
+        """,
+        (campaign_id, upload.filename, "pending"),
+    )
+    doc_id = str(row["id"])
+    dest_dir = Path("data/rag") / campaign_id / doc_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / upload.filename
+    upload.save(dest)
+
+    execute_one(
+        "UPDATE state.rag_documents SET storage_path=%s, status='PROCESSING', updated_at=now() WHERE id=%s RETURNING id",
+        (str(dest), doc_id),
+    )
+
+    try:
+        chunks = _extract_text_chunks(str(dest))
+        vectors = _embed_texts(campaign_id, [c["text"] for c in chunks]) if chunks else []
+        from shared.db.connection import execute_query
+        execute_query("DELETE FROM state.rag_chunks WHERE doc_id=%s", (doc_id,), fetch=False)
+        for i, chunk in enumerate(chunks):
+            qid = f"{doc_id}:{chunk['chunk_id']}"
+            execute_one(
+                """
+                INSERT INTO state.rag_chunks (doc_id, campaign_id, chunk_id, page, text, qdrant_point_id, metadata)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                RETURNING id
+                """,
+                (
+                    doc_id,
+                    campaign_id,
+                    chunk["chunk_id"],
+                    chunk["page"],
+                    chunk["text"],
+                    qid,
+                    json.dumps({"source_filename": upload.filename, "vector_dim": len(vectors[i]) if vectors else 0}),
+                ),
+            )
+        execute_one(
+            "UPDATE state.rag_documents SET status='READY', error_text=NULL, updated_at=now() WHERE id=%s RETURNING id",
+            (doc_id,),
+        )
+    except Exception as exc:
+        execute_one(
+            "UPDATE state.rag_documents SET status='FAILED', error_text=%s, updated_at=now() WHERE id=%s RETURNING id",
+            (str(exc), doc_id),
+        )
+
+    latest = execute_one("SELECT * FROM state.rag_documents WHERE id=%s", (doc_id,))
+    return jsonify(_serialize(latest)), 201
+
+
+@app.route("/api/campaigns/<campaign_id>/rag/documents")
+def api_rag_documents(campaign_id):
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        "SELECT * FROM state.rag_documents WHERE campaign_id=%s ORDER BY created_at DESC",
+        (campaign_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/rag/documents/<doc_id>/enable", methods=["POST"])
+def api_rag_enable(doc_id):
+    from shared.db.connection import execute_one
+    return jsonify(_serialize(execute_one("UPDATE state.rag_documents SET enabled=true, updated_at=now() WHERE id=%s RETURNING *", (doc_id,))))
+
+
+@app.route("/api/rag/documents/<doc_id>/disable", methods=["POST"])
+def api_rag_disable(doc_id):
+    from shared.db.connection import execute_one
+    return jsonify(_serialize(execute_one("UPDATE state.rag_documents SET enabled=false, updated_at=now() WHERE id=%s RETURNING *", (doc_id,))))
+
+
+@app.route("/api/rag/documents/<doc_id>/reindex", methods=["POST"])
+def api_rag_reindex(doc_id):
+    from shared.db.connection import execute_one
+    doc = execute_one("SELECT campaign_id FROM state.rag_documents WHERE id=%s", (doc_id,))
+    if not doc:
+        return jsonify({"error": "Not found"}), 404
+    execute_one("UPDATE state.rag_documents SET status='QUEUED', updated_at=now() WHERE id=%s RETURNING id", (doc_id,))
+    return jsonify({"status": "queued", "doc_id": doc_id})
+
+
+@app.route("/api/campaigns/<campaign_id>/rag/query", methods=["POST"])
+def api_rag_query(campaign_id):
+    from shared.db.connection import execute_query
+
+    data = request.get_json(silent=True) or {}
+    query = data.get("query", "").strip().lower()
+    if not query:
+        return jsonify({"error": "query is required"}), 400
+    top_k = int(data.get("top_k", 5))
+    rows = execute_query(
+        """
+        SELECT c.*, d.filename
+        FROM state.rag_chunks c
+        JOIN state.rag_documents d ON d.id = c.doc_id
+        WHERE c.campaign_id=%s AND d.enabled=true AND d.status='READY'
+        ORDER BY position(%s in lower(c.text)) DESC, c.created_at DESC
+        LIMIT %s
+        """,
+        (campaign_id, query, top_k),
+    )
+    return jsonify({"results": [_serialize(r) for r in rows]})
 
 
 @socketio.on("connect")
