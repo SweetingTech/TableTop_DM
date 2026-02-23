@@ -8,7 +8,9 @@ if [[ ! -f ../.env ]]; then
   echo "Created .env from .env.example"
 fi
 
+set -a
 source ../.env
+set +a
 
 docker compose ps
 

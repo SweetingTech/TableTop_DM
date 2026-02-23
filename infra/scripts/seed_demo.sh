@@ -9,7 +9,9 @@ if [[ ! -f "$ROOT_DIR/.env" ]]; then
   echo "Created .env from .env.example"
 fi
 
+set -a
 source "$ROOT_DIR/.env"
+set +a
 
 SEED_FILE="$ROOT_DIR/infra/sql/seed/001_demo_campaign.sql"
 
@@ -20,13 +22,15 @@ echo ""
 echo "Demo scenario IDs"
 echo "-----------------"
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
-SELECT 'campaign_id' AS key, id::text AS value FROM state.campaigns WHERE id = '11111111-1111-1111-1111-111111111111'
-UNION ALL
-SELECT 'session_id', '66666666-6666-6666-6666-666666666661'
-UNION ALL
-SELECT 'encounter_id', id::text FROM state.encounters WHERE id = '55555555-5555-5555-5555-555555555551'
-UNION ALL
-SELECT 'map_id', id::text FROM state.maps WHERE id = '44444444-4444-4444-4444-444444444441'
+SELECT * FROM (
+  SELECT 'campaign_id' AS key, id::text AS value FROM state.campaigns WHERE id = '11111111-1111-1111-1111-111111111111'
+  UNION ALL
+  SELECT 'session_id', '66666666-6666-6666-6666-666666666661'
+  UNION ALL
+  SELECT 'encounter_id', id::text FROM state.encounters WHERE id = '55555555-5555-5555-5555-555555555551'
+  UNION ALL
+  SELECT 'map_id', id::text FROM state.maps WHERE id = '44444444-4444-4444-4444-444444444441'
+) t
 ORDER BY CASE key WHEN 'campaign_id' THEN 1 WHEN 'session_id' THEN 2 WHEN 'encounter_id' THEN 3 WHEN 'map_id' THEN 4 ELSE 5 END;"
 
 echo ""

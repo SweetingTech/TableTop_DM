@@ -6,14 +6,19 @@ $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
-$bash = Get-Command bash -ErrorAction SilentlyContinue
-if (-not $bash) {
-  Write-Error "The 'bash' command was not found. Install Git Bash, WSL, or another Bash environment."
-  exit 1
+# Prefer Git Bash for Windows paths over WSL bash
+$GitBashPath = "$env:ProgramFiles\Git\bin\bash.exe"
+$bash = if (Test-Path $GitBashPath) {
+    $GitBashPath
+} elseif (Get-Command bash -ErrorAction SilentlyContinue) {
+    (Get-Command bash).Path
+} else {
+    Write-Error "The 'bash' command was not found. Install Git Bash, WSL, or another Bash environment."
+    exit 1
 }
 
 if ($Mode -eq 'docker') {
-  & $bash.Path 'scripts/start.sh' '--mode' 'docker'
+  & $bash 'scripts/start.sh' '--mode' 'docker'
 } else {
-  & $bash.Path 'scripts/start.sh' '--mode' 'local'
+  & $bash 'scripts/start.sh' '--mode' 'local'
 }

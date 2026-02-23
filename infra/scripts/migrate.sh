@@ -9,7 +9,9 @@ if [[ ! -f "$ROOT_DIR/.env" ]]; then
   echo "Created .env from .env.example"
 fi
 
+set -a
 source "$ROOT_DIR/.env"
+set +a
 
 if ! docker compose ps postgres >/dev/null 2>&1; then
   echo "Postgres service not found in compose. Run ./infra/scripts/phase1_up.sh first." >&2

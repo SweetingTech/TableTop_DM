@@ -8,6 +8,10 @@ if [[ ! -f ../.env ]]; then
   echo "Created .env from .env.example"
 fi
 
-docker compose up -d
+set -a
+source ../.env
+set +a
+
+docker compose up -d --wait
 
 echo "Services started. Run ./infra/scripts/phase1_healthcheck.sh to verify readiness."
