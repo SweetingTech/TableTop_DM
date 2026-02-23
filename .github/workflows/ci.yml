@@ -5,219 +5,67 @@ on:
   push:
     branches: ["main"]
 
-permissions:
-  contents: read
-  packages: read
-
 jobs:
-  lint-type-unit-contracts:
+  ci-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 50
     env:
-      PYTHONUNBUFFERED: "1"
-      TTDM_LLM_MODE: mock
-      TTDM_RNG_SEED: "1337"
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: requirements-dev.txt
-
-      - name: Install dependencies
-        run: make install
-
-      - name: Fast CI gates
-        run: bash scripts/test.sh
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-xml
-          path: coverage.xml
-
-  local-verification:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: tabletop_dm
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: requirements-dev.txt
-          cache: "pip"
-          cache-dependency-path: requirements-dev.txt
-      - name: Install dependencies
-        run: make install
-      - name: Write .env
-        run: |
-          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tabletop_dm" > .env
-          echo "POSTGRES_USER=postgres" >> .env
-          echo "POSTGRES_PASSWORD=postgres" >> .env
-          echo "POSTGRES_DB=tabletop_dm" >> .env
-      - name: Run Local Audit
-        run: python scripts/audit_todo.py --full --strict --mode local
-
-  integration-compose-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    needs: [lint-type-unit-contracts]
-    env:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tabletop_dm
-      POSTGRES_PORT: "5432"
-      REDIS_PASSWORD: redispass
-      REDIS_PORT: "6379"
-      QDRANT_HTTP_PORT: "6333"
-      QDRANT_GRPC_PORT: "6334"
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tabletop_dm
-      TTDM_LLM_MODE: mock
-      TTDM_RNG_SEED: "1337"
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Write CI .env values
-        run: |
-          cat > .env <<EOF
-          POSTGRES_USER=${POSTGRES_USER}
-          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-          POSTGRES_DB=${POSTGRES_DB}
-          POSTGRES_PORT=${POSTGRES_PORT}
-          REDIS_PASSWORD=${REDIS_PASSWORD}
-          REDIS_PORT=${REDIS_PORT}
-          QDRANT_HTTP_PORT=${QDRANT_HTTP_PORT}
-          QDRANT_GRPC_PORT=${QDRANT_GRPC_PORT}
-          DATABASE_URL=${DATABASE_URL}
-          EOF
-
-      - name: Start dependencies
-        run: |
-          docker compose -f infra/docker-compose.yml up -d
-          docker compose -f infra/docker-compose.yml ps
-
-      - name: Compose smoke
-        run: bash infra/scripts/compose_smoke.sh
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: make install
-
-      - name: Integration gate
-        run: make ci-integration
-
-
-      - name: Dump compose logs on failure
-        if: failure()
-        run: docker compose -f infra/docker-compose.yml logs --no-color
-
-      - name: Shutdown
-        if: always()
-        run: docker compose -f infra/docker-compose.yml down --volumes --remove-orphans
-
-  release-candidate-verification:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [integration-compose-smoke]
-    env:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tabletop_dm
-      POSTGRES_PORT: "5432"
-      REDIS_PASSWORD: redispass
-      REDIS_PORT: "6379"
-      QDRANT_HTTP_PORT: "6333"
-      QDRANT_GRPC_PORT: "6334"
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tabletop_dm
       TTDM_LLM_MODE: mock
       TTDM_RNG_SEED: "1337"
       CI: "true"
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
 
-      - name: Write CI .env values
+      - name: Write .env
         run: |
-          cat > .env <<EOF
-          POSTGRES_USER=${POSTGRES_USER}
-          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-          POSTGRES_DB=${POSTGRES_DB}
-          POSTGRES_PORT=${POSTGRES_PORT}
-          REDIS_PASSWORD=${REDIS_PASSWORD}
-          REDIS_PORT=${REDIS_PORT}
-          QDRANT_HTTP_PORT=${QDRANT_HTTP_PORT}
-          QDRANT_GRPC_PORT=${QDRANT_GRPC_PORT}
-          DATABASE_URL=${DATABASE_URL}
-          EOF
+          cat > .env <<EOF_ENV
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=tabletop_dm
+          POSTGRES_PORT=5432
+          REDIS_PASSWORD=redispass
+          REDIS_PORT=6379
+          QDRANT_HTTP_PORT=6333
+          QDRANT_GRPC_PORT=6334
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tabletop_dm
+          EOF_ENV
 
-      - name: Run release-candidate verification
-        run: make verify-rc
+      - name: Export .env to workflow env
+        run: |
+          grep -E '^[A-Za-z_][A-Za-z0-9_]*=' .env >> "$GITHUB_ENV"
 
-      - name: Dump compose logs on failure
-        if: failure()
-        run: docker compose -f infra/docker-compose.yml logs --no-color
+      - name: Install dependencies
+        run: make install
 
-      - name: Shutdown
+      - name: Optional compose smoke (runtime-gated)
+        run: |
+          if bash scripts/docker_runtime_available.sh; then
+            docker compose -f infra/docker-compose.yml up -d
+            bash infra/scripts/compose_smoke.sh
+          else
+            echo "[workflow] Docker runtime unavailable; skipping pre-ci compose smoke"
+          fi
+
+      - name: Integration gate
+        run: make ci-integration
+
+      - name: CI pipeline
+        run: make ci
+
+      - name: Verify docker mode
+        run: make verify-docker
+
+      - name: Verify local mode
+        run: make verify-local
+
+      - name: Tear down
         if: always()
-        run: docker compose -f infra/docker-compose.yml down --volumes --remove-orphans
-
-  docker-build:
-    runs-on: ubuntu-latest
-    needs: [lint-type-unit-contracts]
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  docker-push:
-    runs-on: ubuntu-latest
-    needs: [lint-type-unit-contracts, integration-compose-smoke]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository }}:main
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            docker compose -f infra/docker-compose.yml down --remove-orphans || true
+          fi

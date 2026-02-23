@@ -15,7 +15,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 scripts/audit_todo.py --full --strict
+python3 scripts/audit_todo.py --full --strict --mode docker
 
 docker compose -f "$COMPOSE_FILE" config
 docker compose -f "$COMPOSE_FILE" build
@@ -25,12 +25,12 @@ make up
 MAX_HEALTHCHECK_ATTEMPTS="${MAX_HEALTHCHECK_ATTEMPTS:-10}"
 HEALTHCHECK_SLEEP_SECONDS="${HEALTHCHECK_SLEEP_SECONDS:-3}"
 for attempt in $(seq 1 "$MAX_HEALTHCHECK_ATTEMPTS"); do
-  if curl -fsS --max-time 5 http://localhost:8000/health >/dev/null; then
+  if curl -fsS --max-time 5 http://localhost:8000/readyz >/dev/null; then
     break
   fi
 
   if [ "$attempt" -eq "$MAX_HEALTHCHECK_ATTEMPTS" ]; then
-    echo "[verify-rc] ERROR: service at http://localhost:8000/health did not become healthy after $MAX_HEALTHCHECK_ATTEMPTS attempts." >&2
+    echo "[verify-rc] ERROR: service at http://localhost:8000/readyz did not become healthy after $MAX_HEALTHCHECK_ATTEMPTS attempts." >&2
     exit 1
   fi
 
@@ -38,7 +38,7 @@ for attempt in $(seq 1 "$MAX_HEALTHCHECK_ATTEMPTS"); do
 done
 
 make ci
-python3 scripts/audit_todo.py --full --strict
+python3 scripts/audit_todo.py --full --strict --mode docker
 
 make down
 trap - EXIT

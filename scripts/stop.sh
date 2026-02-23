@@ -4,20 +4,46 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-if [[ -f .run/app.pid ]]; then
-  APP_PID="$(cat .run/app.pid)"
-  if kill -0 "$APP_PID" >/dev/null 2>&1; then
-    echo "[stop] Stopping app process $APP_PID"
-    kill "$APP_PID" || true
+MODE="docker"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      MODE="$2"
+      shift 2
+      ;;
+    *)
+      echo "[stop] Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+APP_PID_FILE=".local-run/app.pid"
+DEPS_PROVIDER_FILE=".local-run/deps-provider"
+DEPS_STARTED_FILE=".local-run/deps-started-by-start"
+
+if [[ -f "$APP_PID_FILE" ]]; then
+  PID="$(cat "$APP_PID_FILE")"
+  if kill -0 "$PID" >/dev/null 2>&1; then
+    kill "$PID" || true
+    sleep 1
+    if kill -0 "$PID" >/dev/null 2>&1; then
+      kill -9 "$PID" >/dev/null 2>&1 || true
+    fi
   fi
-  rm -f .run/app.pid
+  rm -f "$APP_PID_FILE"
 fi
 
-echo "[stop] Stopping infrastructure services"
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  docker compose -f infra/docker-compose.yml down --remove-orphans
-else
-  echo "[stop] docker compose not available; skipped infra shutdown" >&2
+provider=""
+[[ -f "$DEPS_PROVIDER_FILE" ]] && provider="$(cat "$DEPS_PROVIDER_FILE")"
+started_by_start=0
+[[ -f "$DEPS_STARTED_FILE" ]] && started_by_start=1
+
+if [[ "$MODE" == "docker" || ( "$provider" == "docker" && "$started_by_start" == "1" ) ]]; then
+  if bash scripts/docker_runtime_available.sh; then
+    docker compose -f infra/docker-compose.yml down --remove-orphans
+  fi
 fi
 
-echo "[stop] Done"
+rm -f "$DEPS_PROVIDER_FILE" "$DEPS_STARTED_FILE"
+echo "[stop] Stopped mode=$MODE"
