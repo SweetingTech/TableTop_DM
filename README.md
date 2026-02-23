@@ -145,6 +145,7 @@ services/
   orchestrator/
     pipeline.py                     Validation + auth + tool exec + ledger append
     state_machine.py                Mode + encounter state management
+    npc_autonomy.py                 AI turn processing for NPC-controlled entities
   ledger/
     writer.py                       Append-only ledger writer
   visibility/
@@ -176,6 +177,7 @@ docs/                               Architecture specs
 |--------|------|-------------|
 | GET | `/` | Dashboard (database viewer) |
 | GET | `/game` | Game console frontend |
+| GET | `/control` | Control plane UI |
 | GET | `/health` | Liveness endpoint (process only) |
 | GET | `/readyz` | Readiness endpoint (deps + migrations) |
 | GET | `/api/health` | Backward-compatible alias for `/readyz` |
@@ -184,6 +186,7 @@ docs/                               Architecture specs
 | GET | `/api/campaigns/<id>/entities` | Campaign entities |
 | GET | `/api/campaigns/<id>/encounters` | Campaign encounters |
 | GET | `/api/campaigns/<id>/session` | GM loads current campaign session record |
+| GET | `/api/campaigns/<id>/members` | List campaign principals/members |
 | GET/POST | `/api/campaigns/<id>/mode` | Get/set game mode |
 | GET | `/api/campaigns/<id>/maps` | Campaign maps |
 | GET | `/api/maps/<id>` | Map detail with nodes |
@@ -191,6 +194,7 @@ docs/                               Architecture specs
 | POST | `/api/propose` | Submit intervention proposal |
 | POST | `/api/dice/roll` | Roll dice |
 | POST | `/api/encounters/<id>/advance` | Advance combat turn |
+| POST | `/api/encounters/<id>/auto_advance` | Auto-advance AI-controlled NPC turns |
 | GET | `/api/encounters/<id>/slots` | Encounter initiative slots |
 | POST | `/api/chat` | Send chat message |
 | POST | `/api/narrate` | Request AI narration |
@@ -212,9 +216,14 @@ docs/                               Architecture specs
 |---------|-------------|
 | `/roll [dice] [modifier]` | Roll dice (e.g., `/roll 2d6 3`) |
 | `/mode [MODE]` | Change game mode (EXPLORATION, COMBAT, DIALOGUE, CUTSCENE, DOWNTIME) |
-| `/advance` | Advance combat turn |
+| `/attack [target]` | Attack a target entity (e.g., `/attack Goblin Scout`) |
+| `/endturn` | End your current turn |
+| `/say @target message` | Directed speech to trigger NPC dialogue |
+| `/advance` | Advance combat turn (advances initiative) |
 | `/narrate [context]` | Request AI narration |
 | `/help` | Show available commands |
+
+**Map Interaction:** Click on the map canvas to move your selected entity to a tile. Pathfinding validates movement and collision.
 
 
 ## Prime Directives (Non-Negotiable)
@@ -245,7 +254,19 @@ docs/                               Architecture specs
 - **Content Rating Gate:** SAFE/MATURE/EXPLICIT enforcement at generation and pre-broadcast
 
 ### Frontend
-- **Game Console:** WebSocket-connected event feed, slash command console, entity sidebar with HP bars, initiative tracker, canvas map viewer with terrain rendering
+- **Game Console:** WebSocket-connected event feed, slash command console, entity sidebar with HP bars, initiative tracker, canvas map viewer with click-to-move interaction
+- **Principal Context:** Tracks player identity, session, and controlled entities. Visual indicators show which entities you can command
+- **Quick Actions:** Attack Target, End Turn, Advance Initiative, AI Narration buttons for rapid gameplay
+
+### NPC Autonomy
+AI-controlled entities (NPCs/monsters with `controlled_by=AI_NPC`) take autonomous actions on their turn:
+- Attack nearest enemy if within melee range
+- Move toward nearest PC/party member if out of range
+- Auto-end turn after action completes
+- Safeguard: max 3 consecutive AI turns to prevent infinite loops
+
+### Auto-Narration
+Significant combat events (ATTACK, CAST_SPELL, DIVINE_BLESS) trigger automatic DM narration via the LLM adapter, creating immersive descriptions of combat outcomes
 
 
 ## Canonical Object Model

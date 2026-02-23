@@ -74,6 +74,42 @@ body {
 .mode-badge.CUTSCENE { background: #3a1a4a; color: #ce93d8; }
 .mode-badge.DOWNTIME { background: #4a3a1a; color: #ffb74d; }
 
+.control-link {
+    color: #93c5fd;
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.control-link:hover {
+    text-decoration: underline;
+}
+
+.principal-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: var(--bg-tertiary);
+    border-radius: 16px;
+    font-size: 12px;
+}
+
+.principal-name {
+    color: var(--text-green);
+    font-weight: 500;
+}
+
+.session-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #666;
+}
+
+.session-indicator.active {
+    background: var(--text-green);
+}
+
 .connection-indicator {
     width: 8px;
     height: 8px;
@@ -123,6 +159,20 @@ body {
 .entity-item:hover { background: var(--bg-tertiary); }
 
 .entity-item.selected { background: var(--bg-tertiary); border-left: 3px solid var(--text-accent); }
+
+.entity-item.controlled {
+    border-right: 2px solid var(--text-green);
+}
+
+.entity-item.controlled::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--text-green);
+    border-radius: 50%;
+    margin-left: auto;
+    flex-shrink: 0;
+}
 
 .entity-icon {
     width: 24px;
@@ -324,6 +374,29 @@ body {
     font-size: 16px;
 }
 
+.map-hint {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: var(--text-secondary);
+    padding: 6px 16px;
+    border-radius: 16px;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0.8;
+    transition: opacity 0.3s;
+}
+
+.map-hint.hidden {
+    opacity: 0;
+}
+
+.map-canvas.can-move {
+    cursor: crosshair;
+}
+
 .right-panel {
     background: var(--bg-secondary);
     border-left: 1px solid var(--border-color);
@@ -455,6 +528,16 @@ body {
 .action-btn:hover {
     background: var(--bg-tertiary);
     border-color: var(--text-accent);
+}
+
+.action-btn.combat-btn {
+    border-color: var(--text-red);
+    color: var(--text-red);
+}
+
+.action-btn.combat-btn:hover {
+    background: rgba(255, 68, 68, 0.15);
+    border-color: var(--text-red);
 }
 
 .encounter-select {

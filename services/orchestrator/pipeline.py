@@ -201,6 +201,7 @@ class OrchestratorPipeline:
 
     def _handle_move(self, params: dict, campaign_id: uuid.UUID) -> ToolCallPayload:
         from shared.db.connection import execute_one
+        from shared.schemas.events import StateDelta
 
         entity = execute_one(
             "SELECT * FROM state.entities WHERE id = %s", (params["entity_id"],)
@@ -212,16 +213,84 @@ class OrchestratorPipeline:
                 result={"success": False, "reason": "Entity not found"},
             )
 
-        return ToolCallPayload(
-            tool_name="move_entity",
-            arguments=params,
-            result={
-                "success": True,
-                "entity_id": params["entity_id"],
-                "destination_x": params.get("destination_x"),
-                "destination_y": params.get("destination_y"),
-            },
+        # Get current position from public_sheet
+        public_sheet = entity.get("public_sheet") or {}
+        from_x = public_sheet.get("x", 0)
+        from_y = public_sheet.get("y", 0)
+
+        to_x = params.get("destination_x")
+        to_y = params.get("destination_y")
+
+        if to_x is None or to_y is None:
+            return ToolCallPayload(
+                tool_name="move_entity",
+                arguments=params,
+                result={"success": False, "reason": "destination_x and destination_y required"},
+            )
+
+        # Get map for pathfinding validation
+        map_row = execute_one(
+            "SELECT id FROM state.maps WHERE campaign_id = %s LIMIT 1",
+            (str(campaign_id),)
         )
+
+        if map_row:
+            # Use SpatialEngine for pathfinding and collision validation
+            max_speed = entity.get("speed") or 30
+            move_result = self.spatial.move_entity(
+                entity_id=uuid.UUID(params["entity_id"]),
+                map_id=str(map_row["id"]),
+                from_x=from_x,
+                from_y=from_y,
+                to_x=to_x,
+                to_y=to_y,
+                max_speed=max_speed,
+            )
+
+            # If pathfinding failed, return the error
+            if not move_result.result.get("success"):
+                return move_result
+
+            # Create delta for public_sheet position update
+            move_result.deltas = [
+                StateDelta(
+                    table="state.entities",
+                    operation="UPDATE",
+                    entity_id=uuid.UUID(params["entity_id"]),
+                    changes={
+                        "public_sheet_x": to_x,
+                        "public_sheet_y": to_y,
+                        "previous_x": from_x,
+                        "previous_y": from_y,
+                    },
+                    domain_tags=["movement"],
+                )
+            ]
+            return move_result
+        else:
+            # No map - allow free movement without pathfinding
+            return ToolCallPayload(
+                tool_name="move_entity",
+                arguments=params,
+                result={
+                    "success": True,
+                    "entity_id": params["entity_id"],
+                    "from": {"x": from_x, "y": from_y},
+                    "to": {"x": to_x, "y": to_y},
+                },
+                deltas=[
+                    StateDelta(
+                        table="state.entities",
+                        operation="UPDATE",
+                        entity_id=uuid.UUID(params["entity_id"]),
+                        changes={
+                            "public_sheet_x": to_x,
+                            "public_sheet_y": to_y,
+                        },
+                        domain_tags=["movement"],
+                    )
+                ],
+            )
 
     def _commit(
         self,
@@ -250,7 +319,7 @@ class OrchestratorPipeline:
                     "tool_name": tool_result.tool_name,
                     "arguments": tool_result.arguments,
                     "result": tool_result.result,
-                    "rolls": [r.model_dump() for r in tool_result.rolls],
+                    "rolls": [r.model_dump(mode="json") for r in tool_result.rolls],
                 },
                 visible_to=visible_to,
                 domain_tags=proposal.domain_tags,
@@ -269,7 +338,7 @@ class OrchestratorPipeline:
                     encounter_id=proposal.encounter_id,
                     sender_principal_id=principal.principal_id,
                     payload={
-                        "deltas": [d.model_dump() for d in tool_result.deltas],
+                        "deltas": [d.model_dump(mode="json") for d in tool_result.deltas],
                     },
                     visible_to=visible_to,
                     domain_tags=[t for d in tool_result.deltas for t in d.domain_tags],
@@ -284,11 +353,21 @@ class OrchestratorPipeline:
 
             conn.commit()
 
+            # Auto-narrate significant events (non-blocking)
+            self._auto_narrate_if_significant(
+                proposal=proposal,
+                principal=principal,
+                session_id=session_id,
+                tool_result=tool_result,
+                visible_to=visible_to,
+                parent_event_id=tool_event.event_id,
+            )
+
             return {
                 "success": True,
                 "event_id": str(tool_event.event_id),
                 "tool_result": tool_result.result,
-                "rolls": [r.model_dump() for r in tool_result.rolls],
+                "rolls": [r.model_dump(mode="json") for r in tool_result.rolls],
                 "deltas_applied": len(tool_result.deltas),
             }
         except Exception:
@@ -297,15 +376,139 @@ class OrchestratorPipeline:
         finally:
             conn.close()
 
+    def _auto_narrate_if_significant(
+        self,
+        proposal: InterventionProposal,
+        principal: PrincipalContext,
+        session_id: uuid.UUID,
+        tool_result: ToolCallPayload,
+        visible_to: list,
+        parent_event_id: uuid.UUID,
+    ):
+        """Generate automatic narration for significant events."""
+        # Only narrate significant combat/story events
+        significant_actions = {
+            "ATTACK", "OPPORTUNITY_ATTACK", "CAST_SPELL",
+            "DIVINE_BLESS", "DIVINE_CURSE", "DIVINE_SMITE",
+        }
+
+        if proposal.action_type not in significant_actions:
+            return
+
+        # Check if auto-narration is enabled (default: enabled)
+        try:
+            from shared.db.connection import execute_one
+
+            settings = execute_one(
+                "SELECT settings FROM state.campaign_settings WHERE campaign_id = %s",
+                (str(proposal.campaign_id),)
+            )
+            if settings and settings.get("settings"):
+                if not settings["settings"].get("auto_narrate", True):
+                    return
+        except Exception:
+            pass  # Default to enabled if settings check fails
+
+        try:
+            from services.llm.adapter import DMNarrationAgent
+
+            dm_agent = DMNarrationAgent(campaign_id=proposal.campaign_id)
+
+            # Build context from tool result
+            result_data = tool_result.result or {}
+            context_parts = []
+
+            if proposal.action_type == "ATTACK":
+                if result_data.get("hits"):
+                    damage = result_data.get("damage", 0)
+                    context_parts.append(f"Attack hit for {damage} damage")
+                    if result_data.get("natural_20"):
+                        context_parts.append("Critical hit!")
+                    if result_data.get("target_down"):
+                        context_parts.append("Target is down!")
+                else:
+                    context_parts.append("Attack missed")
+                    if result_data.get("natural_1"):
+                        context_parts.append("Critical miss!")
+
+            context = " ".join(context_parts) if context_parts else "Combat action"
+
+            narration = dm_agent.narrate_event(
+                tool_result=result_data,
+                context=context,
+            )
+
+            if narration:
+                from shared.schemas.events import EventEnvelope
+
+                narration_event = EventEnvelope(
+                    type=EventType.NARRATION,
+                    campaign_id=proposal.campaign_id,
+                    session_id=session_id,
+                    encounter_id=proposal.encounter_id,
+                    sender_principal_id=principal.principal_id,
+                    payload={
+                        "narration": narration,
+                        "trigger_action": proposal.action_type,
+                    },
+                    visible_to=visible_to,
+                    domain_tags=["narration", "auto_generated"],
+                    parent_event_id=parent_event_id,
+                )
+                self.ledger.append_event(narration_event)
+
+        except Exception:
+            # Don't fail the action if narration fails
+            pass
+
     def _apply_delta(self, delta, conn):
         cur = conn.cursor()
         if delta.table == "state.entities" and delta.operation == "UPDATE":
             changes = delta.changes
+            # Handle HP changes
             if "hp_current" in changes and delta.entity_id:
                 cur.execute(
                     "UPDATE state.entities SET hp_current = %s, updated_at = now() WHERE id = %s",
                     (changes["hp_current"], str(delta.entity_id)),
                 )
+            # Handle position changes in public_sheet JSONB
+            if ("public_sheet_x" in changes or "public_sheet_y" in changes) and delta.entity_id:
+                # Update x and/or y coordinates inside the public_sheet JSONB
+                new_x = changes.get("public_sheet_x")
+                new_y = changes.get("public_sheet_y")
+                if new_x is not None and new_y is not None:
+                    cur.execute(
+                        """
+                        UPDATE state.entities
+                        SET public_sheet = jsonb_set(
+                            jsonb_set(COALESCE(public_sheet, '{}'::jsonb), '{x}', %s::jsonb),
+                            '{y}', %s::jsonb
+                        ),
+                        updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (str(new_x), str(new_y), str(delta.entity_id)),
+                    )
+                elif new_x is not None:
+                    cur.execute(
+                        """
+                        UPDATE state.entities
+                        SET public_sheet = jsonb_set(COALESCE(public_sheet, '{}'::jsonb), '{x}', %s::jsonb),
+                        updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (str(new_x), str(delta.entity_id)),
+                    )
+                elif new_y is not None:
+                    cur.execute(
+                        """
+                        UPDATE state.entities
+                        SET public_sheet = jsonb_set(COALESCE(public_sheet, '{}'::jsonb), '{y}', %s::jsonb),
+                        updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (str(new_y), str(delta.entity_id)),
+                    )
         elif delta.table == "state.conditions" and delta.operation == "INSERT":
             changes = delta.changes
             cur.execute(

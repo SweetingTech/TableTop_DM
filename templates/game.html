@@ -10,9 +10,14 @@
 <body>
     <div class="app-layout">
         <div class="top-bar">
-            <h1>TABLETOP DM</h1> <a href="/control" style="color:#93c5fd;font-size:14px">Control Plane</a>
+            <h1>TABLETOP DM</h1>
+            <a href="/control" class="control-link">Control Plane</a>
             <span id="campaignName" class="campaign-name">Loading...</span>
             <span id="modeBadge" class="mode-badge">---</span>
+            <div class="principal-info">
+                <span id="principalName" class="principal-name">--</span>
+                <span id="sessionIndicator" class="session-indicator" title="Session status"></span>
+            </div>
             <div id="connIndicator" class="connection-indicator" title="WebSocket status"></div>
         </div>
 
@@ -41,6 +46,7 @@
             <div id="tab-map" class="tab-content">
                 <div class="map-container">
                     <canvas id="mapCanvas" class="map-canvas"></canvas>
+                    <div class="map-hint" id="mapHint">Select an entity, then click to move</div>
                     <div class="map-controls">
                         <button onclick="App.renderMap()" title="Refresh map">&#8635;</button>
                     </div>
@@ -80,7 +86,9 @@
             <div class="quick-actions">
                 <h4>Quick Actions</h4>
                 <button class="action-btn" onclick="App.rollDice()">Roll d20</button>
-                <button class="action-btn" onclick="App.advanceTurn()">Advance Turn</button>
+                <button class="action-btn combat-btn" onclick="App.quickAttack()" title="Attack selected target">Attack Target</button>
+                <button class="action-btn combat-btn" onclick="App.quickEndTurn()" title="End your turn">End Turn</button>
+                <button class="action-btn" onclick="App.advanceTurn()">Advance Initiative</button>
                 <button class="action-btn" onclick="App.requestNarration()">AI Narration</button>
             </div>
         </div>

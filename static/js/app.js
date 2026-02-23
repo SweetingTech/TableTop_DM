@@ -10,6 +10,12 @@ const App = {
     maps: [],
     events: [],
     connected: false,
+    // Session context (Phase 1)
+    principalId: null,
+    sessionId: null,
+    members: [],
+    controlledEntities: [],
+    mapContext: null,
 
     async init() {
         this.initSocket();
@@ -96,6 +102,9 @@ const App = {
             this.loadEncounters(),
             this.loadMaps(),
         ]);
+
+        // Load session context after entities are loaded (needs entity list for controlled_entities)
+        await this.loadSessionContext();
     },
 
     async loadEntities() {
@@ -145,13 +154,114 @@ const App = {
         }
     },
 
+    async loadSessionContext() {
+        if (!this.campaign) return;
+
+        // Load campaign members
+        try {
+            const resp = await fetch(`/api/campaigns/${this.campaign.id}/members`);
+            this.members = await resp.json();
+        } catch (e) {
+            console.error('Failed to load members:', e);
+            return;
+        }
+
+        // Auto-select first HUMAN principal (demo mode - production would use real auth)
+        const humanMember = this.members.find(m => m.principal_type === 'HUMAN');
+        if (humanMember) {
+            this.principalId = humanMember.principal_id;
+            console.log('Principal context set:', this.principalId, humanMember.display_name);
+            // Update UI
+            const nameEl = document.getElementById('principalName');
+            if (nameEl) nameEl.textContent = humanMember.display_name;
+        }
+
+        // Load or create active session
+        try {
+            const resp = await fetch(`/api/campaigns/${this.campaign.id}/resume`, {method: 'POST'});
+            const data = await resp.json();
+            if (data.session) {
+                this.sessionId = data.session.id;
+                console.log('Session context set:', this.sessionId);
+                // Update UI
+                const sessionEl = document.getElementById('sessionIndicator');
+                if (sessionEl) sessionEl.classList.add('active');
+            }
+        } catch (e) {
+            console.error('Failed to load session:', e);
+        }
+
+        // Compute which entities this principal controls
+        this.controlledEntities = this.entities
+            .filter(e => e.controller_principal_id === this.principalId)
+            .map(e => e.id);
+        console.log('Controlled entities:', this.controlledEntities.length);
+
+        // Re-render entity list to show controlled indicators
+        this.renderEntityList();
+    },
+
+    canControl(entityId) {
+        if (!this.principalId) return false;
+        // GMs can control any entity
+        const member = this.members.find(m => m.principal_id === this.principalId);
+        if (member?.role === 'GM') return true;
+        // Otherwise check if principal controls this entity
+        return this.controlledEntities.includes(entityId);
+    },
+
+    async proposeAction(actionType, params) {
+        if (!this.campaign || !this.principalId || !this.sessionId) {
+            this.addEvent({type: 'ERROR', payload: {message: 'Missing session context. Reload the page.'}});
+            return null;
+        }
+
+        try {
+            const body = {
+                action_type: actionType,
+                params: params,
+                principal_id: this.principalId,
+                campaign_id: this.campaign.id,
+                session_id: this.sessionId,
+                encounter_id: this.selectedEncounter?.id || null,
+            };
+
+            const resp = await fetch('/api/propose', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body),
+            });
+
+            const data = await resp.json();
+            if (data.error) {
+                this.addEvent({type: 'ERROR', payload: {message: data.error}});
+                return null;
+            }
+
+            // Refresh state after action
+            await this.loadEntities();
+            if (this.selectedEncounter) {
+                await this.loadEncounterSlots();
+            }
+
+            return data;
+        } catch (e) {
+            this.addEvent({type: 'ERROR', payload: {message: 'Action failed: ' + e.message}});
+            return null;
+        }
+    },
+
     renderEntityList() {
         const list = document.getElementById('entityList');
         list.innerHTML = '';
 
         for (const entity of this.entities) {
             const item = document.createElement('div');
-            item.className = 'entity-item' + (this.selectedEntity?.id === entity.id ? ' selected' : '');
+            const isSelected = this.selectedEntity?.id === entity.id;
+            const isControlled = this.controlledEntities.includes(entity.id);
+            item.className = 'entity-item' +
+                (isSelected ? ' selected' : '') +
+                (isControlled ? ' controlled' : '');
             item.onclick = () => this.selectEntity(entity);
 
             const hpPct = entity.hp_max > 0 ? (entity.hp_current / entity.hp_max * 100) : 100;
@@ -176,6 +286,26 @@ const App = {
         this.selectedEntity = entity;
         this.renderEntityList();
         this.renderEntityDetail();
+        this.updateMapCursor();
+    },
+
+    updateMapCursor() {
+        const canvas = document.getElementById('mapCanvas');
+        const hint = document.getElementById('mapHint');
+
+        if (this.selectedEntity && this.canControl(this.selectedEntity.id)) {
+            canvas?.classList.add('can-move');
+            if (hint) {
+                hint.textContent = `Click to move ${this.selectedEntity.name}`;
+                hint.classList.remove('hidden');
+            }
+        } else {
+            canvas?.classList.remove('can-move');
+            if (hint) {
+                hint.textContent = 'Select a controlled entity to move';
+                hint.classList.add('hidden');
+            }
+        }
     },
 
     renderEntityDetail() {
@@ -335,13 +465,60 @@ const App = {
                     this.addEvent({type: 'ERROR', payload: {message: 'Select an entity first'}});
                     return;
                 }
+                if (!this.canControl(this.selectedEntity.id)) {
+                    this.addEvent({type: 'ERROR', payload: {message: 'You cannot control this entity'}});
+                    return;
+                }
                 const targetName = parts.slice(1).join(' ');
                 const target = this.entities.find(e => e.name.toLowerCase().includes(targetName.toLowerCase()));
                 if (!target) {
                     this.addEvent({type: 'ERROR', payload: {message: `Target "${targetName}" not found`}});
                     return;
                 }
-                this.addEvent({type: 'SYSTEM', payload: {message: `Attacking ${target.name}...`}});
+
+                this.addEvent({type: 'SYSTEM', payload: {message: `${this.selectedEntity.name} attacks ${target.name}...`}});
+
+                const result = await this.proposeAction('ATTACK', {
+                    attacker_id: this.selectedEntity.id,
+                    target_id: target.id,
+                    weapon: 'melee',
+                });
+
+                if (result && result.tool_result) {
+                    const tr = result.tool_result;
+                    let msg = tr.hits ?
+                        `Hit! Rolled ${tr.attack_roll} vs AC ${tr.target_ac}. Dealt ${tr.damage} damage.` :
+                        `Miss! Rolled ${tr.attack_roll} vs AC ${tr.target_ac}.`;
+                    if (tr.natural_20) msg = 'CRITICAL HIT! ' + msg;
+                    if (tr.natural_1) msg = 'Critical miss! ' + msg;
+                    if (tr.target_down) msg += ' Target is down!';
+
+                    this.addEvent({type: 'TOOL_CALL', payload: {
+                        tool_name: 'resolve_attack',
+                        rolls: result.rolls || [],
+                        result: msg,
+                    }});
+                }
+                break;
+            }
+
+            case '/endturn': {
+                if (!this.selectedEncounter) {
+                    this.addEvent({type: 'ERROR', payload: {message: 'No encounter selected'}});
+                    return;
+                }
+                if (!this.selectedEntity) {
+                    this.addEvent({type: 'ERROR', payload: {message: 'Select your entity first'}});
+                    return;
+                }
+
+                const result = await this.proposeAction('END_TURN', {
+                    entity_id: this.selectedEntity.id,
+                });
+
+                if (result?.tool_result?.success) {
+                    this.addEvent({type: 'SYSTEM', payload: {message: 'Turn ended'}});
+                }
                 break;
             }
 
@@ -404,9 +581,37 @@ const App = {
                 break;
             }
 
+            case '/say': {
+                // Parse @target from message: /say @npc_name message
+                const msgText = parts.slice(1).join(' ');
+                const targetMatch = msgText.match(/^@(\S+)\s*(.*)/);
+                let targetEntity = null;
+                let message = msgText;
+
+                if (targetMatch) {
+                    const targetName = targetMatch[1];
+                    targetEntity = this.entities.find(e =>
+                        e.name.toLowerCase().includes(targetName.toLowerCase())
+                    );
+                    message = targetMatch[2] || '';
+                }
+
+                if (!message.trim()) {
+                    this.addEvent({type: 'ERROR', payload: {message: 'Usage: /say [@target] message'}});
+                    return;
+                }
+
+                if (targetEntity) {
+                    this.addEvent({type: 'SYSTEM', payload: {message: `Speaking to ${targetEntity.name}...`}});
+                }
+
+                await this.sendChat(message, targetEntity?.id);
+                break;
+            }
+
             case '/help':
                 this.addEvent({type: 'SYSTEM', payload: {
-                    message: 'Commands: /roll [dice] [mod] | /mode [MODE] | /advance | /narrate [context] | /attack [target] | /help',
+                    message: 'Commands: /roll [dice] [mod] | /attack [target] | /endturn | /mode [MODE] | /advance | /narrate [context] | /say [@target] msg | /help',
                 }});
                 break;
 
@@ -415,13 +620,50 @@ const App = {
         }
     },
 
-    async sendChat(message) {
-        if (!this.campaign) return;
+    async sendChat(message, targetEntityId = null) {
+        if (!this.campaign || !this.principalId || !this.sessionId) {
+            this.addEvent({type: 'ERROR', payload: {message: 'Session context not loaded. Reload the page.'}});
+            return;
+        }
 
-        const speaker = this.entities.find(e => e.entity_type === 'PC');
-        const principal = null;
+        // Find speaker entity (selected if controlled, else first controlled entity)
+        let speakerEntity = this.selectedEntity;
+        if (!speakerEntity || !this.canControl(speakerEntity.id)) {
+            speakerEntity = this.entities.find(e => this.controlledEntities.includes(e.id));
+        }
 
-        this.addEvent({type: 'SYSTEM', payload: {message: 'Chat sent (requires principal context for full processing)'}});
+        if (!speakerEntity) {
+            this.addEvent({type: 'ERROR', payload: {message: 'No character to speak as'}});
+            return;
+        }
+
+        try {
+            const body = {
+                campaign_id: this.campaign.id,
+                session_id: this.sessionId,
+                speaker_entity_id: speakerEntity.id,
+                speaker_principal_id: this.principalId,
+                message: message,
+            };
+
+            if (targetEntityId) {
+                body.target_entity_id = targetEntityId;
+            }
+
+            const resp = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body),
+            });
+
+            const data = await resp.json();
+            if (data.error) {
+                this.addEvent({type: 'ERROR', payload: {message: data.error}});
+            }
+            // Chat events will arrive via WebSocket
+        } catch (e) {
+            this.addEvent({type: 'ERROR', payload: {message: 'Chat failed: ' + e.message}});
+        }
     },
 
     async advanceTurn() {
@@ -470,6 +712,78 @@ const App = {
             }
         } catch (e) {
             this.addEvent({type: 'ERROR', payload: {message: e.message}});
+        }
+    },
+
+    async quickAttack() {
+        // Attack requires: a selected entity we control, and a target
+        if (!this.selectedEntity) {
+            this.addEvent({type: 'ERROR', payload: {message: 'Select your character first'}});
+            return;
+        }
+        if (!this.canControl(this.selectedEntity.id)) {
+            this.addEvent({type: 'ERROR', payload: {message: 'You cannot control this entity'}});
+            return;
+        }
+
+        // Find a valid target (first enemy entity)
+        const targets = this.entities.filter(e =>
+            e.id !== this.selectedEntity.id &&
+            e.hp_current > 0 &&
+            (e.entity_type === 'MONSTER' || e.entity_type === 'NPC')
+        );
+
+        if (targets.length === 0) {
+            this.addEvent({type: 'ERROR', payload: {message: 'No valid targets. Use /attack [name] to specify.'}});
+            return;
+        }
+
+        const target = targets[0];
+        this.addEvent({type: 'SYSTEM', payload: {message: `${this.selectedEntity.name} attacks ${target.name}...`}});
+
+        const result = await this.proposeAction('ATTACK', {
+            attacker_id: this.selectedEntity.id,
+            target_id: target.id,
+            weapon: 'melee',
+        });
+
+        if (result && result.tool_result) {
+            const tr = result.tool_result;
+            let msg = tr.hits ?
+                `Hit! Rolled ${tr.attack_roll} vs AC ${tr.target_ac}. Dealt ${tr.damage} damage.` :
+                `Miss! Rolled ${tr.attack_roll} vs AC ${tr.target_ac}.`;
+            if (tr.natural_20) msg = 'CRITICAL HIT! ' + msg;
+            if (tr.natural_1) msg = 'Critical miss! ' + msg;
+            if (tr.target_down) msg += ' Target is down!';
+
+            this.addEvent({type: 'TOOL_CALL', payload: {
+                tool_name: 'resolve_attack',
+                rolls: result.rolls || [],
+                result: msg,
+            }});
+        }
+    },
+
+    async quickEndTurn() {
+        if (!this.selectedEncounter) {
+            this.addEvent({type: 'ERROR', payload: {message: 'No encounter active'}});
+            return;
+        }
+        if (!this.selectedEntity) {
+            this.addEvent({type: 'ERROR', payload: {message: 'Select your character first'}});
+            return;
+        }
+        if (!this.canControl(this.selectedEntity.id)) {
+            this.addEvent({type: 'ERROR', payload: {message: 'You cannot control this entity'}});
+            return;
+        }
+
+        const result = await this.proposeAction('END_TURN', {
+            entity_id: this.selectedEntity.id,
+        });
+
+        if (result?.tool_result?.success) {
+            this.addEvent({type: 'SYSTEM', payload: {message: `${this.selectedEntity.name} ends their turn`}});
         }
     },
 
@@ -573,8 +887,66 @@ const App = {
             ctx.textAlign = 'left';
             ctx.fillText(mapData.name || 'Map', 12, canvas.height - 12);
 
+            // Store map context for click-to-move
+            this.mapContext = {
+                cellSize: cellSize,
+                offsetX: offsetX,
+                offsetY: offsetY,
+                mapId: mapId,
+                mapWidth: mapData.width || 20,
+                mapHeight: mapData.height || 20,
+            };
+
+            // Add click handler for movement
+            canvas.onclick = (e) => this.handleMapClick(e);
+
         } catch (e) {
             console.error('Map render error:', e);
+        }
+    },
+
+    async handleMapClick(event) {
+        const canvas = document.getElementById('mapCanvas');
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        if (!this.mapContext || !this.selectedEntity) {
+            this.addEvent({type: 'SYSTEM', payload: {message: 'Select an entity to move'}});
+            return;
+        }
+
+        if (!this.canControl(this.selectedEntity.id)) {
+            this.addEvent({type: 'ERROR', payload: {message: 'You cannot control this entity'}});
+            return;
+        }
+
+        // Convert click to grid coordinates
+        const gridX = Math.floor((x - this.mapContext.offsetX) / this.mapContext.cellSize);
+        const gridY = Math.floor((y - this.mapContext.offsetY) / this.mapContext.cellSize);
+
+        // Validate bounds
+        if (gridX < 0 || gridX >= this.mapContext.mapWidth ||
+            gridY < 0 || gridY >= this.mapContext.mapHeight) {
+            return;
+        }
+
+        this.addEvent({type: 'SYSTEM', payload: {
+            message: `Moving ${this.selectedEntity.name} to (${gridX}, ${gridY})...`
+        }});
+
+        const result = await this.proposeAction('MOVE', {
+            entity_id: this.selectedEntity.id,
+            destination_x: gridX,
+            destination_y: gridY,
+        });
+
+        if (result?.tool_result?.success) {
+            this.addEvent({type: 'SYSTEM', payload: {
+                message: `${this.selectedEntity.name} moved to (${gridX}, ${gridY})`
+            }});
+            // Re-render map with updated positions
+            this.renderMap();
         }
     },
 
