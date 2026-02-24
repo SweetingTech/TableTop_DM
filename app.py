@@ -1103,8 +1103,12 @@ def api_entity_control(entity_id):
     from shared.db.connection import execute_one
 
     data = request.get_json(silent=True) or {}
-    if data.get("controlled_by") not in {"HUMAN", "AI"}:
-        return jsonify({"error": "controlled_by must be HUMAN or AI"}), 400
+    controlled_by = data.get("controlled_by")
+    aliases = {"HUMAN": "PLAYER", "AI": "AI_NPC"}
+    allowed = {"PLAYER", "AI_DM", "AI_NPC", "AI_GOD", "SYSTEM", *aliases.keys()}
+    if controlled_by not in allowed:
+        return jsonify({"error": "invalid controlled_by"}), 400
+    data["controlled_by"] = aliases.get(controlled_by, controlled_by)
     row = execute_one(
         """
         UPDATE state.entities

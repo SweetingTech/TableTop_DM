@@ -25,8 +25,9 @@ class LedgerWriter:
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s, %s, %s
                 )
                 ON CONFLICT (session_id, sender_principal_id, idempotency_key)
-                DO NOTHING
-                RETURNING seq_id, event_id
+                DO UPDATE SET
+                    idempotency_key = EXCLUDED.idempotency_key
+                RETURNING seq_id, event_id, (xmax = 0) AS inserted
             """,
                 (
                     str(event.event_id),
@@ -51,8 +52,16 @@ class LedgerWriter:
                 conn.commit()
 
             if row:
-                return {"seq_id": row[0], "event_id": str(row[1]), "inserted": True}
-            return {"inserted": False, "reason": "idempotency_key_duplicate"}
+                inserted = bool(row[2])
+                result = {
+                    "seq_id": row[0],
+                    "event_id": str(row[1]),
+                    "inserted": inserted,
+                }
+                if not inserted:
+                    result["reason"] = "idempotency_key_duplicate"
+                return result
+            return {"inserted": False, "reason": "ledger_insert_failed"}
 
         except Exception:
             if own_conn:

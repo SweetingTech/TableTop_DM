@@ -325,7 +325,18 @@ class OrchestratorPipeline:
                 domain_tags=proposal.domain_tags,
                 idempotency_key=proposal.idempotency_key,
             )
-            self.ledger.append_event(tool_event, conn)
+            ledger_result = self.ledger.append_event(tool_event, conn)
+            if not ledger_result.get("inserted", False):
+                conn.rollback()
+                return {
+                    "success": True,
+                    "event_id": ledger_result.get("event_id", str(tool_event.event_id)),
+                    "idempotent_replay": True,
+                    "reason": ledger_result.get("reason", "idempotency_key_duplicate"),
+                    "tool_result": tool_result.result,
+                    "rolls": [r.model_dump(mode="json") for r in tool_result.rolls],
+                    "deltas_applied": 0,
+                }
 
             for delta in tool_result.deltas:
                 self._apply_delta(delta, conn)
