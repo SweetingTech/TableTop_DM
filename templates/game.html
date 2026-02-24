@@ -12,6 +12,7 @@
         <div class="top-bar">
             <h1>TABLETOP DM</h1>
             <a href="/control" class="control-link">Control Plane</a>
+            <a href="/help" class="control-link" title="Help & Documentation">Help</a>
             <span id="campaignName" class="campaign-name">Loading...</span>
             <span id="modeBadge" class="mode-badge">---</span>
             <div class="principal-info">
@@ -22,6 +23,18 @@
         </div>
 
         <div class="sidebar">
+            <div class="sidebar-section story-state-board">
+                <h3>Story State</h3>
+                <div class="story-state-item">
+                    <span class="story-label">Location:</span>
+                    <span id="currentLocation" class="story-value">--</span>
+                </div>
+                <div class="story-state-item">
+                    <span class="story-label">Time:</span>
+                    <span id="gameTime" class="story-value">--</span>
+                </div>
+                <div class="story-state-summary" id="storyStateSummary"></div>
+            </div>
             <div class="sidebar-section">
                 <h3>Entities</h3>
             </div>

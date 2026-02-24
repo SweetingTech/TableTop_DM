@@ -186,6 +186,9 @@ const App = {
                 // Update UI
                 const sessionEl = document.getElementById('sessionIndicator');
                 if (sessionEl) sessionEl.classList.add('active');
+
+                // Load session resume data (chat history, story state, party)
+                await this.loadSessionResume();
             }
         } catch (e) {
             console.error('Failed to load session:', e);
@@ -199,6 +202,98 @@ const App = {
 
         // Re-render entity list to show controlled indicators
         this.renderEntityList();
+    },
+
+    async loadSessionResume() {
+        if (!this.sessionId) return;
+
+        try {
+            const resp = await fetch(`/api/sessions/${this.sessionId}/resume_data`);
+            const data = await resp.json();
+
+            // Store story state
+            this.storyState = data.story_state;
+
+            // Store party info
+            this.party = data.party || [];
+
+            // Load chat history into event feed
+            if (data.chat_history && data.chat_history.length > 0) {
+                this.addEvent({
+                    type: 'SYSTEM',
+                    payload: {message: `--- Resuming session: ${data.chat_history.length} messages loaded ---`}
+                });
+
+                for (const msg of data.chat_history) {
+                    this.addHistoryEvent(msg);
+                }
+
+                this.addEvent({
+                    type: 'SYSTEM',
+                    payload: {message: '--- Session resumed ---'}
+                });
+            }
+
+            // Update story state UI if available
+            this.updateStoryStateUI();
+
+            console.log('Session resumed with', data.chat_history?.length || 0, 'messages');
+        } catch (e) {
+            console.error('Failed to load session resume data:', e);
+        }
+    },
+
+    addHistoryEvent(data) {
+        // Add a historical event (with original timestamp)
+        const feed = document.getElementById('eventFeed');
+        const type = (data.event_type || 'system').toLowerCase();
+        const payload = data.payload || {};
+
+        const item = document.createElement('div');
+        item.className = `event-item ${type} history`;
+
+        // Use original timestamp
+        let timestamp = '--:--:--';
+        if (data.created_at) {
+            const d = new Date(data.created_at);
+            timestamp = d.toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
+        }
+
+        let content = `<span class="timestamp">${timestamp}</span>`;
+
+        if (type === 'narration') {
+            content += payload.narration || payload.message || JSON.stringify(payload);
+        } else if (type === 'dialogue' || type === 'chat') {
+            const speaker = data.speaker_name || payload.speaker || 'Unknown';
+            const msg = payload.dialogue || payload.message || '';
+            content += `<span class="speaker">${speaker}:</span> ${msg}`;
+        } else if (type === 'action') {
+            content += `<strong>${payload.action_type || 'Action'}</strong>`;
+            if (payload.result) {
+                const res = typeof payload.result === 'string' ? payload.result : JSON.stringify(payload.result);
+                content += `<div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">${res.substring(0, 200)}</div>`;
+            }
+        } else {
+            content += payload.message || JSON.stringify(payload).substring(0, 200);
+        }
+
+        item.innerHTML = content;
+        feed.appendChild(item);
+    },
+
+    updateStoryStateUI() {
+        if (!this.storyState) return;
+
+        // Update story state indicators if they exist
+        const locationEl = document.getElementById('currentLocation');
+        if (locationEl && this.storyState.current_location) {
+            locationEl.textContent = this.storyState.current_location;
+        }
+
+        const timeEl = document.getElementById('gameTime');
+        if (timeEl && this.storyState.game_time) {
+            timeEl.textContent = this.storyState.game_time;
+        }
     },
 
     canControl(entityId) {

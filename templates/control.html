@@ -14,6 +14,7 @@
             <span class="nav-separator">|</span>
             <a href="/" class="control-link">Dashboard</a>
             <a href="/game" class="control-link">Game Console</a>
+            <a href="/help" class="control-link">Help</a>
             <span class="page-title">Control Plane</span>
             <div class="campaign-selector">
                 <label>Campaign:</label>
@@ -72,24 +73,400 @@
                         <h3>Sessions</h3>
                         <div id="sessionList" class="item-list"></div>
                     </div>
+
+                    <!-- Session Archives Panel -->
+                    <div class="panel">
+                        <h3>Session Archives</h3>
+                        <p class="help-text">View archived sessions and their chat history</p>
+                        <div id="sessionArchives" class="item-list">
+                            <div class="list-item-meta">Select a campaign to see archived sessions</div>
+                        </div>
+                    </div>
+
+                    <!-- Session History Viewer Modal -->
+                    <div id="sessionHistoryModal" class="modal" style="display:none;">
+                        <div class="modal-content modal-large">
+                            <div class="modal-header">
+                                <h3>Session History</h3>
+                                <button onclick="control.closeHistoryModal()" class="btn-close">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="history-meta" id="historyMeta"></div>
+                                <div class="history-story-state" id="historyStoryState"></div>
+                                <div class="history-chat" id="historyChatLog"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button onclick="control.deleteArchive()" class="btn btn-danger">Delete Archive</button>
+                                <button onclick="control.closeHistoryModal()" class="btn btn-secondary">Close</button>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- Characters Tab -->
                 <section id="characters" class="tab-panel">
+                    <!-- Quick Actions -->
                     <div class="panel">
-                        <h3>Create / Import Character</h3>
-                        <textarea id="characterJson" class="textarea-field" rows="6" placeholder='{"name":"Aria","entity_type":"PC","public_sheet":{}}'></textarea>
+                        <h3>Quick Character Creation</h3>
                         <div class="form-row">
-                            <button id="createCharacter" class="btn btn-primary">Create from JSON</button>
+                            <input type="text" id="charConcept" class="input-field input-wide" placeholder="Character concept (e.g., 'elven ranger with dark past')">
+                            <button id="generateCharacter" class="btn btn-primary">AI Generate</button>
                         </div>
-                        <div class="form-row" style="margin-top: 12px;">
-                            <input type="text" id="charConcept" class="input-field" placeholder="Character concept (e.g., 'elven ranger')">
-                            <button id="generateCharacter" class="btn btn-secondary">Generate Character</button>
+                        <p class="help-text">Enter a concept and let AI generate a complete character sheet</p>
+                    </div>
+
+                    <!-- Character Builder Form -->
+                    <div class="panel">
+                        <h3>Character Builder</h3>
+                        <p class="help-text">Fill in the sections below to create a detailed character</p>
+
+                        <!-- Identity Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('identity')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Identity &amp; Basics</span>
+                            </div>
+                            <div id="identity" class="section-content">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Character Name *</label>
+                                        <input type="text" id="charName" class="input-field" placeholder="Thorin Ironforge">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Entity Type</label>
+                                        <select id="charEntityType" class="select-input">
+                                            <option value="PC">Player Character (PC)</option>
+                                            <option value="NPC">Non-Player Character (NPC)</option>
+                                            <option value="MONSTER">Monster</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Race/Species</label>
+                                        <input type="text" id="charRace" class="input-field" placeholder="Human, Elf, Dwarf...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Class/Archetype</label>
+                                        <input type="text" id="charClass" class="input-field" placeholder="Fighter, Wizard, Rogue...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Level</label>
+                                        <input type="number" id="charLevel" class="input-field" value="1" min="1" max="20">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Background</label>
+                                        <input type="text" id="charBackground" class="input-field" placeholder="Soldier, Noble, Outlander...">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Attributes Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('attributes')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Attributes &amp; Stats</span>
+                            </div>
+                            <div id="attributes" class="section-content">
+                                <div class="form-grid stats-grid">
+                                    <div class="form-group">
+                                        <label>Strength</label>
+                                        <input type="number" id="charStr" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Dexterity</label>
+                                        <input type="number" id="charDex" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Constitution</label>
+                                        <input type="number" id="charCon" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Intelligence</label>
+                                        <input type="number" id="charInt" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Wisdom</label>
+                                        <input type="number" id="charWis" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Charisma</label>
+                                        <input type="number" id="charCha" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                </div>
+                                <div class="form-grid" style="margin-top: 12px;">
+                                    <div class="form-group">
+                                        <label>Hit Points</label>
+                                        <input type="number" id="charHp" class="input-field" value="10" min="1">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Armor Class</label>
+                                        <input type="number" id="charAc" class="input-field" value="10" min="1">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Speed (ft)</label>
+                                        <input type="number" id="charSpeed" class="input-field" value="30" min="0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Initiative Bonus</label>
+                                        <input type="number" id="charInit" class="input-field" value="0">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Abilities Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('abilities')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Abilities &amp; Skills</span>
+                            </div>
+                            <div id="abilities" class="section-content">
+                                <div class="form-group">
+                                    <label>Proficient Skills (comma-separated)</label>
+                                    <input type="text" id="charSkills" class="input-field" placeholder="Perception, Stealth, Athletics...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Languages (comma-separated)</label>
+                                    <input type="text" id="charLanguages" class="input-field" placeholder="Common, Elvish, Dwarvish...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Special Abilities</label>
+                                    <textarea id="charAbilities" class="textarea-field" rows="3" placeholder="Darkvision 60ft, Rage (3/day), Spellcasting..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Actions Available Per Turn</label>
+                                    <textarea id="charActions" class="textarea-field" rows="2" placeholder="Attack (melee/ranged), Cast Spell, Dash, Dodge..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Equipment Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('equipment')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Equipment &amp; Inventory</span>
+                            </div>
+                            <div id="equipment" class="section-content">
+                                <div class="form-group">
+                                    <label>Weapons</label>
+                                    <textarea id="charWeapons" class="textarea-field" rows="2" placeholder="Longsword (1d8 slashing), Shortbow (1d6 piercing)..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Armor &amp; Shield</label>
+                                    <input type="text" id="charArmor" class="input-field" placeholder="Chain mail, Shield">
+                                </div>
+                                <div class="form-group">
+                                    <label>Other Equipment</label>
+                                    <textarea id="charEquipment" class="textarea-field" rows="2" placeholder="Backpack, bedroll, torches, rope..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Gold/Currency</label>
+                                    <input type="number" id="charGold" class="input-field" value="0" min="0">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Personality Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('personality')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Personality &amp; Roleplay</span>
+                            </div>
+                            <div id="personality" class="section-content">
+                                <div class="form-group">
+                                    <label>Personality Traits</label>
+                                    <textarea id="charTraits" class="textarea-field" rows="2" placeholder="Brave but reckless, speaks in riddles..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Ideals</label>
+                                    <input type="text" id="charIdeals" class="input-field" placeholder="Freedom, Honor, Knowledge...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Bonds</label>
+                                    <input type="text" id="charBonds" class="input-field" placeholder="My family, a sacred oath, my mentor...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Flaws</label>
+                                    <input type="text" id="charFlaws" class="input-field" placeholder="Overconfident, fears the dark...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Goals &amp; Motivation</label>
+                                    <textarea id="charGoals" class="textarea-field" rows="2" placeholder="Seek revenge, find lost artifact, protect the innocent..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Backstory Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('backstory')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Backstory &amp; Connections</span>
+                            </div>
+                            <div id="backstory" class="section-content">
+                                <div class="form-group">
+                                    <label>Backstory</label>
+                                    <textarea id="charBackstory" class="textarea-field" rows="4" placeholder="Character history, origin, key life events..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Allies &amp; Organizations</label>
+                                    <input type="text" id="charAllies" class="input-field" placeholder="The Thieves Guild, Order of Paladins...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Enemies &amp; Rivals</label>
+                                    <input type="text" id="charEnemies" class="input-field" placeholder="The Shadow King, rival adventurer...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- DM Notes Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('dmnotes')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>DM Notes &amp; Meta</span>
+                            </div>
+                            <div id="dmnotes" class="section-content">
+                                <div class="form-group">
+                                    <label>Secret Information (hidden from player)</label>
+                                    <textarea id="charSecrets" class="textarea-field" rows="2" placeholder="True identity, hidden curse, secret mission..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Plot Hooks</label>
+                                    <textarea id="charPlotHooks" class="textarea-field" rows="2" placeholder="Can be used to introduce quests or story arcs..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Balance Notes</label>
+                                    <textarea id="charBalance" class="textarea-field" rows="2" placeholder="Power level considerations, special rules..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Control Mode</label>
+                                    <select id="charControlledBy" class="select-input">
+                                        <option value="PLAYER">Player Controlled</option>
+                                        <option value="AI_NPC">AI Controlled (NPC)</option>
+                                        <option value="GM">GM Controlled</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="form-row" style="margin-top: 16px;">
+                            <button id="createCharacterForm" class="btn btn-primary">Create Character</button>
+                            <button id="randomizeStats" class="btn btn-secondary">Randomize Stats</button>
+                            <button id="clearCharacterForm" class="btn btn-secondary">Clear Form</button>
                         </div>
                     </div>
+
+                    <!-- JSON Import (collapsed by default) -->
                     <div class="panel">
-                        <h3>Characters</h3>
+                        <div class="section-header" onclick="toggleSection('jsonimport')">
+                            <span class="section-icon">&#9658;</span>
+                            <span>Advanced: JSON Import</span>
+                        </div>
+                        <div id="jsonimport" class="section-content">
+                            <textarea id="characterJson" class="textarea-field" rows="6" placeholder='{"name":"Aria","entity_type":"PC","public_sheet":{}}'></textarea>
+                            <div class="form-row">
+                                <button id="createCharacter" class="btn btn-primary">Create from JSON</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Session Party Panel -->
+                    <div class="panel">
+                        <h3>Current Session Party</h3>
+                        <p class="help-text">Characters active in the current session</p>
+                        <div id="sessionParty" class="item-list">
+                            <div class="list-item-meta">Select a session to see party members</div>
+                        </div>
+                        <div class="form-row" style="margin-top: 12px;">
+                            <select id="addCharacterSelect" class="select-input" style="flex: 1;">
+                                <option value="">-- Add Character to Session --</option>
+                            </select>
+                            <button id="addToSession" class="btn btn-primary">Add to Session</button>
+                        </div>
+                    </div>
+
+                    <!-- Character List -->
+                    <div class="panel">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h3 style="margin: 0;">All Characters</h3>
+                            <div class="view-toggle">
+                                <button id="viewList" class="btn btn-sm btn-secondary active" title="List View">&#9776;</button>
+                                <button id="viewCards" class="btn btn-sm btn-secondary" title="Card View">&#9638;</button>
+                                <label class="checkbox-label" style="margin-left: 12px;">
+                                    <input type="checkbox" id="showDeleted"> Show Deleted
+                                </label>
+                            </div>
+                        </div>
                         <div id="characterList" class="item-list"></div>
+                        <div id="characterCards" class="card-grid" style="display: none;"></div>
+                    </div>
+
+                    <!-- Edit Character Modal -->
+                    <div id="editCharacterModal" class="modal" style="display: none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Edit Character</h3>
+                                <button class="modal-close" onclick="closeEditModal()">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <input type="hidden" id="editCharId">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Name</label>
+                                        <input type="text" id="editCharName" class="input-field">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Entity Type</label>
+                                        <select id="editCharEntityType" class="select-input">
+                                            <option value="PC">PC</option>
+                                            <option value="NPC">NPC</option>
+                                            <option value="MONSTER">Monster</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Control Mode</label>
+                                        <select id="editCharControlledBy" class="select-input">
+                                            <option value="PLAYER">Player</option>
+                                            <option value="AI_NPC">AI</option>
+                                            <option value="GM">GM</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>HP Current / Max</label>
+                                        <div style="display: flex; gap: 8px;">
+                                            <input type="number" id="editCharHpCurrent" class="input-field" style="width: 80px;">
+                                            <span style="align-self: center;">/</span>
+                                            <input type="number" id="editCharHpMax" class="input-field" style="width: 80px;">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>AC</label>
+                                        <input type="number" id="editCharAc" class="input-field">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Speed</label>
+                                        <input type="number" id="editCharSpeed" class="input-field">
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-top: 12px;">
+                                    <label>Portrait Image</label>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input type="file" id="editCharImage" class="file-input" accept="image/*">
+                                        <button id="uploadCharImage" class="btn btn-secondary">Upload</button>
+                                        <button id="removeCharImage" class="btn btn-danger">Remove</button>
+                                    </div>
+                                    <div id="editCharImagePreview" style="margin-top: 8px;"></div>
+                                </div>
+                                <div class="form-group" style="margin-top: 12px;">
+                                    <label>Public Sheet (JSON)</label>
+                                    <textarea id="editCharPublicSheet" class="textarea-field" rows="4"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button id="saveCharacterEdit" class="btn btn-primary">Save Changes</button>
+                                <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 

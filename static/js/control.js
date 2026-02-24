@@ -1,7 +1,191 @@
-const state = { campaigns: [], selectedCampaign: localStorage.getItem('control_campaign_id') || '' };
+const state = {
+    campaigns: [],
+    selectedCampaign: localStorage.getItem('control_campaign_id') || '',
+    selectedSession: localStorage.getItem('control_session_id') || '',
+    characters: [],
+    sessionCharacters: [],
+    viewMode: 'list', // 'list' or 'cards'
+    showDeleted: false,
+};
 
 const $ = (id) => document.getElementById(id);
 const showErr = (msg) => { $('error').textContent = msg || ''; };
+
+// Section toggle for accordion panels
+function toggleSection(sectionId) {
+    const content = $(sectionId);
+    const header = content.previousElementSibling;
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        header.classList.remove('expanded');
+    } else {
+        content.classList.add('expanded');
+        header.classList.add('expanded');
+    }
+}
+
+// Make toggleSection globally accessible
+window.toggleSection = toggleSection;
+
+// Roll 4d6 drop lowest for a single stat
+function roll4d6DropLowest() {
+    const rolls = [0, 0, 0, 0].map(() => Math.floor(Math.random() * 6) + 1);
+    rolls.sort((a, b) => b - a);
+    return rolls[0] + rolls[1] + rolls[2];
+}
+
+// Build character object from form
+function buildCharacterFromForm() {
+    const name = $('charName').value.trim();
+    if (!name) {
+        throw new Error('Character name is required');
+    }
+
+    const skills = $('charSkills').value.split(',').map(s => s.trim()).filter(Boolean);
+    const languages = $('charLanguages').value.split(',').map(s => s.trim()).filter(Boolean);
+
+    return {
+        name: name,
+        entity_type: $('charEntityType').value,
+        controlled_by: $('charControlledBy').value,
+        hp_max: parseInt($('charHp').value) || 10,
+        hp_current: parseInt($('charHp').value) || 10,
+        public_sheet: {
+            race: $('charRace').value.trim(),
+            class: $('charClass').value.trim(),
+            level: parseInt($('charLevel').value) || 1,
+            background: $('charBackground').value.trim(),
+            attributes: {
+                strength: parseInt($('charStr').value) || 10,
+                dexterity: parseInt($('charDex').value) || 10,
+                constitution: parseInt($('charCon').value) || 10,
+                intelligence: parseInt($('charInt').value) || 10,
+                wisdom: parseInt($('charWis').value) || 10,
+                charisma: parseInt($('charCha').value) || 10,
+            },
+            armor_class: parseInt($('charAc').value) || 10,
+            speed: parseInt($('charSpeed').value) || 30,
+            initiative_bonus: parseInt($('charInit').value) || 0,
+            skills: skills,
+            languages: languages,
+            abilities: $('charAbilities').value.trim(),
+            actions: $('charActions').value.trim(),
+            weapons: $('charWeapons').value.trim(),
+            armor: $('charArmor').value.trim(),
+            equipment: $('charEquipment').value.trim(),
+            gold: parseInt($('charGold').value) || 0,
+            personality: {
+                traits: $('charTraits').value.trim(),
+                ideals: $('charIdeals').value.trim(),
+                bonds: $('charBonds').value.trim(),
+                flaws: $('charFlaws').value.trim(),
+                goals: $('charGoals').value.trim(),
+            },
+            backstory: $('charBackstory').value.trim(),
+            allies: $('charAllies').value.trim(),
+            enemies: $('charEnemies').value.trim(),
+            x: 0,
+            y: 0,
+        },
+        secret_sheet: {
+            secrets: $('charSecrets').value.trim(),
+            plot_hooks: $('charPlotHooks').value.trim(),
+            balance_notes: $('charBalance').value.trim(),
+        },
+        ac: parseInt($('charAc').value) || 10,
+        speed: parseInt($('charSpeed').value) || 30,
+    };
+}
+
+// Clear character form
+function clearCharacterForm() {
+    const fields = [
+        'charName', 'charRace', 'charClass', 'charBackground',
+        'charSkills', 'charLanguages', 'charAbilities', 'charActions',
+        'charWeapons', 'charArmor', 'charEquipment',
+        'charTraits', 'charIdeals', 'charBonds', 'charFlaws', 'charGoals',
+        'charBackstory', 'charAllies', 'charEnemies',
+        'charSecrets', 'charPlotHooks', 'charBalance'
+    ];
+    fields.forEach(id => { if ($(id)) $(id).value = ''; });
+
+    // Reset numbers to defaults
+    $('charLevel').value = 1;
+    $('charStr').value = 10;
+    $('charDex').value = 10;
+    $('charCon').value = 10;
+    $('charInt').value = 10;
+    $('charWis').value = 10;
+    $('charCha').value = 10;
+    $('charHp').value = 10;
+    $('charAc').value = 10;
+    $('charSpeed').value = 30;
+    $('charInit').value = 0;
+    $('charGold').value = 0;
+
+    // Reset selects
+    $('charEntityType').value = 'PC';
+    $('charControlledBy').value = 'PLAYER';
+}
+
+// Populate form from character object (for AI generation)
+function populateFormFromCharacter(char) {
+    const sheet = char.public_sheet || {};
+    const attrs = sheet.attributes || {};
+    const personality = sheet.personality || {};
+    const secret = char.secret_sheet || {};
+
+    $('charName').value = char.name || '';
+    $('charEntityType').value = char.entity_type || 'PC';
+    $('charControlledBy').value = char.controlled_by || 'PLAYER';
+    $('charRace').value = sheet.race || '';
+    $('charClass').value = sheet.class || '';
+    $('charLevel').value = sheet.level || 1;
+    $('charBackground').value = sheet.background || '';
+
+    $('charStr').value = attrs.strength || 10;
+    $('charDex').value = attrs.dexterity || 10;
+    $('charCon').value = attrs.constitution || 10;
+    $('charInt').value = attrs.intelligence || 10;
+    $('charWis').value = attrs.wisdom || 10;
+    $('charCha').value = attrs.charisma || 10;
+
+    $('charHp').value = char.hp_max || sheet.hp || 10;
+    // AC and speed can be top-level or in public_sheet
+    $('charAc').value = char.ac || sheet.armor_class || 10;
+    $('charSpeed').value = char.speed || sheet.speed || 30;
+    $('charInit').value = sheet.initiative_bonus || 0;
+
+    $('charSkills').value = Array.isArray(sheet.skills) ? sheet.skills.join(', ') : (sheet.skills || '');
+    $('charLanguages').value = Array.isArray(sheet.languages) ? sheet.languages.join(', ') : (sheet.languages || '');
+    $('charAbilities').value = sheet.abilities || '';
+    $('charActions').value = sheet.actions || '';
+
+    $('charWeapons').value = sheet.weapons || '';
+    $('charArmor').value = sheet.armor || '';
+    $('charEquipment').value = sheet.equipment || '';
+    $('charGold').value = sheet.gold || 0;
+
+    $('charTraits').value = personality.traits || '';
+    $('charIdeals').value = personality.ideals || '';
+    $('charBonds').value = personality.bonds || '';
+    $('charFlaws').value = personality.flaws || '';
+    $('charGoals').value = personality.goals || '';
+
+    $('charBackstory').value = sheet.backstory || '';
+    $('charAllies').value = sheet.allies || '';
+    $('charEnemies').value = sheet.enemies || '';
+
+    $('charSecrets').value = secret.secrets || '';
+    $('charPlotHooks').value = secret.plot_hooks || '';
+    $('charBalance').value = secret.balance_notes || '';
+
+    // Expand the identity section so user sees the result
+    const identityContent = $('identity');
+    const identityHeader = identityContent.previousElementSibling;
+    identityContent.classList.add('expanded');
+    identityHeader.classList.add('expanded');
+}
 
 async function api(url, opts = {}) {
     const r = await fetch(url, opts);
@@ -65,58 +249,247 @@ async function loadCampaigns() {
 async function loadSessions() {
     if (!state.selectedCampaign) {
         $('sessionList').innerHTML = '<div class="list-item-meta">Select a campaign first</div>';
+        state.selectedSession = '';
         return;
     }
     const rows = await api(`/api/campaigns/${state.selectedCampaign}/sessions`);
     if (rows.length === 0) {
         $('sessionList').innerHTML = '<div class="list-item-meta">No sessions found. Create one to start playing.</div>';
+        state.selectedSession = '';
         return;
     }
-    $('sessionList').innerHTML = rows.map((s) => `
-        <div class="list-item">
+
+    // Auto-select first ACTIVE session, or first session if none active
+    const activeSession = rows.find(s => s.status === 'ACTIVE') || rows[0];
+    if (activeSession && (!state.selectedSession || !rows.find(s => s.id === state.selectedSession))) {
+        state.selectedSession = activeSession.id;
+        localStorage.setItem('control_session_id', state.selectedSession);
+    }
+
+    $('sessionList').innerHTML = rows.map((s) => {
+        const isSelected = s.id === state.selectedSession;
+        return `
+        <div class="list-item ${isSelected ? 'selected' : ''}" style="${isSelected ? 'border-color: var(--text-accent);' : ''}">
             <div class="list-item-info">
-                <div class="list-item-name">Session ${s.id.substring(0, 8)}...</div>
+                <div class="list-item-name">
+                    Session ${s.id.substring(0, 8)}...
+                    ${isSelected ? '<span style="color: var(--text-accent); font-size: 10px; margin-left: 8px;">(Active Party)</span>' : ''}
+                </div>
                 <div class="list-item-meta">
                     ${statusBadge(s.status)} &bull; Created: ${new Date(s.created_at).toLocaleString()}
                 </div>
             </div>
             <div class="list-item-actions">
+                ${!isSelected ? `<button class="btn btn-secondary" onclick="window.control.selectSession('${s.id}')">Select</button>` : ''}
                 <button class="btn btn-secondary" onclick="window.control.sessionAction('${s.id}','pause')">Pause</button>
                 <button class="btn btn-primary" onclick="window.control.sessionAction('${s.id}','resume')">Resume</button>
                 <button class="btn btn-danger" onclick="window.control.sessionAction('${s.id}','end')">End</button>
             </div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 async function loadCharacters() {
     if (!state.selectedCampaign) {
         $('characterList').innerHTML = '<div class="list-item-meta">Select a campaign first</div>';
+        $('characterCards').innerHTML = '';
         return;
     }
+
     const rows = await api(`/api/campaigns/${state.selectedCampaign}/entities`);
-    const chars = rows.filter(e => ['PC', 'NPC', 'MONSTER'].includes(e.entity_type));
+    let chars = rows.filter(e => ['PC', 'NPC', 'MONSTER'].includes(e.entity_type));
+
+    // Filter out deleted unless showing deleted
+    if (!state.showDeleted) {
+        chars = chars.filter(e => e.status !== 'TOMBSTONED' && e.status !== 'PURGED');
+    }
+
+    state.characters = chars;
+
     if (chars.length === 0) {
         $('characterList').innerHTML = '<div class="list-item-meta">No characters found. Create or import one.</div>';
+        $('characterCards').innerHTML = '';
+        updateAddCharacterDropdown();
         return;
     }
-    $('characterList').innerHTML = chars.map((e) => `
-        <div class="list-item">
-            <div class="list-item-info">
-                <div class="list-item-name">${escapeHtml(e.name)}</div>
-                <div class="list-item-meta">
-                    <span class="entity-icon ${e.entity_type}" style="display:inline-flex;width:16px;height:16px;font-size:9px;margin-right:4px;">${e.entity_type.charAt(0)}</span>
-                    ${e.entity_type} &bull; ${controlBadge(e.controlled_by)}
-                    ${e.hp_current != null ? ` &bull; HP: ${e.hp_current}/${e.hp_max}` : ''}
+
+    // Render list view
+    $('characterList').innerHTML = chars.map((e) => renderCharacterListItem(e)).join('');
+
+    // Render card view
+    $('characterCards').innerHTML = chars.map((e) => renderCharacterCard(e)).join('');
+
+    // Update the add-to-session dropdown
+    updateAddCharacterDropdown();
+}
+
+function renderCharacterListItem(e) {
+    const isTombstoned = e.status === 'TOMBSTONED';
+    const statusClass = isTombstoned ? 'tombstoned' : '';
+
+    return `
+        <div class="list-item ${statusClass}">
+            <div class="list-item-info" style="display: flex; align-items: center; gap: 12px;">
+                ${e.image_url ? `<img src="${e.image_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">` : ''}
+                <div>
+                    <div class="list-item-name">${escapeHtml(e.name)} ${isTombstoned ? '(Deleted)' : ''}</div>
+                    <div class="list-item-meta">
+                        <span class="entity-icon ${e.entity_type}" style="display:inline-flex;width:16px;height:16px;font-size:9px;margin-right:4px;">${e.entity_type.charAt(0)}</span>
+                        ${e.entity_type} &bull; ${controlBadge(e.controlled_by)}
+                        ${e.hp_current != null ? ` &bull; HP: ${e.hp_current}/${e.hp_max}` : ''}
+                        ${e.public_sheet?.class ? ` &bull; ${e.public_sheet.class}` : ''}
+                    </div>
                 </div>
             </div>
             <div class="list-item-actions">
-                <button class="btn ${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'btn-primary' : 'btn-secondary'}"
-                        onclick="window.control.toggleControl('${e.id}','${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'HUMAN' : 'AI'}')">
-                    ${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'Set Human' : 'Set AI'}
-                </button>
+                ${isTombstoned ? `
+                    <button class="btn btn-secondary" onclick="window.control.restoreCharacter('${e.id}')">Restore</button>
+                ` : `
+                    <button class="btn btn-secondary" onclick="window.control.editCharacter('${e.id}')">Edit</button>
+                    <button class="btn ${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'btn-primary' : 'btn-secondary'}"
+                            onclick="window.control.toggleControl('${e.id}','${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'HUMAN' : 'AI'}')">
+                        ${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'Human' : 'AI'}
+                    </button>
+                    <button class="btn btn-danger" onclick="window.control.deleteCharacter('${e.id}')">Delete</button>
+                `}
             </div>
-        </div>`).join('');
+        </div>`;
 }
+
+function renderCharacterCard(e) {
+    const isTombstoned = e.status === 'TOMBSTONED';
+    const sheet = e.public_sheet || {};
+
+    return `
+        <div class="character-card ${isTombstoned ? 'tombstoned' : ''}">
+            <div class="card-portrait">
+                ${e.image_url
+                    ? `<img src="${e.image_url}" alt="${escapeHtml(e.name)}">`
+                    : `<span class="no-portrait">${e.entity_type.charAt(0)}</span>`}
+            </div>
+            <div class="card-body">
+                <div class="card-name">${escapeHtml(e.name)}</div>
+                <div class="card-meta">
+                    ${sheet.race || ''} ${sheet.class || ''} ${sheet.level ? `Lv.${sheet.level}` : ''}
+                </div>
+                <div class="card-stats">
+                    ${e.hp_current != null ? `<div class="card-stat">HP: <span class="card-stat-value">${e.hp_current}/${e.hp_max}</span></div>` : ''}
+                    ${e.ac != null ? `<div class="card-stat">AC: <span class="card-stat-value">${e.ac}</span></div>` : ''}
+                    ${e.speed != null ? `<div class="card-stat">SPD: <span class="card-stat-value">${e.speed}</span></div>` : ''}
+                </div>
+            </div>
+            <div class="card-actions">
+                ${isTombstoned ? `
+                    <button class="btn btn-secondary" onclick="window.control.restoreCharacter('${e.id}')">Restore</button>
+                ` : `
+                    <button class="btn btn-secondary" onclick="window.control.editCharacter('${e.id}')">Edit</button>
+                    <button class="btn btn-danger" onclick="window.control.deleteCharacter('${e.id}')">Del</button>
+                `}
+            </div>
+        </div>`;
+}
+
+function updateAddCharacterDropdown() {
+    const select = $('addCharacterSelect');
+    if (!select) return;
+
+    // Get characters not in current session
+    const sessionEntityIds = state.sessionCharacters.map(sc => sc.entity_id || sc.id);
+    const available = state.characters.filter(c =>
+        c.status !== 'TOMBSTONED' &&
+        !sessionEntityIds.includes(c.id) &&
+        !c.is_dead_in_campaign
+    );
+
+    select.innerHTML = '<option value="">-- Add Character to Session --</option>' +
+        available.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${c.entity_type})</option>`).join('');
+}
+
+async function loadSessionParty() {
+    const partyDiv = $('sessionParty');
+    if (!partyDiv) return;
+
+    if (!state.selectedSession) {
+        partyDiv.innerHTML = '<div class="list-item-meta">No active session selected</div>';
+        return;
+    }
+
+    try {
+        const chars = await api(`/api/sessions/${state.selectedSession}/characters`);
+        state.sessionCharacters = chars;
+
+        if (chars.length === 0) {
+            partyDiv.innerHTML = '<div class="list-item-meta">No characters in this session. Add characters below.</div>';
+            updateAddCharacterDropdown();
+            return;
+        }
+
+        partyDiv.innerHTML = chars.map(c => renderPartyMember(c)).join('');
+        updateAddCharacterDropdown();
+    } catch (e) {
+        partyDiv.innerHTML = '<div class="list-item-meta">Could not load session party</div>';
+    }
+}
+
+function renderPartyMember(c) {
+    const isDead = c.session_status === 'DEAD';
+    const hpPercent = c.hp_max > 0 ? Math.round((c.hp_current / c.hp_max) * 100) : 0;
+    const hpClass = hpPercent <= 25 ? 'critical' : hpPercent <= 50 ? 'low' : '';
+
+    return `
+        <div class="party-member ${isDead ? 'dead' : ''}">
+            <div class="party-avatar">
+                ${c.image_url
+                    ? `<img src="${c.image_url}" alt="${escapeHtml(c.name)}">`
+                    : `<span class="avatar-placeholder">${c.name.charAt(0)}</span>`}
+            </div>
+            <div class="party-info">
+                <div class="party-name">${escapeHtml(c.name)} ${isDead ? '(Dead)' : ''}</div>
+                <div class="party-stats">
+                    HP: ${c.hp_current}/${c.hp_max}
+                    <span class="hp-bar"><span class="hp-bar-fill ${hpClass}" style="width:${hpPercent}%"></span></span>
+                    &bull; AC: ${c.ac || '?'}
+                </div>
+            </div>
+            <div class="party-actions">
+                ${isDead ? `
+                    <button class="btn btn-primary" onclick="window.control.reviveCharacter('${c.id}')">Revive</button>
+                ` : `
+                    <button class="btn btn-danger" onclick="window.control.markDead('${c.id}')">Mark Dead</button>
+                `}
+                <button class="btn btn-secondary" onclick="window.control.removeFromSession('${c.id}')">Remove</button>
+            </div>
+        </div>`;
+}
+
+// Modal functions
+function openEditModal(entity) {
+    const modal = $('editCharacterModal');
+    $('editCharId').value = entity.id;
+    $('editCharName').value = entity.name || '';
+    $('editCharEntityType').value = entity.entity_type || 'PC';
+    $('editCharControlledBy').value = entity.controlled_by || 'PLAYER';
+    $('editCharHpCurrent').value = entity.hp_current || 0;
+    $('editCharHpMax').value = entity.hp_max || 0;
+    $('editCharAc').value = entity.ac || 10;
+    $('editCharSpeed').value = entity.speed || 30;
+    $('editCharPublicSheet').value = JSON.stringify(entity.public_sheet || {}, null, 2);
+
+    // Image preview
+    const preview = $('editCharImagePreview');
+    if (entity.image_url) {
+        preview.innerHTML = `<img src="${entity.image_url}" style="max-width:100px;max-height:100px;border-radius:8px;">`;
+    } else {
+        preview.innerHTML = '<span style="color:var(--text-secondary);font-size:12px;">No image</span>';
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeEditModal() {
+    $('editCharacterModal').style.display = 'none';
+}
+window.closeEditModal = closeEditModal;
 
 async function loadDocs() {
     if (!state.selectedCampaign) {
@@ -207,6 +580,13 @@ window.control = {
     async sessionAction(id, action) {
         await api(`/api/sessions/${id}/${action}`, { method: 'POST' });
         await loadSessions();
+        await loadSessionParty();
+    },
+    async selectSession(id) {
+        state.selectedSession = id;
+        localStorage.setItem('control_session_id', id);
+        await loadSessions();
+        await loadSessionParty();
     },
     async toggleControl(id, controlled_by) {
         await api(`/api/entities/${id}/control`, {
@@ -220,14 +600,314 @@ window.control = {
         await api(`/api/rag/documents/${id}/${action}`, { method: 'POST' });
         await loadDocs();
     },
+
+    // Character Management
+    async editCharacter(id) {
+        const entity = state.characters.find(c => c.id === id);
+        if (entity) {
+            openEditModal(entity);
+        }
+    },
+    async deleteCharacter(id) {
+        const entity = state.characters.find(c => c.id === id);
+        if (!confirm(`Delete ${entity?.name || 'this character'}? It can be restored later.`)) return;
+        try {
+            await api(`/api/entities/${id}`, { method: 'DELETE' });
+            await loadCharacters();
+            await loadSessionParty();
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+    async restoreCharacter(id) {
+        try {
+            await api(`/api/entities/${id}/restore`, { method: 'POST' });
+            await loadCharacters();
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+
+    // Session Party Management
+    async addToSession(entityId) {
+        if (!state.selectedSession) {
+            showErr('No session selected');
+            return;
+        }
+        if (!entityId) {
+            showErr('Select a character to add');
+            return;
+        }
+        try {
+            await api(`/api/sessions/${state.selectedSession}/characters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entity_id: entityId })
+            });
+            await loadSessionParty();
+            showErr('');
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+    async removeFromSession(entityId) {
+        if (!confirm('Remove this character from the session?')) return;
+        try {
+            await api(`/api/sessions/${state.selectedSession}/characters/${entityId}`, {
+                method: 'DELETE'
+            });
+            await loadSessionParty();
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+    async markDead(entityId) {
+        if (!confirm('Mark this character as dead? They can be revived later.')) return;
+        try {
+            await api(`/api/sessions/${state.selectedSession}/characters/${entityId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'DEAD',
+                    death_type: 'COMBAT',
+                    death_details: { marked_at: new Date().toISOString() }
+                })
+            });
+            await loadSessionParty();
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+    async reviveCharacter(entityId) {
+        const method = prompt('Revive method? (SPELL, DIVINE_INTERVENTION, STORY)', 'STORY');
+        if (!method) return;
+        try {
+            await api(`/api/sessions/${state.selectedSession}/characters/${entityId}/revive`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    method: method,
+                    restore_hp: 1,
+                    revive_details: { revived_at: new Date().toISOString() }
+                })
+            });
+            await loadSessionParty();
+            await loadCharacters();
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+
+    // Image upload
+    async uploadCharacterImage() {
+        const entityId = $('editCharId').value;
+        const fileInput = $('editCharImage');
+        if (!fileInput.files[0]) {
+            showErr('Select an image file');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        try {
+            const result = await fetch(`/api/entities/${entityId}/image`, {
+                method: 'POST',
+                body: formData
+            }).then(r => r.json());
+            if (result.error) throw new Error(result.error);
+            $('editCharImagePreview').innerHTML = `<img src="${result.image_url}" style="max-width:100px;max-height:100px;border-radius:8px;">`;
+            await loadCharacters();
+            showErr('');
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+    async removeCharacterImage() {
+        const entityId = $('editCharId').value;
+        try {
+            await api(`/api/entities/${entityId}/image`, { method: 'DELETE' });
+            $('editCharImagePreview').innerHTML = '<span style="color:var(--text-secondary);font-size:12px;">No image</span>';
+            await loadCharacters();
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+    async saveCharacterEdit() {
+        const entityId = $('editCharId').value;
+        let publicSheet;
+        try {
+            publicSheet = JSON.parse($('editCharPublicSheet').value || '{}');
+        } catch (e) {
+            showErr('Invalid JSON in public sheet');
+            return;
+        }
+        try {
+            await api(`/api/entities/${entityId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: $('editCharName').value,
+                    entity_type: $('editCharEntityType').value,
+                    controlled_by: $('editCharControlledBy').value,
+                    hp_current: parseInt($('editCharHpCurrent').value) || 0,
+                    hp_max: parseInt($('editCharHpMax').value) || 0,
+                    ac: parseInt($('editCharAc').value) || 10,
+                    speed: parseInt($('editCharSpeed').value) || 30,
+                    public_sheet: publicSheet,
+                })
+            });
+            closeEditModal();
+            await loadCharacters();
+            await loadSessionParty();
+            showErr('');
+        } catch (e) {
+            showErr(e.message);
+        }
+    },
+
+    // Session Archives
+    currentArchiveId: null,
+
+    async viewArchive(id) {
+        try {
+            const archive = await api(`/api/session_archives/${id}`);
+            this.currentArchiveId = id;
+
+            // Update modal header
+            const metaEl = $('historyMeta');
+            if (metaEl) {
+                metaEl.innerHTML = `
+                    <div class="history-info">
+                        <strong>${archive.session_name || 'Session ' + (archive.session_number || archive.original_session_id?.substring(0, 8))}</strong>
+                        <span class="history-date">
+                            ${archive.started_at ? new Date(archive.started_at).toLocaleDateString() : 'Unknown start'}
+                            - ${archive.ended_at ? new Date(archive.ended_at).toLocaleDateString() : 'Ongoing'}
+                        </span>
+                    </div>
+                    ${archive.session_summary ? `<div class="history-summary">${escapeHtml(archive.session_summary)}</div>` : ''}
+                `;
+            }
+
+            // Render story state snapshot
+            const storyEl = $('historyStoryState');
+            if (storyEl && archive.final_story_state) {
+                const ss = archive.final_story_state;
+                storyEl.innerHTML = `
+                    <div class="story-snapshot">
+                        ${ss.current_location ? `<div><strong>Location:</strong> ${escapeHtml(ss.current_location)}</div>` : ''}
+                        ${ss.game_time ? `<div><strong>Time:</strong> ${escapeHtml(ss.game_time)}</div>` : ''}
+                        ${ss.dm_notes ? `<div class="dm-notes"><strong>DM Notes:</strong> ${escapeHtml(ss.dm_notes)}</div>` : ''}
+                    </div>
+                `;
+            }
+
+            // Render chat history
+            const chatEl = $('historyChatLog');
+            if (chatEl && archive.chat_history) {
+                const messages = archive.chat_history;
+                if (messages.length === 0) {
+                    chatEl.innerHTML = '<div class="list-item-meta">No messages in this session</div>';
+                } else {
+                    chatEl.innerHTML = messages.map(msg => {
+                        const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : '--:--';
+                        const type = (msg.event_type || 'system').toLowerCase();
+                        const payload = msg.payload || {};
+                        let content = '';
+
+                        if (type === 'chat' || type === 'dialogue') {
+                            const speaker = payload.speaker || 'Unknown';
+                            content = `<span class="chat-speaker">${escapeHtml(speaker)}:</span> ${escapeHtml(payload.message || payload.dialogue || '')}`;
+                        } else if (type === 'narration') {
+                            content = `<em>${escapeHtml(payload.narration || payload.message || '')}</em>`;
+                        } else if (type === 'action') {
+                            content = `<strong>${escapeHtml(payload.action_type || 'Action')}</strong>`;
+                        } else {
+                            content = escapeHtml(payload.message || JSON.stringify(payload).substring(0, 100));
+                        }
+
+                        return `<div class="chat-message ${type}"><span class="chat-time">${timestamp}</span> ${content}</div>`;
+                    }).join('');
+                }
+            }
+
+            // Show modal
+            const modal = $('sessionHistoryModal');
+            if (modal) modal.style.display = 'flex';
+        } catch (e) {
+            showErr('Failed to load archive: ' + e.message);
+        }
+    },
+
+    closeHistoryModal() {
+        const modal = $('sessionHistoryModal');
+        if (modal) modal.style.display = 'none';
+        this.currentArchiveId = null;
+    },
+
+    async deleteArchive(id) {
+        const archiveId = id || this.currentArchiveId;
+        if (!archiveId) return;
+        if (!confirm('Permanently delete this archived session? This cannot be undone.')) return;
+
+        try {
+            await api(`/api/session_archives/${archiveId}`, { method: 'DELETE' });
+            this.closeHistoryModal();
+            await loadArchives();
+            showErr('');
+        } catch (e) {
+            showErr('Failed to delete archive: ' + e.message);
+        }
+    },
 };
+
+// Session Archives
+async function loadArchives() {
+    if (!state.selectedCampaign) {
+        const el = $('sessionArchives');
+        if (el) el.innerHTML = '<div class="list-item-meta">Select a campaign to see archived sessions</div>';
+        return;
+    }
+
+    try {
+        const archives = await api(`/api/campaigns/${state.selectedCampaign}/session_archives`);
+        const el = $('sessionArchives');
+        if (!el) return;
+
+        if (archives.length === 0) {
+            el.innerHTML = '<div class="list-item-meta">No archived sessions yet</div>';
+            return;
+        }
+
+        el.innerHTML = archives.map(a => `
+            <div class="list-item">
+                <div class="list-item-info">
+                    <div class="list-item-name">
+                        ${a.session_name || 'Session ' + (a.session_number || a.original_session_id.substring(0, 8))}
+                    </div>
+                    <div class="list-item-meta">
+                        ${statusBadge(a.archive_reason)} &bull;
+                        Archived: ${new Date(a.archived_at).toLocaleString()}
+                        ${a.chat_count ? `&bull; ${a.chat_count} messages` : ''}
+                    </div>
+                </div>
+                <div class="list-item-actions">
+                    <button class="btn btn-secondary" onclick="window.control.viewArchive('${a.id}')">View History</button>
+                    <button class="btn btn-danger" onclick="window.control.deleteArchive('${a.id}')">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error('Failed to load archives:', e);
+    }
+}
 
 async function refreshAll() {
     showErr('');
     try {
         await loadCampaigns();
         await loadSessions();
+        await loadArchives();
         await loadCharacters();
+        await loadSessionParty();
         await loadDocs();
         await loadAi();
     } catch (e) {
@@ -301,16 +981,81 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     $('generateCharacter').onclick = async () => {
         try {
-            await api(`/api/campaigns/${state.selectedCampaign}/characters/generate`, {
+            const concept = $('charConcept').value.trim();
+            if (!concept) {
+                showErr('Please enter a character concept');
+                return;
+            }
+            showErr('');
+            $('generateCharacter').disabled = true;
+            $('generateCharacter').textContent = 'Generating...';
+
+            const result = await api(`/api/campaigns/${state.selectedCampaign}/characters/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ concept: $('charConcept').value })
+                body: JSON.stringify({ concept: concept, populate_form: true })
             });
-            $('charConcept').value = '';
+
+            // Populate form with generated character
+            if (result.character) {
+                populateFormFromCharacter(result.character);
+                $('charConcept').value = '';
+                showErr('');
+            }
             await loadCharacters();
         } catch (e) {
             showErr(e.message);
+        } finally {
+            $('generateCharacter').disabled = false;
+            $('generateCharacter').textContent = 'AI Generate';
         }
+    };
+
+    // Character builder form handlers
+    $('createCharacterForm').onclick = async () => {
+        try {
+            const payload = buildCharacterFromForm();
+            await api(`/api/campaigns/${state.selectedCampaign}/entities`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            clearCharacterForm();
+            await loadCharacters();
+            showErr('');
+        } catch (e) {
+            showErr(e.message);
+        }
+    };
+
+    $('randomizeStats').onclick = () => {
+        $('charStr').value = roll4d6DropLowest();
+        $('charDex').value = roll4d6DropLowest();
+        $('charCon').value = roll4d6DropLowest();
+        $('charInt').value = roll4d6DropLowest();
+        $('charWis').value = roll4d6DropLowest();
+        $('charCha').value = roll4d6DropLowest();
+
+        // Calculate HP based on constitution
+        const conMod = Math.floor((parseInt($('charCon').value) - 10) / 2);
+        const level = parseInt($('charLevel').value) || 1;
+        // Assume d8 hit die as default
+        const baseHp = 8 + conMod + ((level - 1) * (5 + conMod));
+        $('charHp').value = Math.max(1, baseHp);
+
+        // Calculate initiative from dexterity
+        const dexMod = Math.floor((parseInt($('charDex').value) - 10) / 2);
+        $('charInit').value = dexMod;
+
+        // Expand attributes section to show results
+        const attrsContent = $('attributes');
+        const attrsHeader = attrsContent.previousElementSibling;
+        attrsContent.classList.add('expanded');
+        attrsHeader.classList.add('expanded');
+    };
+
+    $('clearCharacterForm').onclick = () => {
+        clearCharacterForm();
     };
 
     $('uploadRag').onclick = async () => {
@@ -392,6 +1137,71 @@ window.addEventListener('DOMContentLoaded', async () => {
             showErr(e.message);
         }
     };
+
+    // ===== Character View Toggle =====
+    const viewListBtn = $('viewList');
+    const viewCardsBtn = $('viewCards');
+    const charListDiv = $('characterList');
+    const charCardsDiv = $('characterCards');
+
+    if (viewListBtn && viewCardsBtn) {
+        viewListBtn.onclick = () => {
+            state.viewMode = 'list';
+            viewListBtn.classList.add('active');
+            viewCardsBtn.classList.remove('active');
+            charListDiv.style.display = 'block';
+            charCardsDiv.style.display = 'none';
+        };
+        viewCardsBtn.onclick = () => {
+            state.viewMode = 'cards';
+            viewCardsBtn.classList.add('active');
+            viewListBtn.classList.remove('active');
+            charListDiv.style.display = 'none';
+            charCardsDiv.style.display = 'grid';
+        };
+    }
+
+    // Show deleted checkbox
+    const showDeletedCheckbox = $('showDeleted');
+    if (showDeletedCheckbox) {
+        showDeletedCheckbox.onchange = () => {
+            state.showDeleted = showDeletedCheckbox.checked;
+            loadCharacters();
+        };
+    }
+
+    // Add to session button
+    const addToSessionBtn = $('addToSession');
+    if (addToSessionBtn) {
+        addToSessionBtn.onclick = () => {
+            const select = $('addCharacterSelect');
+            window.control.addToSession(select.value);
+        };
+    }
+
+    // Modal buttons
+    const saveEditBtn = $('saveCharacterEdit');
+    if (saveEditBtn) {
+        saveEditBtn.onclick = () => window.control.saveCharacterEdit();
+    }
+
+    const uploadImgBtn = $('uploadCharImage');
+    if (uploadImgBtn) {
+        uploadImgBtn.onclick = () => window.control.uploadCharacterImage();
+    }
+
+    const removeImgBtn = $('removeCharImage');
+    if (removeImgBtn) {
+        removeImgBtn.onclick = () => window.control.removeCharacterImage();
+    }
+
+    // Close modal on backdrop click
+    const modal = $('editCharacterModal');
+    if (modal) {
+        modal.onclick = (e) => {
+            if (e.target === modal) closeEditModal();
+        };
+    }
 
     await refreshAll();
 });

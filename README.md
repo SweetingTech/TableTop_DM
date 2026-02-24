@@ -1,5 +1,12 @@
 # Headless Multi-Agent AI-Driven VTT Engine
-Production-oriented, headless VTT + RPG engine with deterministic state, append-only event ledger, strict visibility filtering, and multi-agent LLM layer (DM, NPCs, Gods, Factions) that can only propose schema-validated actions.
+
+Production-oriented VTT + RPG engine with deterministic state, append-only event ledger, strict visibility filtering, and multi-agent LLM layer (DM, NPCs, Gods, Factions) that can only propose schema-validated actions.
+
+**Two ways to use TableTop DM:**
+- **Web GUI**: Full-featured browser interface for gameplay, campaign management, and character creation
+- **Headless API**: REST + WebSocket API for programmatic access, custom frontends, or integration with other tools
+
+See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart or [API Endpoints](#api-endpoints) for headless access.
 
 
 ## Implementation Status
@@ -90,6 +97,66 @@ bash scripts/rg1.sh --mode docker
 bash scripts/rg1.sh --mode local
 ```
 
+## Using the Web Interface (GUI)
+
+After starting the application, open your browser to access the GUI:
+
+### Available Interfaces
+
+| URL | Interface | Purpose |
+|-----|-----------|---------|
+| http://localhost:8000/game | **Game Console** | Main gameplay interface |
+| http://localhost:8000/control | **Control Plane** | Campaign/character management |
+| http://localhost:8000/ | **Dashboard** | Database viewer and stats |
+| http://localhost:8000/help | **Help & Wiki** | Documentation and guides |
+
+### Quick Start: Playing a Game
+
+1. **Start the application** (see Quickstart above)
+2. **Open the Control Plane** at http://localhost:8000/control
+3. **Select a campaign** from the dropdown (demo campaign "Eclipse Keep" is pre-loaded)
+4. **Go to Sessions tab** and verify a session exists (or create one)
+5. **Open the Game Console** at http://localhost:8000/game
+6. **Start playing!**
+
+### Game Console Basics
+
+The Game Console is where gameplay happens:
+
+- **Left Sidebar**: Story State (location/time) and Entity list
+- **Center**: Event Feed (chat, actions, narration) or Map view
+- **Right Panel**: Entity details, Encounter selector, Initiative tracker, Quick Actions
+- **Bottom**: Command input for chat and slash commands
+
+**Common Actions:**
+- Type a message and press Enter to chat
+- Type `/help` to see available commands
+- Click an entity to select it
+- Click the map to move your selected entity
+- Use Quick Action buttons for combat
+
+### Control Plane Basics
+
+The Control Plane manages your game:
+
+| Tab | Purpose |
+|-----|---------|
+| **Campaigns** | Create/edit campaigns |
+| **Sessions** | Manage sessions, view archives |
+| **Characters** | Create characters, manage party |
+| **RAG** | Upload reference documents |
+| **AI Settings** | Configure LLM providers |
+
+### Help & Documentation
+
+For detailed guides, visit http://localhost:8000/help or click the **Help** link in any interface header.
+
+Key documentation:
+- [Quick Start Guide](/help/quickstart) - Get playing in 5 minutes
+- [Game Console Guide](/help/game-console) - Full interface documentation
+- [Commands Reference](/help/commands) - All slash commands
+- [Control Plane Guide](/help/control-plane) - Management interface
+
 ## Environment Variables
 
 Defaults are in `.env.example`:
@@ -114,9 +181,16 @@ Default local ports (also mirrored in `.env.example`):
 
 ## Database
 Uses PostgreSQL with three schemas (Replit built-in or Docker Compose):
-- **`state`** — canonical world truth (campaigns, entities, encounters, maps, factions, economy, etc.)
+- **`state`** — canonical world truth (campaigns, entities, encounters, maps, factions, economy, story_state, session_archives, etc.)
 - **`ledger`** — append-only event log with `visible_to[]` principal filtering
 - **`infra_meta`** — migration tracking with SHA-256 checksums
+
+Key tables include:
+- `state.story_state` — DM tracking board (location, time, NPCs, quests, events, notes)
+- `state.story_state_history` — Change history for story state
+- `state.session_archives` — Archived sessions with full chat history
+- `state.session_characters` — Characters assigned to sessions with death/revival tracking
+- `state.entity_death_history` — Permanent death records for campaign continuity
 
 Migrations are in `infra/sql/migrations/`. Seed data for the "Eclipse Keep" demo campaign is in `infra/sql/seed/`.
 
@@ -127,9 +201,12 @@ app.py                              Flask + SocketIO server (port 8000)
 templates/
   index.html                        Dashboard template
   game.html                         Game console template
+  control.html                      Control plane template
 static/
   css/app.css                       Game console styles
+  css/control.css                   Control plane styles
   js/app.js                         Game console client
+  js/control.js                     Control plane client
 shared/
   db/connection.py                  Database connection layer
   schemas/enums.py                  Enums (GameMode, EventType, TensionLevel, etc.)
@@ -200,6 +277,15 @@ docs/                               Architecture specs
 | POST | `/api/narrate` | Request AI narration |
 | POST | `/api/content/check` | Content rating check |
 | GET | `/api/export/<session_id>` | Export session to Markdown |
+| GET | `/api/sessions/<id>/story_state` | Get session story state |
+| PUT | `/api/sessions/<id>/story_state` | Update story state |
+| GET | `/api/sessions/<id>/story_state/history` | Story state change history |
+| GET | `/api/sessions/<id>/chat_history` | Get session chat history |
+| GET | `/api/sessions/<id>/resume_data` | Get full session resume data |
+| POST | `/api/sessions/<id>/archive` | Manually archive a session |
+| GET | `/api/campaigns/<id>/session_archives` | List archived sessions |
+| GET | `/api/session_archives/<id>` | Get archived session details |
+| DELETE | `/api/session_archives/<id>` | Delete archived session |
 
 ## WebSocket Events
 | Event | Direction | Description |
@@ -255,8 +341,11 @@ docs/                               Architecture specs
 
 ### Frontend
 - **Game Console:** WebSocket-connected event feed, slash command console, entity sidebar with HP bars, initiative tracker, canvas map viewer with click-to-move interaction
+- **Story State Board:** Sidebar panel showing current location, game time, and narrative context. Updated by DM during play.
+- **Session Resume:** Automatically loads chat history when returning to a session, allowing seamless continuation of play
 - **Principal Context:** Tracks player identity, session, and controlled entities. Visual indicators show which entities you can command
 - **Quick Actions:** Attack Target, End Turn, Advance Initiative, AI Narration buttons for rapid gameplay
+- **Control Plane:** Session archives browser with full chat history viewer, character management with portraits and party tracking
 
 ### NPC Autonomy
 AI-controlled entities (NPCs/monsters with `controlled_by=AI_NPC`) take autonomous actions on their turn:
@@ -320,7 +409,7 @@ The interface uses a dark blue/purple color scheme with:
 
 ## Control Plane UI
 - Route: `GET /control`
-- Purpose: campaign/session/character lifecycle, RAG ingestion, and per-campaign AI provider config.
+- Purpose: campaign/session/character lifecycle, session archives, RAG ingestion, and per-campaign AI provider config.
 
 ### Campaign lifecycle
 - Create/list/edit campaigns from the Campaigns tab.
@@ -332,12 +421,45 @@ The interface uses a dark blue/purple color scheme with:
 - `GET/POST /api/campaigns/<id>/sessions` to list/create.
 - Session actions: `POST /api/sessions/<id>/pause|resume|end`.
 - Soft restart behavior: creating a new session ends prior ACTIVE session transactionally.
+- Session resume: `GET /api/sessions/<id>/resume_data` returns story state, chat history, and party info.
+- Sessions automatically create a story state record on creation.
+- Deleting a session auto-archives it with full chat history.
+
+### Session Archives
+- View archived sessions: `GET /api/campaigns/<id>/session_archives`.
+- View archive details with full chat history: `GET /api/session_archives/<id>`.
+- Manually archive a session: `POST /api/sessions/<id>/archive`.
+- Delete archive permanently: `DELETE /api/session_archives/<id>`.
+- Archives preserve: session metadata, chat history, final story state snapshot.
 
 ### Character management
 - List per campaign: `GET /api/campaigns/<id>/entities`.
 - Create/import JSON: `POST /api/campaigns/<id>/entities`.
 - Generate character: `POST /api/campaigns/<id>/characters/generate` (strict JSON schema validated before deterministic commit).
 - Control handoff: `POST /api/entities/<id>/control` (`controlled_by` = `HUMAN` or `AI`, `control_version` increments).
+- Edit/delete characters with soft delete (tombstone) and restore capability.
+- Character portraits: upload images via `POST /api/entities/<id>/image`.
+- Session party management: add/remove characters from sessions, track death/revival status.
+
+### Story State Board (DM Tracking)
+The Story State Board provides real-time tracking of the narrative context during sessions:
+
+| Field | Purpose |
+|-------|---------|
+| Location | Current in-game location (WHERE) |
+| Game Time | In-game time/date (WHEN) |
+| Active NPCs | NPCs present in the scene (WHO) |
+| Active Quests | Current objectives (WHAT) |
+| Plot Threads | Ongoing story arcs (WHY) |
+| Party Resources | Gold, supplies, key items (HOW) |
+| DM Notes | Public and private notes |
+
+**API endpoints:**
+- `GET/PUT /api/sessions/<id>/story_state` - Read/update story state
+- `GET /api/sessions/<id>/story_state/history` - View change history
+- `POST /api/sessions/<id>/story_state/add_event` - Log a story event
+
+Story state is automatically created when a session starts and can be viewed in the Game Console sidebar.
 
 ### RAG ingestion and retrieval
 - Upload: `POST /api/campaigns/<id>/rag/upload` (multipart).

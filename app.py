@@ -135,6 +135,43 @@ def control():
     return render_template("control.html")
 
 
+@app.route("/help")
+@app.route("/help/")
+@app.route("/help/<path:page>")
+def help_page(page="index"):
+    """Serve wiki/help documentation"""
+    import markdown
+    from pathlib import Path
+
+    wiki_dir = Path(__file__).parent / "docs" / "wiki"
+
+    # Sanitize page name
+    page = page.replace("..", "").strip("/")
+    if not page.endswith(".md"):
+        page = page + ".md"
+
+    wiki_file = wiki_dir / page
+    if not wiki_file.exists() or not str(wiki_file.resolve()).startswith(str(wiki_dir.resolve())):
+        wiki_file = wiki_dir / "index.md"
+
+    content = wiki_file.read_text(encoding="utf-8")
+
+    # Get list of all wiki pages for navigation
+    pages = []
+    for f in sorted(wiki_dir.glob("*.md")):
+        name = f.stem
+        title = name.replace("-", " ").title()
+        pages.append({"name": name, "title": title, "active": f.name == page})
+
+    # Convert markdown to HTML
+    html_content = markdown.markdown(
+        content,
+        extensions=["tables", "fenced_code", "toc"]
+    )
+
+    return render_template("help.html", content=html_content, pages=pages, current_page=page.replace(".md", ""))
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "alive"})
@@ -1081,36 +1118,503 @@ def api_entity_control(entity_id):
     return jsonify(_serialize(row))
 
 
+@app.route("/api/entities/<entity_id>", methods=["DELETE"])
+def api_entity_delete(entity_id):
+    """Soft delete (tombstone) an entity"""
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        """
+        UPDATE state.entities
+        SET status = 'TOMBSTONED', updated_at = now()
+        WHERE id = %s AND status = 'ACTIVE'
+        RETURNING *
+        """,
+        (entity_id,),
+    )
+    if not row:
+        return jsonify({"error": "Not found or already deleted"}), 404
+    return jsonify({"success": True, "entity": _serialize(row)})
+
+
+@app.route("/api/entities/<entity_id>/restore", methods=["POST"])
+def api_entity_restore(entity_id):
+    """Restore a tombstoned entity"""
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        """
+        UPDATE state.entities
+        SET status = 'ACTIVE', updated_at = now()
+        WHERE id = %s AND status = 'TOMBSTONED'
+        RETURNING *
+        """,
+        (entity_id,),
+    )
+    if not row:
+        return jsonify({"error": "Not found or not tombstoned"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/entities/<entity_id>/image", methods=["POST"])
+def api_entity_image_upload(entity_id):
+    """Upload an image for entity portrait"""
+    from shared.db.connection import execute_one
+    import base64
+
+    # Check if entity exists
+    entity = execute_one("SELECT id FROM state.entities WHERE id = %s", (entity_id,))
+    if not entity:
+        return jsonify({"error": "Entity not found"}), 404
+
+    # Handle file upload
+    if "file" in request.files:
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+
+        # Validate file type
+        allowed_extensions = {"png", "jpg", "jpeg", "gif", "webp"}
+        ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+        if ext not in allowed_extensions:
+            return jsonify({"error": f"Invalid file type. Allowed: {allowed_extensions}"}), 400
+
+        # Read and encode as base64 data URL
+        content = file.read()
+        if len(content) > 2 * 1024 * 1024:  # 2MB limit
+            return jsonify({"error": "File too large. Max 2MB"}), 400
+
+        mime_type = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+        data_url = f"data:{mime_type};base64,{base64.b64encode(content).decode()}"
+
+        row = execute_one(
+            "UPDATE state.entities SET image_url = %s, updated_at = now() WHERE id = %s RETURNING *",
+            (data_url, entity_id),
+        )
+        return jsonify(_serialize(row))
+
+    # Handle URL-based image
+    data = request.get_json(silent=True) or {}
+    if data.get("image_url"):
+        row = execute_one(
+            "UPDATE state.entities SET image_url = %s, updated_at = now() WHERE id = %s RETURNING *",
+            (data["image_url"], entity_id),
+        )
+        return jsonify(_serialize(row))
+
+    return jsonify({"error": "No image provided"}), 400
+
+
+@app.route("/api/entities/<entity_id>/image", methods=["DELETE"])
+def api_entity_image_delete(entity_id):
+    """Remove entity portrait"""
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        "UPDATE state.entities SET image_url = NULL, updated_at = now() WHERE id = %s RETURNING *",
+        (entity_id,),
+    )
+    if not row:
+        return jsonify({"error": "Entity not found"}), 404
+    return jsonify(_serialize(row))
+
+
+# ==================== Session Characters Management ====================
+
+
+@app.route("/api/sessions/<session_id>/characters")
+def api_session_characters(session_id):
+    """Get all characters in a session with their status"""
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        """
+        SELECT
+            sc.id as session_char_id,
+            sc.status as session_status,
+            sc.joined_at,
+            sc.left_at,
+            sc.death_round,
+            sc.death_details,
+            sc.revived_at,
+            e.*
+        FROM state.session_characters sc
+        JOIN state.entities e ON sc.entity_id = e.id
+        WHERE sc.session_id = %s
+        ORDER BY sc.joined_at
+        """,
+        (session_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/sessions/<session_id>/characters", methods=["POST"])
+def api_session_character_add(session_id):
+    """Add a character to a session"""
+    from shared.db.connection import execute_one, execute_query
+
+    data = request.get_json(silent=True) or {}
+    entity_id = data.get("entity_id")
+    if not entity_id:
+        return jsonify({"error": "entity_id required"}), 400
+
+    # Check if session exists and get campaign_id
+    session = execute_one(
+        "SELECT id, campaign_id FROM state.sessions WHERE id = %s",
+        (session_id,),
+    )
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    # Check if entity exists and belongs to this campaign
+    entity = execute_one(
+        "SELECT id, name, campaign_id FROM state.entities WHERE id = %s AND status = 'ACTIVE'",
+        (entity_id,),
+    )
+    if not entity:
+        return jsonify({"error": "Entity not found or inactive"}), 404
+    if str(entity["campaign_id"]) != str(session["campaign_id"]):
+        return jsonify({"error": "Entity does not belong to this campaign"}), 400
+
+    # Check if entity has unrevived deaths in this campaign
+    deaths = execute_query(
+        """
+        SELECT id FROM state.entity_death_history
+        WHERE entity_id = %s AND campaign_id = %s AND is_revived = FALSE
+        """,
+        (entity_id, session["campaign_id"]),
+    )
+    if deaths:
+        return jsonify({
+            "error": "Character has died in this campaign and must be revived before joining a new session",
+            "can_revive": True,
+        }), 400
+
+    # Check if already in session
+    existing = execute_one(
+        "SELECT id, status FROM state.session_characters WHERE session_id = %s AND entity_id = %s",
+        (session_id, entity_id),
+    )
+    if existing:
+        if existing["status"] == "ACTIVE":
+            return jsonify({"error": "Character already in session"}), 400
+        # Reactivate if previously removed
+        row = execute_one(
+            """
+            UPDATE state.session_characters
+            SET status = 'ACTIVE', left_at = NULL, updated_at = now()
+            WHERE id = %s
+            RETURNING *
+            """,
+            (existing["id"],),
+        )
+        return jsonify(_serialize(row))
+
+    # Add to session
+    row = execute_one(
+        """
+        INSERT INTO state.session_characters (session_id, entity_id, status)
+        VALUES (%s, %s, 'ACTIVE')
+        RETURNING *
+        """,
+        (session_id, entity_id),
+    )
+    return jsonify(_serialize(row)), 201
+
+
+@app.route("/api/sessions/<session_id>/characters/<entity_id>", methods=["PUT"])
+def api_session_character_update(session_id, entity_id):
+    """Update character status in session (mark as dead, removed, etc.)"""
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    new_status = data.get("status")
+    if new_status not in {"ACTIVE", "DEAD", "REMOVED", "RETIRED"}:
+        return jsonify({"error": "Invalid status"}), 400
+
+    # Get current record
+    current = execute_one(
+        "SELECT * FROM state.session_characters WHERE session_id = %s AND entity_id = %s",
+        (session_id, entity_id),
+    )
+    if not current:
+        return jsonify({"error": "Character not in session"}), 404
+
+    # Handle death
+    if new_status == "DEAD" and current["status"] != "DEAD":
+        # Record death in history
+        session = execute_one("SELECT campaign_id FROM state.sessions WHERE id = %s", (session_id,))
+        execute_one(
+            """
+            INSERT INTO state.entity_death_history
+                (entity_id, campaign_id, session_id, death_type, death_details)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                entity_id,
+                session["campaign_id"],
+                session_id,
+                data.get("death_type", "OTHER"),
+                json.dumps(data.get("death_details", {})),
+            ),
+        )
+
+    # Update session character record
+    row = execute_one(
+        """
+        UPDATE state.session_characters
+        SET status = %s,
+            death_round = %s,
+            death_details = %s,
+            left_at = CASE WHEN %s IN ('REMOVED', 'RETIRED') THEN now() ELSE left_at END,
+            updated_at = now()
+        WHERE session_id = %s AND entity_id = %s
+        RETURNING *
+        """,
+        (
+            new_status,
+            data.get("death_round"),
+            json.dumps(data.get("death_details", {})) if data.get("death_details") else None,
+            new_status,
+            session_id,
+            entity_id,
+        ),
+    )
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/sessions/<session_id>/characters/<entity_id>/revive", methods=["POST"])
+def api_session_character_revive(session_id, entity_id):
+    """Revive a dead character"""
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    revive_method = data.get("method", "STORY")  # SPELL, DIVINE_INTERVENTION, STORY, etc.
+
+    # Check current status
+    current = execute_one(
+        "SELECT * FROM state.session_characters WHERE session_id = %s AND entity_id = %s",
+        (session_id, entity_id),
+    )
+    if not current:
+        return jsonify({"error": "Character not in session"}), 404
+    if current["status"] != "DEAD":
+        return jsonify({"error": "Character is not dead"}), 400
+
+    # Get session for campaign_id
+    session = execute_one("SELECT campaign_id FROM state.sessions WHERE id = %s", (session_id,))
+
+    # Update death history to mark as revived
+    execute_one(
+        """
+        UPDATE state.entity_death_history
+        SET is_revived = TRUE,
+            revived_in_session_id = %s,
+            revive_method = %s,
+            revive_details = %s,
+            revived_at = now()
+        WHERE entity_id = %s
+          AND campaign_id = %s
+          AND is_revived = FALSE
+        """,
+        (
+            session_id,
+            revive_method,
+            json.dumps(data.get("revive_details", {})),
+            entity_id,
+            session["campaign_id"],
+        ),
+    )
+
+    # Update session character
+    row = execute_one(
+        """
+        UPDATE state.session_characters
+        SET status = 'ACTIVE',
+            revived_at = now(),
+            revive_details = %s,
+            updated_at = now()
+        WHERE session_id = %s AND entity_id = %s
+        RETURNING *
+        """,
+        (json.dumps(data.get("revive_details", {})), session_id, entity_id),
+    )
+
+    # Restore entity HP to 1 (or specified amount)
+    restore_hp = data.get("restore_hp", 1)
+    execute_one(
+        "UPDATE state.entities SET hp_current = LEAST(%s, hp_max), updated_at = now() WHERE id = %s",
+        (restore_hp, entity_id),
+    )
+
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/sessions/<session_id>/characters/<entity_id>", methods=["DELETE"])
+def api_session_character_remove(session_id, entity_id):
+    """Remove a character from a session"""
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        """
+        UPDATE state.session_characters
+        SET status = 'REMOVED', left_at = now(), updated_at = now()
+        WHERE session_id = %s AND entity_id = %s AND status = 'ACTIVE'
+        RETURNING *
+        """,
+        (session_id, entity_id),
+    )
+    if not row:
+        return jsonify({"error": "Character not in session or already removed"}), 404
+    return jsonify({"success": True, "record": _serialize(row)})
+
+
+@app.route("/api/campaigns/<campaign_id>/available_characters")
+def api_available_characters(campaign_id):
+    """Get characters available to join sessions (not permanently dead)"""
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        """
+        SELECT e.*,
+            CASE WHEN EXISTS (
+                SELECT 1 FROM state.entity_death_history edh
+                WHERE edh.entity_id = e.id
+                  AND edh.campaign_id = %s
+                  AND edh.is_revived = FALSE
+            ) THEN TRUE ELSE FALSE END as is_dead_in_campaign
+        FROM state.entities e
+        WHERE e.campaign_id = %s
+          AND e.status = 'ACTIVE'
+          AND e.entity_type IN ('PC', 'NPC')
+        ORDER BY e.name
+        """,
+        (campaign_id, campaign_id),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
 @app.route("/api/campaigns/<campaign_id>/characters/generate", methods=["POST"])
 def api_generate_character(campaign_id):
     from services.llm.adapter import LLMAdapter
 
     data = request.get_json(silent=True) or {}
     concept = data.get("concept", "A balanced adventurer")
+    populate_form = data.get("populate_form", False)
+
+    # Enhanced schema with full character sheet structure
     schema = {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
             "entity_type": {"type": "string", "enum": ["PC", "NPC"]},
+            "controlled_by": {"type": "string", "enum": ["PLAYER", "AI_NPC", "GM"]},
             "hp_max": {"type": "integer", "minimum": 1},
+            "public_sheet": {
+                "type": "object",
+                "properties": {
+                    "race": {"type": "string"},
+                    "class": {"type": "string"},
+                    "level": {"type": "integer", "minimum": 1, "maximum": 20},
+                    "background": {"type": "string"},
+                    "attributes": {
+                        "type": "object",
+                        "properties": {
+                            "strength": {"type": "integer", "minimum": 1, "maximum": 30},
+                            "dexterity": {"type": "integer", "minimum": 1, "maximum": 30},
+                            "constitution": {"type": "integer", "minimum": 1, "maximum": 30},
+                            "intelligence": {"type": "integer", "minimum": 1, "maximum": 30},
+                            "wisdom": {"type": "integer", "minimum": 1, "maximum": 30},
+                            "charisma": {"type": "integer", "minimum": 1, "maximum": 30},
+                        },
+                        "required": ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"],
+                        "additionalProperties": False,
+                    },
+                    "armor_class": {"type": "integer", "minimum": 1},
+                    "speed": {"type": "integer", "minimum": 0},
+                    "initiative_bonus": {"type": "integer"},
+                    "skills": {"type": "array", "items": {"type": "string"}},
+                    "languages": {"type": "array", "items": {"type": "string"}},
+                    "abilities": {"type": "string"},
+                    "actions": {"type": "string"},
+                    "weapons": {"type": "string"},
+                    "armor": {"type": "string"},
+                    "equipment": {"type": "string"},
+                    "gold": {"type": "integer", "minimum": 0},
+                    "personality": {
+                        "type": "object",
+                        "properties": {
+                            "traits": {"type": "string"},
+                            "ideals": {"type": "string"},
+                            "bonds": {"type": "string"},
+                            "flaws": {"type": "string"},
+                            "goals": {"type": "string"},
+                        },
+                        "required": ["traits", "ideals", "bonds", "flaws", "goals"],
+                        "additionalProperties": False,
+                    },
+                    "backstory": {"type": "string"},
+                    "allies": {"type": "string"},
+                    "enemies": {"type": "string"},
+                },
+                "required": ["race", "class", "level", "background", "attributes", "armor_class", "speed", "skills", "languages", "personality", "backstory"],
+                "additionalProperties": False,
+            },
+            "secret_sheet": {
+                "type": "object",
+                "properties": {
+                    "secrets": {"type": "string"},
+                    "plot_hooks": {"type": "string"},
+                    "balance_notes": {"type": "string"},
+                },
+                "required": ["secrets", "plot_hooks", "balance_notes"],
+                "additionalProperties": False,
+            },
+            "tags": {"type": "array", "items": {"type": "string"}},
             "ac": {"type": "integer", "minimum": 1},
             "speed": {"type": "integer", "minimum": 0},
-            "public_sheet": {"type": "object"},
-            "tags": {"type": "array", "items": {"type": "string"}},
         },
-        "required": ["name", "entity_type", "hp_max", "ac", "speed", "public_sheet", "tags"],
+        "required": ["name", "entity_type", "controlled_by", "hp_max", "public_sheet", "secret_sheet", "tags", "ac", "speed"],
         "additionalProperties": False,
     }
+
+    system_prompt = """You are a tabletop RPG character generator. Create detailed, balanced characters with interesting backstories and personalities.
+Generate realistic stats (typically 8-18 for attributes), appropriate equipment for the class and level, and compelling personality traits.
+Make the character feel like a real person with motivations, flaws, and connections to the world."""
+
+    user_prompt = f"""Generate a complete character based on this concept: {concept}
+
+Guidelines:
+- Use standard fantasy RPG conventions (D&D-style)
+- Attributes should follow 4d6-drop-lowest distribution (typically 8-18)
+- HP should be appropriate for class and level (e.g., level 1 fighter: 10-12 HP)
+- AC (armor class) should be 10-18 depending on armor worn
+- Speed is typically 30 for medium creatures
+- Include 2-4 proficient skills appropriate to the class
+- Create a compelling but concise backstory (2-3 sentences)
+- Add interesting personality traits, ideals, bonds, and flaws
+- Include at least one secret or plot hook for the DM
+- Equipment should be appropriate for a starting character of that class
+- Note: ac and speed must be at the TOP LEVEL of the JSON, not inside public_sheet"""
+
     llm = LLMAdapter(model="gpt-4o-mini", campaign_id=uuid.UUID(campaign_id), role="dm")
-    generated = llm.generate_structured(
-        "Generate a JSON tabletop character sheet.",
-        f"Concept: {concept}. Keep numeric values modest.",
-        response_schema=schema,
-    )
+    generated = llm.generate_structured(system_prompt, user_prompt, response_schema=schema)
+
     if generated.get("error"):
         return jsonify(generated), 400
+
+    # Add derived fields
     generated["hp_current"] = generated["hp_max"]
-    generated["controlled_by"] = "HUMAN"
+    sheet = generated.get("public_sheet", {})
+    sheet["x"] = 0
+    sheet["y"] = 0
+
+    # If populate_form is true, return the character without saving
+    if populate_form:
+        return jsonify({"character": generated, "message": "Character generated. Review and create."}), 200
+
+    # Otherwise create the entity in the database
     created = _create_entity_record(campaign_id, generated)
     return jsonify(_serialize(created)), 201
 
@@ -1398,6 +1902,378 @@ def handle_submit_intent(data):
 
     except Exception as e:
         emit("error", {"message": str(e)})
+
+
+# =============================================================================
+# Story State Board Endpoints
+# =============================================================================
+
+
+@app.route("/api/sessions/<session_id>/story_state")
+def api_get_story_state(session_id):
+    """Get the current story state for a session"""
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        """
+        SELECT ss.*, s.id as session_id, s.status as session_status
+        FROM state.story_state ss
+        JOIN state.sessions s ON ss.session_id = s.id
+        WHERE ss.session_id = %s
+        """,
+        (session_id,),
+    )
+    if not row:
+        return jsonify({"error": "Story state not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/sessions/<session_id>/story_state", methods=["PUT"])
+def api_update_story_state(session_id):
+    """Update the story state for a session"""
+    from shared.db.connection import execute_one, transaction
+
+    data = request.get_json(silent=True) or {}
+
+    with transaction() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Get existing story state
+        cur.execute("SELECT * FROM state.story_state WHERE session_id = %s", (session_id,))
+        existing = cur.fetchone()
+        if not existing:
+            return jsonify({"error": "Story state not found"}), 404
+
+        # Build update query dynamically
+        allowed_fields = [
+            "current_location", "location_details", "game_time", "game_time_details",
+            "active_npcs", "party_status", "active_quests", "recent_events",
+            "plot_threads", "party_goals", "key_items", "party_resources",
+            "dm_notes", "dm_private_notes"
+        ]
+        updates = []
+        values = []
+        for field in allowed_fields:
+            if field in data:
+                updates.append(f"{field} = %s")
+                val = data[field]
+                if isinstance(val, (dict, list)):
+                    values.append(json.dumps(val))
+                else:
+                    values.append(val)
+
+        if not updates:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        updates.append("updated_at = now()")
+        if data.get("updated_by"):
+            updates.append("updated_by = %s")
+            values.append(data["updated_by"])
+
+        values.append(session_id)
+        cur.execute(
+            f"UPDATE state.story_state SET {', '.join(updates)} WHERE session_id = %s RETURNING *",
+            values,
+        )
+        updated = cur.fetchone()
+
+        # Log change to history
+        change_type = data.get("change_type", "OTHER")
+        cur.execute(
+            """
+            INSERT INTO state.story_state_history
+            (story_state_id, session_id, state_snapshot, change_type, change_description, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                str(updated["id"]),
+                session_id,
+                json.dumps(_serialize(updated)),
+                change_type,
+                data.get("change_description", ""),
+                data.get("updated_by"),
+            ),
+        )
+
+    return jsonify(_serialize(updated))
+
+
+@app.route("/api/sessions/<session_id>/story_state/history")
+def api_story_state_history(session_id):
+    """Get history of story state changes for a session"""
+    from shared.db.connection import execute_query
+
+    limit = request.args.get("limit", 50, type=int)
+    offset = request.args.get("offset", 0, type=int)
+
+    rows = execute_query(
+        """
+        SELECT ssh.*, p.display_name as updated_by_name
+        FROM state.story_state_history ssh
+        LEFT JOIN state.principals p ON ssh.created_by = p.id
+        WHERE ssh.session_id = %s
+        ORDER BY ssh.created_at DESC
+        LIMIT %s OFFSET %s
+        """,
+        (session_id, limit, offset),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/sessions/<session_id>/story_state/add_event", methods=["POST"])
+def api_add_story_event(session_id):
+    """Add a new event to the story state recent_events"""
+    from shared.db.connection import execute_one
+    from datetime import datetime
+
+    data = request.get_json(silent=True) or {}
+    description = data.get("description", "").strip()
+    if not description:
+        return jsonify({"error": "description is required"}), 400
+
+    importance = data.get("importance", "normal")
+
+    # Get current story state
+    row = execute_one("SELECT * FROM state.story_state WHERE session_id = %s", (session_id,))
+    if not row:
+        return jsonify({"error": "Story state not found"}), 404
+
+    # Add event to recent_events array
+    recent_events = row.get("recent_events") or []
+    new_event = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "description": description,
+        "importance": importance,
+    }
+    recent_events.append(new_event)
+
+    # Keep only last 100 events
+    recent_events = recent_events[-100:]
+
+    updated = execute_one(
+        """
+        UPDATE state.story_state
+        SET recent_events = %s, updated_at = now()
+        WHERE session_id = %s
+        RETURNING *
+        """,
+        (json.dumps(recent_events), session_id),
+    )
+    return jsonify(_serialize(updated))
+
+
+# =============================================================================
+# Session Archive and History Endpoints
+# =============================================================================
+
+
+@app.route("/api/campaigns/<campaign_id>/session_archives")
+def api_session_archives(campaign_id):
+    """Get archived sessions for a campaign"""
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        """
+        SELECT id, original_session_id, campaign_id, session_name, session_number,
+               started_at, ended_at, session_summary, archived_at, archive_reason,
+               jsonb_array_length(COALESCE(chat_history, '[]'::jsonb)) as chat_count
+        FROM state.session_archives
+        WHERE campaign_id = %s
+        ORDER BY archived_at DESC
+        """,
+        (campaign_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/session_archives/<archive_id>")
+def api_session_archive_detail(archive_id):
+    """Get full details of an archived session including chat history"""
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        "SELECT * FROM state.session_archives WHERE id = %s",
+        (archive_id,),
+    )
+    if not row:
+        return jsonify({"error": "Archive not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/session_archives/<archive_id>", methods=["DELETE"])
+def api_delete_session_archive(archive_id):
+    """Permanently delete an archived session"""
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        "DELETE FROM state.session_archives WHERE id = %s RETURNING id",
+        (archive_id,),
+    )
+    if not row:
+        return jsonify({"error": "Archive not found"}), 404
+    return jsonify({"success": True, "deleted_id": str(row["id"])})
+
+
+@app.route("/api/sessions/<session_id>/chat_history")
+def api_session_chat_history(session_id):
+    """Get chat history for a session from ledger events"""
+    from shared.db.connection import execute_query
+
+    limit = request.args.get("limit", 100, type=int)
+    before_seq = request.args.get("before_seq")
+
+    base_query = """
+        SELECT sl.seq_id, sl.event_id, sl.type as event_type, sl.payload,
+               sl.sender_principal_id as principal_id, sl.sender_entity_id,
+               sl.created_at, e.name as speaker_name, p.display_name as principal_name
+        FROM ledger.session_ledger sl
+        LEFT JOIN state.entities e ON sl.sender_entity_id = e.id
+        LEFT JOIN state.principals p ON sl.sender_principal_id = p.id
+        WHERE sl.session_id = %s
+          AND sl.type IN ('CHAT', 'ACTION', 'NARRATION', 'SYSTEM', 'GM_WHISPER')
+    """
+
+    if before_seq:
+        query = base_query + " AND sl.seq_id < %s ORDER BY sl.seq_id DESC LIMIT %s"
+        rows = execute_query(query, (session_id, int(before_seq), limit))
+    else:
+        query = base_query + " ORDER BY sl.seq_id DESC LIMIT %s"
+        rows = execute_query(query, (session_id, limit))
+
+    # Return in chronological order
+    return jsonify(list(reversed([_serialize(r) for r in rows])))
+
+
+@app.route("/api/sessions/<session_id>/resume_data")
+def api_session_resume_data(session_id):
+    """Get session state for resuming play - returns story state and recent chat"""
+    from shared.db.connection import execute_query, execute_one
+
+    # Get session info
+    session = execute_one(
+        """
+        SELECT s.*, c.name as campaign_name
+        FROM state.sessions s
+        JOIN state.campaigns c ON s.campaign_id = c.id
+        WHERE s.id = %s
+        """,
+        (session_id,),
+    )
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    # Get story state
+    story_state = execute_one(
+        "SELECT * FROM state.story_state WHERE session_id = %s",
+        (session_id,),
+    )
+
+    # Get recent chat (last 50 messages)
+    chat_history = execute_query(
+        """
+        SELECT sl.seq_id, sl.event_id, sl.type as event_type, sl.payload,
+               sl.sender_principal_id as principal_id, sl.sender_entity_id,
+               sl.created_at, e.name as speaker_name, p.display_name as principal_name
+        FROM ledger.session_ledger sl
+        LEFT JOIN state.entities e ON sl.sender_entity_id = e.id
+        LEFT JOIN state.principals p ON sl.sender_principal_id = p.id
+        WHERE sl.session_id = %s
+          AND sl.type IN ('CHAT', 'ACTION', 'NARRATION', 'SYSTEM', 'GM_WHISPER')
+        ORDER BY sl.seq_id DESC
+        LIMIT 50
+        """,
+        (session_id,),
+    )
+
+    # Get party members
+    party = execute_query(
+        """
+        SELECT sc.*, e.name, e.hp_current, e.hp_max, e.image_url,
+               e.public_sheet
+        FROM state.session_characters sc
+        JOIN state.entities e ON sc.entity_id = e.id
+        WHERE sc.session_id = %s AND sc.status IN ('ACTIVE', 'DEAD')
+        ORDER BY e.name
+        """,
+        (session_id,),
+    )
+
+    return jsonify({
+        "session": _serialize(session),
+        "story_state": _serialize(story_state) if story_state else None,
+        "chat_history": list(reversed([_serialize(r) for r in chat_history])),
+        "party": [_serialize(r) for r in party],
+    })
+
+
+@app.route("/api/sessions/<session_id>/archive", methods=["POST"])
+def api_archive_session(session_id):
+    """Manually archive a session (without deleting it)"""
+    from shared.db.connection import execute_one, execute_query, transaction
+
+    data = request.get_json(silent=True) or {}
+
+    with transaction() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Get session
+        cur.execute("SELECT * FROM state.sessions WHERE id = %s", (session_id,))
+        session = cur.fetchone()
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        # Gather chat history
+        cur.execute(
+            """
+            SELECT sl.created_at, sl.type as event_type, sl.payload, sl.sender_principal_id as principal_id
+            FROM ledger.session_ledger sl
+            WHERE sl.session_id = %s
+              AND sl.type IN ('CHAT', 'ACTION', 'NARRATION', 'SYSTEM')
+            ORDER BY sl.created_at
+            """,
+            (session_id,),
+        )
+        chat_rows = cur.fetchall()
+        chat_history = [_serialize(r) for r in chat_rows]
+
+        # Get story state
+        cur.execute("SELECT * FROM state.story_state WHERE session_id = %s", (session_id,))
+        story_row = cur.fetchone()
+        story_snapshot = _serialize(story_row) if story_row else {}
+
+        # Create archive
+        cur.execute(
+            """
+            INSERT INTO state.session_archives
+            (original_session_id, campaign_id, session_name, session_number,
+             started_at, ended_at, chat_history, final_story_state,
+             session_summary, archive_reason, archived_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                session_id,
+                str(session["campaign_id"]),
+                session.get("name"),
+                session.get("session_number"),
+                session.get("started_at"),
+                session.get("ended_at"),
+                json.dumps(chat_history),
+                json.dumps(story_snapshot),
+                data.get("summary", ""),
+                data.get("reason", "COMPLETED"),
+                data.get("archived_by"),
+            ),
+        )
+        archive = cur.fetchone()
+
+        # Mark session as archived
+        cur.execute(
+            "UPDATE state.sessions SET is_archived = TRUE WHERE id = %s",
+            (session_id,),
+        )
+
+    return jsonify(_serialize(archive))
 
 
 def _serialize(obj):
