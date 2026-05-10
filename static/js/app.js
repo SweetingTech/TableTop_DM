@@ -115,7 +115,7 @@ const App = {
             this.renderEntityList();
             // Push new positions to the 3D renderer if it's already up.
             if (this._mapRenderer && this.mapContext) {
-                this._mapRenderer.setEntities(this.entities);
+                this._mapRenderer.setEntities(this.entities, this.controlledEntities);
                 // POI fog-of-war re-evaluates whenever the player moves.
                 this._refreshDiscoveredPOIs();
             }
@@ -310,11 +310,18 @@ const App = {
             console.error('Failed to load session:', e);
         }
 
-        // Compute which entities this principal controls
+        // Compute which entities this principal controls.
+        // GMs can drive any PC in the campaign (canControl returns true for them
+        // unconditionally on the server). Mirror that here so the renderer's
+        // halo + movement-target logic treats every PC as "yours" when you're
+        // the GM. Regular players still only see halos on the PCs explicitly
+        // tied to their principal_id.
+        const myMember = (this.members || []).find(m => m.principal_id === this.principalId);
+        const isGM = myMember?.role === 'GM';
         this.controlledEntities = this.entities
-            .filter(e => e.controller_principal_id === this.principalId)
+            .filter(e => isGM ? e.entity_type === 'PC' : e.controller_principal_id === this.principalId)
             .map(e => e.id);
-        console.log('Controlled entities:', this.controlledEntities.length);
+        console.log('Controlled entities:', this.controlledEntities.length, isGM ? '(GM)' : '');
 
         // Re-render entity list to show controlled indicators
         this.renderEntityList();
@@ -1035,6 +1042,16 @@ const App = {
 
     async _tryMoveTo(gx, gy) {
         if (this.mapContext?.mapKind && this.mapContext.mapKind !== 'ROOM') return;
+        // If nothing selected but the player can move a PC on the board,
+        // auto-select it (covers GM mode where controlledEntities is empty).
+        if (!this.selectedEntity) {
+            const pc = (this.entities || []).find(e =>
+                e.entity_type === 'PC'
+                && e.public_sheet?.x !== undefined
+                && this.canControl(e.id)
+            );
+            if (pc) this.selectedEntity = pc;
+        }
         if (!this.selectedEntity) {
             this.addEvent({type: 'SYSTEM', payload: {message: 'Select your character first'}});
             return;
@@ -1055,12 +1072,25 @@ const App = {
 
     async _tryStep(dx, dy) {
         if (this.mapContext?.mapKind && this.mapContext.mapKind !== 'ROOM') return;
-        // Default movement target = the player's controlled PC (not arbitrary
-        // selected entity), so WASD always moves you.
-        const own = (this.entities || []).find(e =>
+        // Default movement target = the player's controlled PC, OR if the
+        // local player is the GM (no entity directly tied to them), the
+        // currently-selected entity, OR the first PC on the map.
+        let own = (this.entities || []).find(e =>
             this.controlledEntities?.includes(e.id) && e.public_sheet?.x !== undefined
         );
+        if (!own && this.selectedEntity && this.canControl(this.selectedEntity.id)
+                 && this.selectedEntity.public_sheet?.x !== undefined) {
+            own = this.selectedEntity;
+        }
+        if (!own) {
+            // Last resort: GM gets to push the first PC on the map.
+            own = (this.entities || []).find(e =>
+                e.entity_type === 'PC' && e.public_sheet?.x !== undefined && this.canControl(e.id)
+            );
+        }
         if (!own) return;
+        // Make subsequent WASDs continue from the same actor.
+        this.selectedEntity = own;
         const cx = own.public_sheet.x;
         const cy = own.public_sheet.y;
         await this._tryMoveTo(cx + dx, cy + dy);
@@ -1103,7 +1133,7 @@ const App = {
             // Only show entities on the map that hosts them. Right now entities
             // don't carry a current_map_id — show on the deepest (Room) only.
             const showEntities = (data.map.kind || 'ROOM') === 'ROOM';
-            r.setEntities(showEntities ? (this.entities || []) : []);
+            r.setEntities(showEntities ? (this.entities || []) : [], this.controlledEntities);
             this.mapContext = {
                 mapId: mapId,
                 mapKind: data.map.kind,

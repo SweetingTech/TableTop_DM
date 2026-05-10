@@ -922,6 +922,81 @@ def api_event_audience():
     return jsonify({"audience": audience})
 
 
+@app.route("/api/decorations/<deco_id>/generate_image", methods=["POST"])
+def api_decoration_generate_image(deco_id):
+    """Generate art for a decoration via the campaign's configured image
+    provider (OpenRouter / OpenAI / etc). Same flow as POI generation."""
+    from shared.db.connection import execute_one
+    from services.domain.maps.image_gen import generate_poi_image, ImageGenError
+
+    deco = execute_one(
+        "SELECT d.*, m.campaign_id FROM state.map_decorations d "
+        "JOIN state.maps m ON d.map_id = m.id WHERE d.id = %s",
+        (deco_id,),
+    )
+    if not deco:
+        return jsonify({"error": "decoration not found"}), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        url = generate_poi_image(
+            campaign_id=deco["campaign_id"],
+            name=deco["kind"].title(),
+            kind=deco["kind"],
+            description=None,
+            style_hint=body.get("style_hint")
+                or "PS1-era pixel art object on transparent background, top-down, crisp pixels, no antialiasing",
+        )
+    except ImageGenError as e:
+        return jsonify({"error": str(e)}), 502
+    except Exception as e:
+        return jsonify({"error": f"Image generation crashed: {e}"}), 500
+    row = execute_one(
+        "UPDATE state.map_decorations SET image_url = %s WHERE id = %s RETURNING *",
+        (url, deco_id),
+    )
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/campaigns/<campaign_id>/test_image_gen", methods=["POST"])
+def api_test_image_gen(campaign_id):
+    """One-shot smoke test for the campaign's configured image provider.
+    Used by the AI Settings 'Test Image Gen' button. Doesn't write anything;
+    returns the raw provider response (URL or data:URL).
+
+    Body (optional): {"prompt": "..."} to override the default test prompt.
+    """
+    from services.domain.maps.image_gen import (
+        generate_poi_image, ImageGenError, _campaign_image_config
+    )
+
+    body = request.get_json(silent=True) or {}
+    cfg = _campaign_image_config(uuid.UUID(campaign_id))
+    if not cfg["api_key"]:
+        return jsonify({
+            "ok": False,
+            "error": f"No API key configured for image provider '{cfg['provider']}'. Save one in AI Settings → Image Generation."
+        }), 400
+    try:
+        url = generate_poi_image(
+            campaign_id=uuid.UUID(campaign_id),
+            name=body.get("prompt") or "Smoke test object",
+            kind="GENERIC",
+            description="A small wooden chest",
+            style_hint=body.get("style_hint") or "PS1-era pixel art, crisp pixels",
+        )
+    except ImageGenError as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"crashed: {e}"}), 500
+    return jsonify({
+        "ok": True,
+        "provider": cfg["provider"],
+        "model": cfg["model"],
+        "image_url_preview": url[:80] + "…" if len(url) > 80 else url,
+        "image_url": url,  # full URL/data-URL so the UI can display it
+    })
+
+
 @app.route("/api/pois/<poi_id>/generate_image", methods=["POST"])
 def api_poi_generate_image(poi_id):
     """Generate an image for a POI via the campaign's configured image provider.
@@ -1229,6 +1304,44 @@ def api_export(session_id):
         return jsonify({"error": str(e)}), 500
 
 
+def _ensure_default_human_principal():
+    """Return the id of a HUMAN principal usable as the default GM, creating
+    one on first call. Without a HUMAN member tied to a campaign, the game
+    UI can't elect a principal_id and click/WASD/attack all silently no-op
+    (canControl returns false for every entity)."""
+    from shared.db.connection import execute_one
+
+    existing = execute_one(
+        "SELECT id FROM state.principals WHERE auth_subject='local:player' AND is_active = true LIMIT 1"
+    )
+    if existing:
+        return existing["id"]
+    row = execute_one(
+        """
+        INSERT INTO state.principals (principal_type, display_name, auth_subject, is_active)
+        VALUES ('HUMAN', 'LocalPlayer', 'local:player', true)
+        RETURNING id
+        """,
+    )
+    return row["id"]
+
+
+def _attach_default_gm(campaign_id):
+    """Add the default HUMAN principal as GM of a campaign (idempotent)."""
+    from shared.db.connection import execute_one
+
+    pid = _ensure_default_human_principal()
+    execute_one(
+        """
+        INSERT INTO state.campaign_members (campaign_id, principal_id, role)
+        VALUES (%s, %s, 'GM')
+        ON CONFLICT (campaign_id, principal_id) DO NOTHING
+        RETURNING principal_id
+        """,
+        (campaign_id, str(pid)),
+    )
+
+
 @app.route("/api/campaigns", methods=["POST"])
 def api_campaigns_create():
     from shared.db.connection import execute_one
@@ -1246,6 +1359,12 @@ def api_campaigns_create():
         """,
         (data["slug"], data["name"], data["status"], data["mode"]),
     )
+    # Tie the default LocalPlayer human to the new campaign as GM. Without this,
+    # the game UI has no principal to act as, so click/WASD/attack all no-op.
+    try:
+        _attach_default_gm(str(row["id"]))
+    except Exception:
+        app.logger.exception("failed to attach default GM to campaign %s", row["id"])
     return jsonify(_serialize(row)), 201
 
 

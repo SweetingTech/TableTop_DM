@@ -285,29 +285,72 @@ class MapRenderer {
         this._render();
     }
 
-    /** Render entity sprites at their public_sheet (x, y) positions. */
-    setEntities(entities) {
+    /** Render entity sprites at their public_sheet (x, y) positions.
+     * controlledIds is a set/array of entity ids the local player controls;
+     * those tokens get a glowing yellow ring so the player can spot themselves
+     * at a glance. */
+    setEntities(entities, controlledIds) {
+        const owned = new Set((controlledIds || []).map(String));
         const seen = new Set();
         for (const e of entities) {
             if (e.entity_type === 'LOCATION') continue;
             const sheet = e.public_sheet || {};
             if (sheet.x === undefined || sheet.y === undefined) continue;
             seen.add(e.id);
+            const isOwned = owned.has(String(e.id));
             let sprite = this.entitySprites.get(e.id);
+            // Rebuild the sprite if its owned-state flipped (different texture).
+            if (sprite && sprite.userData?.isOwned !== isOwned) {
+                this.scene.remove(sprite);
+                sprite.material.dispose();
+                this.entitySprites.delete(e.id);
+                sprite = null;
+            }
             if (!sprite) {
-                sprite = this._buildSprite(e);
+                sprite = this._buildSprite(e, isOwned);
+                sprite.userData = { isOwned };
                 this.scene.add(sprite);
                 this.entitySprites.set(e.id, sprite);
             }
             const [wx, wz] = this._gridToWorld(sheet.x, sheet.y);
-            sprite.position.set(wx, 0.5, wz);
+            sprite.position.set(wx, 0.55, wz);
+
+            // Floor halo (visible from above) — narrower so the sprite mostly
+            // hides it from the side view but you can still see the ring around
+            // the base.
+            const haloKey = `__halo_${e.id}`;
+            const existingHalo = this[haloKey];
+            if (isOwned && !existingHalo) {
+                const ring = new THREE.Mesh(
+                    new THREE.RingGeometry(0.55, 0.7, 32),
+                    new THREE.MeshBasicMaterial({ color: 0xffd54f, side: THREE.DoubleSide, transparent: true, opacity: 0.95 }),
+                );
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.set(wx, 0.06, wz);
+                this.scene.add(ring);
+                this[haloKey] = ring;
+            } else if (isOwned && existingHalo) {
+                existingHalo.position.set(wx, 0.06, wz);
+            } else if (!isOwned && existingHalo) {
+                this.scene.remove(existingHalo);
+                existingHalo.material.dispose();
+                existingHalo.geometry.dispose();
+                this[haloKey] = null;
+            }
         }
-        // Remove sprites for entities that disappeared
+        // Remove sprites + halos for entities that disappeared
         for (const [id, sprite] of this.entitySprites) {
             if (!seen.has(id)) {
                 this.scene.remove(sprite);
                 sprite.material.dispose();
                 this.entitySprites.delete(id);
+                const halo = this[`__halo_${id}`];
+                if (halo) {
+                    this.scene.remove(halo);
+                    halo.material.dispose();
+                    halo.geometry.dispose();
+                    this[`__halo_${id}`] = null;
+                }
             }
         }
         this._render();
@@ -519,41 +562,48 @@ class MapRenderer {
         return tex;
     }
 
-    _buildSprite(entity) {
+    _buildSprite(entity, isOwned = false) {
         const letter = (entity.name || '?')[0].toUpperCase();
         const color = ENTITY_COLORS[entity.entity_type] || 0x888888;
-        const key = `${letter}|${color.toString(16)}`;
+        const key = `${letter}|${color.toString(16)}|${isOwned ? '1' : '0'}`;
         let tex = this._spriteCache.get(key);
         if (!tex) {
-            tex = this._makeLabelTexture(letter, color);
+            tex = this._makeLabelTexture(letter, color, isOwned);
             this._spriteCache.set(key, tex);
         }
         const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
         const sprite = new THREE.Sprite(mat);
-        // Slightly larger than a tile so the token visibly stands ON the floor.
-        sprite.scale.set(1.05, 1.05, 1);
+        // Owned tokens slightly bigger so the player spots them at a glance.
+        sprite.scale.set(isOwned ? 1.25 : 1.05, isOwned ? 1.25 : 1.05, 1);
         return sprite;
     }
 
-    _makeLabelTexture(letter, hexColor) {
+    _makeLabelTexture(letter, hexColor, isOwned = false) {
         const c = document.createElement('canvas');
         c.width = c.height = 96;
         const ctx = c.getContext('2d');
+        if (isOwned) {
+            // Bright yellow outer glow ring — unmistakable "this is YOU".
+            ctx.fillStyle = '#ffd54f';
+            ctx.beginPath();
+            ctx.arc(48, 48, 47, 0, Math.PI * 2);
+            ctx.fill();
+        }
         // outer black halo so the token reads against any tile color
         ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.beginPath();
-        ctx.arc(48, 48, 44, 0, Math.PI * 2);
+        ctx.arc(48, 48, isOwned ? 41 : 44, 0, Math.PI * 2);
         ctx.fill();
-        // colored disc body (4px inset from halo)
+        // colored disc body
         ctx.fillStyle = '#' + hexColor.toString(16).padStart(6, '0');
         ctx.beginPath();
-        ctx.arc(48, 48, 40, 0, Math.PI * 2);
+        ctx.arc(48, 48, isOwned ? 37 : 40, 0, Math.PI * 2);
         ctx.fill();
         // bright inner ring for definition
         ctx.strokeStyle = 'rgba(255,255,255,0.65)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(48, 48, 38, 0, Math.PI * 2);
+        ctx.arc(48, 48, isOwned ? 35 : 38, 0, Math.PI * 2);
         ctx.stroke();
         // letter — black outline + white fill so it reads on any disc color
         ctx.font = 'bold 54px system-ui, sans-serif';

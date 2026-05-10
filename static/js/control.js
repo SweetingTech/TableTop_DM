@@ -1161,6 +1161,31 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
+    if ($('testImgGen')) {
+        $('testImgGen').onclick = async () => {
+            if (!state.selectedCampaign) { showErr('Select a campaign first'); return; }
+            const out = $('imgOut');
+            const img = $('imgPreview');
+            out.textContent = 'Calling provider…';
+            img.style.display = 'none';
+            try {
+                const res = await api(`/api/campaigns/${state.selectedCampaign}/test_image_gen`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                out.textContent = `OK — ${res.provider} / ${res.model}\n${res.image_url_preview}`;
+                if (res.image_url) {
+                    img.src = res.image_url;
+                    img.style.display = 'block';
+                }
+            } catch (e) {
+                out.textContent = `Error: ${e.message}`;
+                img.style.display = 'none';
+            }
+        };
+    }
+
     if ($('saveImgSettings')) {
         $('saveImgSettings').onclick = async () => {
             try {
