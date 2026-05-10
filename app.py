@@ -714,6 +714,18 @@ def api_map_children(map_id):
     return jsonify([_serialize(r) for r in rows])
 
 
+@app.route("/api/maps/<map_id>/decorations")
+def api_map_decorations(map_id):
+    """Visual flavor objects on a map (trees, barrels, torches, etc.).
+    Decorations are non-interactive — they just make a map look like a place."""
+    from shared.db.connection import execute_query
+    rows = execute_query(
+        "SELECT * FROM state.map_decorations WHERE map_id = %s ORDER BY y, x",
+        (map_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
 @app.route("/api/maps/<map_id>/pois")
 def api_map_pois(map_id):
     """All POIs on a map. GM/AI-DM view; clients should use discovered_pois

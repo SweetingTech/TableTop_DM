@@ -115,6 +115,29 @@ const POI_GLYPHS = {
     PORTAL:   { glyph: '◉', color: 0xb39ddb },
     GENERIC:  { glyph: '•', color: 0xcccccc },
 };
+// Decorations are flavor-only. Each kind has a glyph + color used by the
+// canvas-baked sprite (NearestFilter, no halo — they sit *on* the tile, not
+// floating above it like POI markers). Tall things (trees) get bigger scale.
+const DECO_GLYPHS = {
+    TREE:     { glyph: '♣', color: 0x2d6a31, scale: 0.95 },
+    BUSH:     { glyph: '❀', color: 0x4caf50, scale: 0.55 },
+    ROCK:     { glyph: '◆', color: 0x8b8b95, scale: 0.55 },
+    CACTUS:   { glyph: '↟', color: 0x6da06f, scale: 0.85 },
+    FLOWER:   { glyph: '✿', color: 0xff7eb3, scale: 0.4 },
+    BARREL:   { glyph: '◯', color: 0x8a5a35, scale: 0.5 },
+    CRATE:    { glyph: '▣', color: 0xa3702c, scale: 0.5 },
+    CHEST:    { glyph: '⌸', color: 0xffc107, scale: 0.55 },
+    TABLE:    { glyph: '☷', color: 0xa3702c, scale: 0.6 },
+    CHAIR:    { glyph: '⊥', color: 0xa3702c, scale: 0.45 },
+    TORCH:    { glyph: '↑', color: 0xffaa00, scale: 0.45 },
+    BRAZIER:  { glyph: '✶', color: 0xff5722, scale: 0.5 },
+    BANNER:   { glyph: '⚑', color: 0xb71c1c, scale: 0.7 },
+    RUG:      { glyph: '▦', color: 0xaa3322, scale: 0.7 },
+    FOUNTAIN: { glyph: '✺', color: 0x4fc3f7, scale: 0.7 },
+    WELL:     { glyph: '⊙', color: 0x607d8b, scale: 0.55 },
+    SHRINE:   { glyph: '⛩', color: 0xffd54f, scale: 0.7 },
+    GENERIC:  { glyph: '•', color: 0xcccccc, scale: 0.4 },
+};
 const VIEW_SIZE = 14; // tiles visible vertically at zoom 1
 
 class MapRenderer {
@@ -123,9 +146,11 @@ class MapRenderer {
         this.tiles = [];
         this.entitySprites = new Map();
         this.poiSprites = new Map();
+        this.decorationSprites = new Map();
         this.mapData = null;
         this._spriteCache = new Map();
         this._poiTexCache = new Map();
+        this._decoTexCache = new Map();
         this._terrainMatCache = new Map(); // material per terrain type
 
         this.scene = new THREE.Scene();
@@ -288,6 +313,33 @@ class MapRenderer {
         this._render();
     }
 
+    /** Replace the visible decoration set. Pass [] to clear. */
+    setDecorations(decos) {
+        const seen = new Set();
+        for (const d of decos || []) {
+            seen.add(d.id);
+            let sprite = this.decorationSprites.get(d.id);
+            if (!sprite) {
+                sprite = this._buildDecoration(d);
+                this.scene.add(sprite);
+                this.decorationSprites.set(d.id, sprite);
+            }
+            const [wx, wz] = this._gridToWorld(d.x, d.y);
+            // Decorations sit slightly above the floor so the sprite shadow
+            // can catch the tile beneath. POIs sit higher (0.4) so they
+            // visibly float as markers; decos at 0.15 read as "on the tile."
+            sprite.position.set(wx, 0.15, wz);
+        }
+        for (const [id, sprite] of this.decorationSprites) {
+            if (!seen.has(id)) {
+                this.scene.remove(sprite);
+                sprite.material.dispose();
+                this.decorationSprites.delete(id);
+            }
+        }
+        this._render();
+    }
+
     /** Replace the visible POI set. Pass [] to clear. */
     setPOIs(pois) {
         const seen = new Set();
@@ -342,6 +394,11 @@ class MapRenderer {
             sprite.material.dispose();
         }
         this.poiSprites.clear();
+        for (const sprite of this.decorationSprites.values()) {
+            this.scene.remove(sprite);
+            sprite.material.dispose();
+        }
+        this.decorationSprites.clear();
         this.controls.dispose();
         this.renderer.dispose();
     }
@@ -362,6 +419,55 @@ class MapRenderer {
             t.material?.dispose();
         }
         this.tiles = [];
+    }
+
+    _buildDecoration(deco) {
+        // Use uploaded image if present; otherwise glyph from kind.
+        if (deco.image_url) {
+            const tex = new THREE.TextureLoader().load(deco.image_url, () => this._render());
+            tex.minFilter = THREE.NearestFilter;
+            tex.magFilter = THREE.NearestFilter;
+            tex.generateMipmaps = false;
+            const mat = new THREE.SpriteMaterial({ map: tex, depthTest: true, transparent: true });
+            const sprite = new THREE.Sprite(mat);
+            sprite.scale.set(0.85, 0.85, 1);
+            sprite.userData = { deco };
+            return sprite;
+        }
+        const def = DECO_GLYPHS[deco.kind] || DECO_GLYPHS.GENERIC;
+        const key = `${def.glyph}|${def.color}`;
+        let tex = this._decoTexCache.get(key);
+        if (!tex) {
+            tex = this._makeDecoTexture(def.glyph, def.color);
+            this._decoTexCache.set(key, tex);
+        }
+        const mat = new THREE.SpriteMaterial({ map: tex, depthTest: true, transparent: true });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.set(def.scale, def.scale, 1);
+        sprite.userData = { deco };
+        return sprite;
+    }
+
+    _makeDecoTexture(glyph, hexColor) {
+        // Smaller canvas than POI markers — decorations are detail, not labels.
+        // No halo: a transparent background reads as "the object is sitting on
+        // the tile" rather than "labeled marker hovering over the tile."
+        const c = document.createElement('canvas');
+        c.width = c.height = 48;
+        const ctx = c.getContext('2d');
+        // soft shadow under the glyph for contrast against any tile color
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.font = 'bold 36px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(glyph, 24 + 1, 25 + 1);
+        ctx.fillStyle = '#' + hexColor.toString(16).padStart(6, '0');
+        ctx.fillText(glyph, 24, 25);
+        const tex = new THREE.CanvasTexture(c);
+        tex.minFilter = THREE.NearestFilter;
+        tex.magFilter = THREE.NearestFilter;
+        tex.generateMipmaps = false;
+        return tex;
     }
 
     _buildPOI(poi) {

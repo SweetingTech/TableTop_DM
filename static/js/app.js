@@ -1119,8 +1119,21 @@ const App = {
             }
             this._renderBreadcrumbs(data.map);
             this._refreshDiscoveredPOIs();
+            this._refreshDecorations(mapId);
         } catch (e) {
             console.error('Map render error:', e);
+        }
+    },
+
+    async _refreshDecorations(mapId) {
+        if (!this._mapRenderer) return;
+        try {
+            const r = await fetch(`/api/maps/${mapId}/decorations`);
+            if (!r.ok) return;
+            const decos = await r.json();
+            this._mapRenderer.setDecorations(decos);
+        } catch (e) {
+            console.error('Decorations fetch failed:', e);
         }
     },
 
