@@ -555,6 +555,7 @@ async function loadAi() {
         const ig = s.image_gen || {};
         if ($('imgProvider')) $('imgProvider').value = ig.provider || 'openrouter';
         if ($('imgModel')) $('imgModel').value = ig.model || '';
+        if ($('imgHostModel')) $('imgHostModel').value = ig.host_model || '';
         // Never display saved keys — placeholder hint only.
         const hasKey = !!((s.api_keys || {})[c.llm_provider]);
         const ph = hasKey ? 'leave blank to keep saved key' : 'no key saved';
@@ -1192,7 +1193,8 @@ window.addEventListener('DOMContentLoaded', async () => {
                 const settings = {
                     image_gen: {
                         provider: $('imgProvider').value,
-                        model: $('imgModel').value || 'google/gemini-2.5-flash-image-preview',
+                        model: $('imgModel').value || 'google/gemini-2.5-flash-image',
+                        host_model: $('imgHostModel').value || 'openai/gpt-4o-mini',
                     },
                 };
                 const k = $('imgApiKey').value.trim();
@@ -1200,7 +1202,6 @@ window.addEventListener('DOMContentLoaded', async () => {
                 await api(`/api/campaigns/${state.selectedCampaign}/ai_config`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    // Reuse existing provider/model fields (PUT requires llm_provider).
                     body: JSON.stringify({
                         llm_provider: $('provider').value || 'mock',
                         settings,

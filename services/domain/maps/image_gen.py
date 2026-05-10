@@ -21,7 +21,27 @@ from shared.db.connection import execute_one
 
 # Defaults if the campaign hasn't configured anything explicit.
 DEFAULT_OPENROUTER_BASE = "https://openrouter.ai/api/v1"
-DEFAULT_IMAGE_MODEL = "google/gemini-2.5-flash-image-preview"
+# The image-generation model OpenRouter routes the tool call to.
+DEFAULT_IMAGE_MODEL = "google/gemini-2.5-flash-image"
+# The chat model that *drives* the tool call. OpenRouter's server-tool flow
+# requires a host model that supports tool calling — it receives the user
+# prompt, decides to invoke the image tool, and embeds the result. Any cheap
+# tool-capable chat model works (gpt-4o-mini, claude-haiku, deepseek-chat,
+# llama-3-instruct, etc). The actual image cost is on the image model.
+DEFAULT_OPENROUTER_HOST_MODEL = "openai/gpt-4o-mini"
+
+# Models known to support OpenRouter's image_generation server tool (Nov 2026).
+# Surfaced in the UI as suggestions; not enforced — paste any newer model id.
+SUPPORTED_IMAGE_MODELS = [
+    "google/gemini-2.5-flash-image",
+    "google/gemini-3.1-flash-image-preview",
+    "google/gemini-3-pro-image-preview",
+    "bytedance-seed/seedream-4.5",
+    "openai/gpt-5.4-image-2",
+    "openai/gpt-5-image-mini",
+    "black-forest-labs/flux.2-pro",
+    "sourceful/riverflow-v2-fast",
+]
 
 
 class ImageGenError(Exception):
@@ -52,6 +72,8 @@ def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
     return {
         "provider": provider,
         "model": image_gen.get("model") or DEFAULT_IMAGE_MODEL,
+        # OpenRouter only — the chat model that drives the server-tool call.
+        "host_model": image_gen.get("host_model") or DEFAULT_OPENROUTER_HOST_MODEL,
         "api_key": api_key,
         "base_url": _base_url_for(provider),
     }
@@ -120,14 +142,32 @@ def _build_prompt(*, name: str, kind: str, description: Optional[str], style: st
 
 
 def _call_openrouter_image(cfg: dict, prompt: str) -> str:
-    """OpenRouter exposes image-capable models through a chat-completions
-    endpoint. Image models return inline data URLs in the response content.
+    """Generate an image via OpenRouter's `openrouter:image_generation`
+    server tool. The flow is:
+
+      1. We send a chat-completion request to a HOST chat model (cfg["host_model"])
+         with the user prompt + the image-generation tool declared.
+      2. The host model decides to call the tool with a refined prompt.
+      3. OpenRouter executes the image gen using cfg["model"] (the image-only
+         model — e.g. google/gemini-2.5-flash-image) and returns the URL to
+         the host model.
+      4. The host model embeds the image in its final response.
+
+    Cost = host model tokens + image model invocation.
+
+    Reference: https://openrouter.ai/docs/features/server-tools/image-generation
     """
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
     body = json.dumps({
-        "model": cfg["model"],
-        "messages": [{"role": "user", "content": prompt}],
-        "modalities": ["image", "text"],
+        "model": cfg["host_model"],
+        "messages": [{"role": "user", "content": f"Please generate this image: {prompt}"}],
+        "tools": [{
+            "type": "openrouter:image_generation",
+            "parameters": {
+                "model": cfg["model"],
+                "output_format": "png",
+            },
+        }],
     }).encode("utf-8")
     req = urllib_request.Request(
         url,
@@ -135,13 +175,13 @@ def _call_openrouter_image(cfg: dict, prompt: str) -> str:
         headers={
             "Authorization": f"Bearer {cfg['api_key']}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/anthropics/tabletop-dm",
+            "HTTP-Referer": "https://github.com/SweetingTech/TableTop_DM",
             "X-Title": "TableTop DM",
         },
         method="POST",
     )
     try:
-        with urllib_request.urlopen(req, timeout=60) as resp:
+        with urllib_request.urlopen(req, timeout=90) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except urllib_error.HTTPError as e:
         try:
@@ -149,27 +189,76 @@ def _call_openrouter_image(cfg: dict, prompt: str) -> str:
         except Exception:
             err_body = ""
         logging.error("openrouter image gen %d: %s", e.code, err_body)
-        raise ImageGenError(f"OpenRouter HTTP {e.code}: {err_body[:300]}")
+        raise ImageGenError(f"OpenRouter HTTP {e.code}: {err_body[:400]}")
     except Exception as e:
         raise ImageGenError(f"OpenRouter request failed: {e}")
 
-    # Per OpenRouter docs the image arrives as `images[].image_url.url`
-    # alongside the assistant message. Fall back to message.content scan if not.
+    return _extract_image_url(payload)
+
+
+def _extract_image_url(payload: dict) -> str:
+    """OpenRouter's server-tool response can carry the image URL in several
+    shapes depending on how the host model formats its reply. Try them all.
+    """
+    # 1. Direct `images` array on the assistant message (Gemini-style)
     choice = (payload.get("choices") or [{}])[0]
     message = choice.get("message") or {}
-    images = message.get("images") or []
-    for img in images:
-        url_field = (img.get("image_url") or {}).get("url")
-        if url_field:
-            return url_field
+    for img in (message.get("images") or []):
+        u = (img.get("image_url") or {}).get("url") if isinstance(img, dict) else None
+        if u:
+            return u
+
+    # 2. content[].type == "image_url" (multimodal content array)
     content = message.get("content")
     if isinstance(content, list):
         for part in content:
-            if part.get("type") == "image_url":
+            if isinstance(part, dict) and part.get("type") == "image_url":
                 u = (part.get("image_url") or {}).get("url")
                 if u:
                     return u
-    raise ImageGenError("OpenRouter response had no image data")
+
+    # 3. Tool-call result with status=ok / imageUrl (the raw tool response
+    #    bubbling up if the host model doesn't reformat).
+    tool_calls = message.get("tool_calls") or []
+    for tc in tool_calls:
+        # OpenAI-style tool_call: {"function": {"arguments": "..."}}; here the
+        # tool *result* (not the call) might appear in a separate tool message.
+        if isinstance(tc, dict):
+            func = tc.get("function") or {}
+            args = func.get("arguments")
+            if isinstance(args, str):
+                try:
+                    a = json.loads(args)
+                    if a.get("imageUrl"):
+                        return a["imageUrl"]
+                except Exception:
+                    pass
+    # Server-tool result message style — OpenRouter may include it in choices
+    # as a separate tool-role message.
+    for c in (payload.get("choices") or []):
+        m = c.get("message") or {}
+        if m.get("role") == "tool":
+            try:
+                tr = json.loads(m.get("content") or "{}")
+                if tr.get("imageUrl"):
+                    return tr["imageUrl"]
+                if tr.get("status") == "error":
+                    raise ImageGenError(f"Image tool error: {tr.get('error', 'unknown')}")
+            except json.JSONDecodeError:
+                pass
+
+    # 4. Markdown image syntax in plain content
+    if isinstance(content, str):
+        import re
+        m = re.search(r"!\[[^\]]*\]\((https?://[^)\s]+|data:image/[^)\s]+)\)", content)
+        if m:
+            return m.group(1)
+
+    raise ImageGenError(
+        "OpenRouter response had no image data. The host model may not have "
+        "invoked the image tool (try a model that supports tools, like "
+        "openai/gpt-5.2 or anthropic/claude-sonnet-4)."
+    )
 
 
 def _call_openai_image(cfg: dict, prompt: str) -> str:
