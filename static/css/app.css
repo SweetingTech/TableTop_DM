@@ -438,12 +438,141 @@ body {
     transition: opacity 0.3s;
 }
 
+.map-legend {
+    position: absolute;
+    top: 12px;
+    right: 56px; /* don't collide with map-controls */
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: var(--text-primary);
+    line-height: 1.45;
+    pointer-events: none;
+    user-select: none;
+}
+.map-legend .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.map-legend .lc {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1px solid #1a1a26;
+    border-radius: 1px;
+}
+.map-legend .lc-stone     { background: #6b6e85; }
+.map-legend .lc-grass     { background: #4d8a3a; }
+.map-legend .lc-dirt      { background: #8a5a35; }
+.map-legend .lc-water     { background: #2a6fb0; }
+.map-legend .lc-sand      { background: #d4b56a; }
+.map-legend .lc-wood      { background: #a3702c; }
+.map-legend .lc-wall      { background: #222226; border-color: #000; }
+.map-legend .lc-difficult { background: repeating-linear-gradient(45deg, #ff7a00 0, #ff7a00 3px, transparent 3px, transparent 6px), #6b6e85; }
+
+.map-breadcrumbs {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: auto;
+    align-items: center;
+}
+.map-breadcrumbs .crumb {
+    color: var(--text-accent);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+.map-breadcrumbs .crumb:hover { background: rgba(255,255,255,0.08); }
+.map-breadcrumbs .crumb.current { color: var(--text-primary); cursor: default; font-weight: 600; }
+.map-breadcrumbs .crumb.current:hover { background: transparent; }
+.map-breadcrumbs .sep { color: var(--text-secondary); }
+.map-breadcrumbs .child-link {
+    color: #ffd54f;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,213,79,0.35);
+    margin-left: 4px;
+}
+.map-breadcrumbs .child-link:hover { background: rgba(255,213,79,0.1); }
+
 .map-hint.hidden {
     opacity: 0;
 }
 
 .map-canvas.can-move {
     cursor: crosshair;
+}
+
+/* Combat HUD — JRPG-style menu shown when it's the player's turn in COMBAT mode. */
+.combat-hud {
+    margin-top: 12px;
+    background: linear-gradient(180deg, #16193a 0%, #0c0e22 100%);
+    border: 2px solid #ffd54f;
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6) inset, 0 0 12px rgba(255,213,79,0.18);
+}
+.combat-hud-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+}
+.combat-hud-title {
+    color: #ffd54f;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    font-size: 12px;
+}
+.combat-hud-actor {
+    color: var(--text-primary);
+    font-size: 12px;
+}
+.combat-hud-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.hud-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.hud-btn:hover { background: #1a4a7a; }
+.hud-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.hud-btn-danger { color: var(--text-red); }
+.hud-btn-danger:hover { background: #4a1a1a; }
+.combat-hud-prompt {
+    margin-top: 8px;
+    padding: 6px 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    min-height: 14px;
+    border-top: 1px dashed var(--border-color);
+}
+.combat-hud-prompt.active {
+    color: #ffd54f;
 }
 
 .right-panel {

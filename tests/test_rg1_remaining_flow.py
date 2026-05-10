@@ -61,6 +61,9 @@ def test_player_talk_to_npc_creates_dialogue_event(monkeypatch):
             return {"type": "DIALOGUE", "payload": {"dialogue": "Halt, intruder!"}}
 
     class ConversationManager:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
         def handle_proximity_chat(self, **_kwargs):
             return [FakeEvent()]
 

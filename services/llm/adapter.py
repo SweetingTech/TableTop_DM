@@ -27,15 +27,28 @@ def get_campaign_ai_config(campaign_id: Optional[uuid.UUID]) -> dict:
         return {}
 
 
+PROVIDER_DEFAULTS = {
+    # Local
+    "ollama":     "http://localhost:11434/v1/",
+    "lmstudio":   "http://localhost:1234/v1",
+    # Hosted, OpenAI-compatible
+    "openai":     None,  # SDK default
+    "openrouter": "https://openrouter.ai/api/v1",
+    "deepseek":   "https://api.deepseek.com/v1",
+    # Hosted, Anthropic-native (separate SDK path; base_url not used by OpenAI SDK)
+    "anthropic":  "https://api.anthropic.com",
+    "mock":       None,
+}
+
+# Keep this in sync with the providers the API/UI offers.
+SUPPORTED_PROVIDERS = set(PROVIDER_DEFAULTS.keys())
+
+
 def resolve_provider_base_url(provider: str, base_url: Optional[str]) -> Optional[str]:
     provider = (provider or "mock").lower()
     if base_url:
         return base_url
-    if provider == "ollama":
-        return "http://localhost:11434/v1/"
-    if provider == "lmstudio":
-        return "http://localhost:1234/v1"
-    return None
+    return PROVIDER_DEFAULTS.get(provider)
 
 def get_openai_client() -> "OpenAI":
     from openai import OpenAI

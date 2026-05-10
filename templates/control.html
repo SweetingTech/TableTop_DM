@@ -68,6 +68,13 @@
                             <button id="createSession" class="btn btn-primary">Create Session (soft restart)</button>
                             <button id="resumeCampaign" class="btn btn-secondary">Resume Campaign</button>
                         </div>
+                        <div class="form-row" style="margin-top: 8px; align-items:center;">
+                            <span style="font-size:12px;color:var(--text-secondary);">Mode:</span>
+                            <span id="campModeBadge" class="mode-badge" style="font-size:11px;padding:2px 8px;">--</span>
+                            <button id="btnEnterCombat" class="btn btn-danger">Enter Combat</button>
+                            <button id="btnExitCombat" class="btn btn-secondary">Exit Combat</button>
+                        </div>
+                        <p class="help-text">GM-controlled combat trigger. In AI-DM campaigns the orchestrator calls the same endpoint via NPCAutonomy when hostile proximity is met.</p>
                     </div>
                     <div class="panel">
                         <h3>Sessions</h3>
@@ -497,27 +504,42 @@
                 <section id="ai" class="tab-panel">
                     <div class="panel">
                         <h3>LLM Provider Configuration</h3>
+                        <p class="help-text">
+                            Cloud providers need an API key. Get one from
+                            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai</a>,
+                            <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a>,
+                            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>, or
+                            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+                            Keys are stored per-campaign in <code>state.campaign_settings.settings.api_keys</code>.
+                        </p>
                         <div class="form-grid">
                             <div class="form-group">
                                 <label>Provider</label>
                                 <select id="provider" class="select-input">
                                     <option value="mock">Mock (Testing)</option>
                                     <option value="openai">OpenAI</option>
-                                    <option value="ollama">Ollama</option>
-                                    <option value="lmstudio">LM Studio</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="openrouter">OpenRouter</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="ollama">Ollama (local)</option>
+                                    <option value="lmstudio">LM Studio (local)</option>
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>Base URL</label>
-                                <input type="text" id="baseUrl" class="input-field" placeholder="http://localhost:11434/v1">
+                                <label>Base URL <span class="help-text">(blank = default)</span></label>
+                                <input type="text" id="baseUrl" class="input-field" placeholder="auto from provider">
+                            </div>
+                            <div class="form-group">
+                                <label>API Key</label>
+                                <input type="password" id="apiKey" class="input-field" placeholder="leave blank to keep saved key" autocomplete="off">
                             </div>
                             <div class="form-group">
                                 <label>DM Model</label>
-                                <input type="text" id="dmModel" class="input-field" placeholder="gpt-4">
+                                <input type="text" id="dmModel" class="input-field" placeholder="e.g. gpt-4o-mini, claude-sonnet-4-6, deepseek-chat">
                             </div>
                             <div class="form-group">
                                 <label>NPC Model</label>
-                                <input type="text" id="npcModel" class="input-field" placeholder="gpt-3.5-turbo">
+                                <input type="text" id="npcModel" class="input-field" placeholder="cheaper model is fine">
                             </div>
                             <div class="form-group">
                                 <label>Embedding Model</label>
@@ -530,6 +552,36 @@
                             <button id="testProvider" class="btn btn-secondary">Test Provider</button>
                         </div>
                         <pre id="aiOut" class="output-pre"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Image Generation</h3>
+                        <p class="help-text">
+                            Used for tile and POI artwork. Default routes through
+                            <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a> so you can pick any
+                            image-capable model (Google Gemini Banana, Flux, etc).
+                        </p>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Image Provider</label>
+                                <select id="imgProvider" class="select-input">
+                                    <option value="openrouter">OpenRouter</option>
+                                    <option value="openai">OpenAI</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Image Model</label>
+                                <input type="text" id="imgModel" class="input-field" placeholder="google/gemini-2.5-flash-image-preview">
+                            </div>
+                            <div class="form-group">
+                                <label>Image API Key <span class="help-text">(can reuse provider key)</span></label>
+                                <input type="password" id="imgApiKey" class="input-field" placeholder="leave blank to use provider key" autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="form-row" style="margin-top: 12px;">
+                            <button id="saveImgSettings" class="btn btn-primary">Save Image Settings</button>
+                        </div>
+                        <pre id="imgOut" class="output-pre"></pre>
                     </div>
                 </section>
             </div>

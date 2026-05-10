@@ -4,13 +4,72 @@ NPC Autonomy - AI turn processing for AI-controlled entities.
 When an AI_NPC entity's turn comes up in combat, this module decides
 and executes their action without human intervention.
 """
+import random
 import uuid
 from typing import Optional
 from services.orchestrator.state_machine import StateMachine
 from services.orchestrator.pipeline import OrchestratorPipeline
 from shared.schemas.contracts import InterventionProposal
+from shared.schemas.enums import GameMode
 from shared.auth.principal import load_principal
 from shared.db.connection import execute_one, execute_query
+
+
+def maybe_trigger_combat(
+    campaign_id: uuid.UUID,
+    *,
+    hostility_radius: int = 4,
+    rng: Optional[random.Random] = None,
+) -> bool:
+    """AI-DM heuristic: switch a campaign to COMBAT mode when a hostile NPC
+    is within ``hostility_radius`` tiles of any PC.
+
+    Returns True if it flipped the mode. No-op if the campaign is already
+    in COMBAT or if no hostile pair is in range.
+
+    Used by the orchestrator when running in AI-DM mode (no human GM). The
+    Control Plane "Enter Combat" button is the human-driven equivalent and
+    just hits ``/api/campaigns/<id>/mode`` directly.
+    """
+    rng = rng or random.Random()
+    sm = StateMachine()
+    if sm.get_campaign_mode(campaign_id) == GameMode.COMBAT:
+        return False
+
+    rows = execute_query(
+        "SELECT id, entity_type, public_sheet, tags FROM state.entities "
+        "WHERE campaign_id = %s AND status = 'ACTIVE'",
+        (str(campaign_id),),
+    )
+    pcs = [r for r in rows if r["entity_type"] == "PC"]
+    hostiles = [
+        r for r in rows
+        if r["entity_type"] in ("NPC", "MONSTER")
+        and (r.get("tags") or [])
+        and any(t in ("enemy", "hostile", "monster") for t in (r.get("tags") or []))
+    ]
+    if not pcs or not hostiles:
+        return False
+
+    def pos(e):
+        s = e.get("public_sheet") or {}
+        return s.get("x"), s.get("y")
+
+    for h in hostiles:
+        hx, hy = pos(h)
+        if hx is None or hy is None:
+            continue
+        for p in pcs:
+            px, py = pos(p)
+            if px is None or py is None:
+                continue
+            if max(abs(hx - px), abs(hy - py)) <= hostility_radius:
+                # Tiny RNG bias so two near-misses in a row aren't both 100% triggers
+                # (lets the AI-DM occasionally let the party slip past).
+                if rng.random() < 0.85:
+                    sm.set_campaign_mode(campaign_id, GameMode.COMBAT)
+                    return True
+    return False
 
 
 class NPCAutonomy:

@@ -217,7 +217,9 @@ function controlBadge(controlledBy) {
 }
 
 async function loadCampaigns() {
-    state.campaigns = await api('/api/campaigns');
+    const all = await api('/api/campaigns');
+    // Hide PURGED always; hide TOMBSTONED unless "Show Deleted" is on.
+    state.campaigns = all.filter(c => c.status !== 'PURGED' && (state.showDeleted || c.status !== 'TOMBSTONED'));
     $('campaignList').innerHTML = state.campaigns.map((c) => `
         <div class="list-item">
             <div class="list-item-info">
@@ -239,11 +241,27 @@ async function loadCampaigns() {
         `<option value="${c.id}" ${c.id === state.selectedCampaign ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
     ).join('');
 
+    // If the previously selected campaign was filtered out, reset selection.
+    if (state.selectedCampaign && !state.campaigns.find(c => c.id === state.selectedCampaign)) {
+        state.selectedCampaign = '';
+        localStorage.removeItem('control_campaign_id');
+    }
     // Auto-select first campaign if none selected
     if (!state.selectedCampaign && state.campaigns.length > 0) {
         state.selectedCampaign = state.campaigns[0].id;
         localStorage.setItem('control_campaign_id', state.selectedCampaign);
     }
+}
+
+async function loadCampaignModeBadge() {
+    const badge = $('campModeBadge');
+    if (!badge) return;
+    if (!state.selectedCampaign) { badge.textContent = '--'; badge.className = 'mode-badge'; return; }
+    try {
+        const res = await api(`/api/campaigns/${state.selectedCampaign}/mode`);
+        badge.textContent = res.mode;
+        badge.className = `mode-badge ${res.mode}`;
+    } catch (e) { /* non-fatal */ }
 }
 
 async function loadSessions() {
@@ -532,6 +550,15 @@ async function loadAi() {
         $('dmModel').value = c.dm_model || '';
         $('npcModel').value = c.npc_model || '';
         $('embedModel').value = c.embedding_model || '';
+        // Image-gen panel: read out of settings JSONB (set by saveImgSettings)
+        const s = c.settings || {};
+        const ig = s.image_gen || {};
+        if ($('imgProvider')) $('imgProvider').value = ig.provider || 'openrouter';
+        if ($('imgModel')) $('imgModel').value = ig.model || '';
+        // Never display saved keys — placeholder hint only.
+        const hasKey = !!((s.api_keys || {})[c.llm_provider]);
+        const ph = hasKey ? 'leave blank to keep saved key' : 'no key saved';
+        if ($('apiKey')) $('apiKey').placeholder = ph;
     } catch (e) {
         // AI config may not exist yet
     }
@@ -904,6 +931,7 @@ async function refreshAll() {
     showErr('');
     try {
         await loadCampaigns();
+        await loadCampaignModeBadge();
         await loadSessions();
         await loadArchives();
         await loadCharacters();
@@ -954,6 +982,23 @@ window.addEventListener('DOMContentLoaded', async () => {
             showErr(e.message);
         }
     };
+
+    const setMode = async (newMode) => {
+        if (!state.selectedCampaign) { showErr('Select a campaign first'); return; }
+        try {
+            await api(`/api/campaigns/${state.selectedCampaign}/mode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: newMode }),
+            });
+            await loadCampaignModeBadge();
+            await loadCampaigns();
+        } catch (e) {
+            showErr(e.message);
+        }
+    };
+    $('btnEnterCombat').onclick = () => setMode('COMBAT');
+    $('btnExitCombat').onclick = () => setMode('EXPLORATION');
 
     $('resumeCampaign').onclick = async () => {
         try {
@@ -1093,23 +1138,57 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     $('saveAi').onclick = async () => {
         try {
+            const body = {
+                llm_provider: $('provider').value,
+                llm_base_url: $('baseUrl').value,
+                dm_model: $('dmModel').value,
+                npc_model: $('npcModel').value,
+                embedding_model: $('embedModel').value,
+            };
+            // Only send api_key if user typed one — empty means "keep existing".
+            const k = $('apiKey').value.trim();
+            if (k) body.api_key = k;
             await api(`/api/campaigns/${state.selectedCampaign}/ai_config`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    llm_provider: $('provider').value,
-                    llm_base_url: $('baseUrl').value,
-                    dm_model: $('dmModel').value,
-                    npc_model: $('npcModel').value,
-                    embedding_model: $('embedModel').value
-                })
+                body: JSON.stringify(body),
             });
-            $('aiOut').textContent = 'Settings saved successfully!';
+            $('apiKey').value = ''; // clear field so user knows it's saved
+            $('aiOut').textContent = 'Settings saved.';
             await loadAi();
         } catch (e) {
             showErr(e.message);
         }
     };
+
+    if ($('saveImgSettings')) {
+        $('saveImgSettings').onclick = async () => {
+            try {
+                const settings = {
+                    image_gen: {
+                        provider: $('imgProvider').value,
+                        model: $('imgModel').value || 'google/gemini-2.5-flash-image-preview',
+                    },
+                };
+                const k = $('imgApiKey').value.trim();
+                if (k) settings.api_keys = { [`image_${$('imgProvider').value}`]: k };
+                await api(`/api/campaigns/${state.selectedCampaign}/ai_config`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    // Reuse existing provider/model fields (PUT requires llm_provider).
+                    body: JSON.stringify({
+                        llm_provider: $('provider').value || 'mock',
+                        settings,
+                    }),
+                });
+                $('imgApiKey').value = '';
+                $('imgOut').textContent = 'Image settings saved.';
+                await loadAi();
+            } catch (e) {
+                showErr(e.message);
+            }
+        };
+    }
 
     $('listModels').onclick = async () => {
         try {
@@ -1166,6 +1245,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (showDeletedCheckbox) {
         showDeletedCheckbox.onchange = () => {
             state.showDeleted = showDeletedCheckbox.checked;
+            loadCampaigns();
             loadCharacters();
         };
     }

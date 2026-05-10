@@ -113,8 +113,42 @@ const App = {
             const resp = await fetch(`/api/campaigns/${this.campaign.id}/entities`);
             this.entities = await resp.json();
             this.renderEntityList();
+            // Push new positions to the 3D renderer if it's already up.
+            if (this._mapRenderer && this.mapContext) {
+                this._mapRenderer.setEntities(this.entities);
+                // POI fog-of-war re-evaluates whenever the player moves.
+                this._refreshDiscoveredPOIs();
+            }
+            this._updateCombatHUD();
         } catch (e) {
             console.error('Failed to load entities:', e);
+        }
+    },
+
+    async _refreshDiscoveredPOIs() {
+        if (!this._mapRenderer || !this.mapContext?.mapId) return;
+        const tier = this.mapContext.mapKind || 'ROOM';
+        try {
+            if (tier === 'ROOM') {
+                // Pure-prox class-modulated discovery on the tactical tier.
+                const own = (this.entities || []).find(e =>
+                    this.controlledEntities?.includes(e.id) && e.public_sheet?.x !== undefined
+                );
+                if (!own) { this._mapRenderer.setPOIs([]); return; }
+                const r = await fetch(
+                    `/api/entities/${own.id}/discovered_pois?map_id=${this.mapContext.mapId}`
+                );
+                if (!r.ok) return;
+                this._mapRenderer.setPOIs(await r.json());
+            } else {
+                // World / Area: show all (non-hidden) POIs with labels for click-to-drill.
+                const r = await fetch(`/api/maps/${this.mapContext.mapId}/pois`);
+                if (!r.ok) return;
+                const all = await r.json();
+                this._mapRenderer.setPOIs(all.filter(p => !p.is_hidden));
+            }
+        } catch (e) {
+            console.error('POI refresh failed:', e);
         }
     },
 
@@ -139,8 +173,90 @@ const App = {
             const resp = await fetch(`/api/encounters/${this.selectedEncounter.id}/slots`);
             this.encounterSlots = await resp.json();
             this.renderInitiativeTracker();
+            this._updateCombatHUD();
         } catch (e) {
             console.error('Failed to load encounter slots:', e);
+        }
+    },
+
+    // ---- Combat HUD (Phase 5) ----
+    // JRPG-style menu visible only when:
+    //   - campaign.mode === 'COMBAT'
+    //   - the encounter's active slot belongs to a PC the player controls
+    // In AI-only mode no human is around to click; the HUD stays hidden and
+    // the AI policy drives the same /api/propose endpoints.
+
+    _updateCombatHUD() {
+        const hud = document.getElementById('combatHUD');
+        if (!hud) return;
+        const inCombat = this.campaign?.mode === 'COMBAT';
+        const activeSlot = (this.encounterSlots || []).find(s => s.is_active);
+        const activeEntity = activeSlot
+            ? (this.entities || []).find(e => e.id === activeSlot.entity_id)
+            : null;
+        const isMine = activeEntity && this.canControl(activeEntity.id);
+        if (inCombat && isMine) {
+            hud.style.display = 'block';
+            document.getElementById('combatActor').textContent =
+                `${activeEntity.name} • ${activeSlot.ap_current ?? 0} AP`;
+        } else {
+            hud.style.display = 'none';
+            this._combatPendingClick = null;
+        }
+    },
+
+    /** Dispatcher for the JRPG-style combat menu buttons. */
+    async combatChoose(cmd) {
+        const promptEl = document.getElementById('combatPrompt');
+        const setPrompt = (msg, active = false) => {
+            promptEl.textContent = msg;
+            promptEl.classList.toggle('active', !!active);
+        };
+        const activeSlot = (this.encounterSlots || []).find(s => s.is_active);
+        const me = activeSlot ? (this.entities || []).find(e => e.id === activeSlot.entity_id) : null;
+        if (!me) { setPrompt('No active actor.'); return; }
+        this.selectedEntity = me;
+
+        switch (cmd) {
+            case 'fight':
+                setPrompt('Resolving attack…');
+                await this.quickAttack();
+                setPrompt('');
+                break;
+            case 'item':
+                setPrompt('No items in inventory yet.', true);
+                break;
+            case 'spell': {
+                const spells = (me.public_sheet?.spells) || [];
+                if (!spells.length) {
+                    setPrompt('No spells prepared.', true);
+                } else {
+                    setPrompt(`Spells: ${spells.join(', ')} — selection UI coming soon.`, true);
+                }
+                break;
+            }
+            case 'move':
+                this._combatPendingClick = me.id;
+                setPrompt('Click a tile on the map (or use WASD) to move.', true);
+                break;
+            case 'endturn':
+                setPrompt('Ending turn…');
+                await this.quickEndTurn();
+                setPrompt('');
+                break;
+            case 'flee':
+                setPrompt('Attempting to disengage…');
+                try {
+                    const result = await this.proposeAction('FLEE', { entity_id: me.id });
+                    if (result?.tool_result?.success) {
+                        setPrompt('Disengaged.');
+                    } else {
+                        setPrompt('Disengage failed.');
+                    }
+                } catch (e) {
+                    setPrompt(`Flee error: ${e.message}`, true);
+                }
+                break;
         }
     },
 
@@ -882,168 +998,189 @@ const App = {
         }
     },
 
-    renderMap() {
+    // ---- Three.js map renderer integration (Phase 1) ----
+    // Click-to-move (raycaster) + WASD come in Phase 3.
+
+    _ensureMapRenderer() {
+        if (this._mapRenderer) return this._mapRenderer;
+        if (!window.MapRenderer) return null; // module still loading
         const canvas = document.getElementById('mapCanvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const container = canvas.parentElement;
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
+        if (!canvas) return null;
+        this._mapRenderer = new window.MapRenderer(canvas);
+        // Phase 3 — movement (only meaningful on the ROOM tier).
+        this._mapRenderer.onTileClick = (gx, gy) => this._tryMoveTo(gx, gy);
+        this._mapRenderer.onTileStep = (dx, dy) => this._tryStep(dx, dy);
+        // Phase 6b — clicking a POI sprite. On World/Area, drill into target_map_id
+        // if set. On Room, surface the POI's name/description as an event.
+        this._mapRenderer.onPOIClick = (poi) => this._handlePOIClick(poi);
+        return this._mapRenderer;
+    },
 
-        ctx.fillStyle = '#0a0a1a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        if (this.maps.length === 0) {
-            ctx.fillStyle = '#a0a0c0';
-            ctx.font = '16px system-ui';
-            ctx.textAlign = 'center';
-            ctx.fillText('No maps loaded', canvas.width/2, canvas.height/2);
+    async _handlePOIClick(poi) {
+        if (!poi) return;
+        const tier = this.mapContext?.mapKind || 'ROOM';
+        if (poi.target_map_id) {
+            await this.drillIntoMap(poi.target_map_id);
             return;
         }
+        if (tier === 'ROOM') {
+            // Surface description as an event-feed entry.
+            const desc = poi.description ? ` — ${poi.description}` : '';
+            this.addEvent({type: 'SYSTEM', payload: {message: `Examining ${poi.name}${desc}`}});
+        } else {
+            // World/Area POI without a target — just acknowledge.
+            this.addEvent({type: 'SYSTEM', payload: {message: `${poi.kind}: ${poi.name}`}});
+        }
+    },
 
-        const map = this.maps[0];
-        this.loadAndRenderMap(map.id);
+    async _tryMoveTo(gx, gy) {
+        if (this.mapContext?.mapKind && this.mapContext.mapKind !== 'ROOM') return;
+        if (!this.selectedEntity) {
+            this.addEvent({type: 'SYSTEM', payload: {message: 'Select your character first'}});
+            return;
+        }
+        if (!this.canControl(this.selectedEntity.id)) {
+            this.addEvent({type: 'ERROR', payload: {message: 'You cannot control this entity'}});
+            return;
+        }
+        const result = await this.proposeAction('MOVE', {
+            entity_id: this.selectedEntity.id,
+            destination_x: gx,
+            destination_y: gy,
+        });
+        if (result?.tool_result?.success) {
+            await this.loadEntities(); // pulls new (x,y), pushes to renderer
+        }
+    },
+
+    async _tryStep(dx, dy) {
+        if (this.mapContext?.mapKind && this.mapContext.mapKind !== 'ROOM') return;
+        // Default movement target = the player's controlled PC (not arbitrary
+        // selected entity), so WASD always moves you.
+        const own = (this.entities || []).find(e =>
+            this.controlledEntities?.includes(e.id) && e.public_sheet?.x !== undefined
+        );
+        if (!own) return;
+        const cx = own.public_sheet.x;
+        const cy = own.public_sheet.y;
+        await this._tryMoveTo(cx + dx, cy + dy);
+    },
+
+    renderMap() {
+        const r = this._ensureMapRenderer();
+        if (!r) {
+            // Module still loading via importmap — retry shortly.
+            setTimeout(() => this.renderMap(), 200);
+            return;
+        }
+        if (!this.maps || this.maps.length === 0) {
+            r.loadMap(null, null);
+            r.setEntities([]);
+            this._renderBreadcrumbs(null);
+            return;
+        }
+        // Default to the deepest tier the campaign has — Room beats Area beats World.
+        // Once the user navigates with the breadcrumbs we honor _currentMapId.
+        if (!this._currentMapId || !this.maps.find(m => m.id === this._currentMapId)) {
+            const order = { ROOM: 0, AREA: 1, WORLD: 2 };
+            const sorted = [...this.maps].sort((a, b) =>
+                (order[a.kind] ?? 0) - (order[b.kind] ?? 0)
+            );
+            this._currentMapId = sorted[0]?.id || this.maps[0]?.id;
+        }
+        this.loadAndRenderMap(this._currentMapId);
     },
 
     async loadAndRenderMap(mapId) {
+        const r = this._ensureMapRenderer();
+        if (!r) return;
         try {
             const resp = await fetch(`/api/maps/${mapId}`);
             const data = await resp.json();
             if (data.error) return;
-
-            const canvas = document.getElementById('mapCanvas');
-            const ctx = canvas.getContext('2d');
-            const mapData = data.map;
-            const nodes = data.nodes;
-
-            const cellSize = Math.min(
-                (canvas.width - 40) / (mapData.width || 20),
-                (canvas.height - 40) / (mapData.height || 20)
-            );
-
-            const offsetX = (canvas.width - cellSize * (mapData.width || 20)) / 2;
-            const offsetY = (canvas.height - cellSize * (mapData.height || 20)) / 2;
-
-            ctx.fillStyle = '#0a0a1a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const terrainColors = {
-                stone_floor: '#3a3a4a',
-                grass: '#1a3a1a',
-                dirt: '#3a2a1a',
-                water: '#1a2a4a',
-                sand: '#4a4a2a',
-                wood: '#3a2a1a',
-                wall: '#1a1a1a',
-            };
-
-            for (const node of nodes) {
-                const x = offsetX + node.x * cellSize;
-                const y = offsetY + node.y * cellSize;
-                const terrain = node.terrain || {};
-                const type = terrain.type || 'stone_floor';
-                const isWall = node.collision_mask && node.collision_mask[0] === '1';
-
-                ctx.fillStyle = isWall ? '#0a0a0a' : (terrainColors[type] || '#2a2a3a');
-                ctx.fillRect(x, y, cellSize - 1, cellSize - 1);
-
-                if (terrain.difficult) {
-                    ctx.fillStyle = 'rgba(255, 136, 0, 0.3)';
-                    ctx.fillRect(x, y, cellSize - 1, cellSize - 1);
-                }
-            }
-
-            for (const entity of this.entities) {
-                if (entity.entity_type === 'LOCATION') continue;
-                const sheet = entity.public_sheet || {};
-                const ex = sheet.x;
-                const ey = sheet.y;
-                if (ex !== undefined && ey !== undefined) {
-                    const px = offsetX + ex * cellSize + cellSize/2;
-                    const py = offsetY + ey * cellSize + cellSize/2;
-                    const radius = cellSize * 0.35;
-
-                    const colors = {PC: '#4caf50', NPC: '#42a5f5', MONSTER: '#ff4444', GOD: '#ce93d8'};
-                    ctx.fillStyle = colors[entity.entity_type] || '#888';
-                    ctx.beginPath();
-                    ctx.arc(px, py, radius, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    ctx.fillStyle = '#fff';
-                    ctx.font = `${Math.max(8, cellSize * 0.3)}px system-ui`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(entity.name[0], px, py);
-                }
-            }
-
-            ctx.fillStyle = '#a0a0c0';
-            ctx.font = '12px system-ui';
-            ctx.textAlign = 'left';
-            ctx.fillText(mapData.name || 'Map', 12, canvas.height - 12);
-
-            // Store map context for click-to-move
+            this._currentMapId = mapId;
+            r.loadMap(data.map, data.nodes);
+            // Only show entities on the map that hosts them. Right now entities
+            // don't carry a current_map_id — show on the deepest (Room) only.
+            const showEntities = (data.map.kind || 'ROOM') === 'ROOM';
+            r.setEntities(showEntities ? (this.entities || []) : []);
             this.mapContext = {
-                cellSize: cellSize,
-                offsetX: offsetX,
-                offsetY: offsetY,
                 mapId: mapId,
-                mapWidth: mapData.width || 20,
-                mapHeight: mapData.height || 20,
+                mapKind: data.map.kind,
+                mapWidth: data.map.width || 20,
+                mapHeight: data.map.height || 20,
             };
-
-            // Add click handler for movement
-            canvas.onclick = (e) => this.handleMapClick(e);
-
+            // Camera follow only on Room tier — World/Area free pan.
+            if (showEntities) {
+                const own = (this.entities || []).find(e =>
+                    this.controlledEntities?.includes(e.id) && e.public_sheet?.x !== undefined
+                );
+                if (own) r.focusOn(own.public_sheet.x, own.public_sheet.y);
+            }
+            this._renderBreadcrumbs(data.map);
+            this._refreshDiscoveredPOIs();
         } catch (e) {
             console.error('Map render error:', e);
         }
     },
 
-    async handleMapClick(event) {
-        const canvas = document.getElementById('mapCanvas');
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+    /** Drilldown: load a child map. Called from breadcrumb child-links. */
+    async drillIntoMap(childMapId) {
+        await this.loadAndRenderMap(childMapId);
+    },
 
-        if (!this.mapContext || !this.selectedEntity) {
-            this.addEvent({type: 'SYSTEM', payload: {message: 'Select an entity to move'}});
-            return;
+    /** Zoom out one tier — load the parent map if there is one. */
+    async zoomOutMap() {
+        if (!this.mapContext?.mapId) return;
+        const cur = this.maps.find(m => m.id === this.mapContext.mapId);
+        if (!cur?.parent_map_id) return;
+        await this.loadAndRenderMap(cur.parent_map_id);
+    },
+
+    async _renderBreadcrumbs(mapData) {
+        const el = document.getElementById('mapBreadcrumbs');
+        if (!el) return;
+        if (!mapData) { el.innerHTML = ''; return; }
+
+        // Walk parent chain (resolved client-side from this.maps).
+        const chain = [];
+        let cursor = mapData;
+        const guard = new Set();
+        while (cursor && !guard.has(cursor.id)) {
+            guard.add(cursor.id);
+            chain.unshift(cursor);
+            if (!cursor.parent_map_id) break;
+            cursor = this.maps.find(m => m.id === cursor.parent_map_id);
         }
 
-        if (!this.canControl(this.selectedEntity.id)) {
-            this.addEvent({type: 'ERROR', payload: {message: 'You cannot control this entity'}});
-            return;
-        }
-
-        // Convert click to grid coordinates
-        const gridX = Math.floor((x - this.mapContext.offsetX) / this.mapContext.cellSize);
-        const gridY = Math.floor((y - this.mapContext.offsetY) / this.mapContext.cellSize);
-
-        // Validate bounds
-        if (gridX < 0 || gridX >= this.mapContext.mapWidth ||
-            gridY < 0 || gridY >= this.mapContext.mapHeight) {
-            return;
-        }
-
-        this.addEvent({type: 'SYSTEM', payload: {
-            message: `Moving ${this.selectedEntity.name} to (${gridX}, ${gridY})...`
-        }});
-
-        const result = await this.proposeAction('MOVE', {
-            entity_id: this.selectedEntity.id,
-            destination_x: gridX,
-            destination_y: gridY,
+        const parts = chain.map(m => {
+            const isCurrent = m.id === mapData.id;
+            const cls = isCurrent ? 'crumb current' : 'crumb';
+            const label = `${m.kind || 'ROOM'}: ${m.name || 'Untitled'}`;
+            if (isCurrent) return `<span class="${cls}">${label}</span>`;
+            return `<span class="${cls}" onclick="App.loadAndRenderMap('${m.id}')">${label}</span>`;
         });
 
-        if (result?.tool_result?.success) {
-            this.addEvent({type: 'SYSTEM', payload: {
-                message: `${this.selectedEntity.name} moved to (${gridX}, ${gridY})`
-            }});
-            // Re-render map with updated positions
-            this.renderMap();
-        }
+        // Pull child maps so the user can drill in. Lazy-fetch.
+        let childrenHtml = '';
+        try {
+            const r = await fetch(`/api/maps/${mapData.id}/children`);
+            const children = await r.json();
+            if (Array.isArray(children) && children.length) {
+                childrenHtml = children.map(c =>
+                    `<span class="child-link" onclick="App.drillIntoMap('${c.id}')">↓ ${c.name}</span>`
+                ).join('');
+            }
+        } catch (_) { /* non-fatal */ }
+
+        el.innerHTML = parts.join('<span class="sep">›</span>') + childrenHtml;
+        // Disable the zoom-out button when there's no parent.
+        const btn = document.getElementById('btnZoomOut');
+        if (btn) btn.disabled = !mapData.parent_map_id;
     },
+
+    // Click-to-move stub (Phase 3 replaces with raycaster).
+    async handleMapClick(_event) { /* Phase 3 */ },
 
     selectEncounter(encounterId) {
         this.selectedEncounter = this.encounters.find(e => e.id === encounterId) || null;

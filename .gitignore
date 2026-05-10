@@ -221,3 +221,11 @@ burn-bag/
 .vscode/
 .idea/
 .DS_Store
+
+# Playwright e2e artifacts (videos, screenshots, traces)
+test-results-e2e/
+.playwright/
+
+# Claude Code agent worktrees and per-machine launch config
+.claude/worktrees/
+.claude/launch.json

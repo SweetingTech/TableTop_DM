@@ -61,6 +61,9 @@ def load_principal(
             "SELECT id FROM state.entities WHERE controller_principal_id = %s AND campaign_id = %s",
             (str(principal_id), str(campaign_id)),
         )
-        ctx.controlled_entity_ids = [e["id"] for e in entities]
+        ctx.controlled_entity_ids = [
+            e["id"] if isinstance(e["id"], uuid.UUID) else uuid.UUID(e["id"])
+            for e in entities
+        ]
 
     return ctx

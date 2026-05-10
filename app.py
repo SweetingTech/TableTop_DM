@@ -43,7 +43,11 @@ def index():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-    cur.execute("SELECT * FROM state.campaigns ORDER BY created_at DESC")
+    cur.execute(
+        "SELECT * FROM state.campaigns "
+        "WHERE status NOT IN ('PURGED', 'TOMBSTONED') "
+        "ORDER BY created_at DESC"
+    )
     campaigns = cur.fetchall()
 
     cur.execute("SELECT * FROM state.principals ORDER BY display_name")
@@ -697,6 +701,300 @@ def api_map_detail(map_id):
     return jsonify(_serialize(data))
 
 
+@app.route("/api/maps/<map_id>/children")
+def api_map_children(map_id):
+    """Direct child maps (drilldown) — e.g. all rooms inside an area."""
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        "SELECT id, name, kind, width, height, parent_map_id "
+        "FROM state.maps WHERE parent_map_id = %s ORDER BY name",
+        (map_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/maps/<map_id>/pois")
+def api_map_pois(map_id):
+    """All POIs on a map. GM/AI-DM view; clients should use discovered_pois
+    to get the proximity-filtered, hidden-aware list for a player."""
+    from shared.db.connection import execute_query
+
+    rows = execute_query(
+        "SELECT * FROM state.map_pois WHERE map_id = %s ORDER BY x, y",
+        (map_id,),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/maps/<map_id>/pois", methods=["POST"])
+def api_map_poi_create(map_id):
+    """Create a POI on a map. Body: { x, y, kind, name, description?, image_url?, target_map_id?, is_hidden?, metadata? }"""
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    required = ("x", "y", "kind", "name")
+    missing = [k for k in required if data.get(k) is None]
+    if missing:
+        return jsonify({"error": f"missing fields: {missing}"}), 400
+    valid_kinds = {"NPC", "BUILDING", "SIGN", "HAZARD", "TREASURE", "PORTAL", "GENERIC"}
+    if data["kind"] not in valid_kinds:
+        return jsonify({"error": f"kind must be one of {sorted(valid_kinds)}"}), 400
+    row = execute_one(
+        """
+        INSERT INTO state.map_pois
+          (map_id, x, y, kind, name, description, image_url, target_map_id, is_hidden, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+        RETURNING *
+        """,
+        (
+            map_id,
+            int(data["x"]),
+            int(data["y"]),
+            data["kind"],
+            data["name"],
+            data.get("description"),
+            data.get("image_url"),
+            data.get("target_map_id"),
+            bool(data.get("is_hidden", False)),
+            json.dumps(data.get("metadata") or {}),
+        ),
+    )
+    return jsonify(_serialize(row)), 201
+
+
+@app.route("/api/pois/<poi_id>", methods=["PUT"])
+def api_poi_update(poi_id):
+    """Patch a POI. Accepts any subset of name/description/x/y/kind/target_map_id/is_hidden/metadata."""
+    from shared.db.connection import execute_one
+
+    data = request.get_json(silent=True) or {}
+    allowed = ("name", "description", "x", "y", "kind", "target_map_id", "is_hidden", "metadata")
+    sets, params = [], []
+    for k in allowed:
+        if k in data:
+            if k == "metadata":
+                sets.append("metadata = %s::jsonb")
+                params.append(json.dumps(data[k] or {}))
+            else:
+                sets.append(f"{k} = %s")
+                params.append(data[k])
+    if not sets:
+        return jsonify({"error": "no updatable fields provided"}), 400
+    params.append(poi_id)
+    row = execute_one(
+        f"UPDATE state.map_pois SET {', '.join(sets)}, updated_at = now() WHERE id = %s RETURNING *",
+        tuple(params),
+    )
+    if not row:
+        return jsonify({"error": "POI not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/pois/<poi_id>", methods=["DELETE"])
+def api_poi_delete(poi_id):
+    from shared.db.connection import execute_one
+
+    row = execute_one("DELETE FROM state.map_pois WHERE id = %s RETURNING id", (poi_id,))
+    if not row:
+        return jsonify({"error": "POI not found"}), 404
+    return jsonify({"deleted": str(row["id"])})
+
+
+@app.route("/api/pois/<poi_id>/image", methods=["POST"])
+def api_poi_image_upload(poi_id):
+    """Upload or set the image for a POI. Mirrors entity-portrait flow:
+    - file upload as data URL (capped at 2MB), OR
+    - JSON body with image_url to use a remote URL (e.g. one returned by an
+      OpenRouter image-gen call later in Phase 6e)."""
+    from shared.db.connection import execute_one
+    import base64
+
+    poi = execute_one("SELECT id FROM state.map_pois WHERE id = %s", (poi_id,))
+    if not poi:
+        return jsonify({"error": "POI not found"}), 404
+
+    if "file" in request.files:
+        f = request.files["file"]
+        if f.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+        allowed = {"png", "jpg", "jpeg", "gif", "webp"}
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        if ext not in allowed:
+            return jsonify({"error": f"Invalid file type. Allowed: {allowed}"}), 400
+        content = f.read()
+        if len(content) > 2 * 1024 * 1024:
+            return jsonify({"error": "File too large. Max 2MB"}), 400
+        mime = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+        data_url = f"data:{mime};base64,{base64.b64encode(content).decode()}"
+        row = execute_one(
+            "UPDATE state.map_pois SET image_url = %s, updated_at = now() WHERE id = %s RETURNING *",
+            (data_url, poi_id),
+        )
+        return jsonify(_serialize(row))
+
+    body = request.get_json(silent=True) or {}
+    if body.get("image_url"):
+        row = execute_one(
+            "UPDATE state.map_pois SET image_url = %s, updated_at = now() WHERE id = %s RETURNING *",
+            (body["image_url"], poi_id),
+        )
+        return jsonify(_serialize(row))
+    return jsonify({"error": "No image provided"}), 400
+
+
+@app.route("/api/_debug/save_canvas", methods=["POST"])
+def api_debug_save_canvas():
+    """One-shot debug helper to write a base64 data-URL to disk so we can
+    inspect what the renderer drew. Saves under burn-bag/canvas-snaps/."""
+    import base64
+    data = request.get_json(silent=True) or {}
+    url = data.get("data_url") or ""
+    name = data.get("name") or f"snap-{uuid.uuid4().hex[:8]}.png"
+    if not url.startswith("data:image/png;base64,"):
+        return jsonify({"error": "data_url must be a base64 png"}), 400
+    payload = base64.b64decode(url.split(",", 1)[1])
+    out_dir = Path("burn-bag/canvas-snaps")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe = secure_filename(name) or f"snap-{uuid.uuid4().hex[:8]}.png"
+    out_path = (out_dir / safe).resolve()
+    out_path.write_bytes(payload)
+    return jsonify({"saved": str(out_path), "bytes": len(payload)})
+
+
+@app.route("/api/entities/<entity_id>/transition_map", methods=["POST"])
+def api_entity_transition_map(entity_id):
+    """Move an entity to a different map (and optionally a starting position).
+
+    Used when a PC walks through a portal POI, moves between rooms, etc.
+    Body: {"map_id": "...", "x": 5, "y": 5}
+    """
+    from services.domain.maps.decoherence import transition_entity_map
+
+    data = request.get_json(silent=True) or {}
+    map_id = data.get("map_id")
+    if not map_id:
+        return jsonify({"error": "map_id required"}), 400
+    try:
+        row = transition_entity_map(
+            uuid.UUID(entity_id),
+            uuid.UUID(map_id),
+            x=data.get("x"),
+            y=data.get("y"),
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/events/audience", methods=["POST"])
+def api_event_audience():
+    """Compute which principals should witness an event at (map_id, x, y).
+
+    Pure read endpoint, intended for the orchestrator and AI-DM heuristics
+    to consult before deciding what to push. The WebSocket broadcaster will
+    eventually use this internally; for now it's exposed for inspection.
+    """
+    from services.domain.maps.decoherence import audience_for_event
+
+    data = request.get_json(silent=True) or {}
+    cid = data.get("campaign_id")
+    if not cid:
+        return jsonify({"error": "campaign_id required"}), 400
+    audience = audience_for_event(
+        campaign_id=uuid.UUID(cid),
+        map_id=uuid.UUID(data["map_id"]) if data.get("map_id") else None,
+        x=data.get("x"),
+        y=data.get("y"),
+    )
+    return jsonify({"audience": audience})
+
+
+@app.route("/api/pois/<poi_id>/generate_image", methods=["POST"])
+def api_poi_generate_image(poi_id):
+    """Generate an image for a POI via the campaign's configured image provider.
+    Stores the result in the POI's image_url and returns the row.
+    Body (optional): {"style_hint": "..."}
+    """
+    from shared.db.connection import execute_one
+    from services.domain.maps.image_gen import generate_poi_image, ImageGenError
+
+    poi = execute_one(
+        "SELECT p.*, m.campaign_id FROM state.map_pois p "
+        "JOIN state.maps m ON p.map_id = m.id WHERE p.id = %s",
+        (poi_id,),
+    )
+    if not poi:
+        return jsonify({"error": "POI not found"}), 404
+
+    body = request.get_json(silent=True) or {}
+    try:
+        url = generate_poi_image(
+            campaign_id=poi["campaign_id"],
+            name=poi["name"],
+            kind=poi["kind"],
+            description=poi.get("description"),
+            style_hint=body.get("style_hint")
+                or "PS1-era pixel art, top-down, isometric, crisp pixels, no antialiasing",
+        )
+    except ImageGenError as e:
+        return jsonify({"error": str(e)}), 502
+    except Exception as e:
+        return jsonify({"error": f"Image generation crashed: {e}"}), 500
+
+    row = execute_one(
+        "UPDATE state.map_pois SET image_url = %s, updated_at = now() WHERE id = %s RETURNING *",
+        (url, poi_id),
+    )
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/pois/<poi_id>/image", methods=["DELETE"])
+def api_poi_image_delete(poi_id):
+    from shared.db.connection import execute_one
+
+    row = execute_one(
+        "UPDATE state.map_pois SET image_url = NULL, updated_at = now() WHERE id = %s RETURNING *",
+        (poi_id,),
+    )
+    if not row:
+        return jsonify({"error": "POI not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/entities/<entity_id>/discovered_pois")
+def api_discovered_pois(entity_id):
+    """POIs the entity can currently see, given their position and class.
+
+    Optional query param ``map_id``: which map to read from. If omitted, the
+    entity's `current_map_id` would be used — but that column doesn't exist
+    yet (Phase 4 keeps a single map per campaign), so map_id is required.
+    """
+    from shared.db.connection import execute_one, execute_query
+    from services.domain.maps.perception import discovered_pois
+
+    map_id = request.args.get("map_id")
+    if not map_id:
+        return jsonify({"error": "map_id query param required"}), 400
+
+    entity = execute_one(
+        "SELECT * FROM state.entities WHERE id = %s",
+        (entity_id,),
+    )
+    if not entity:
+        return jsonify({"error": "entity not found"}), 404
+
+    pois = execute_query(
+        "SELECT * FROM state.map_pois WHERE map_id = %s",
+        (map_id,),
+    )
+    visible = [
+        p for p in discovered_pois(dict(entity), [dict(p) for p in pois])
+        if not p.get("is_hidden")
+    ]
+    return jsonify([_serialize(p) for p in visible])
+
+
 @app.route("/api/propose", methods=["POST"])
 def api_propose():
     data = request.get_json()
@@ -979,17 +1277,97 @@ def api_campaign_tombstone(campaign_id):
     return jsonify(_serialize(row))
 
 
+def _cascade_delete_campaign(campaign_id: str) -> bool:
+    """Hard-delete a campaign and every row that depends on it.
+
+    Runs as a single transaction. Children-before-parents order, so FKs
+    declared NO ACTION don't block. Tables already declared ON DELETE
+    CASCADE in the schema are listed redundantly here — the explicit DELETE
+    is a no-op once the parent's gone, but we list them so the order is
+    obvious from reading the code.
+
+    Returns True if a campaign row was deleted.
+    """
+    from shared.db.connection import transaction
+
+    cid = (campaign_id,)
+    DELETES = [
+        # Ledger (no FK to campaigns, just a column)
+        "DELETE FROM ledger.session_ledger WHERE campaign_id = %s",
+        # Entity- and encounter-level grandchildren
+        "DELETE FROM state.encounter_slots WHERE encounter_id IN (SELECT id FROM state.encounters WHERE campaign_id = %s)",
+        "DELETE FROM state.conditions WHERE entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s) OR encounter_id IN (SELECT id FROM state.encounters WHERE campaign_id = %s)",
+        "DELETE FROM state.intents WHERE campaign_id = %s",
+        "DELETE FROM state.interventions WHERE campaign_id = %s",
+        "DELETE FROM state.divine_standings WHERE campaign_id = %s",
+        "DELETE FROM state.faction_memberships WHERE entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s) OR faction_id IN (SELECT id FROM state.factions WHERE campaign_id = %s)",
+        "DELETE FROM state.faction_wars WHERE campaign_id = %s",
+        "DELETE FROM state.bounties WHERE campaign_id = %s",
+        "DELETE FROM state.shop_inventory WHERE shop_id IN (SELECT id FROM state.shops WHERE campaign_id = %s) OR item_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s)",
+        "DELETE FROM state.location_metrics WHERE location_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s)",
+        "DELETE FROM state.property_ownership WHERE property_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s) OR owner_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s)",
+        "DELETE FROM state.reaction_triggers WHERE campaign_id = %s",
+        "DELETE FROM state.entity_death_history WHERE campaign_id = %s",  # CASCADEd, redundant
+        "DELETE FROM state.session_characters WHERE session_id IN (SELECT id FROM state.sessions WHERE campaign_id = %s)",
+        "DELETE FROM state.price_modifiers WHERE campaign_id = %s",
+        # Mid-tier (children of campaign)
+        "DELETE FROM state.encounters WHERE campaign_id = %s",
+        "DELETE FROM state.shops WHERE campaign_id = %s",
+        "DELETE FROM state.factions WHERE campaign_id = %s",
+        "DELETE FROM state.map_nodes WHERE map_id IN (SELECT id FROM state.maps WHERE campaign_id = %s)",
+        "DELETE FROM state.map_pois WHERE map_id IN (SELECT id FROM state.maps WHERE campaign_id = %s)",  # CASCADEd, redundant
+        # Entities reference current_map_id (SET NULL on map delete) so order
+        # of maps vs entities doesn't matter, but doing entities first keeps
+        # entity-children deletes self-contained.
+        "DELETE FROM state.entities WHERE campaign_id = %s",
+        "DELETE FROM state.maps WHERE campaign_id = %s",
+        # Sessions and their direct dependents
+        "DELETE FROM state.story_state_history WHERE session_id IN (SELECT id FROM state.sessions WHERE campaign_id = %s)",
+        "DELETE FROM state.story_state WHERE campaign_id = %s",  # CASCADEd, redundant
+        "DELETE FROM state.session_archives WHERE campaign_id = %s",  # CASCADEd, redundant
+        "DELETE FROM state.sessions WHERE campaign_id = %s",
+        # Per-campaign metadata
+        "DELETE FROM state.rag_chunks WHERE campaign_id = %s",  # CASCADEd, redundant
+        "DELETE FROM state.rag_documents WHERE campaign_id = %s",  # CASCADEd, redundant
+        "DELETE FROM state.campaign_settings WHERE campaign_id = %s",  # CASCADEd, redundant
+        "DELETE FROM state.campaign_members WHERE campaign_id = %s",
+        # Finally, the campaign row itself.
+        "DELETE FROM state.campaigns WHERE id = %s RETURNING id",
+    ]
+
+    deleted = False
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            # The schema has a trigger `trg_archive_session` that auto-archives
+            # a session when it's DELETEd. It's currently broken (references a
+            # `sessions.name` column that no longer exists) AND semantically wrong
+            # for purge — purging means destroy, not archive. Disable for the txn.
+            cur.execute("ALTER TABLE state.sessions DISABLE TRIGGER trg_archive_session")
+            try:
+                for sql in DELETES:
+                    placeholders = sql.count("%s")
+                    cur.execute(sql, cid * placeholders)
+                    if "FROM state.campaigns WHERE id" in sql and cur.rowcount > 0:
+                        deleted = True
+            finally:
+                cur.execute("ALTER TABLE state.sessions ENABLE TRIGGER trg_archive_session")
+    return deleted
+
+
 @app.route("/api/campaigns/<campaign_id>/purge", methods=["POST"])
 def api_campaign_purge(campaign_id):
-    from shared.db.connection import execute_one
+    """Permanently delete a campaign and every row that ties to it.
 
-    row = execute_one(
-        "UPDATE state.campaigns SET status='PURGED', updated_at=now() WHERE id=%s RETURNING *",
-        (campaign_id,),
-    )
-    if not row:
-        return jsonify({"error": "Not found"}), 404
-    return jsonify({"warning": "PURGE is irreversible", "campaign": _serialize(row)})
+    Irreversible. Use Archive (DELETE /api/campaigns/<id>) for soft delete.
+    """
+    try:
+        ok = _cascade_delete_campaign(campaign_id)
+    except Exception as e:
+        app.logger.exception("purge failed for %s", campaign_id)
+        return jsonify({"error": f"purge failed: {e}"}), 500
+    if not ok:
+        return jsonify({"error": "campaign not found"}), 404
+    return jsonify({"deleted": campaign_id, "warning": "PURGE is irreversible"})
 
 
 @app.route("/api/campaigns/<campaign_id>/resume", methods=["POST"])
@@ -1020,6 +1398,29 @@ def api_campaign_sessions(campaign_id):
     return jsonify([_serialize(r) for r in rows])
 
 
+def _ensure_starter_map(campaign_id: str) -> None:
+    """Generate the World/Area/Room hierarchy for a campaign that has none.
+
+    Deterministic: seed derives from the campaign_id so re-runs reproduce the
+    same layout. Idempotent: skips generation when any map already exists.
+    """
+    from shared.db.connection import execute_one
+    from services.domain.maps.system import ProceduralMapGenerator
+
+    existing = execute_one(
+        "SELECT id FROM state.maps WHERE campaign_id = %s LIMIT 1",
+        (campaign_id,),
+    )
+    if existing:
+        return
+
+    seed = int(hashlib.sha1(campaign_id.encode("utf-8")).hexdigest()[:8], 16)
+    ProceduralMapGenerator().generate_starter_world(
+        campaign_id=uuid.UUID(campaign_id),
+        seed=seed,
+    )
+
+
 @app.route("/api/campaigns/<campaign_id>/sessions", methods=["POST"])
 def api_campaign_sessions_create(campaign_id):
     from shared.db.connection import transaction
@@ -1035,6 +1436,16 @@ def api_campaign_sessions_create(campaign_id):
                 (campaign_id,),
             )
             row = cur.fetchone()
+
+    # Generate a starter map for first-time campaigns. Done after the session
+    # transaction commits so a slow generator can't roll back the session.
+    try:
+        _ensure_starter_map(campaign_id)
+    except Exception:
+        # Map gen failures should not block session creation. The user can
+        # still play; the GM can retry by adding a map manually later.
+        app.logger.exception("starter map generation failed for %s", campaign_id)
+
     return jsonify(_serialize(row)), 201
 
 
@@ -1627,12 +2038,29 @@ def api_ai_config_get(campaign_id):
 @app.route("/api/campaigns/<campaign_id>/ai_config", methods=["PUT"])
 def api_ai_config_put(campaign_id):
     from shared.db.connection import execute_one
-    from services.llm.adapter import resolve_provider_base_url
+    from services.llm.adapter import resolve_provider_base_url, SUPPORTED_PROVIDERS
 
     data = request.get_json(silent=True) or {}
     provider = (data.get("llm_provider") or "mock").lower()
-    if provider not in {"openai", "ollama", "lmstudio", "mock"}:
-        return jsonify({"error": "invalid provider"}), 400
+    if provider not in SUPPORTED_PROVIDERS:
+        return jsonify({"error": f"invalid provider — supported: {sorted(SUPPORTED_PROVIDERS)}"}), 400
+
+    # API keys + image-gen config live in the settings JSONB so we don't need
+    # a migration every time we add a provider. Each key is namespaced by
+    # provider so a campaign can store keys for multiple at once.
+    incoming_settings = data.get("settings") or {}
+    # Merge with existing settings so callers can update one field at a time.
+    existing = execute_one(
+        "SELECT settings FROM state.campaign_settings WHERE campaign_id=%s",
+        (campaign_id,),
+    )
+    merged_settings = dict((existing or {}).get("settings") or {})
+    for k, v in incoming_settings.items():
+        merged_settings[k] = v
+    # Top-level api_key field is a convenience alias for the active provider's key.
+    if "api_key" in data:
+        merged_settings.setdefault("api_keys", {})[provider] = data["api_key"]
+
     row = execute_one(
         """
         INSERT INTO state.campaign_settings (campaign_id,llm_provider,llm_base_url,embedding_base_url,dm_model,npc_model,embedding_model,settings,updated_at)
@@ -1656,7 +2084,7 @@ def api_ai_config_put(campaign_id):
             data.get("dm_model", "gpt-4o-mini"),
             data.get("npc_model", "gpt-4o-mini"),
             data.get("embedding_model", "text-embedding-3-small"),
-            json.dumps(data.get("settings", {})),
+            json.dumps(merged_settings),
         ),
     )
     return jsonify(_serialize(row))
@@ -1729,6 +2157,66 @@ def api_ai_test_provider():
                 "hint": "Check the model name or use 'List Models' to see available models."
             }), 400
         return jsonify({"ok": False, "error": error_msg}), 500
+
+
+_LOCAL_PROVIDER_DEFAULTS = {
+    # Use 127.0.0.1 (not "localhost") for the probe to avoid IPv6 dual-stack
+    # latency on Windows where ``localhost`` resolves to ``::1`` first and the
+    # IPv6 connection attempt blocks before falling back to IPv4.
+    "ollama": "http://127.0.0.1:11434/v1",
+    "lmstudio": "http://127.0.0.1:1234/v1",
+}
+
+
+@app.route("/api/ai/detect_local")
+def api_ai_detect_local():
+    """Lightweight probe for a local OpenAI-compatible server (default: LM Studio).
+
+    Bypasses the OpenAI SDK and any heavy imports so the round-trip stays in
+    the tens of ms when the server is up and fails fast (connection refused)
+    when it isn't. Always returns 200; clients inspect ``detected``.
+    """
+    provider = (request.args.get("provider") or "lmstudio").lower()
+    base_url = (request.args.get("base_url") or _LOCAL_PROVIDER_DEFAULTS.get(provider) or "").strip()
+    canonical_base_url = base_url
+    # If the caller forced a base_url containing "localhost", swap to 127.0.0.1
+    # for the probe only (the canonical URL we report back is unchanged so it
+    # round-trips into ai_config the way the user expects).
+    probe_base = base_url.replace("//localhost:", "//127.0.0.1:") if base_url else ""
+    if not probe_base:
+        return jsonify({
+            "detected": False, "provider": provider,
+            "base_url": None, "error": "no default base_url for provider",
+        })
+    models_url = probe_base.rstrip("/") + "/models"
+    try:
+        req = urllib_request.Request(models_url, headers={"Accept": "application/json"})
+        with urllib_request.urlopen(req, timeout=1.5) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+        payload = json.loads(body) if body else {}
+        raw = payload.get("data") if isinstance(payload, dict) else None
+        models = [{"id": m.get("id")} for m in raw if isinstance(m, dict) and m.get("id")] if isinstance(raw, list) else []
+        return jsonify({
+            "detected": len(models) > 0,
+            "provider": provider,
+            "base_url": canonical_base_url,
+            "models": models,
+        })
+    except urllib_error.URLError as e:
+        return jsonify({
+            "detected": False, "provider": provider,
+            "base_url": canonical_base_url, "error": str(getattr(e, "reason", e)),
+        })
+    except (TimeoutError, socket.timeout):
+        return jsonify({
+            "detected": False, "provider": provider,
+            "base_url": canonical_base_url, "error": "timeout",
+        })
+    except Exception as e:
+        return jsonify({
+            "detected": False, "provider": provider,
+            "base_url": canonical_base_url, "error": str(e),
+        })
 
 
 @app.route("/api/campaigns/<campaign_id>/rag/upload", methods=["POST"])
