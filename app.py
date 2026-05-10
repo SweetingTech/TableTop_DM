@@ -855,6 +855,154 @@ def api_poi_image_upload(poi_id):
     return jsonify({"error": "No image provided"}), 400
 
 
+@app.route("/api/saves/game/export", methods=["POST"])
+def api_save_game_export():
+    """Encrypt + return a campaign's game-state as a downloadable file.
+    Body: { campaign_id, passphrase }"""
+    from services.saves.game_save import export_campaign
+    from services.saves.crypto import encrypt_save, SaveFileError
+
+    data = request.get_json(silent=True) or {}
+    cid = data.get("campaign_id")
+    passphrase = data.get("passphrase") or ""
+    if not cid:
+        return jsonify({"error": "campaign_id required"}), 400
+    if not passphrase:
+        return jsonify({"error": "passphrase required"}), 400
+    try:
+        payload = export_campaign(uuid.UUID(cid))
+        blob = encrypt_save(payload, kind="game", passphrase=passphrase)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except SaveFileError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        app.logger.exception("game export failed")
+        return jsonify({"error": f"export failed: {e}"}), 500
+
+    slug = payload["campaign"].get("slug") or "campaign"
+    return Response(
+        blob,
+        mimetype="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{slug}.ttdm"'},
+    )
+
+
+@app.route("/api/saves/game/import", methods=["POST"])
+def api_save_game_import():
+    """Accept a multipart upload (file=...&passphrase=...&replace=true|false).
+    Decrypts, imports, returns the imported campaign_id."""
+    from services.saves.game_save import import_campaign
+    from services.saves.crypto import decrypt_save, SaveFileError
+
+    if "file" not in request.files:
+        return jsonify({"error": "file is required"}), 400
+    passphrase = request.form.get("passphrase") or ""
+    replace = (request.form.get("replace") or "false").lower() == "true"
+    if not passphrase:
+        return jsonify({"error": "passphrase required"}), 400
+
+    blob = request.files["file"].read()
+    try:
+        payload = decrypt_save(blob, passphrase=passphrase, expected_kind="game")
+    except SaveFileError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        cid = import_campaign(payload, replace=replace)
+    except ValueError as e:
+        return jsonify({"error": str(e), "conflict": True}), 409
+    except Exception as e:
+        app.logger.exception("game import failed")
+        return jsonify({"error": f"import failed: {e}"}), 500
+    return jsonify({"campaign_id": cid, "imported": True})
+
+
+@app.route("/api/saves/program/export", methods=["POST"])
+def api_save_program_export():
+    """Encrypt + return installation-wide config as a download."""
+    from services.saves.program_save import export_program
+    from services.saves.crypto import encrypt_save, SaveFileError
+
+    data = request.get_json(silent=True) or {}
+    passphrase = data.get("passphrase") or ""
+    if not passphrase:
+        return jsonify({"error": "passphrase required"}), 400
+    try:
+        payload = export_program()
+        blob = encrypt_save(payload, kind="program", passphrase=passphrase)
+    except SaveFileError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        app.logger.exception("program export failed")
+        return jsonify({"error": f"export failed: {e}"}), 500
+    return Response(
+        blob,
+        mimetype="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="program.ttdm"'},
+    )
+
+
+@app.route("/api/saves/program/import", methods=["POST"])
+def api_save_program_import():
+    """Multipart upload of a program save file."""
+    from services.saves.program_save import import_program
+    from services.saves.crypto import decrypt_save, SaveFileError
+
+    if "file" not in request.files:
+        return jsonify({"error": "file is required"}), 400
+    passphrase = request.form.get("passphrase") or ""
+    if not passphrase:
+        return jsonify({"error": "passphrase required"}), 400
+
+    blob = request.files["file"].read()
+    try:
+        payload = decrypt_save(blob, passphrase=passphrase, expected_kind="program")
+    except SaveFileError as e:
+        return jsonify({"error": str(e)}), 400
+    try:
+        result = import_program(payload)
+    except Exception as e:
+        app.logger.exception("program import failed")
+        return jsonify({"error": f"import failed: {e}"}), 500
+    return jsonify({"imported": True, **result})
+
+
+# ---------- Global settings (installation-wide API keys etc.) ----------
+
+@app.route("/api/global_settings", methods=["GET"])
+def api_global_settings_get():
+    """Return all global settings keys. Values include API keys — only the
+    GM should call this. The image-gen and LLM layers consult global_settings
+    as a fallback when a campaign hasn't set its own provider keys."""
+    from shared.db.connection import execute_query
+    rows = execute_query("SELECT key, value FROM state.global_settings")
+    return jsonify({r["key"]: r["value"] for r in rows})
+
+
+@app.route("/api/global_settings/<key>", methods=["PUT"])
+def api_global_settings_put(key):
+    """Upsert one global settings key. Body must be JSON; the body becomes
+    the value (use {api_keys: {openrouter: '...'}} etc)."""
+    from shared.db.connection import execute_one
+    body = request.get_json(silent=True)
+    if body is None:
+        return jsonify({"error": "JSON body required"}), 400
+    if not key or len(key) > 64:
+        return jsonify({"error": "key must be 1-64 chars"}), 400
+    row = execute_one(
+        """
+        INSERT INTO state.global_settings (key, value, updated_at)
+        VALUES (%s, %s::jsonb, now())
+        ON CONFLICT (key) DO UPDATE
+        SET value = EXCLUDED.value, updated_at = now()
+        RETURNING key, value, updated_at
+        """,
+        (key, json.dumps(body)),
+    )
+    return jsonify(_serialize(row))
+
+
 @app.route("/api/_debug/save_canvas", methods=["POST"])
 def api_debug_save_canvas():
     """One-shot debug helper to write a base64 data-URL to disk so we can

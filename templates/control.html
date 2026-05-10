@@ -30,6 +30,7 @@
                 <button class="tab" data-tab="characters">Characters</button>
                 <button class="tab" data-tab="kb">Knowledge Base</button>
                 <button class="tab" data-tab="ai">AI Settings</button>
+                <button class="tab" data-tab="saves">Save / Load</button>
             </div>
 
             <div class="tab-panels">
@@ -605,6 +606,44 @@
                         </div>
                         <pre id="imgOut" class="output-pre"></pre>
                         <img id="imgPreview" alt="" style="display:none; max-width:256px; max-height:256px; border:1px solid var(--border-color); border-radius:4px; margin-top:8px; image-rendering: pixelated;" />
+                    </div>
+                </section>
+
+                <!-- Save / Load Tab -->
+                <section id="saves" class="tab-panel">
+                    <div class="panel">
+                        <h3>Program Save</h3>
+                        <p class="help-text">
+                            Installation-wide configuration: API keys (OpenRouter / OpenAI / etc.), default
+                            image-gen model, the LocalPlayer principal. Export once, import on a new machine to
+                            restore your setup. <strong>Encrypted</strong> — you'll need the same passphrase to
+                            load it again. Save it outside Docker (Desktop, USB, your password manager — wherever
+                            you keep portable credentials).
+                        </p>
+                        <div class="form-row">
+                            <button id="btnExportProgram" class="btn btn-primary">Export Program Save</button>
+                            <input type="file" id="importProgramFile" class="file-input" accept=".ttdm,application/octet-stream" />
+                            <button id="btnImportProgram" class="btn btn-secondary">Import Program Save</button>
+                        </div>
+                        <pre id="programSaveOut" class="output-pre"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Game Save (current campaign)</h3>
+                        <p class="help-text">
+                            Everything tied to <em><span id="currentCampaignLabel">(no campaign selected)</span></em>:
+                            maps, entities, POIs, decorations, sessions, ledger events. Carry a campaign between
+                            machines — or just keep a backup before you do something risky. <strong>Encrypted.</strong>
+                        </p>
+                        <div class="form-row">
+                            <button id="btnExportGame" class="btn btn-primary">Export Game Save</button>
+                            <input type="file" id="importGameFile" class="file-input" accept=".ttdm,application/octet-stream" />
+                            <button id="btnImportGame" class="btn btn-secondary">Import Game Save</button>
+                            <label class="checkbox-label" style="margin-left:8px;">
+                                <input type="checkbox" id="importReplace" /> Replace if same id exists
+                            </label>
+                        </div>
+                        <pre id="gameSaveOut" class="output-pre"></pre>
                     </div>
                 </section>
             </div>

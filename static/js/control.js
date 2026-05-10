@@ -246,6 +246,9 @@ async function loadCampaigns() {
         state.selectedCampaign = '';
         localStorage.removeItem('control_campaign_id');
     }
+    // Sync the Save/Load tab's "current campaign" label if the helper's wired.
+    window._updateCampaignLabel?.();
+
     // Auto-select first campaign if none selected
     if (!state.selectedCampaign && state.campaigns.length > 0) {
         state.selectedCampaign = state.campaigns[0].id;
@@ -580,6 +583,7 @@ window.control = {
         localStorage.setItem('control_campaign_id', id);
         $('campaignContext').value = id;
         await refreshAll();
+        window._updateCampaignLabel?.();
     },
     async editCampaign(id) {
         const name = prompt('New campaign name');
@@ -1241,6 +1245,118 @@ window.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {
             showErr(e.message);
         }
+    };
+
+    // ===== Save / Load tab =====
+    // Files live entirely on the user's filesystem; the server only encrypts/
+    // decrypts on demand. Passphrase is prompted in-page and never stored.
+
+    async function downloadEncrypted(endpoint, body, filename) {
+        const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            let msg;
+            try { msg = (await r.json()).error; } catch { msg = r.statusText; }
+            throw new Error(msg || 'export failed');
+        }
+        const blob = await r.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+    }
+
+    if ($('btnExportProgram')) {
+        $('btnExportProgram').onclick = async () => {
+            const pw = prompt('Choose a passphrase for this program save:');
+            if (!pw) return;
+            const confirm = prompt('Confirm the passphrase:');
+            if (confirm !== pw) { $('programSaveOut').textContent = 'Passphrases did not match.'; return; }
+            $('programSaveOut').textContent = 'Generating encrypted program save…';
+            try {
+                await downloadEncrypted('/api/saves/program/export', { passphrase: pw }, 'program.ttdm');
+                $('programSaveOut').textContent = 'Downloaded program.ttdm. Store it somewhere safe — anyone with the file and passphrase can read your API keys.';
+            } catch (e) { $('programSaveOut').textContent = `Error: ${e.message}`; }
+        };
+    }
+
+    if ($('btnImportProgram')) {
+        $('btnImportProgram').onclick = async () => {
+            const f = $('importProgramFile').files[0];
+            if (!f) { $('programSaveOut').textContent = 'Pick a .ttdm file first.'; return; }
+            const pw = prompt('Passphrase for the program save:');
+            if (!pw) return;
+            $('programSaveOut').textContent = 'Decrypting and importing…';
+            const fd = new FormData();
+            fd.append('file', f);
+            fd.append('passphrase', pw);
+            try {
+                const r = await fetch('/api/saves/program/import', { method: 'POST', body: fd });
+                const res = await r.json();
+                if (!r.ok) throw new Error(res.error || 'import failed');
+                $('programSaveOut').textContent =
+                    `Imported ${res.settings_imported} setting(s) and ${res.principals_imported} principal(s).`;
+                await refreshAll();
+            } catch (e) { $('programSaveOut').textContent = `Error: ${e.message}`; }
+        };
+    }
+
+    if ($('btnExportGame')) {
+        $('btnExportGame').onclick = async () => {
+            if (!state.selectedCampaign) { $('gameSaveOut').textContent = 'Select a campaign first.'; return; }
+            const pw = prompt('Choose a passphrase for this game save:');
+            if (!pw) return;
+            const confirm = prompt('Confirm the passphrase:');
+            if (confirm !== pw) { $('gameSaveOut').textContent = 'Passphrases did not match.'; return; }
+            const camp = state.campaigns.find(c => c.id === state.selectedCampaign);
+            const slug = (camp?.slug || 'campaign') + '.ttdm';
+            $('gameSaveOut').textContent = 'Generating encrypted game save…';
+            try {
+                await downloadEncrypted('/api/saves/game/export',
+                    { campaign_id: state.selectedCampaign, passphrase: pw }, slug);
+                $('gameSaveOut').textContent = `Downloaded ${slug}.`;
+            } catch (e) { $('gameSaveOut').textContent = `Error: ${e.message}`; }
+        };
+    }
+
+    if ($('btnImportGame')) {
+        $('btnImportGame').onclick = async () => {
+            const f = $('importGameFile').files[0];
+            if (!f) { $('gameSaveOut').textContent = 'Pick a .ttdm file first.'; return; }
+            const pw = prompt('Passphrase for the game save:');
+            if (!pw) return;
+            $('gameSaveOut').textContent = 'Decrypting and importing…';
+            const fd = new FormData();
+            fd.append('file', f);
+            fd.append('passphrase', pw);
+            fd.append('replace', $('importReplace').checked ? 'true' : 'false');
+            try {
+                const r = await fetch('/api/saves/game/import', { method: 'POST', body: fd });
+                const res = await r.json();
+                if (r.status === 409) {
+                    $('gameSaveOut').textContent =
+                        `A campaign with the same id already exists. Tick "Replace if same id exists" to overwrite.`;
+                    return;
+                }
+                if (!r.ok) throw new Error(res.error || 'import failed');
+                $('gameSaveOut').textContent = `Imported. Campaign id: ${res.campaign_id}`;
+                await refreshAll();
+            } catch (e) { $('gameSaveOut').textContent = `Error: ${e.message}`; }
+        };
+    }
+
+    // Keep the "current campaign" label in the Save panel in sync.
+    window._updateCampaignLabel = () => {
+        const el = $('currentCampaignLabel');
+        if (!el) return;
+        const c = state.campaigns?.find(c => c.id === state.selectedCampaign);
+        el.textContent = c ? c.name : '(no campaign selected)';
     };
 
     // ===== Character View Toggle =====

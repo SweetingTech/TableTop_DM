@@ -48,6 +48,20 @@ class ImageGenError(Exception):
     pass
 
 
+def _global_settings() -> dict:
+    """Read installation-wide settings as a dict {key: value}."""
+    try:
+        rows = execute_one(
+            "SELECT jsonb_object_agg(key, value) AS agg FROM state.global_settings"
+        )
+        agg = rows.get("agg") if rows else None
+        if isinstance(agg, str):
+            return json.loads(agg)
+        return agg or {}
+    except Exception:
+        return {}
+
+
 def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
     row = execute_one(
         "SELECT * FROM state.campaign_settings WHERE campaign_id = %s",
@@ -61,19 +75,32 @@ def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
             settings = {}
     image_gen = (settings.get("image_gen") or {})
     api_keys = (settings.get("api_keys") or {})
-    provider = (image_gen.get("provider") or "openrouter").lower()
 
-    # Lookup priority: image-specific key > provider key > env fallback.
+    # Fall back to installation-wide settings if the campaign hasn't set its
+    # own. Lookup chain for any value: campaign.image_gen → global.image_gen
+    # → DEFAULT. For api keys: campaign.api_keys → global.api_keys → env var.
+    gs = _global_settings()
+    g_image_gen = gs.get("image_gen") or {}
+    g_api_keys = gs.get("api_keys") or {}
+
+    provider = (image_gen.get("provider") or g_image_gen.get("provider") or "openrouter").lower()
+
     api_key = (
         api_keys.get(f"image_{provider}")
         or api_keys.get(provider)
+        or g_api_keys.get(f"image_{provider}")
+        or g_api_keys.get(provider)
         or _env_key_for(provider)
     )
     return {
         "provider": provider,
-        "model": image_gen.get("model") or DEFAULT_IMAGE_MODEL,
+        "model": image_gen.get("model") or g_image_gen.get("model") or DEFAULT_IMAGE_MODEL,
         # OpenRouter only — the chat model that drives the server-tool call.
-        "host_model": image_gen.get("host_model") or DEFAULT_OPENROUTER_HOST_MODEL,
+        "host_model": (
+            image_gen.get("host_model")
+            or g_image_gen.get("host_model")
+            or DEFAULT_OPENROUTER_HOST_MODEL
+        ),
         "api_key": api_key,
         "base_url": _base_url_for(provider),
     }
