@@ -15,7 +15,15 @@ from shared.db.connection import get_connection, execute_query
 
 
 def export_program() -> dict:
-    """Snapshot everything that should follow the user across installs."""
+    """Snapshot everything that should follow the user across installs.
+
+    Decrypts vault-protected values before writing them into the save —
+    each installation has its own vault key, so we can't share encrypted
+    blobs across machines. The .ttdm wrapper is itself passphrase-encrypted,
+    so the cleartext only exists inside the encrypted save file.
+    """
+    from services.saves.vault import decrypt_dict_values
+
     settings_rows = execute_query(
         "SELECT key, value, updated_at FROM state.global_settings ORDER BY key"
     )
@@ -23,15 +31,21 @@ def export_program() -> dict:
         "SELECT id, principal_type, display_name, auth_subject, is_active "
         "FROM state.principals WHERE principal_type = 'HUMAN'"
     )
+
+    settings_out = []
+    for r in settings_rows:
+        value = r["value"]
+        # Strip vault wrappers so the file is portable across machines.
+        if isinstance(value, dict):
+            value = decrypt_dict_values(value)
+        settings_out.append({
+            "key": r["key"],
+            "value": value,
+            "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+        })
+
     return {
-        "global_settings": [
-            {
-                "key": r["key"],
-                "value": r["value"],
-                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-            }
-            for r in settings_rows
-        ],
+        "global_settings": settings_out,
         "principals": [
             {
                 "id": str(p["id"]),
@@ -55,14 +69,28 @@ def import_program(payload: dict) -> dict:
 
     Returns a summary count for the UI to display.
     """
+    from services.saves.vault import encrypt_str
+
     settings = payload.get("global_settings", []) or []
     principals = payload.get("principals", []) or []
+
+    def _maybe_reencrypt(key: str, value):
+        """The export decrypted vault-wrapped values; re-encrypt them with
+        this machine's vault key on import. Affects only the api_keys family."""
+        if not isinstance(value, dict):
+            return value
+        if key == "api_keys" or key.endswith("_api_keys"):
+            return {
+                k: (encrypt_str(v) if v and isinstance(v, str) else v)
+                for k, v in value.items()
+            }
+        return value
 
     conn = get_connection()
     try:
         cur = conn.cursor()
         for s in settings:
-            val = s["value"]
+            val = _maybe_reencrypt(s["key"], s["value"])
             if not isinstance(val, str):
                 val = json.dumps(val)
             cur.execute(

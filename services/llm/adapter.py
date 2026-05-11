@@ -50,13 +50,52 @@ def resolve_provider_base_url(provider: str, base_url: Optional[str]) -> Optiona
         return base_url
     return PROVIDER_DEFAULTS.get(provider)
 
-def get_openai_client() -> "OpenAI":
+def _resolve_api_key(provider: str, cfg: dict) -> str:
+    """Pull the API key for the LLM provider from (in priority):
+    campaign.api_keys → global_settings.api_keys → environment variable.
+    Decrypts vault-encrypted values."""
+    from services.saves.vault import decrypt_str
+    from shared.db.connection import execute_one
+
+    settings = (cfg or {}).get("settings") or {}
+    if isinstance(settings, str):
+        try:
+            import json as _json
+            settings = _json.loads(settings)
+        except Exception:
+            settings = {}
+
+    keys = settings.get("api_keys") or {}
+    raw = keys.get(provider)
+
+    if not raw:
+        try:
+            row = execute_one(
+                "SELECT value FROM state.global_settings WHERE key = 'api_keys'"
+            )
+            gkeys = (row or {}).get("value") or {}
+            if isinstance(gkeys, str):
+                import json as _json
+                gkeys = _json.loads(gkeys)
+            raw = gkeys.get(provider)
+        except Exception:
+            raw = None
+
+    if raw:
+        return decrypt_str(raw)
+    # Environment fallback for ops setups (e.g. shipping a key via .env).
+    return (
+        os.environ.get(f"{provider.upper()}_API_KEY")
+        or os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
+        or os.environ.get("OPENAI_API_KEY", "")
+    )
+
+
+def get_openai_client(provider: str = "openai", cfg: Optional[dict] = None) -> "OpenAI":
     from openai import OpenAI
 
     return OpenAI(
-        api_key=os.environ.get(
-            "AI_INTEGRATIONS_OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", "")
-        ),
+        api_key=_resolve_api_key(provider, cfg or {}),
         base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL", None),
     )
 
@@ -68,7 +107,8 @@ class LLMAdapter:
         provider = cfg.get("llm_provider", os.environ.get("AI_PROVIDER", "mock"))
         base_url = resolve_provider_base_url(provider, cfg.get("llm_base_url"))
         self.client: Optional["OpenAI"] = (
-            None if self.mode == "mock" or provider == "mock" else get_openai_client()
+            None if self.mode == "mock" or provider == "mock"
+            else get_openai_client(provider=provider, cfg=cfg)
         )
         if self.client is not None and base_url:
             self.client.base_url = base_url

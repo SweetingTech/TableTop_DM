@@ -970,37 +970,61 @@ def api_save_program_import():
 
 # ---------- Global settings (installation-wide API keys etc.) ----------
 
+def _is_api_key_field(key: str) -> bool:
+    """Whether a global_settings key's value should have its strings
+    encrypted at rest. Right now: anything matching the api_keys family."""
+    return key == "api_keys" or key.endswith("_api_keys")
+
+
 @app.route("/api/global_settings", methods=["GET"])
 def api_global_settings_get():
-    """Return all global settings keys. Values include API keys — only the
-    GM should call this. The image-gen and LLM layers consult global_settings
-    as a fallback when a campaign hasn't set its own provider keys."""
+    """Return all global settings keys with sensitive values redacted to
+    `********` so the cleartext never leaves the server. Use the dedicated
+    PUT to set keys; the server holds the only cleartext copy at runtime."""
     from shared.db.connection import execute_query
+    from services.saves.vault import redact_dict_values
     rows = execute_query("SELECT key, value FROM state.global_settings")
-    return jsonify({r["key"]: r["value"] for r in rows})
+    out = {}
+    for r in rows:
+        v = r["value"]
+        if _is_api_key_field(r["key"]) and isinstance(v, dict):
+            # Redact every provider's key value — never reveal cleartext.
+            out[r["key"]] = redact_dict_values(v, sensitive_keys=None)
+        else:
+            out[r["key"]] = v
+    return jsonify(out)
 
 
 @app.route("/api/global_settings/<key>", methods=["PUT"])
 def api_global_settings_put(key):
-    """Upsert one global settings key. Body must be JSON; the body becomes
-    the value (use {api_keys: {openrouter: '...'}} etc)."""
+    """Upsert one global settings key. API-key values get encrypted at rest
+    using the machine-local vault key. Body must be JSON."""
     from shared.db.connection import execute_one
+    from services.saves.vault import encrypt_dict_values, encrypt_str
+
     body = request.get_json(silent=True)
     if body is None:
         return jsonify({"error": "JSON body required"}), 400
     if not key or len(key) > 64:
         return jsonify({"error": "key must be 1-64 chars"}), 400
+
+    if _is_api_key_field(key) and isinstance(body, dict):
+        # Every value in an api_keys dict is sensitive — encrypt them all.
+        # Empty string ('') passes through as a "delete this key" sentinel.
+        body = {k: (encrypt_str(v) if v else v) for k, v in body.items()}
+
     row = execute_one(
         """
         INSERT INTO state.global_settings (key, value, updated_at)
         VALUES (%s, %s::jsonb, now())
         ON CONFLICT (key) DO UPDATE
         SET value = EXCLUDED.value, updated_at = now()
-        RETURNING key, value, updated_at
+        RETURNING key, updated_at
         """,
         (key, json.dumps(body)),
     )
-    return jsonify(_serialize(row))
+    # Don't echo encrypted values back; just confirm the write.
+    return jsonify({"key": row["key"], "saved": True, "updated_at": _serialize(row)["updated_at"]})
 
 
 @app.route("/api/_debug/save_canvas", methods=["POST"])
@@ -2311,13 +2335,20 @@ Guidelines:
 
 @app.route("/api/campaigns/<campaign_id>/ai_config")
 def api_ai_config_get(campaign_id):
-    return jsonify(_get_ai_config(campaign_id))
+    from services.saves.vault import redact_dict_values
+    cfg = _get_ai_config(campaign_id)
+    # Redact API key values — server keeps cleartext, never echoes it back.
+    settings = cfg.get("settings") or {}
+    if "api_keys" in settings and isinstance(settings["api_keys"], dict):
+        settings["api_keys"] = redact_dict_values(settings["api_keys"], sensitive_keys=None)
+    return jsonify(cfg)
 
 
 @app.route("/api/campaigns/<campaign_id>/ai_config", methods=["PUT"])
 def api_ai_config_put(campaign_id):
     from shared.db.connection import execute_one
     from services.llm.adapter import resolve_provider_base_url, SUPPORTED_PROVIDERS
+    from services.saves.vault import encrypt_str, is_encrypted
 
     data = request.get_json(silent=True) or {}
     provider = (data.get("llm_provider") or "mock").lower()
@@ -2335,10 +2366,26 @@ def api_ai_config_put(campaign_id):
     )
     merged_settings = dict((existing or {}).get("settings") or {})
     for k, v in incoming_settings.items():
-        merged_settings[k] = v
+        # Encrypt any string in incoming api_keys before merging.
+        if k == "api_keys" and isinstance(v, dict):
+            existing_keys = dict(merged_settings.get("api_keys") or {})
+            for pk, pv in v.items():
+                if pv and isinstance(pv, str):
+                    existing_keys[pk] = pv if is_encrypted(pv) else encrypt_str(pv)
+                elif not pv:
+                    # Empty string deletes the key.
+                    existing_keys.pop(pk, None)
+            merged_settings["api_keys"] = existing_keys
+        else:
+            merged_settings[k] = v
     # Top-level api_key field is a convenience alias for the active provider's key.
     if "api_key" in data:
-        merged_settings.setdefault("api_keys", {})[provider] = data["api_key"]
+        keys_blob = merged_settings.setdefault("api_keys", {})
+        val = data["api_key"]
+        if val:
+            keys_blob[provider] = val if is_encrypted(val) else encrypt_str(val)
+        else:
+            keys_blob.pop(provider, None)
 
     row = execute_one(
         """

@@ -29,6 +29,7 @@
                 <button class="tab" data-tab="sessions">Sessions</button>
                 <button class="tab" data-tab="characters">Characters</button>
                 <button class="tab" data-tab="kb">Knowledge Base</button>
+                <button class="tab" data-tab="keys">API Keys</button>
                 <button class="tab" data-tab="ai">AI Settings</button>
                 <button class="tab" data-tab="saves">Save / Load</button>
             </div>
@@ -498,6 +499,79 @@
                             <button id="testRetrieval" class="btn btn-secondary">Test Retrieval</button>
                         </div>
                         <pre id="retrievalOut" class="output-pre"></pre>
+                    </div>
+                </section>
+
+                <!-- API Keys Tab -->
+                <section id="keys" class="tab-panel">
+                    <div class="panel">
+                        <h3>API Keys</h3>
+                        <p class="help-text">
+                            Keys are stored installation-wide. <strong>Encrypted at rest</strong> with a
+                            vault key at <code>.local-run/vault.key</code> (host filesystem, outside Docker).
+                            The server never echoes a saved key back — once you save, only <code>********</code>
+                            is shown. Leave a field blank to keep an existing saved key; type a new value to
+                            replace; clear the field and click Save to delete.
+                        </p>
+                        <div class="form-grid" style="grid-template-columns: 1fr 200px auto;">
+                            <div class="form-group">
+                                <label>OpenRouter</label>
+                                <input type="password" id="key_openrouter" class="input-field" autocomplete="off" placeholder="sk-or-…">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_openrouter" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+
+                            <div class="form-group">
+                                <label>OpenAI</label>
+                                <input type="password" id="key_openai" class="input-field" autocomplete="off" placeholder="sk-proj-…">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_openai" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Anthropic</label>
+                                <input type="password" id="key_anthropic" class="input-field" autocomplete="off" placeholder="sk-ant-…">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_anthropic" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+
+                            <div class="form-group">
+                                <label>DeepSeek</label>
+                                <input type="password" id="key_deepseek" class="input-field" autocomplete="off">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_deepseek" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+                        </div>
+                        <div class="form-row" style="margin-top: 16px;">
+                            <button id="saveApiKeys" class="btn btn-primary">Save Keys</button>
+                            <span id="apiKeysStatus" class="help-text"></span>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Vault Info</h3>
+                        <p class="help-text">
+                            Saved keys live in <code>state.global_settings.value.api_keys</code>, each
+                            value encrypted with Fernet using the per-installation vault key.
+                            The image-gen and LLM layers automatically decrypt when making API calls.
+                            Per-campaign overrides in AI Settings still take priority when set.
+                        </p>
                     </div>
                 </section>
 

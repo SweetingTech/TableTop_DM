@@ -229,3 +229,6 @@ test-results-e2e/
 # Claude Code agent worktrees and per-machine launch config
 .claude/worktrees/
 .claude/launch.json
+
+# Per-installation API-key encryption vault — must never be committed
+.local-run/vault.key

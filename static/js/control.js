@@ -1247,6 +1247,74 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
+    // ===== API Keys tab =====
+    // Provider key fields are <input type=password>. Server-side, values
+    // are encrypted at rest with a vault key in .local-run/vault.key.
+    // On GET, the server returns "********" for any present key — we use
+    // that to set placeholders so the user sees status without value leak.
+
+    const KEY_PROVIDERS = ["openrouter", "openai", "anthropic", "deepseek"];
+
+    async function loadApiKeys() {
+        if (!$('key_openrouter')) return; // tab not present
+        try {
+            const gs = await api('/api/global_settings');
+            const keys = gs?.api_keys || {};
+            for (const p of KEY_PROVIDERS) {
+                const present = !!keys[p];
+                const input = $('key_' + p);
+                if (input) {
+                    input.value = '';
+                    input.placeholder = present ? 'saved (********), leave blank to keep' : 'paste your key';
+                }
+                const status = $('status_' + p);
+                if (status) {
+                    status.textContent = present ? 'saved' : 'no key saved';
+                    status.style.color = present ? 'var(--text-accent)' : 'var(--text-secondary)';
+                }
+            }
+        } catch (e) { /* non-fatal — tab might be hidden, ignore */ }
+    }
+
+    if ($('saveApiKeys')) {
+        $('saveApiKeys').onclick = async () => {
+            const payload = {};
+            let touched = 0;
+            for (const p of KEY_PROVIDERS) {
+                const v = $('key_' + p).value;
+                if (v !== '') {
+                    payload[p] = v;
+                    touched++;
+                }
+            }
+            if (touched === 0) {
+                $('apiKeysStatus').textContent = 'Nothing changed.';
+                return;
+            }
+            $('apiKeysStatus').textContent = 'Saving…';
+            try {
+                await api('/api/global_settings/api_keys', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                $('apiKeysStatus').textContent = `Saved ${touched} key(s). Cleartext was encrypted before storage.`;
+                await loadApiKeys();
+            } catch (e) {
+                $('apiKeysStatus').textContent = 'Error: ' + e.message;
+            }
+        };
+    }
+
+    // Refresh status whenever the user clicks the API Keys tab.
+    document.querySelectorAll('.tab').forEach(b => {
+        if (b.dataset.tab === 'keys') {
+            b.addEventListener('click', loadApiKeys);
+        }
+    });
+    // Initial load (in case the user lands on the tab directly).
+    loadApiKeys();
+
     // ===== Save / Load tab =====
     // Files live entirely on the user's filesystem; the server only encrypts/
     // decrypts on demand. Passphrase is prompted in-page and never stored.

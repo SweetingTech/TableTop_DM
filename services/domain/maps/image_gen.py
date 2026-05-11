@@ -63,6 +63,8 @@ def _global_settings() -> dict:
 
 
 def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
+    from services.saves.vault import decrypt_str
+
     row = execute_one(
         "SELECT * FROM state.campaign_settings WHERE campaign_id = %s",
         (str(campaign_id),),
@@ -85,13 +87,13 @@ def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
 
     provider = (image_gen.get("provider") or g_image_gen.get("provider") or "openrouter").lower()
 
-    api_key = (
+    raw_key = (
         api_keys.get(f"image_{provider}")
         or api_keys.get(provider)
         or g_api_keys.get(f"image_{provider}")
         or g_api_keys.get(provider)
-        or _env_key_for(provider)
     )
+    api_key = decrypt_str(raw_key) if raw_key else _env_key_for(provider)
     return {
         "provider": provider,
         "model": image_gen.get("model") or g_image_gen.get("model") or DEFAULT_IMAGE_MODEL,
