@@ -206,8 +206,9 @@ def _purge_campaign(conn, campaign_id: str):
 
 
 def _insert_row(conn, table: str, row: dict, principal_remap: dict = None,
-                jsonb_cols: tuple = ()) -> None:
-    """Insert one row, remapping principal_ids and json-encoding jsonb cols."""
+                jsonb_cols: tuple = (), array_cols: tuple = ()) -> None:
+    """Insert one row, remapping principal_ids, json-encoding jsonb cols, and
+    leaving array columns as Python lists for psycopg2 to handle natively."""
     cols = list(row.keys())
     vals = []
     for c in cols:
@@ -216,9 +217,17 @@ def _insert_row(conn, table: str, row: dict, principal_remap: dict = None,
             v = principal_remap.get(str(v), v)
         if c in jsonb_cols and not isinstance(v, str):
             v = json.dumps(v) if v is not None else None
+        # Array columns: psycopg2 adapts Python lists to PG arrays natively.
+        # If we got a JSON-string back from a previous round-trip, parse it.
+        if c in array_cols and isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except json.JSONDecodeError:
+                pass
         vals.append(v)
     placeholders = ", ".join(
-        f"%s::jsonb" if c in jsonb_cols else "%s" for c in cols
+        f"%s::jsonb" if c in jsonb_cols else "%s"
+        for c in cols
     )
     cur = conn.cursor()
     cur.execute(
@@ -297,8 +306,15 @@ def import_campaign(payload: dict, *, replace: bool = False) -> str:
             _insert_row(conn, "state.encounter_slots", slot)
 
         for ev in payload.get("ledger_events", []):
+            # seq_id is GENERATED ALWAYS — drop it and let Postgres re-assign.
+            # Event ordering is preserved because we insert in original seq_id
+            # order (the exporter ORDER BY seq_id, and Python iteration is
+            # ordered). parent_event_id references event_id (UUID), not seq_id,
+            # so the parent chain survives.
+            ev = {k: v for k, v in ev.items() if k != "seq_id"}
             _insert_row(conn, "ledger.session_ledger", ev,
-                        jsonb_cols=("payload", "domain_tags", "visible_to"))
+                        jsonb_cols=("payload",),
+                        array_cols=("domain_tags", "visible_to"))
 
         conn.commit()
     except Exception:
