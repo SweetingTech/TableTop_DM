@@ -34,10 +34,34 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 17 | Maps (upload + procedural generation) | Done |
 | 18 | Frontend MVP (event feed, console, map viewer) | Done |
 | 19 | Export + replay + debugging | Done |
-| 20 | Observability + CI/testing (23 unit tests) | Done |
+| 20 | Observability + CI/testing (59 unit tests) | Done |
+| 21 | Auto-generate maps on session create (idempotent, deterministic seed) | Done |
+| 22 | **Three.js map renderer** — ortho camera, NearestFilter, raycaster, WASD movement, OrbitControls pan/zoom | Done |
+| 23 | **Hierarchical map system** — World → Area → Room tiers with parent_map_id, breadcrumbs, zoom transitions | Done |
+| 24 | **Themed scene generators + decorations** — biome-aware composers, FF-Tactics palette, billboard sprites for trees/barrels/chests/etc. | Done |
+| 25 | **POI proximity discovery** — class-modulated perception radius (ranger 5, fighter 2), Chebyshev distance, clickable drilldown markers | Done |
+| 26 | **Party decoherence foundation** — `entities.current_map_id`, audience_for_event(), transition_entity_map() | Done (broadcaster integration deferred) |
+| 27 | **Combat HUD** — JRPG-style Fight/Item/Spell/Move/End Turn/Flee menu | Done |
+| 28 | **Multi-provider AI scaffolding** — OpenRouter, DeepSeek, Anthropic alongside OpenAI/Ollama/LM Studio | Done |
+| 29 | **OpenRouter image generation** — server-tool flow with cheap host model + image model, supports Gemini/Flux/Seedream/etc. | Done |
+| 30 | **API key vault** — Fernet encryption at rest with installation-local vault key, redacted GET responses, dedicated UI panel | Done |
+| 31 | **External save files** — passphrase-encrypted `.ttdm` files for game state and program config, portable across machines | Done |
+| 32 | **Desktop launcher** — one-click `.lnk` that boots compose + Flask + opens the dashboard | Done |
 
 
 ## Quickstart
+
+### Windows desktop shortcut (recommended for play)
+
+Install a desktop shortcut that boots the whole stack and opens the dashboard in one click:
+
+```powershell
+.\scripts\install_shortcut.ps1
+```
+
+A **Tabletop DM** icon appears on your desktop. Double-click → docker compose spins up Postgres/Redis/Qdrant → Flask boots → `/readyz` polled → browser opens to `http://localhost:8000/`. First boot ~30s; subsequent boots faster. To stop: `.\scripts\stop.ps1` (or just close the launcher window — Postgres keeps running until you stop it explicitly).
+
+### Manual / cross-platform
 
 One-time setup:
 ```bash
@@ -141,11 +165,13 @@ The Control Plane manages your game:
 
 | Tab | Purpose |
 |-----|---------|
-| **Campaigns** | Create/edit campaigns |
-| **Sessions** | Manage sessions, view archives |
-| **Characters** | Create characters, manage party |
-| **RAG** | Upload reference documents |
-| **AI Settings** | Configure LLM providers |
+| **Campaigns** | Create / edit / archive / purge campaigns. Enter / Exit Combat toggle. |
+| **Sessions** | Manage sessions, view archived sessions, mode badge for current campaign |
+| **Characters** | Create characters via builder form or AI generator, manage party, portraits |
+| **Knowledge Base** | Upload reference documents (RAG ingestion) |
+| **API Keys** | Save OpenRouter / OpenAI / Anthropic / DeepSeek keys. Encrypted at rest. |
+| **AI Settings** | Per-campaign LLM provider, model selection, image-gen config |
+| **Save / Load** | Export / import game and program saves as encrypted `.ttdm` files |
 
 ### Help & Documentation
 
@@ -239,12 +265,29 @@ services/
     factions/system.py              Faction membership, wars, tenet enforcement
     economy/system.py               Dynamic pricing, property, upkeep
     content_rating/gate.py          SAFE/MATURE/EXPLICIT content filtering
-    maps/system.py                  Map management + procedural generation
+    maps/system.py                  Map management + themed scene generators
+    maps/perception.py              Class-modulated proximity radius for POI discovery
+    maps/decoherence.py             Audience filter + transition_entity_map (Phase 6f)
+    maps/image_gen.py               OpenRouter server-tool image generation
+  saves/
+    crypto.py                       Passphrase-encrypted .ttdm file format (Fernet + PBKDF2)
+    vault.py                        Installation-local API-key encryption at rest
+    game_save.py                    Per-campaign export/import
+    program_save.py                 Installation-wide export/import (keys + principals)
   export/
     exporter.py                     Session export (Markdown) + replay engine
+static/js/
+  map_renderer.js                   Three.js renderer — ortho camera, tile textures,
+                                    sprites, raycaster, WASD, OrbitControls
 tests/
   services/test_mechanics.py        deterministic unit tests (mechanics/spatial/domain)
-infra/sql/                          SQL migrations and seed data
+infra/sql/migrations/
+  001-007                           State / ledger / security / sessions / control plane
+  008_map_hierarchy.sql             kind + parent_map_id on state.maps
+  009_map_pois.sql                  state.map_pois
+  010_entity_current_map.sql        entities.current_map_id (party decoherence)
+  011_map_decorations.sql           state.map_decorations
+  012_global_settings.sql           Installation-wide K/V (API keys + image gen defaults)
 docs/                               Architecture specs
 ```
 
@@ -265,8 +308,19 @@ docs/                               Architecture specs
 | GET | `/api/campaigns/<id>/session` | GM loads current campaign session record |
 | GET | `/api/campaigns/<id>/members` | List campaign principals/members |
 | GET/POST | `/api/campaigns/<id>/mode` | Get/set game mode |
-| GET | `/api/campaigns/<id>/maps` | Campaign maps |
+| GET | `/api/campaigns/<id>/maps` | Campaign maps (all tiers) |
 | GET | `/api/maps/<id>` | Map detail with nodes |
+| GET | `/api/maps/<id>/children` | Direct child maps (drilldown) |
+| GET | `/api/maps/<id>/pois` | All POIs on a map (GM/AI-DM view) |
+| POST | `/api/maps/<id>/pois` | Create a POI |
+| PUT/DELETE | `/api/pois/<id>` | Update / delete a POI |
+| POST | `/api/pois/<id>/image` | Upload image for POI (multipart or `{image_url}`) |
+| POST | `/api/pois/<id>/generate_image` | Generate POI art via OpenRouter |
+| GET | `/api/maps/<id>/decorations` | All decorations on a map (flavor sprites) |
+| POST | `/api/decorations/<id>/generate_image` | Generate decoration art via OpenRouter |
+| GET | `/api/entities/<id>/discovered_pois?map_id=…` | POIs visible to this entity (class-modulated radius) |
+| POST | `/api/entities/<id>/transition_map` | Move an entity to a different map (portal POI flow) |
+| POST | `/api/events/audience` | Compute which principals should witness an event at (map_id, x, y) |
 | POST | `/api/sessions/<session_id>/join` | Join a seeded session (membership/auth stub) |
 | POST | `/api/propose` | Submit intervention proposal |
 | POST | `/api/dice/roll` | Roll dice |
@@ -286,6 +340,13 @@ docs/                               Architecture specs
 | GET | `/api/campaigns/<id>/session_archives` | List archived sessions |
 | GET | `/api/session_archives/<id>` | Get archived session details |
 | DELETE | `/api/session_archives/<id>` | Delete archived session |
+| GET/PUT | `/api/global_settings` / `/api/global_settings/<key>` | Read all (redacted) / upsert one installation-wide setting |
+| GET/PUT | `/api/campaigns/<id>/ai_config` | Read (redacted) / save per-campaign LLM + image-gen config |
+| POST | `/api/campaigns/<id>/test_image_gen` | Smoke-test the configured image-gen provider |
+| POST | `/api/saves/game/export` | `{campaign_id, passphrase}` → encrypted `.ttdm` |
+| POST | `/api/saves/game/import` | multipart `file`, `passphrase`, `replace=true|false` |
+| POST | `/api/saves/program/export` | `{passphrase}` → encrypted `.ttdm` |
+| POST | `/api/saves/program/import` | multipart `file`, `passphrase` |
 
 ## WebSocket Events
 | Event | Direction | Description |
@@ -309,7 +370,14 @@ docs/                               Architecture specs
 | `/narrate [context]` | Request AI narration |
 | `/help` | Show available commands |
 
-**Map Interaction:** Click on the map canvas to move your selected entity to a tile. Pathfinding validates movement and collision.
+**Map Interaction:**
+- **WASD / arrow keys** — move your controlled PC one tile per keypress (tile-snapped, server-validated)
+- **Left click** — raycaster snaps the move to the clicked tile (or surfaces a POI's description if you clicked a POI sprite)
+- **Right-click drag** — pan the camera
+- **Mouse wheel** — zoom (0.4× – 4×)
+- Movement against walls is rejected by the server; the sprite snaps back
+
+**Combat HUD:** When `campaign.mode === 'COMBAT'` and the active slot belongs to a PC you control, a JRPG-style menu appears with Fight / Item / Spell / Move / End Turn / Flee buttons. All wire to the same `/api/propose` endpoints the AI-DM uses.
 
 
 ## Prime Directives (Non-Negotiable)
@@ -389,6 +457,63 @@ Death triggers cascading consequences: investigations, bounties, faction hostili
 
 ### Combat Pre-Registered Triggers
 AI entities register deterministic reaction triggers (ON_MOVEMENT, ON_ATTACKED, ON_CAST) executed with zero LLM calls.
+
+## Map System
+
+The map viewer uses **Three.js with an orthographic camera**, NearestFilter textures, and no antialiasing — a PS1-era FF Tactics / Ragnarok Online idiom. Tiles are 1×1 quads with baked procedural pixel-art textures; walls are 3D boxes that stand 0.7 units off the floor; entity tokens are billboarded sprites ("paper minis").
+
+### Tier hierarchy
+
+Every campaign auto-generates a three-tier map set on first session creation:
+
+| Tier | Default size | Generator |
+|---|---|---|
+| **WORLD** | 40×40 | Voronoi-style biome regions from 5–7 seeds, mountain ridge walls |
+| **AREA** | 24×24 | Biome-dominant (forest / plains / desert / coastal / tundra / town), meandering random-walk path, feature clusters, biome-flavored decoration scatter |
+| **ROOM** | 20×20 | Walled enclosure with 1–2 doorway gaps, mostly stone floor, optional wood-plank platform, rubble cluster, basin, decorations (torches by walls, barrels, chests, table+chair pair) |
+
+Generation is **deterministic** — seed derives from the campaign UUID via SHA-1, so re-running session creation reproduces the same layout. **Idempotent** — existing maps are not overwritten.
+
+Drilldown is via breadcrumbs in the renderer UI: `WORLD: World Map › AREA: Starting Area › ROOM: Starting Room`. Each tier shows child-map links (e.g. clicking "↓ Starting Room" on the Area tier drills into the Room).
+
+### Movement
+
+Two equivalent input paths, both server-validated:
+
+| Mode | Trigger | Behavior |
+|---|---|---|
+| **WASD / arrows** | Keypress | One-tile step in the chosen direction. Skipped if focus is in an input field or the Map tab isn't visible. |
+| **Click-to-move** | Raycaster on left-click | Snap to the clicked tile's grid coordinate. Drag distance > 5px is treated as a pan, not a click. |
+| **Right-drag** | OrbitControls | Pan the camera. |
+| **Mouse wheel** | OrbitControls | Zoom (bounded 0.4× – 4×). |
+
+Server validates every transition against the map's collision mask. If rejected (wall, out of bounds, off-map), the client snaps back.
+
+### POI proximity discovery
+
+`state.map_pois` table holds Points of Interest — buildings, signs, hazards, treasure markers, portals, NPC markers. Each has a kind, position, optional `target_map_id` (for drilldown links on World/Area), and optional `image_url`.
+
+On the **Room** tier, POIs are revealed only when within the player's **class-modulated perception radius** (Chebyshev distance):
+
+| Class | Radius |
+|---|---|
+| ranger / scout | 5 |
+| rogue / wizard / sorcerer / druid | 4 |
+| monk / cleric / bard | 3 |
+| fighter / paladin / barbarian | 2 |
+| default | 3 |
+
+Override per-entity via `public_sheet.perception_radius`. The class-radius mechanic makes party composition matter — a ranger sees POIs from across a room that a fighter has to walk up to.
+
+On the **World** and **Area** tiers all (non-hidden) POIs are visible as clickable labeled markers — pure-prox would be punitive at scale.
+
+### Party decoherence
+
+Foundation laid in `services/domain/maps/decoherence.py`. Each entity has `current_map_id`; events get pushed to a player only if their PC is on the same map AND within their perception radius. Helper `audience_for_event(campaign_id, map_id, x, y)` returns the set of principals who should witness an event. `transition_entity_map()` moves a PC between maps (used by portal POI drilldown). WebSocket broadcaster integration is deferred — current behavior is still per-campaign-room broadcast.
+
+### Decoration sprites
+
+`state.map_decorations` table stores billboard sprites placed during generation: trees / bushes / rocks / cacti / flowers (outdoor), barrels / crates / chests / tables / chairs (room), torches / braziers / banners / rugs (ambient), fountains / wells / shrines (features). Sprites render with depth-test on so they sit visibly *on* the tile rather than floating above. User-uploaded image URLs override the default glyph.
 
 ## User Interface
 
@@ -498,12 +623,88 @@ The system uses different models for different AI agents:
 
 | Provider | Base URL | Notes |
 |----------|----------|-------|
-| OpenAI | (default) | Uses `OPENAI_API_KEY` from environment |
-| Ollama | `http://localhost:11434/v1/` | Local, free, supports many open models |
-| LM Studio | `http://localhost:1234/v1` | Local GUI with model management |
-| Mock | N/A | Deterministic responses for testing |
+| **OpenAI** | (SDK default) | Direct API access |
+| **Anthropic** | `https://api.anthropic.com` | Claude models (Anthropic-native API path) |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | Aggregator — paste one key, access dozens of models |
+| **DeepSeek** | `https://api.deepseek.com/v1` | OpenAI-compatible API |
+| **Ollama** | `http://localhost:11434/v1/` | Local, free, OpenAI-compatible |
+| **LM Studio** | `http://localhost:1234/v1` | Local GUI with model management |
+| **Mock** | N/A | Deterministic responses for tests |
 
-**Security notes:**
-- Prefer `OPENAI_API_KEY` from environment for OpenAI
-- Local Ollama/LM Studio can use dummy API key
-- DB-stored AI settings are for dev/local use; do not store production secrets
+API keys are entered in the **Control Plane → API Keys** tab (see [API Keys & Vault](#api-keys--vault) below) and stored encrypted at rest. The LLM adapter automatically pulls the right key per provider at call time.
+
+## Image Generation
+
+Tile and POI artwork via **OpenRouter's [image-generation server tool](https://openrouter.ai/docs/features/server-tools/image-generation)**. The flow is:
+
+1. Send a chat-completions request to a cheap **host chat model** (default `openai/gpt-4o-mini`) with the user prompt + the image tool declared as `{type: "openrouter:image_generation", parameters: {model: "<image-model>"}}`.
+2. The host model invokes the tool with a refined prompt.
+3. OpenRouter executes the image generation using the configured image model and returns the URL.
+4. The host embeds the result in its reply; the server extracts the URL and stores it on the POI / decoration.
+
+**Supported image models** (autocomplete dropdown in the UI):
+
+- `google/gemini-2.5-flash-image` (default)
+- `google/gemini-3.1-flash-image-preview`
+- `google/gemini-3-pro-image-preview`
+- `bytedance-seed/seedream-4.5`
+- `openai/gpt-5.4-image-2`
+- `openai/gpt-5-image-mini`
+- `black-forest-labs/flux.2-pro`
+- `sourceful/riverflow-v2-fast`
+
+Configure under **Control Plane → AI Settings → Image Generation**. Host model and image model are independent — pick a cheap chat model to drive the tool, pick whichever image model fits your budget for the actual art. Once set, image gen is exposed on each POI / decoration:
+
+- `POST /api/pois/<id>/generate_image` — generate art for a POI from its name + kind + description
+- `POST /api/pois/<id>/image` — upload (or set by URL) without using AI
+- `POST /api/decorations/<id>/generate_image` — same for decorations
+
+If no key is configured the endpoint returns a 502 with a clear "no API key" message; no silent failures.
+
+## API Keys & Vault
+
+API keys are **encrypted at rest** using Fernet (AES-128-CBC + HMAC-SHA256) with a per-installation key stored at `.local-run/vault.key` (gitignored, mode 0600, outside Docker).
+
+**Why encryption and not hashing:** the server has to send the actual key in the `Authorization: Bearer …` header to OpenRouter / OpenAI / etc. Hashing makes the value unreadable *and* unusable. Encryption lets the DB hold a scrambled form while the server can decrypt it at call time.
+
+| Surface | Behavior |
+|---|---|
+| **PUT `/api/global_settings/api_keys`** | Each value passed in is encrypted before the row hits Postgres. Empty string deletes that provider's key. |
+| **GET `/api/global_settings`** | Returns `"********"` for every encrypted value. Cleartext never leaves the server after save. |
+| **Storage** | DB row contains `"openrouter": "vault:v1:gAAAA…"` — anyone reading the raw JSONB sees the encrypted form. |
+| **At call time** | `image_gen` and `LLMAdapter` decrypt right before the HTTP call. Cleartext lives in memory only as long as the request is in flight. |
+| **Vault key** | `.local-run/vault.key` (per machine). Override via `TTDM_VAULT_KEY` env var for CI / containerized deploys. |
+
+Per-campaign overrides in **AI Settings** still work and take priority over the global key when set.
+
+**Where to enter keys:** Control Plane → API Keys tab. One field per provider, with status indicators ("saved" / "no key saved") and deep links to each provider's keys page.
+
+## Save / Load — External Files
+
+Two save-file kinds, both `.ttdm`, both passphrase-encrypted with Fernet keyed by PBKDF2-HMAC-SHA256 (600k iterations, 16-byte random salt), both stored entirely on the user's local filesystem (never in Docker).
+
+| Save kind | Contains | Use case |
+|---|---|---|
+| **Game save** | One campaign — maps, nodes, POIs, decorations, entities, encounters, sessions, ledger events, ai_config, members | Carry your campaign to a friend's house. Backup before risky operations. |
+| **Program save** | Installation-wide config — global_settings.api_keys, image_gen defaults, HUMAN principals | Set up a new install with your keys + identity already populated. |
+
+**Format** (versioned, self-describing):
+```
+ttdm-save:v1
+<one-line JSON header — format, version, kind, created_at, schema_version, KDF params>
+<base64 fernet token of the JSON payload>
+```
+
+Wrong passphrase produces a clean "Decryption failed" error. Format magic mismatch produces "Not a TableTop DM save file."
+
+**Cross-machine portability:**
+- Principal references migrate by `auth_subject` (e.g. `local:player`), not UUID — so a game save plays on any machine that has a principal with the same auth_subject. Importing a program save first populates auth_subjects on the destination.
+- API keys are **decrypted before export** (since each install has its own vault key) and **re-encrypted on import** with the destination machine's vault. The cleartext only exists inside the passphrase-protected `.ttdm` file.
+
+**UI:** Control Plane → Save / Load tab. Buttons for Export Program Save, Import Program Save, Export Game Save (uses currently-selected campaign), Import Game Save. Imports prompt for passphrase. The "Replace if same id exists" checkbox on game-save import surfaces the conflict-resolution path (cascade-purge then re-insert).
+
+**Endpoints:**
+- `POST /api/saves/game/export` — body `{campaign_id, passphrase}` returns the binary file
+- `POST /api/saves/game/import` — multipart `file=…&passphrase=…&replace=true|false`
+- `POST /api/saves/program/export` — body `{passphrase}` returns the binary file
+- `POST /api/saves/program/import` — multipart `file=…&passphrase=…`
