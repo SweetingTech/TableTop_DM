@@ -8,6 +8,8 @@ Production-oriented VTT + RPG engine with deterministic state, append-only event
 
 See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart or [API Endpoints](#api-endpoints) for headless access.
 
+**See [CHANGELOG.md](CHANGELOG.md)** for a date-ordered history of feature drops plus the planned next sprint. The Implementation Status table below is a quick reference; the changelog is where I write down *what* and *why* per release window.
+
 
 ## Implementation Status
 **TODO phases are tracked and regularly audited.** See `TODO.md` for the full checklist.
@@ -54,6 +56,7 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 37 | **Visibility-scoped recaps** — DM / party / principal / public; falls back to deterministic bullets if no LLM | Done |
 | 38 | **Continuity queries** — open threads, unresolved promises, NPC memory, contradictions | Done |
 | 39 | **RAG-grounded DM/NPC cognition** — centralized retriever, visibility-filtered prompt injection, embedding-profile guard, north-star leak-prevention tests | Done |
+| 40+ | RAG-aware Session Intel, DM-packet citations, per-principal WebSocket broadcaster, per-chunk visibility UI, reranker, audio ingestion | See [CHANGELOG.md → Planned](CHANGELOG.md#planned--next-sprint) |
 
 
 ## Quickstart
