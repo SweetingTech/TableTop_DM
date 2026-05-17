@@ -29,6 +29,7 @@
                 <button class="tab" data-tab="sessions">Sessions</button>
                 <button class="tab" data-tab="characters">Characters</button>
                 <button class="tab" data-tab="kb">Knowledge Base</button>
+                <button class="tab" data-tab="intel">Session Intel</button>
                 <button class="tab" data-tab="keys">API Keys</button>
                 <button class="tab" data-tab="ai">AI Settings</button>
                 <button class="tab" data-tab="saves">Save / Load</button>
@@ -499,6 +500,107 @@
                             <button id="testRetrieval" class="btn btn-secondary">Test Retrieval</button>
                         </div>
                         <pre id="retrievalOut" class="output-pre"></pre>
+                    </div>
+                </section>
+
+                <!-- Session Intel Tab -->
+                <section id="intel" class="tab-panel">
+                    <div class="panel">
+                        <h3>Session Intelligence</h3>
+                        <p class="help-text">
+                            Narrative state compiler. Observes chat + ledger, proposes patches to
+                            <code>state.story_state</code>, queues them here for DM review. Approve / edit /
+                            reject each item. Approved patches commit to <code>story_state</code> via the
+                            per-event-type dispatcher. Cleartext lives only in your DB — keys/secrets stay on
+                            the server.
+                        </p>
+                        <div class="form-row" style="align-items:center;">
+                            <label for="intelSession" style="font-size:12px;color:var(--text-secondary);">Session:</label>
+                            <select id="intelSession" class="select-input" style="flex:1;"></select>
+                            <button id="btnIntelExtract" class="btn btn-primary">Run Extractor</button>
+                            <button id="btnIntelExtractLLM" class="btn btn-secondary" title="Includes LLM narrative-inference path (uses your API key)">Run Extractor + LLM</button>
+                            <button id="btnIntelPacket" class="btn btn-secondary">Generate DM Packet</button>
+                            <button id="btnIntelRefresh" class="btn btn-secondary">Refresh</button>
+                        </div>
+                        <pre id="intelOut" class="output-pre"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Pending Patches <span id="intelPendingCount" class="status-badge"></span></h3>
+                        <p class="help-text">Patches waiting for DM review. Each one cites the source event and (where the LLM extractor ran) a verbatim quote.</p>
+                        <div id="intelPatchList" class="item-list">
+                            <div class="list-item-meta">Select a session, then click "Run Extractor".</div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Recaps</h3>
+                        <div class="form-row" style="margin-bottom:8px;">
+                            <button id="btnRecapDm" class="btn btn-secondary btn-sm">DM Recap</button>
+                            <button id="btnRecapParty" class="btn btn-secondary btn-sm">Party Recap</button>
+                            <button id="btnRecapPublic" class="btn btn-secondary btn-sm">Public Recap</button>
+                            <span class="help-text">Visibility separation: party recap omits dm-only secrets; DM recap includes them and flagged contradictions.</span>
+                        </div>
+                        <pre id="intelRecap" class="output-pre" style="min-height:80px;"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Continuity</h3>
+                        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div>
+                                <h4 style="margin-top:0;">Open Threads</h4>
+                                <div id="intelOpenThreads" class="item-list">
+                                    <div class="list-item-meta">No open threads.</div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="margin-top:0;">Unresolved Promises</h4>
+                                <div id="intelPromises" class="item-list">
+                                    <div class="list-item-meta">No outstanding promises.</div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="margin-top:0;">Contradictions / Retcons</h4>
+                                <div id="intelContradictions" class="item-list">
+                                    <div class="list-item-meta">No contradictions flagged.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Edit Patch Modal -->
+                    <div id="patchEditModal" class="modal" style="display:none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Edit Patch</h3>
+                                <button class="modal-close" onclick="document.getElementById('patchEditModal').style.display='none'">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <input type="hidden" id="patchEditId" />
+                                <div class="form-group">
+                                    <label>Summary</label>
+                                    <input type="text" id="patchEditSummary" class="input-field">
+                                </div>
+                                <div class="form-group">
+                                    <label>Visibility</label>
+                                    <select id="patchEditVisibility" class="select-input">
+                                        <option value="public">public</option>
+                                        <option value="party">party</option>
+                                        <option value="dm_only">dm_only</option>
+                                        <option value="principal_scoped">principal_scoped</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Patch payload (JSON)</label>
+                                    <textarea id="patchEditPatch" class="textarea-field" rows="6"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button id="patchEditSave" class="btn btn-primary">Save (status → EDITED)</button>
+                                <button id="patchEditApply" class="btn btn-primary">Save + Apply now</button>
+                                <button class="btn btn-secondary" onclick="document.getElementById('patchEditModal').style.display='none'">Cancel</button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 

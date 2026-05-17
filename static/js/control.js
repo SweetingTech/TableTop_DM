@@ -585,6 +585,37 @@ window.control = {
         await refreshAll();
         window._updateCampaignLabel?.();
     },
+
+    // Session Intel patch actions (called from inline onclicks in the
+    // patch-card template above).
+    async approvePatch(pid) {
+        try {
+            await api(`/api/patches/${pid}/approve`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+            });
+            // Reload the patch list + continuity panels.
+            if (window._reloadIntel) window._reloadIntel();
+        } catch (e) { showErr(e.message); }
+    },
+    async rejectPatch(pid) {
+        const notes = prompt('Reason for rejection (optional):') || '';
+        try {
+            await api(`/api/patches/${pid}/reject`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes }),
+            });
+            if (window._reloadIntel) window._reloadIntel();
+        } catch (e) { showErr(e.message); }
+    },
+    editPatch(pid, patchJSON, visibility, summary) {
+        // Open the modal pre-filled. patchJSON is already parsed by the
+        // template (it came in via JSON.stringify in the data attribute).
+        $('patchEditId').value = pid;
+        $('patchEditSummary').value = summary || '';
+        $('patchEditVisibility').value = visibility || 'party';
+        $('patchEditPatch').value = JSON.stringify(patchJSON || {}, null, 2);
+        $('patchEditModal').style.display = 'flex';
+    },
     async editCampaign(id) {
         const name = prompt('New campaign name');
         if (!name) return;
@@ -1314,6 +1345,226 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
     // Initial load (in case the user lands on the tab directly).
     loadApiKeys();
+
+    // ===== Session Intel tab =====
+    // Browse pending patches from state.proposed_story_patches, approve/edit/reject,
+    // view visibility-scoped recaps, surface continuity (open threads / promises /
+    // contradictions). The API does the heavy lifting; this is just a thin shell.
+
+    // event_type → CSS group + display label
+    const PATCH_KIND_CLASS = {
+        location_changed: 'location', scene_started: 'scene', scene_ended: 'scene',
+        npc_introduced: 'npc', npc_updated: 'npc', npc_attitude_changed: 'npc',
+        quest_introduced: 'quest', quest_updated: 'quest',
+        promise_made: 'thread', threat_created: 'thread', consequence_created: 'thread', unresolved_thread: 'thread',
+        secret_revealed: 'secret',
+        retcon_or_contradiction: 'retcon',
+        loot_gained: 'loot', item_used: 'loot',
+    };
+    const PATCH_VIS_LABEL = { public: 'PUBLIC', party: 'PARTY', dm_only: 'DM ONLY', principal_scoped: 'PRINCIPAL' };
+
+    let intelCurrentSessionId = null;
+
+    async function loadIntelSessions() {
+        const sel = $('intelSession');
+        if (!sel || !state.selectedCampaign) return;
+        try {
+            const sessions = await api(`/api/campaigns/${state.selectedCampaign}/sessions`);
+            sel.innerHTML = sessions.length === 0
+                ? '<option value="">no sessions</option>'
+                : sessions.map(s => `<option value="${s.id}">${s.id.slice(0,8)} — ${s.status} — ${s.started_at?.slice(0,16) || ''}</option>`).join('');
+            // Auto-pick the first ACTIVE session
+            const active = sessions.find(s => s.status === 'ACTIVE') || sessions[0];
+            if (active) {
+                sel.value = active.id;
+                intelCurrentSessionId = active.id;
+            }
+        } catch (e) { showErr(e.message); }
+    }
+
+    function escapePre(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+    async function loadPendingPatches() {
+        if (!state.selectedCampaign) return;
+        const params = new URLSearchParams({ status: 'PENDING' });
+        if (intelCurrentSessionId) params.set('session_id', intelCurrentSessionId);
+        try {
+            const patches = await api(`/api/campaigns/${state.selectedCampaign}/patches?${params}`);
+            $('intelPendingCount').textContent = `${patches.length} pending`;
+            const listEl = $('intelPatchList');
+            if (patches.length === 0) {
+                listEl.innerHTML = '<div class="list-item-meta">No pending patches. Run the extractor or wait for play activity.</div>';
+                return;
+            }
+            listEl.innerHTML = patches.map(p => {
+                const kindClass = PATCH_KIND_CLASS[p.event_type] || 'other';
+                const conf = Math.round((p.confidence || 0) * 100);
+                const evidence = (p.evidence || []).filter(e => e.quote).map(e =>
+                    `<div class="patch-evidence">"${escapeHtml(e.quote)}"</div>`
+                ).join('');
+                const entityList = Array.isArray(p.entities) && p.entities.length
+                    ? `<div class="patch-evidence">entities: ${p.entities.map(escapeHtml).join(', ')}</div>` : '';
+                return `
+                <div class="patch-card kind-${kindClass}" data-pid="${p.id}">
+                    <div class="patch-head">
+                        <span class="patch-type">${p.event_type}</span>
+                        <span class="patch-vis">${PATCH_VIS_LABEL[p.visibility] || p.visibility}</span>
+                    </div>
+                    <div class="patch-summary">${escapeHtml(p.summary)}</div>
+                    ${entityList}
+                    ${evidence}
+                    <div class="help-text">
+                        confidence: ${conf}%
+                        <span class="patch-conf"><span style="width:${conf}%"></span></span>
+                    </div>
+                    <div class="patch-actions">
+                        <button class="btn btn-primary btn-sm" onclick="window.control.approvePatch('${p.id}')">Approve & Apply</button>
+                        <button class="btn btn-secondary btn-sm" onclick="window.control.editPatch('${p.id}', ${JSON.stringify(p.patch || {}).replace(/"/g, '&quot;')}, '${p.visibility}', '${escapeHtml(p.summary).replace(/'/g, '&#39;')}')">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="window.control.rejectPatch('${p.id}')">Reject</button>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            showErr(e.message);
+        }
+    }
+
+    async function loadContinuity() {
+        if (!state.selectedCampaign) return;
+        try {
+            const threads = await api(`/api/campaigns/${state.selectedCampaign}/open_threads`);
+            const promises = await api(`/api/campaigns/${state.selectedCampaign}/unresolved_promises`);
+            const patches = await api(`/api/campaigns/${state.selectedCampaign}/patches?status=*&event_type=retcon_or_contradiction`);
+
+            const fmt = (rows, emptyText) => rows.length === 0
+                ? `<div class="list-item-meta">${emptyText}</div>`
+                : rows.map(r => `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${escapeHtml(r.summary)}</div><div class="list-item-meta">${r.event_type || ''} · ${(r.created_at || '').slice(0,16)}</div></div></div>`).join('');
+
+            $('intelOpenThreads').innerHTML = fmt(threads, 'No open threads.');
+            $('intelPromises').innerHTML = fmt(promises, 'No outstanding promises.');
+            $('intelContradictions').innerHTML = fmt(patches, 'No contradictions flagged.');
+        } catch (e) { /* non-fatal */ }
+    }
+
+    async function loadRecap(visibility) {
+        if (!intelCurrentSessionId) {
+            $('intelRecap').textContent = 'Select a session first.'; return;
+        }
+        $('intelRecap').textContent = 'Loading recap…';
+        try {
+            const res = await api(`/api/sessions/${intelCurrentSessionId}/recap?visibility=${visibility}`);
+            $('intelRecap').textContent = res.recap || '(empty)';
+        } catch (e) {
+            $('intelRecap').textContent = 'Error: ' + e.message;
+        }
+    }
+
+    if ($('intelSession')) {
+        $('intelSession').onchange = (e) => {
+            intelCurrentSessionId = e.target.value;
+            loadPendingPatches();
+        };
+    }
+    if ($('btnIntelRefresh')) $('btnIntelRefresh').onclick = () => {
+        loadIntelSessions().then(() => { loadPendingPatches(); loadContinuity(); });
+    };
+    if ($('btnIntelExtract')) $('btnIntelExtract').onclick = async () => {
+        if (!intelCurrentSessionId) { $('intelOut').textContent = 'Pick a session first.'; return; }
+        $('intelOut').textContent = 'Running deterministic extractor…';
+        try {
+            const res = await api(`/api/sessions/${intelCurrentSessionId}/intel/extract`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deterministic_only: true }),
+            });
+            $('intelOut').textContent = `Extracted ${res.proposed_count} candidate event(s). Skipped: ${(res.skipped || []).join(', ') || 'none'}`;
+            await loadPendingPatches();
+        } catch (e) { $('intelOut').textContent = 'Error: ' + e.message; }
+    };
+    if ($('btnIntelExtractLLM')) $('btnIntelExtractLLM').onclick = async () => {
+        if (!intelCurrentSessionId) { $('intelOut').textContent = 'Pick a session first.'; return; }
+        $('intelOut').textContent = 'Running extractor (LLM path active — needs an API key)…';
+        try {
+            const res = await api(`/api/sessions/${intelCurrentSessionId}/intel/extract`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deterministic_only: false }),
+            });
+            $('intelOut').textContent = `Extracted ${res.proposed_count} candidate event(s). Skipped: ${(res.skipped || []).join(', ') || 'none'}`;
+            await loadPendingPatches();
+        } catch (e) { $('intelOut').textContent = 'Error: ' + e.message; }
+    };
+    if ($('btnIntelPacket')) $('btnIntelPacket').onclick = async () => {
+        if (!intelCurrentSessionId) { $('intelOut').textContent = 'Pick a session first.'; return; }
+        $('intelOut').textContent = 'Generating DM packet…';
+        try {
+            const res = await api(`/api/sessions/${intelCurrentSessionId}/dm_packet`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deterministic_only: true }),
+            });
+            $('intelOut').textContent = JSON.stringify({
+                generated_at: res.generated_at,
+                pending: res.pending_patches.length,
+                open_threads: res.open_threads.length,
+                contradictions: res.contradictions.length,
+            }, null, 2);
+            $('intelRecap').textContent = `=== DM RECAP ===\n${res.dm_recap}\n\n=== PARTY RECAP ===\n${res.party_recap}`;
+            await loadPendingPatches();
+            await loadContinuity();
+        } catch (e) { $('intelOut').textContent = 'Error: ' + e.message; }
+    };
+    if ($('btnRecapDm'))     $('btnRecapDm').onclick     = () => loadRecap('dm');
+    if ($('btnRecapParty'))  $('btnRecapParty').onclick  = () => loadRecap('party');
+    if ($('btnRecapPublic')) $('btnRecapPublic').onclick = () => loadRecap('public');
+
+    // Patch modal actions
+    if ($('patchEditSave')) $('patchEditSave').onclick = async () => {
+        const pid = $('patchEditId').value;
+        if (!pid) return;
+        let patchJSON;
+        try {
+            patchJSON = JSON.parse($('patchEditPatch').value || '{}');
+        } catch (e) {
+            $('intelOut').textContent = 'Patch payload must be valid JSON: ' + e.message;
+            return;
+        }
+        try {
+            await api(`/api/patches/${pid}/edit`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    summary: $('patchEditSummary').value,
+                    visibility: $('patchEditVisibility').value,
+                    patch: patchJSON,
+                }),
+            });
+            $('patchEditModal').style.display = 'none';
+            await loadPendingPatches();
+            $('intelOut').textContent = 'Patch edited (status EDITED — click Approve & Apply to commit).';
+        } catch (e) { $('intelOut').textContent = 'Error: ' + e.message; }
+    };
+    if ($('patchEditApply')) $('patchEditApply').onclick = async () => {
+        await $('patchEditSave').click();
+        const pid = $('patchEditId').value;
+        if (!pid) return;
+        try {
+            await api(`/api/patches/${pid}/approve`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            $('intelOut').textContent = 'Edited + applied.';
+            await loadPendingPatches();
+            await loadContinuity();
+        } catch (e) { $('intelOut').textContent = 'Error: ' + e.message; }
+    };
+
+    // When the user clicks the Session Intel tab, refresh everything.
+    document.querySelectorAll('.tab').forEach(b => {
+        if (b.dataset.tab === 'intel') {
+            b.addEventListener('click', () => {
+                loadIntelSessions().then(() => { loadPendingPatches(); loadContinuity(); });
+            });
+        }
+    });
+    // Expose a thin reload helper for patch action handlers on window.control.
+    window._reloadIntel = () => { loadPendingPatches(); loadContinuity(); };
 
     // ===== Save / Load tab =====
     // Files live entirely on the user's filesystem; the server only encrypts/
