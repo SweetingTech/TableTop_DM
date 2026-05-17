@@ -5,6 +5,7 @@ import traceback
 import socket
 import hashlib
 import logging
+from datetime import datetime
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from urllib import request as urllib_request, error as urllib_error
@@ -1025,6 +1026,223 @@ def api_global_settings_put(key):
     )
     # Don't echo encrypted values back; just confirm the write.
     return jsonify({"key": row["key"], "saved": True, "updated_at": _serialize(row)["updated_at"]})
+
+
+# ====================================================================
+# Session Intelligence (Phases 33–38)
+# ====================================================================
+# Observer-extractor-reviewer loop. Watches chat + ledger, proposes
+# narrative state patches, queues them for DM review, applies on
+# approval, surfaces continuity over time.
+# Endpoints are non-mutating by default — extractor produces PENDING
+# rows in state.proposed_story_patches; only /approve actually changes
+# state.story_state via the patcher.
+
+@app.route("/api/sessions/<session_id>/intel/extract", methods=["POST"])
+def api_intel_extract(session_id):
+    """Run the session-intelligence extractor over a window. Body:
+    { campaign_id, since_seq_id?, until_seq_id?, deterministic_only? }
+    Returns the ids of proposed_story_patches rows inserted."""
+    from services.session_intel.extractor import extract_and_queue
+    from shared.schemas.session_intel import ExtractionRequest
+
+    data = request.get_json(silent=True) or {}
+    cid = data.get("campaign_id")
+    if not cid:
+        # Resolve from session if not provided.
+        from shared.db.connection import execute_one
+        row = execute_one("SELECT campaign_id FROM state.sessions WHERE id=%s", (session_id,))
+        if not row:
+            return jsonify({"error": "session not found"}), 404
+        cid = str(row["campaign_id"])
+    req = ExtractionRequest(
+        campaign_id=cid,
+        session_id=session_id,
+        since_seq_id=data.get("since_seq_id"),
+        until_seq_id=data.get("until_seq_id"),
+        deterministic_only=bool(data.get("deterministic_only", False)),
+    )
+    try:
+        result = extract_and_queue(req)
+    except Exception as e:
+        app.logger.exception("intel extract failed")
+        return jsonify({"error": str(e)}), 500
+    return jsonify(result.model_dump())
+
+
+@app.route("/api/campaigns/<campaign_id>/patches")
+def api_patches_list(campaign_id):
+    """List proposed story patches. Filter by ?status=PENDING|APPROVED|... &
+    ?session_id= & ?event_type=. Default returns PENDING."""
+    from shared.db.connection import execute_query
+
+    where = ["campaign_id = %s"]
+    params = [campaign_id]
+    status = request.args.get("status", "PENDING")
+    if status != "*":
+        where.append("status = %s")
+        params.append(status)
+    if request.args.get("session_id"):
+        where.append("session_id = %s")
+        params.append(request.args["session_id"])
+    if request.args.get("event_type"):
+        where.append("event_type = %s")
+        params.append(request.args["event_type"])
+    rows = execute_query(
+        f"SELECT * FROM state.proposed_story_patches "
+        f"WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT 200",
+        tuple(params),
+    )
+    return jsonify([_serialize(r) for r in rows])
+
+
+@app.route("/api/patches/<patch_id>/approve", methods=["POST"])
+def api_patch_approve(patch_id):
+    """Approve a patch and commit it via the patcher in one step."""
+    from shared.db.connection import execute_one
+    from services.session_intel.patcher import apply_patch, PatchError
+
+    data = request.get_json(silent=True) or {}
+    reviewed_by = data.get("reviewed_by")
+    # Move to APPROVED first so apply_patch picks it up.
+    execute_one(
+        "UPDATE state.proposed_story_patches SET status = 'APPROVED', "
+        "reviewed_at = now(), reviewed_by = %s WHERE id = %s AND status IN ('PENDING','EDITED') "
+        "RETURNING id, status",
+        (reviewed_by, patch_id),
+    )
+    try:
+        result = apply_patch(uuid.UUID(patch_id), reviewed_by=uuid.UUID(reviewed_by) if reviewed_by else None)
+    except PatchError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        app.logger.exception("patch apply failed")
+        return jsonify({"error": str(e)}), 500
+    return jsonify(result)
+
+
+@app.route("/api/patches/<patch_id>/reject", methods=["POST"])
+def api_patch_reject(patch_id):
+    from shared.db.connection import execute_one
+    data = request.get_json(silent=True) or {}
+    row = execute_one(
+        "UPDATE state.proposed_story_patches SET status = 'REJECTED', "
+        "reviewed_at = now(), reviewed_by = %s, notes = %s WHERE id = %s "
+        "RETURNING id, status",
+        (data.get("reviewed_by"), data.get("notes"), patch_id),
+    )
+    if not row:
+        return jsonify({"error": "Patch not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/patches/<patch_id>/edit", methods=["POST"])
+def api_patch_edit(patch_id):
+    """DM-edits the proposed patch payload before applying. Body fields
+    summary / patch / entities / visibility are optional overrides."""
+    from shared.db.connection import execute_one
+    data = request.get_json(silent=True) or {}
+    sets = []
+    params = []
+    for col in ("summary", "visibility"):
+        if col in data:
+            sets.append(f"{col} = %s")
+            params.append(data[col])
+    for col in ("patch", "entities"):
+        if col in data:
+            sets.append(f"{col} = %s::jsonb")
+            params.append(json.dumps(data[col]))
+    if not sets:
+        return jsonify({"error": "no editable fields provided"}), 400
+    sets.append("status = 'EDITED'")
+    sets.append("reviewed_at = now()")
+    if data.get("reviewed_by"):
+        sets.append("reviewed_by = %s")
+        params.append(data["reviewed_by"])
+    params.append(patch_id)
+    row = execute_one(
+        f"UPDATE state.proposed_story_patches SET {', '.join(sets)} WHERE id = %s RETURNING *",
+        tuple(params),
+    )
+    if not row:
+        return jsonify({"error": "Patch not found"}), 404
+    return jsonify(_serialize(row))
+
+
+@app.route("/api/sessions/<session_id>/recap")
+def api_session_recap(session_id):
+    """Visibility-scoped recap. ?visibility=dm|party|principal|public."""
+    from services.session_intel.recap import generate_recap
+    from shared.db.connection import execute_one
+
+    row = execute_one("SELECT campaign_id FROM state.sessions WHERE id=%s", (session_id,))
+    if not row:
+        return jsonify({"error": "session not found"}), 404
+    visibility = request.args.get("visibility", "party")
+    text = generate_recap(
+        session_id=uuid.UUID(session_id),
+        campaign_id=row["campaign_id"],
+        visibility=visibility,
+    )
+    return jsonify({"session_id": session_id, "visibility": visibility, "recap": text})
+
+
+@app.route("/api/sessions/<session_id>/dm_packet", methods=["POST"])
+def api_session_dm_packet(session_id):
+    """The 'after every session' deliverable. Runs the extractor over
+    the session's full ledger, assembles pending patches + DM recap +
+    party recap + open threads + contradictions into one payload."""
+    from services.session_intel.extractor import extract_and_queue
+    from services.session_intel.recap import generate_recap
+    from services.session_intel.continuity import open_threads, contradictions
+    from shared.schemas.session_intel import ExtractionRequest
+    from shared.db.connection import execute_one, execute_query
+
+    sess = execute_one("SELECT campaign_id FROM state.sessions WHERE id=%s", (session_id,))
+    if not sess:
+        return jsonify({"error": "session not found"}), 404
+    cid = str(sess["campaign_id"])
+
+    data = request.get_json(silent=True) or {}
+    if not data.get("skip_extract"):
+        extract_and_queue(ExtractionRequest(
+            campaign_id=cid, session_id=session_id,
+            deterministic_only=bool(data.get("deterministic_only", False)),
+        ))
+
+    pending = execute_query(
+        "SELECT * FROM state.proposed_story_patches "
+        "WHERE session_id = %s AND status = 'PENDING' ORDER BY created_at",
+        (session_id,),
+    )
+    return jsonify({
+        "session_id": session_id,
+        "campaign_id": cid,
+        "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "pending_patches": [_serialize(r) for r in pending],
+        "party_recap": generate_recap(uuid.UUID(session_id), uuid.UUID(cid), "party"),
+        "dm_recap":    generate_recap(uuid.UUID(session_id), uuid.UUID(cid), "dm"),
+        "open_threads": [_serialize(r) for r in open_threads(uuid.UUID(cid))],
+        "contradictions": [_serialize(r) for r in contradictions(uuid.UUID(cid))],
+    })
+
+
+@app.route("/api/campaigns/<campaign_id>/open_threads")
+def api_open_threads(campaign_id):
+    from services.session_intel.continuity import open_threads
+    return jsonify([_serialize(r) for r in open_threads(uuid.UUID(campaign_id))])
+
+
+@app.route("/api/campaigns/<campaign_id>/unresolved_promises")
+def api_unresolved_promises(campaign_id):
+    from services.session_intel.continuity import unresolved_promises
+    return jsonify([_serialize(r) for r in unresolved_promises(uuid.UUID(campaign_id))])
+
+
+@app.route("/api/campaigns/<campaign_id>/npc_memory/<npc_id>")
+def api_npc_memory(campaign_id, npc_id):
+    from services.session_intel.continuity import npc_memory
+    return jsonify([_serialize(r) for r in npc_memory(uuid.UUID(campaign_id), npc_id)])
 
 
 @app.route("/api/_debug/save_canvas", methods=["POST"])

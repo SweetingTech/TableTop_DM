@@ -47,6 +47,12 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 30 | **API key vault** — Fernet encryption at rest with installation-local vault key, redacted GET responses, dedicated UI panel | Done |
 | 31 | **External save files** — passphrase-encrypted `.ttdm` files for game state and program config, portable across machines | Done |
 | 32 | **Desktop launcher** — one-click `.lnk` that boots compose + Flask + opens the dashboard | Done |
+| 33 | **Session-intelligence extractor** — deterministic-from-ledger + LLM-driven structured-output paths into a review queue | Done |
+| 34 | **Proposed-patch review queue** (`state.proposed_story_patches`) with PENDING / APPROVED / REJECTED / EDITED / APPLIED workflow | Done |
+| 35 | **Pydantic extraction contracts** (`Evidence`, `ExtractedStoryEvent`, `StoryEventType` enum) | Done |
+| 36 | **Story-state auto-patcher** — per-event-type dispatch into `state.story_state` fields | Done |
+| 37 | **Visibility-scoped recaps** — DM / party / principal / public; falls back to deterministic bullets if no LLM | Done |
+| 38 | **Continuity queries** — open threads, unresolved promises, NPC memory, contradictions | Done |
 
 
 ## Quickstart
@@ -274,6 +280,13 @@ services/
     vault.py                        Installation-local API-key encryption at rest
     game_save.py                    Per-campaign export/import
     program_save.py                 Installation-wide export/import (keys + principals)
+  session_intel/
+    extractor.py                    Deterministic-from-ledger + LLM-driven extraction → review queue
+    patcher.py                      Approved-patch → state.story_state dispatcher (Phase 36)
+    recap.py                        Visibility-scoped recap generator (DM / party / principal)
+    continuity.py                   Open threads / unresolved promises / NPC memory / contradictions
+shared/schemas/
+    session_intel.py                Pydantic contracts for the extractor (Phase 35)
   export/
     exporter.py                     Session export (Markdown) + replay engine
 static/js/
@@ -288,6 +301,7 @@ infra/sql/migrations/
   010_entity_current_map.sql        entities.current_map_id (party decoherence)
   011_map_decorations.sql           state.map_decorations
   012_global_settings.sql           Installation-wide K/V (API keys + image gen defaults)
+  013_proposed_story_patches.sql    Session-intelligence review queue (Phase 34)
 docs/                               Architecture specs
 ```
 
@@ -347,6 +361,16 @@ docs/                               Architecture specs
 | POST | `/api/saves/game/import` | multipart `file`, `passphrase`, `replace=true|false` |
 | POST | `/api/saves/program/export` | `{passphrase}` → encrypted `.ttdm` |
 | POST | `/api/saves/program/import` | multipart `file`, `passphrase` |
+| POST | `/api/sessions/<id>/intel/extract` | Run session-intelligence extractor, queue PENDING patches |
+| POST | `/api/sessions/<id>/dm_packet` | The "after every session" deliverable — extracts, assembles patches + recaps + continuity into one payload |
+| GET | `/api/campaigns/<id>/patches` | List patches (filter `?status=&session_id=&event_type=`) |
+| POST | `/api/patches/<id>/approve` | Approve + apply in one step |
+| POST | `/api/patches/<id>/reject` | Reject with optional notes |
+| POST | `/api/patches/<id>/edit` | DM edits summary/patch/visibility before applying |
+| GET | `/api/sessions/<id>/recap?visibility=dm\|party\|principal\|public` | Visibility-scoped recap |
+| GET | `/api/campaigns/<id>/open_threads` | Plot threads still hanging |
+| GET | `/api/campaigns/<id>/unresolved_promises` | Specifically promise_made patches |
+| GET | `/api/campaigns/<id>/npc_memory/<npc_id>` | All applied patches mentioning an NPC |
 
 ## WebSocket Events
 | Event | Direction | Description |
@@ -678,6 +702,63 @@ API keys are **encrypted at rest** using Fernet (AES-128-CBC + HMAC-SHA256) with
 Per-campaign overrides in **AI Settings** still work and take priority over the global key when set.
 
 **Where to enter keys:** Control Plane → API Keys tab. One field per provider, with status indicators ("saved" / "no key saved") and deep links to each provider's keys page.
+
+## Session Intelligence
+
+The session-intelligence layer is the **narrative state compiler** sitting on top of the deterministic engine. It observes chat + ledger + DM notes within a session, proposes patches to `state.story_state` (locations, NPCs, quests, plot threads, promises, secrets, consequences), queues them for DM review, and applies approved ones via a per-event-type dispatcher.
+
+Like `/api/propose`, this is a **propose-only** layer — the extractor never mutates state directly. Every proposal lands as a `PENDING` row in `state.proposed_story_patches`. The DM approves, edits, or rejects from a review queue. Only on approval does the patcher commit to `state.story_state` and (transactionally) flip the patch's status to `APPLIED`.
+
+### What it captures
+
+Sixteen event types, each with a `proposed_state_delta` shape and a per-visibility routing rule in [services/session_intel/patcher.py](services/session_intel/patcher.py):
+
+| Event type | Lands in `state.story_state` field |
+|---|---|
+| `location_changed` | `current_location` (scalar) |
+| `scene_started` / `scene_ended` | `recent_events` (JSONB list) |
+| `npc_introduced` / `npc_updated` / `npc_attitude_changed` | `active_npcs` |
+| `quest_introduced` / `quest_updated` | `active_quests` |
+| `promise_made` / `threat_created` / `consequence_created` / `unresolved_thread` | `plot_threads` |
+| `loot_gained` | `party_resources` |
+| `item_used` | `recent_events` |
+| `secret_revealed` | `recent_events` if `public`/`party`; `dm_notes` if `dm_only` |
+| `retcon_or_contradiction` | Never auto-applied — flagged in `dm_notes` for the DM to resolve |
+
+### Two extraction paths
+
+| Path | Source | Confidence | When it runs |
+|---|---|---|---|
+| **Deterministic** | `STATE_DELTA` / `TOOL_CALL` ledger rows | 1.0 | Always — cheap, certain, runs first |
+| **LLM-driven** | `DIALOGUE` events + DM notes | model-emitted | When a key is configured AND `deterministic_only != true` |
+
+The LLM extractor calls `LLMAdapter.generate_structured()` with a strict response schema. Anything that doesn't fit the contract is dropped with a skip reason. Inferred facts must cite the verbatim quote that supports them in `evidence[].quote` — without evidence, a "fact" is just an LLM hallucination wearing a confidence score as a hat.
+
+### Visibility-aware recaps
+
+Three flavors, mapped onto the patch table's `visibility` column:
+
+| Recap kind | Includes |
+|---|---|
+| `dm` | All four visibility scopes — secrets, contradictions, the works |
+| `party` | `public` + `party` only — what the players collectively know |
+| `principal` | `public` + `party` + `principal_scoped` for that PC |
+| `public` | `public` only — for table-facing displays |
+
+If an LLM is configured, the recap is one polish-pass call ("turn these bullets into a paragraph"); without one, the recap is a deterministic Markdown bullet list. **Never blocks on the LLM** — offline play still gets a recap.
+
+### Continuity queries
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/campaigns/<id>/open_threads` | APPLIED unresolved_thread / promise / threat / consequence patches |
+| `GET /api/campaigns/<id>/unresolved_promises` | Just `promise_made` — the "did the party owe that NPC a favor" surface |
+| `GET /api/campaigns/<id>/npc_memory/<npc_id>` | All applied patches that mention this NPC |
+| `GET /api/campaigns/<id>/patches?status=&session_id=&event_type=` | Generic browse of the queue |
+
+### The DM Review Packet — the milestone deliverable
+
+`POST /api/sessions/<id>/dm_packet` runs the extractor (unless `skip_extract`), then assembles in one payload: pending patches, party recap, DM recap, open threads, flagged contradictions. The single endpoint a GM hits at session end to see everything the intelligence layer noticed.
 
 ## Save / Load — External Files
 
