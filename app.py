@@ -331,7 +331,19 @@ def _qdrant_base_url() -> str:
 
 
 def _qdrant_collection_name(campaign_id: str) -> str:
+    """LEGACY name from before Phase 39 embedding profiles. Retained for
+    backward compatibility with pre-profile uploads. New ingest paths
+    resolve through services/rag/embedding_profile.py instead."""
     return f"ttdm_{campaign_id}_rag".replace("-", "_")
+
+
+def _active_collection_for(campaign_id: str, provider: str, embedding_model: str) -> tuple[str, str]:
+    """Resolve the (profile_id, collection_name) we should write to right
+    now. Creates a profile row if (campaign, provider, model) is new and
+    retires any other ACTIVE profile (marking its docs NEEDS_REINDEX)."""
+    from services.rag.embedding_profile import resolve_active_profile
+    profile = resolve_active_profile(campaign_id, provider, embedding_model)
+    return str(profile["id"]), profile["qdrant_collection"]
 
 
 def _qdrant_request(method: str, path: str, payload: dict | None = None) -> dict:
@@ -444,16 +456,53 @@ def _process_rag_document(doc_id: str):
         vectors = embedding_result["vectors"]
         dims = embedding_result["dimensions"]
 
+        # Resolve the campaign's ACTIVE embedding profile from current
+        # campaign_settings. Creates a new profile + new collection
+        # automatically if the (provider, model) combination is new for
+        # this campaign — and retires any other active profile, marking
+        # its documents NEEDS_REINDEX. See services/rag/embedding_profile.
+        cfg = _get_ai_config(campaign_id)
+        provider = (cfg.get("llm_provider") or "openai").lower()
+        embedding_model = cfg.get("embedding_model") or "text-embedding-3-small"
+        profile_id, collection_name = _active_collection_for(
+            campaign_id, provider, embedding_model
+        )
+        # Stash the dim on the profile (idempotent on subsequent uploads).
+        if dims > 0:
+            from services.rag.embedding_profile import set_vector_dim
+            set_vector_dim(profile_id, dims)
+
+        # Pull document-level visibility/tags hints from the document name
+        # if the DM uploaded with a convention like "lore_dm-only.md".
+        # Default visibility = 'public'; future UI can override.
+        doc_visibility = "public"
+        doc_tags: list[str] = []
+        name_lower = (doc["filename"] or "").lower()
+        if "dm-only" in name_lower or "dm_only" in name_lower or "secret" in name_lower:
+            doc_visibility = "dm_only"
+        if "party" in name_lower:
+            doc_visibility = "party"
+
         execute_query("DELETE FROM state.rag_chunks WHERE doc_id=%s", (doc_id,), fetch=False)
         if dims > 0:
             try:
-                _delete_qdrant_doc_points(campaign_id, doc_id)
+                _qdrant_request(
+                    "POST",
+                    f"/collections/{collection_name}/points/delete",
+                    {"filter": {"must": [{"key": "doc_id", "match": {"value": doc_id}}]}},
+                )
             except Exception:
                 logging.exception("Failed deleting prior qdrant points for doc_id=%s", doc_id)
 
         points = []
         for i, chunk in enumerate(chunks):
             qid = f"{doc_id}:{chunk['chunk_id']}"
+            chunk_meta = {
+                "source_filename": doc["filename"],
+                "vector_dim": len(vectors[i]) if vectors else 0,
+                "visibility": doc_visibility,
+                "tags": doc_tags,
+            }
             execute_one(
                 """
                 INSERT INTO state.rag_chunks (doc_id, campaign_id, chunk_id, page, text, qdrant_point_id, metadata)
@@ -467,7 +516,7 @@ def _process_rag_document(doc_id: str):
                     chunk["page"],
                     chunk["text"],
                     qid,
-                    json.dumps({"source_filename": doc["filename"], "vector_dim": len(vectors[i]) if vectors else 0}),
+                    json.dumps(chunk_meta),
                 ),
             )
             if vectors:
@@ -482,12 +531,35 @@ def _process_rag_document(doc_id: str):
                             "page": chunk["page"],
                             "source_filename": doc["filename"],
                             "text": chunk["text"],
+                            "visibility": doc_visibility,
+                            "tags": doc_tags,
                         },
                     }
                 )
 
         if points and dims > 0:
-            _upsert_qdrant_points(campaign_id, points, dims)
+            # Profile-aware upsert. Creates the collection at the right
+            # dimension if it doesn't exist yet.
+            try:
+                _qdrant_request("GET", f"/collections/{collection_name}")
+            except RuntimeError:
+                _qdrant_request(
+                    "PUT",
+                    f"/collections/{collection_name}",
+                    {"vectors": {"size": dims, "distance": "Cosine"}},
+                )
+            _qdrant_request(
+                "PUT",
+                f"/collections/{collection_name}/points",
+                {"points": points},
+            )
+
+        # Bind the document to its profile so reindex flows know where it lives.
+        execute_one(
+            "UPDATE state.rag_documents SET embedding_profile_id = %s, "
+            "needs_reindex = false WHERE id = %s RETURNING id",
+            (profile_id, doc_id),
+        )
 
         execute_one(
             "UPDATE state.rag_documents SET status='READY', error_text=NULL, updated_at=now() WHERE id=%s RETURNING id",
@@ -2840,45 +2912,42 @@ def api_rag_reindex(doc_id):
 
 @app.route("/api/campaigns/<campaign_id>/rag/query", methods=["POST"])
 def api_rag_query(campaign_id):
-    from services.llm.adapter import LLMAdapter
+    """Phase 39 step 1 — routes through services.rag.retriever instead of
+    talking to Qdrant directly. The retriever applies profile-aware
+    collection resolution, payload filters, and visibility post-checks."""
+    from services.rag.retriever import retrieve_campaign_context
 
     data = request.get_json(silent=True) or {}
     query = data.get("query", "").strip()
     if not query:
         return jsonify({"error": "query is required"}), 400
     top_k = int(data.get("top_k", 5))
-    try:
-        llm = LLMAdapter(campaign_id=uuid.UUID(campaign_id), role="dm")
-        embedding = llm.embed_texts([query])
-        query_vector = embedding["vectors"][0] if embedding["vectors"] else []
-        if not query_vector:
-            return jsonify({"results": []})
+    purpose = data.get("purpose", "dm_narration")
 
-        hits = _search_qdrant(campaign_id, query_vector, top_k)
-        results = []
-        for hit in hits:
-            payload = hit.get("payload", {})
-            results.append(
-                {
-                    "score": hit.get("score"),
-                    "doc_id": payload.get("doc_id"),
-                    "chunk_id": payload.get("chunk_id"),
-                    "page": payload.get("page"),
-                    "filename": payload.get("source_filename"),
-                    "text": payload.get("text"),
-                    "metadata": {
-                        "campaign_id": payload.get("campaign_id"),
-                        "source_filename": payload.get("source_filename"),
-                    },
-                }
-            )
-        return jsonify({"results": results})
-    except RuntimeError as exc:
-        if "404" in str(exc):
-            return jsonify({"results": []})
-        return jsonify({"error": str(exc)}), 500
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    ctx = retrieve_campaign_context(
+        campaign_id=campaign_id,
+        query=query,
+        top_k=top_k,
+        purpose=purpose,
+        session_id=data.get("session_id"),
+        entity_ids=data.get("entity_ids"),
+    )
+    results = [
+        {
+            "score": c.score,
+            "doc_id": c.doc_id,
+            "chunk_id": c.chunk_id,
+            "page": c.page,
+            "filename": c.filename,
+            "text": c.text,
+            "metadata": c.metadata,
+        }
+        for c in ctx.chunks
+    ]
+    response = {"results": results, "citations": ctx.citations}
+    if ctx.skipped_reason:
+        response["skipped_reason"] = ctx.skipped_reason
+    return jsonify(response)
 
 
 @socketio.on("connect")

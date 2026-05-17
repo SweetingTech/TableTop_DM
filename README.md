@@ -53,6 +53,7 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 36 | **Story-state auto-patcher** — per-event-type dispatch into `state.story_state` fields | Done |
 | 37 | **Visibility-scoped recaps** — DM / party / principal / public; falls back to deterministic bullets if no LLM | Done |
 | 38 | **Continuity queries** — open threads, unresolved promises, NPC memory, contradictions | Done |
+| 39 | **RAG-grounded DM/NPC cognition** — centralized retriever, visibility-filtered prompt injection, embedding-profile guard, north-star leak-prevention tests | Done |
 
 
 ## Quickstart
@@ -285,6 +286,11 @@ services/
     patcher.py                      Approved-patch → state.story_state dispatcher (Phase 36)
     recap.py                        Visibility-scoped recap generator (DM / party / principal)
     continuity.py                   Open threads / unresolved promises / NPC memory / contradictions
+  rag/
+    retriever.py                    Centralized retrieve_campaign_context (Phase 39 step 1)
+    context_builder.py              Prompt-injectable lore + story_state blocks
+    filters.py                      Visibility access matrix + Qdrant payload filter builder
+    embedding_profile.py            Per-(provider,model) collections, dimension-lock guard
 shared/schemas/
     session_intel.py                Pydantic contracts for the extractor (Phase 35)
   export/
@@ -302,6 +308,7 @@ infra/sql/migrations/
   011_map_decorations.sql           state.map_decorations
   012_global_settings.sql           Installation-wide K/V (API keys + image gen defaults)
   013_proposed_story_patches.sql    Session-intelligence review queue (Phase 34)
+  014_rag_embedding_profiles.sql    Per-(provider,model) RAG profiles + NEEDS_REINDEX status (Phase 39)
 docs/                               Architecture specs
 ```
 
@@ -759,6 +766,60 @@ If an LLM is configured, the recap is one polish-pass call ("turn these bullets 
 ### The DM Review Packet — the milestone deliverable
 
 `POST /api/sessions/<id>/dm_packet` runs the extractor (unless `skip_extract`), then assembles in one payload: pending patches, party recap, DM recap, open threads, flagged contradictions. The single endpoint a GM hits at session end to see everything the intelligence layer noticed.
+
+## RAG-grounded narration (Phase 39)
+
+Uploaded campaign lore now feeds the DM narrator and NPC dialogue. The Knowledge Base tab is no longer a searchable attic — it's the brain.
+
+### How it flows
+
+1. Upload a doc in **Control Plane → Knowledge Base**. The file is chunked, embedded, vectors land in Qdrant, text + metadata in Postgres.
+2. When the DM or an NPC speaks, the agent calls [services/rag/context_builder.py](services/rag/context_builder.py), which calls [services/rag/retriever.py](services/rag/retriever.py).
+3. The retriever embeds the query, searches the campaign's **active embedding profile collection**, applies a **server-side filter** (campaign + visibility + entity tags), retrieves over-fetched candidates, then runs a **client-side visibility re-check** before returning the top N.
+4. The context block is **injected into the agent's prompt** above the task. Citations are surfaced in dev responses.
+
+### Visibility access matrix
+
+The agent prompt gets only the chunks its purpose is allowed to see. This is the leak-prevention boundary — verified by 7 north-star tests in [tests/services/test_rag_north_star.py](tests/services/test_rag_north_star.py).
+
+| Purpose | Can see |
+|---|---|
+| `dm_narration` | public, party, dm_only |
+| `npc_dialogue` | public, party (further narrowed by the NPC's `known_lore_tags` if set) |
+| `session_intel` | public, party, dm_only |
+| `recap_dm` | public, party, dm_only, principal_scoped |
+| `recap_party` | public, party |
+| `recap_public` | public only |
+
+**Critical rule:** `dm_only` lore **never reaches NPC dialogue or party/public recaps, regardless of how relevant cosine similarity thinks it is.** Visibility outranks knowledge tags — even an NPC with `chapel` in their known tags won't get a dm_only chapel chunk.
+
+### Embedding profile guard
+
+`state.rag_embedding_profiles` solves the embedding-dimension lock. Each (provider, model) combination gets its own profile and its own Qdrant collection named `ttdm_<campaign_id>_<8-char-hash>_rag`. Switching from OpenAI's `text-embedding-3-small` (1536d) to Ollama's `nomic-embed-text` (768d):
+
+1. New profile row created, new collection at the new dimension
+2. Old profile flipped to `active=false` (retained until cleanup)
+3. Documents previously embedded under the old profile flip to `status='NEEDS_REINDEX'`
+4. No silent broken vectors. No "delete the collection and pray."
+
+Marker tag for uploaded docs: if the filename contains `dm-only`, `dm_only`, or `secret`, the chunks get `visibility=dm_only` automatically. `party` in the filename forces `visibility=party`. Otherwise defaults to `public`. UI-level visibility override is the next iteration.
+
+### Behavioral contract
+
+When `DMNarrationAgent.narrate_event(..., session_id=...)` runs:
+- Pulls `state.story_state` for the session (location, active NPCs, open threads)
+- Retrieves top-4 lore chunks tagged for `dm_narration`
+- Builds `CAMPAIGN LORE CONTEXT` + `CURRENT STORY STATE` prefix
+- Prompts the LLM with `"do not invent beyond these facts"` constraint
+- Returns narration (optionally with citations for dev surfaces)
+
+`NPCDialogueAgent.generate_dialogue(..., session_id=..., npc_entity_id=...)`:
+- Reads the NPC's `public_sheet.known_lore_tags` (if present)
+- Retrieves top-3 chunks, restricted to public/party AND tag-matched
+- Wraps with `"You MUST NOT reveal information outside this context"`
+- Same `/api/chat` flow, no schema changes for callers
+
+Both fail open — if RAG retrieval errors (no Qdrant collection yet, embedding provider down, etc.), the agent narrates from the original prompt without the lore prefix. **The DM never blocks on the knowledge layer.**
 
 ## Save / Load — External Files
 

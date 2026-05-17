@@ -232,13 +232,46 @@ class DMNarrationAgent:
 Your role is NARRATION ONLY. You describe what happens based on mechanical results you receive.
 You NEVER determine mechanical outcomes (damage, hits, saves, etc.) - those are already resolved.
 You receive state deltas and roll results, and produce vivid, atmospheric narration.
+When CAMPAIGN LORE CONTEXT is provided, weave it in naturally — do NOT invent facts beyond it.
 Respond in JSON format with a single "narration" field containing your narrative text."""
 
     def __init__(self, campaign_id: Optional[uuid.UUID] = None):
+        self.campaign_id = campaign_id
         self.llm = LLMAdapter(role="dm", campaign_id=campaign_id)
 
-    def narrate_event(self, tool_result: dict, context: str = "") -> str:
-        prompt = f"""Narrate the following game event result:
+    def narrate_event(
+        self,
+        tool_result: dict,
+        context: str = "",
+        *,
+        session_id: Optional[uuid.UUID] = None,
+        return_citations: bool = False,
+    ) -> str:
+        """Generate narration. When `session_id` is provided, the DM
+        retrieves the campaign's RAG context (lore docs uploaded via the
+        Knowledge Base tab) tagged for dm_narration purpose and injects
+        the top chunks into the prompt before generation. Visibility
+        filter restricts to public/party/dm_only — DM narration is
+        DM-visible by definition."""
+        rag_prefix = ""
+        citations: list[str] = []
+        if self.campaign_id is not None:
+            try:
+                from services.rag.context_builder import build_dm_narration_context
+                rag_prefix, rag_ctx = build_dm_narration_context(
+                    campaign_id=str(self.campaign_id),
+                    session_id=str(session_id) if session_id else None,
+                    user_context=context or json.dumps(tool_result, default=str)[:300],
+                )
+                citations = rag_ctx.citations
+            except Exception as e:  # never block narration on RAG
+                logging.info("DM RAG injection skipped: %s", e)
+
+        prompt_parts = []
+        if rag_prefix:
+            prompt_parts.append(rag_prefix)
+        prompt_parts.append(
+            f"""TASK: Narrate the following game event result.
 
 Event Data:
 {json.dumps(tool_result, indent=2, default=str)}
@@ -247,6 +280,8 @@ Context:
 {context}
 
 Provide dramatic, atmospheric narration of what happened. Do NOT change any mechanical results."""
+        )
+        prompt = "\n\n".join(prompt_parts)
 
         result = self.llm.generate_structured(
             self.SYSTEM_PROMPT,
@@ -258,7 +293,10 @@ Provide dramatic, atmospheric narration of what happened. Do NOT change any mech
                 "additionalProperties": False,
             },
         )
-        return result.get("narration", result.get("error", "The scene unfolds..."))
+        narration = result.get("narration", result.get("error", "The scene unfolds..."))
+        if return_citations:
+            return {"narration": narration, "citations": citations}
+        return narration
 
     def create_narration_event(
         self,
@@ -288,9 +326,12 @@ class NPCDialogueAgent:
 You speak in character based on the NPC's personality, emotional state, and context.
 You NEVER determine mechanical outcomes.
 You only produce dialogue and brief action descriptions.
+When NPC KNOWLEDGE CONTEXT is provided, it is everything this NPC plausibly knows.
+You MUST NOT reveal information outside that context. Do not invent lore.
 Respond in JSON with "dialogue" (what the NPC says) and "action" (brief physical action, optional)."""
 
     def __init__(self, campaign_id: Optional[uuid.UUID] = None):
+        self.campaign_id = campaign_id
         self.llm = LLMAdapter(role="npc", campaign_id=campaign_id)
 
     def generate_dialogue(
@@ -300,20 +341,50 @@ Respond in JSON with "dialogue" (what the NPC says) and "action" (brief physical
         emotional_state: str,
         context: str,
         speaker_message: str = "",
+        *,
+        session_id: Optional[uuid.UUID] = None,
+        npc_entity_id: Optional[uuid.UUID] = None,
     ) -> dict:
-        prompt = f"""You are {npc_name}.
+        """Generate NPC dialogue. RAG-filtered for npc_dialogue purpose —
+        only public + party visibility chunks reach the prompt, and if
+        the NPC has `known_lore_tags` configured in their public_sheet,
+        chunks must overlap those tags.
+
+        This is the critical leak boundary: dm_only lore must NEVER
+        surface in NPC dialogue regardless of how relevant cosine
+        similarity thinks it is. The filter happens in services/rag/
+        filters.py:filter_chunk_visibility before the prompt is built."""
+        rag_prefix = ""
+        if self.campaign_id is not None:
+            try:
+                from services.rag.context_builder import build_npc_dialogue_context
+                rag_prefix, _ = build_npc_dialogue_context(
+                    campaign_id=str(self.campaign_id),
+                    session_id=str(session_id) if session_id else None,
+                    npc_entity_id=str(npc_entity_id) if npc_entity_id else None,
+                    player_utterance=speaker_message or context,
+                )
+            except Exception as e:
+                logging.info("NPC RAG injection skipped: %s", e)
+
+        prompt_parts = []
+        if rag_prefix:
+            prompt_parts.append(rag_prefix)
+        prompt_parts.append(
+            f"""You are {npc_name}.
 
 Your character sheet: {json.dumps(npc_sheet, default=str)}
 Current emotional state: {emotional_state}
 Scene context: {context}
 """
+        )
         if speaker_message:
-            prompt += f'\nSomeone says to you: "{speaker_message}"\n'
-        prompt += "\nRespond in character."
+            prompt_parts.append(f'\nSomeone says to you: "{speaker_message}"\n')
+        prompt_parts.append("\nRespond in character.")
 
         result = self.llm.generate_structured(
             self.SYSTEM_PROMPT,
-            prompt,
+            "".join(prompt_parts),
             response_schema={
                 "type": "object",
                 "properties": {
