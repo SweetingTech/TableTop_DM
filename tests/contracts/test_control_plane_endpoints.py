@@ -81,7 +81,10 @@ def test_ai_test_provider_lmstudio_allows_empty_env_api_key(monkeypatch):
     assert captured["api_key"] == "lmstudio-local"
 
 
-def test_openai_client_for_non_lmstudio_keeps_existing_env_behavior(monkeypatch):
+@pytest.mark.parametrize("provider", ["openai", "ollama", "openrouter"])
+def test_openai_client_for_non_lmstudio_keeps_existing_env_behavior(
+    monkeypatch, provider
+):
     captured = {}
 
     class _FakeOpenAI:
@@ -92,6 +95,6 @@ def test_openai_client_for_non_lmstudio_keeps_existing_env_behavior(monkeypatch)
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setattr("openai.OpenAI", _FakeOpenAI)
 
-    _openai_client_for("openai", None)
+    _openai_client_for(provider, None)
 
     assert captured["api_key"] == ""
