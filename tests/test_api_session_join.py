@@ -53,3 +53,35 @@ def test_non_member_cannot_join_session(monkeypatch):
 
     assert response.status_code == 403
     assert response.get_json()["error"] == "Principal is not a campaign member"
+
+
+def test_join_token_required_when_enabled(monkeypatch):
+    principal_id = "22222222-2222-2222-2222-222222222222"
+    monkeypatch.setenv("TTDM_REQUIRE_JOIN_TOKEN", "1")
+    monkeypatch.setattr(
+        "shared.auth.principal.load_principal",
+        lambda *_args, **_kwargs: Principal("PLAYER"),
+    )
+    monkeypatch.setattr(
+        "shared.db.connection.execute_one",
+        lambda *_args, **_kwargs: {
+            "campaign_id": "11111111-1111-1111-1111-111111111111"
+        },
+    )
+
+    with app.test_client() as client:
+        missing = client.post(
+            "/api/sessions/66666666-6666-6666-6666-666666666661/join",
+            json={"principal_id": principal_id},
+        )
+        accepted = client.post(
+            "/api/sessions/66666666-6666-6666-6666-666666666661/join",
+            json={
+                "principal_id": principal_id,
+                "join_token": f"player-smoke-join-{principal_id}",
+            },
+        )
+
+    assert missing.status_code == 403
+    assert missing.get_json()["error"] == "Invalid join token"
+    assert accepted.status_code == 200

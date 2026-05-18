@@ -238,5 +238,6 @@ def _build_context_block(chunks: list[RagChunk], purpose: str) -> tuple[str, lis
         text = c.text.strip().replace("\n", " ")
         if len(text) > 800:
             text = text[:800] + "…"
-        lines.append(f"{cite}: {text}")
+        chunk_ref = f" chunk_id={c.chunk_id}" if c.chunk_id else ""
+        lines.append(f"{cite}{chunk_ref}: {text}")
     return "\n".join(lines), citations

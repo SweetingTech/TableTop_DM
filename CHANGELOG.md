@@ -6,6 +6,39 @@ The project tags features in **Phases** rather than semver — there's no public
 
 ---
 
+## 2026-05-18 - Phase 43.1: Manual QA Defect Repair
+
+The first full manual QA pass found release-blocking gaps in the local LLM path, player identity flow, player-state visibility, combat setup, event-feed readability, AI autonomy, and DM packet recaps. This patch repairs those surfaces and adds regression coverage.
+
+- **Fixed** local LM Studio/Ollama testing - OpenAI-compatible local providers now use a harmless dummy key when no API key is configured, so mock/no-key local play works with LM Studio at `localhost:1234`.
+- **Fixed** player-state leakage - player snapshots no longer include controlled-entity `private_sheet`; GM snapshots still retain private sheets for GM-owned inspection.
+- **Added** local player creation flow - Control Plane can create campaign player principals, lists player/open links, and `/game` supports explicit `principal_id` selection plus a principal picker.
+- **Changed** character ownership controls - character create/edit forms can assign a player controller principal, and AI-controlled entities get a campaign AI controller principal automatically.
+- **Added** encounter start flow - `/api/campaigns/<id>/encounters` supports `POST`, and the Game Console exposes a Start Encounter action using session characters/visible entities.
+- **Fixed** combat labels - encounter dropdowns and turn advancement fall back to stable encounter/entity labels instead of rendering `undefined`.
+- **Fixed** Game Console narration context - `/narrate` and the AI Narration button now include `campaign_id`, `session_id`, and campaign metadata.
+- **Changed** event feed rendering - movement/state/tool payloads render concise user-readable summaries instead of raw JSON blobs.
+- **Changed** DM recaps - recap text now includes recent visible ledger events as a deterministic fallback when active play happened before Session Intel created patches.
+- **Tests** - added local-provider, manual-QA regression, player-state private-sheet, encounter creation, member creation, and ledger-recap fallback coverage; service, contract, integration, compile, JS checks, E2E, and Docker boot smoke pass.
+
+---
+
+## 2026-05-17 - Phase 43: 1.0 Boot, Recovery, and Verification Hardening
+
+The release-candidate track now verifies the local boot path and the highest-risk recovery surfaces instead of relying on architectural intent.
+
+- **Fixed** Docker startup scripts - `migrate.sh`, `seed_demo.sh`, `start.sh`, and `stop.sh` now call Compose with the repo-root `.env` and `infra/docker-compose.yml` explicitly, avoiding Windows/Git-Bash working-directory drift.
+- **Changed** app startup - `app.py` now reads `TTDM_DEBUG`; launcher mode defaults to no Flask debug reloader, preventing duplicate port-8000 bind failures on Windows.
+- **Added** `scripts/verify_boot.ps1` - stops, starts, probes `/health`, `/readyz?verbose=1`, `/`, `/game`, `/control`, and `/help`, then stops the stack.
+- **Added** save/load roundtrip coverage - game export/import checks the `.ttdm` envelope, wrong-passphrase failure, conflict rejection, replace restore, ledger `visible_to`, and `player_state` after import; program save tests API-key portability and re-encryption.
+- **Changed** save header schema version - `.ttdm` files now advertise schema version 14 to match the current migration set.
+- **Changed** realtime/player-state recovery - committed proposal results now carry `seq_id`; `/game` tracks seen event ids/sequences, ignores duplicate realtime events, and refetches `player_state` on cursor gaps.
+- **Added** local join-token guard - `/api/sessions/<id>/join` accepts deterministic local join tokens and enforces them when `TTDM_REQUIRE_JOIN_TOKEN=1`, while preserving current local-demo behavior by default.
+- **Added** route/auth release matrix - `docs/release/1.0-route-auth-matrix.md` declares route-family access policy and `tests/integration/test_route_auth_matrix.py` locks the highest-risk principal-scoped denials.
+- **Added** V1 golden-path smoke - browser/API E2E covers dashboard -> `/game` player-state boot -> session join -> chat -> save export -> reload without DM-only leakage.
+
+---
+
 ## 2026-05-17 - Phase 42.9: 1.0 Release Gate and Scope Freeze
 
 The core feature set is now frozen behind a release-candidate gate. The next work is 1.0 hardening: identity, reconnect consistency, golden-path playthrough, route/auth audit, save/load torture, docs, perf, and packaging.
@@ -111,32 +144,30 @@ Session Intel now retrieves campaign lore with `retrieve_campaign_context(purpos
 
 The immediate track is release hardening, not new feature expansion. The full gate lives under `docs/release/`.
 
-### Phase 43 - Local identity and join-flow hardening
+### Phase 44 - Fuller local identity and join-flow UI
 
 - Local principal selection/login screen.
 - DM principal protected by setup passphrase or local admin mode.
-- Player join codes or invite tokens.
-- Campaign and session membership enforced on every API and WebSocket path.
-- Players cannot pass another `principal_id` or widen visibility by query param.
+- Player join-code management in the Control Plane.
+- Campaign and session membership enforcement expanded across the remaining local-demo routes.
 
-### Phase 44 - Snapshot/delta/reconnect consistency
+### Phase 45 - Snapshot/delta/reconnect consistency expansion
 
 - `player_state` event cursor reconciles with WebSocket ledger ids/sequences.
-- Client detects cursor gaps and refetches the snapshot.
-- Reload/reconnect does not duplicate events or widen state.
-- Control handoff updates player state and socket context.
+- Reconnect after server restart is tested end-to-end.
+- Control handoff updates player state and socket context across open tabs.
 
-### Phase 45 - V1 golden-path E2E playthrough
+### Phase 46 - V1 golden-path E2E expansion
 
 - Clean stack boot.
 - Campaign/session/player setup.
-- Player joins `/game`, moves, discovers POI, chats, fights, saves, restarts, and resumes.
+- Player joins `/game`, moves, discovers POI, chats, fights, imports a save, restarts, and resumes.
 - No DM-only leakage across reload or reconnect.
 
-### Phase 46+ - release gate closure
+### Phase 47+ - release gate closure
 
-- Route/auth/visibility matrix audit.
-- Save/load torture suite.
+- Route/auth/visibility matrix completion.
+- Save/load RAG/import torture expansion.
 - DM packet review UX hardening.
 - Docs reality pass.
 - Performance smoke and release packaging.

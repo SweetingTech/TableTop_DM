@@ -40,7 +40,7 @@ StoryEventType = Literal[
 ]
 
 
-SourceKind = Literal["chat", "transcript", "ledger_event", "dm_note"]
+SourceKind = Literal["chat", "transcript", "ledger_event", "dm_note", "rag_chunk"]
 
 
 class Evidence(BaseModel):
@@ -55,6 +55,13 @@ class Evidence(BaseModel):
     quote: Optional[str] = Field(None, description="verbatim text the inference rests on")
     timestamp_start: Optional[str] = None
     timestamp_end: Optional[str] = None
+    doc_id: Optional[str] = None
+    chunk_id: Optional[str] = None
+    filename: Optional[str] = None
+    page: Optional[int] = None
+    visibility: Optional[Visibility] = None
+    excerpt: Optional[str] = None
+    score: Optional[float] = None
 
 
 class ExtractedStoryEvent(BaseModel):

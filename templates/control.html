@@ -84,6 +84,18 @@
                         <div id="sessionList" class="item-list"></div>
                     </div>
 
+                    <div class="panel">
+                        <h3>Players / Join</h3>
+                        <p class="help-text">Create a local player principal and use the generated Game Console link for that player.</p>
+                        <div class="form-row">
+                            <input type="text" id="newPlayerName" class="input-field" placeholder="Player display name">
+                            <button id="createPlayerMember" class="btn btn-primary">Create Player</button>
+                        </div>
+                        <div id="memberList" class="item-list">
+                            <div class="list-item-meta">Select a campaign to see players</div>
+                        </div>
+                    </div>
+
                     <!-- Session Archives Panel -->
                     <div class="panel">
                         <h3>Session Archives</h3>
@@ -355,6 +367,12 @@
                                         <option value="GM">GM Controlled</option>
                                     </select>
                                 </div>
+                                <div class="form-group">
+                                    <label>Player Controller</label>
+                                    <select id="charControllerPrincipal" class="select-input">
+                                        <option value="">-- Select player principal --</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -439,6 +457,12 @@
                                             <option value="PLAYER">Player</option>
                                             <option value="AI_NPC">AI</option>
                                             <option value="GM">GM</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Player Controller</label>
+                                        <select id="editCharControllerPrincipal" class="select-input">
+                                            <option value="">-- Select player principal --</option>
                                         </select>
                                     </div>
                                     <div class="form-group">

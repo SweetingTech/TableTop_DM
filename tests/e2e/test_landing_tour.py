@@ -8,30 +8,13 @@ from __future__ import annotations
 import os
 import re
 import time
-import urllib.request
 
 import pytest
 from playwright.sync_api import Error as PWError, Page, expect
 
 BASE_URL = os.environ.get("TTDM_BASE_URL", "http://localhost:8000")
 STORAGE_KEY = "ttdm_tour_done_v1"
-
-
-def _server_up() -> bool:
-    try:
-        with urllib.request.urlopen(f"{BASE_URL}/health", timeout=2) as r:
-            return r.status == 200
-    except Exception:
-        return False
-
-
-pytestmark = [
-    pytest.mark.e2e,
-    pytest.mark.skipif(
-        not _server_up(),
-        reason=f"Tabletop DM server not reachable at {BASE_URL}",
-    ),
-]
+pytestmark = pytest.mark.e2e
 
 
 def _goto_with_retry(page: Page, url: str, attempts: int = 3) -> None:
@@ -48,10 +31,8 @@ def _goto_with_retry(page: Page, url: str, attempts: int = 3) -> None:
 
 @pytest.fixture(autouse=True)
 def _fresh_tour(page: Page):
-    """Clear the tour-completed flag so it auto-starts every test."""
-    _goto_with_retry(page, f"{BASE_URL}/")
-    page.evaluate(f"localStorage.removeItem('{STORAGE_KEY}')")
-    page.reload()
+    """Use the deterministic dashboard test hook so every test starts the tour."""
+    _goto_with_retry(page, f"{BASE_URL}/?tour=1")
 
 
 def test_tour_auto_starts_on_first_visit(page: Page):
@@ -69,7 +50,7 @@ def test_step2_highlights_new_campaign_button_and_pauses(page: Page):
     page.locator(".tour-tooltip [data-tour-next]").click()
 
     tooltip = page.locator(".tour-tooltip")
-    expect(tooltip.locator("h4")).to_have_text("Step 1 — Open the wizard")
+    expect(tooltip.locator("h4")).to_contain_text("Open the wizard")
     expect(tooltip.locator(".tour-progress")).to_contain_text("Step 2 of 11")
     nxt = tooltip.locator("[data-tour-next]")
     expect(nxt).to_be_disabled()

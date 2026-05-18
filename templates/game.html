@@ -25,6 +25,8 @@
             <span id="campaignName" class="campaign-name">Loading...</span>
             <span id="modeBadge" class="mode-badge">---</span>
             <div class="principal-info">
+                <select id="principalSelect" class="principal-select" title="Current player or DM"
+                        onchange="App.selectPrincipal(this.value)" style="display:none"></select>
                 <span id="principalName" class="principal-name">--</span>
                 <span id="sessionIndicator" class="session-indicator" title="Session status"></span>
             </div>
@@ -110,6 +112,7 @@
                         onchange="App.selectEncounter(this.value)">
                     <option value="">No Encounter</option>
                 </select>
+                <button class="action-btn" onclick="App.startEncounter()" style="margin-top:8px">Start Encounter</button>
             </div>
 
             <div class="sidebar-section">

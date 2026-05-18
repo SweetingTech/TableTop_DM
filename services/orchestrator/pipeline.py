@@ -325,7 +325,7 @@ class OrchestratorPipeline:
                 domain_tags=proposal.domain_tags,
                 idempotency_key=proposal.idempotency_key,
             )
-            self.ledger.append_event(tool_event, conn)
+            tool_append = self.ledger.append_event(tool_event, conn)
 
             for delta in tool_result.deltas:
                 self._apply_delta(delta, conn)
@@ -366,6 +366,10 @@ class OrchestratorPipeline:
             return {
                 "success": True,
                 "event_id": str(tool_event.event_id),
+                "seq_id": tool_append.get("seq_id") if tool_append else None,
+                "campaign_id": str(proposal.campaign_id),
+                "session_id": str(session_id),
+                "visible_to": [str(v) for v in visible_to],
                 "tool_result": tool_result.result,
                 "rolls": [r.model_dump(mode="json") for r in tool_result.rolls],
                 "deltas_applied": len(tool_result.deltas),

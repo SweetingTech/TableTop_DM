@@ -555,6 +555,7 @@
             <span class="nav-separator" style="color: var(--text-secondary); opacity: 0.5;">|</span>
             <a href="/control" class="control-link">Control Plane</a>
             <a href="/game" class="control-link">Game Console</a>
+            <a href="/help" class="control-link">Help</a>
             <span style="margin-left: auto; color: var(--text-gold); font-size: 14px; font-weight: 600;">Dashboard</span>
         </div>
 
@@ -1224,9 +1225,16 @@
                     el.addEventListener('click', e => { e.preventDefault(); this.restart(); });
                 });
 
-                if (!this.isComplete()) {
+                if (this.shouldForceStart()) {
+                    try { localStorage.removeItem(this.STORAGE_KEY); } catch (_) {}
+                    setTimeout(() => this.start(), 400);
+                } else if (!this.isComplete()) {
                     setTimeout(() => this.start(), 400);
                 }
+            },
+            shouldForceStart() {
+                try { return new URLSearchParams(window.location.search).get('tour') === '1'; }
+                catch (_) { return false; }
             },
             isComplete() { try { return localStorage.getItem(this.STORAGE_KEY) === '1'; } catch (_) { return false; } },
             markComplete() { try { localStorage.setItem(this.STORAGE_KEY, '1'); } catch (_) {} },

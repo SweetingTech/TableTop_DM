@@ -16,6 +16,9 @@ const App = {
     members: [],
     controlledEntities: [],
     mapContext: null,
+    playerState: null,
+    lastEventSequence: null,
+    seenEventIds: new Set(),
 
     async init() {
         this.initSocket();
@@ -30,9 +33,7 @@ const App = {
         this.socket.on('connect', () => {
             this.connected = true;
             document.getElementById('connIndicator').classList.add('connected');
-            if (this.campaign) {
-                this.socket.emit('join_campaign', {campaign_id: this.campaign.id});
-            }
+            this.joinRealtimeRooms();
         });
 
         this.socket.on('disconnect', () => {
@@ -45,7 +46,8 @@ const App = {
         });
 
         this.socket.on('turn_advanced', (data) => {
-            this.addEvent({type: 'SYSTEM', payload: {message: `Turn advanced. Current turn: ${data.current_turn_order}`}});
+            const label = data.active_entity_name || data.current_entity_name || data.current_turn_order || 'next actor';
+            this.addEvent({type: 'SYSTEM', payload: {message: `Turn advanced. Current turn: ${label}`}});
             this.loadEncounterSlots();
         });
 
@@ -92,10 +94,6 @@ const App = {
         const modeBadge = document.getElementById('modeBadge');
         modeBadge.textContent = campaign.mode;
         modeBadge.className = 'mode-badge ' + campaign.mode;
-
-        if (this.socket && this.connected) {
-            this.socket.emit('join_campaign', {campaign_id: campaign.id});
-        }
 
         await Promise.all([
             this.loadEntities(),
@@ -282,15 +280,7 @@ const App = {
             return;
         }
 
-        // Auto-select first HUMAN principal (demo mode - production would use real auth)
-        const humanMember = this.members.find(m => m.principal_type === 'HUMAN');
-        if (humanMember) {
-            this.principalId = humanMember.principal_id;
-            console.log('Principal context set:', this.principalId, humanMember.display_name);
-            // Update UI
-            const nameEl = document.getElementById('principalName');
-            if (nameEl) nameEl.textContent = humanMember.display_name;
-        }
+        this.populatePrincipalSelector();
 
         // Load or create active session
         try {
@@ -303,14 +293,17 @@ const App = {
                 const sessionEl = document.getElementById('sessionIndicator');
                 if (sessionEl) sessionEl.classList.add('active');
 
-                // Load session resume data (chat history, story state, party)
-                await this.loadSessionResume();
+                // Load authoritative per-principal snapshot first; fall back to
+                // legacy resume data only if the snapshot endpoint is unavailable.
+                const loadedSnapshot = await this.loadPlayerStateSnapshot();
+                if (!loadedSnapshot) await this.loadSessionResume();
             }
         } catch (e) {
             console.error('Failed to load session:', e);
         }
 
-        // Compute which entities this principal controls.
+        // Compute which entities this principal controls when the snapshot did not
+        // already provide the canonical control list.
         // GMs can drive any PC in the campaign (canControl returns true for them
         // unconditionally on the server). Mirror that here so the renderer's
         // halo + movement-target logic treats every PC as "yours" when you're
@@ -318,13 +311,123 @@ const App = {
         // tied to their principal_id.
         const myMember = (this.members || []).find(m => m.principal_id === this.principalId);
         const isGM = myMember?.role === 'GM';
-        this.controlledEntities = this.entities
-            .filter(e => isGM ? e.entity_type === 'PC' : e.controller_principal_id === this.principalId)
-            .map(e => e.id);
+        if (!this.playerState) {
+            this.controlledEntities = this.entities
+                .filter(e => isGM ? e.entity_type === 'PC' : e.controller_principal_id === this.principalId)
+                .map(e => e.id);
+        }
         console.log('Controlled entities:', this.controlledEntities.length, isGM ? '(GM)' : '');
 
         // Re-render entity list to show controlled indicators
         this.renderEntityList();
+        this.joinRealtimeRooms();
+    },
+
+    populatePrincipalSelector() {
+        const select = document.getElementById('principalSelect');
+        const storageKey = this.campaign ? `ttdm_principal_id:${this.campaign.id}` : 'ttdm_principal_id';
+        const params = new URLSearchParams(window.location.search);
+        const requested = params.get('principal_id') || localStorage.getItem(storageKey);
+        const valid = (this.members || []).find(m => m.principal_id === requested);
+        const defaultMember = valid
+            || (this.members || []).find(m => m.role === 'GM')
+            || (this.members || []).find(m => m.principal_type === 'HUMAN')
+            || (this.members || [])[0];
+
+        if (!defaultMember) return;
+        this.principalId = defaultMember.principal_id;
+        localStorage.setItem(storageKey, this.principalId);
+
+        if (select) {
+            select.innerHTML = '';
+            for (const member of this.members || []) {
+                const option = document.createElement('option');
+                option.value = member.principal_id;
+                option.textContent = `${member.display_name} (${member.role})`;
+                option.selected = member.principal_id === this.principalId;
+                select.appendChild(option);
+            }
+            select.style.display = (this.members || []).length > 1 ? 'inline-block' : 'none';
+        }
+
+        const nameEl = document.getElementById('principalName');
+        if (nameEl) nameEl.textContent = defaultMember.display_name;
+        console.log('Principal context set:', this.principalId, defaultMember.display_name);
+    },
+
+    async selectPrincipal(principalId) {
+        if (!principalId || principalId === this.principalId) return;
+        this.principalId = principalId;
+        if (this.campaign) localStorage.setItem(`ttdm_principal_id:${this.campaign.id}`, principalId);
+        const member = (this.members || []).find(m => m.principal_id === principalId);
+        const nameEl = document.getElementById('principalName');
+        if (nameEl) nameEl.textContent = member?.display_name || principalId;
+        this.playerState = null;
+        this.lastEventSequence = null;
+        this.seenEventIds = new Set();
+        await this.loadPlayerStateSnapshot();
+        this.renderEntityList();
+        this.joinRealtimeRooms();
+    },
+
+    async loadPlayerStateSnapshot() {
+        if (!this.sessionId || !this.principalId) return false;
+        try {
+            const resp = await fetch(
+                `/api/sessions/${this.sessionId}/player_state?principal_id=${this.principalId}`
+            );
+            if (!resp.ok) return false;
+            const data = await resp.json();
+            if (!data.ok || !data.player_state) return false;
+
+            this.playerState = data.player_state;
+            window.__TTDM_PLAYER_STATE_LOADED = true;
+            this.lastEventSequence = this.playerState.visible_world?.event_cursor?.last_sequence ?? null;
+            this.seenEventIds = new Set();
+            this.controlledEntities = (this.playerState.controlled_entities || []).map(e => e.entity_id);
+            this.entities = this.playerState.visible_world?.visible_entities || this.entities;
+            this.storyState = {
+                current_location: this.playerState.narrative_state?.location,
+                game_time: this.playerState.narrative_state?.game_time,
+                active_npcs: this.playerState.narrative_state?.known_active_npcs || [],
+                active_quests: this.playerState.narrative_state?.known_active_quests || [],
+                plot_threads: this.playerState.narrative_state?.known_plot_threads || [],
+                party_resources: this.playerState.narrative_state?.known_party_resources || {},
+            };
+
+            const selectedId = this.playerState.ui_state?.selected_entity_id;
+            if (selectedId) this.selectedEntity = this.entities.find(e => e.id === selectedId) || null;
+
+            const recent = this.playerState.visible_world?.visible_recent_events || [];
+            if (recent.length > 0) {
+                this.addEvent({type: 'SYSTEM', payload: {message: `--- Player state restored: ${recent.length} visible events loaded ---`}});
+                for (const event of recent) {
+                    if (event.event_id) this.seenEventIds.add(String(event.event_id));
+                    this.addHistoryEvent(event);
+                }
+            }
+
+            this.updateStoryStateUI();
+            this.renderEntityList();
+            if (this._mapRenderer && this.mapContext) {
+                this._mapRenderer.setEntities(this.entities, this.controlledEntities);
+                this._refreshDiscoveredPOIs();
+            }
+            this._updateCombatHUD();
+            return true;
+        } catch (e) {
+            console.error('Failed to load player state snapshot:', e);
+            return false;
+        }
+    },
+
+    joinRealtimeRooms() {
+        if (!this.socket || !this.connected || !this.campaign || !this.principalId) return;
+        this.socket.emit('join_campaign', {
+            campaign_id: this.campaign.id,
+            session_id: this.sessionId,
+            principal_id: this.principalId,
+        });
     },
 
     async loadSessionResume() {
@@ -366,10 +469,45 @@ const App = {
         }
     },
 
+    escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[ch]));
+    },
+
+    formatPayloadSummary(type, payload, data = {}) {
+        const safeType = String(type || '').toLowerCase();
+        if (!payload || typeof payload !== 'object') return this.escapeHtml(payload || '');
+        if (payload.message || payload.narration || payload.dialogue) {
+            return this.escapeHtml(payload.message || payload.narration || payload.dialogue);
+        }
+        if (payload.summary) return this.escapeHtml(payload.summary);
+        if (payload.tool_name) {
+            const tool = String(payload.tool_name).replace(/_/g, ' ');
+            const result = payload.result;
+            if (typeof result === 'string') return `<strong>${this.escapeHtml(tool)}</strong><div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">${this.escapeHtml(result).substring(0, 240)}</div>`;
+            return `<strong>${this.escapeHtml(tool)}</strong>`;
+        }
+        const delta = payload.delta || payload.state_delta || payload;
+        const actionType = payload.action_type || data.action_type || delta.action_type;
+        if (actionType) return this.escapeHtml(String(actionType).replace(/_/g, ' ').toLowerCase());
+        if (delta.entity_id && (delta.x !== undefined || delta.y !== undefined)) {
+            return this.escapeHtml(`Entity moved to (${delta.x ?? '?'}, ${delta.y ?? '?'})`);
+        }
+        if (safeType === 'state_delta' || safeType === 'tool_call' || payload.deltas || payload.changes) {
+            return 'Game state updated.';
+        }
+        return 'Game event received.';
+    },
+
     addHistoryEvent(data) {
         // Add a historical event (with original timestamp)
         const feed = document.getElementById('eventFeed');
-        const type = (data.event_type || 'system').toLowerCase();
+        const type = (data.event_type || data.type || 'system').toLowerCase();
         const payload = data.payload || {};
 
         const item = document.createElement('div');
@@ -385,19 +523,19 @@ const App = {
         let content = `<span class="timestamp">${timestamp}</span>`;
 
         if (type === 'narration') {
-            content += payload.narration || payload.message || JSON.stringify(payload);
+            content += this.formatPayloadSummary(type, payload, data);
         } else if (type === 'dialogue' || type === 'chat') {
             const speaker = data.speaker_name || payload.speaker || 'Unknown';
             const msg = payload.dialogue || payload.message || '';
-            content += `<span class="speaker">${speaker}:</span> ${msg}`;
+            content += `<span class="speaker">${this.escapeHtml(speaker)}:</span> ${this.escapeHtml(msg)}`;
         } else if (type === 'action') {
-            content += `<strong>${payload.action_type || 'Action'}</strong>`;
+            content += `<strong>${this.escapeHtml(payload.action_type || 'Action')}</strong>`;
             if (payload.result) {
-                const res = typeof payload.result === 'string' ? payload.result : JSON.stringify(payload.result);
-                content += `<div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">${res.substring(0, 200)}</div>`;
+                const res = typeof payload.result === 'string' ? payload.result : this.formatPayloadSummary(type, payload.result, data);
+                content += `<div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">${this.escapeHtml(res).substring(0, 200)}</div>`;
             }
         } else {
-            content += payload.message || JSON.stringify(payload).substring(0, 200);
+            content += this.formatPayloadSummary(type, payload, data);
         }
 
         item.innerHTML = content;
@@ -565,7 +703,8 @@ const App = {
         const sel = document.getElementById('encounterSelect');
         sel.innerHTML = '<option value="">No Encounter</option>';
         for (const enc of this.encounters) {
-            sel.innerHTML += `<option value="${enc.id}" ${this.selectedEncounter?.id === enc.id ? 'selected' : ''}>${enc.name} (${enc.status})</option>`;
+            const label = enc.name || `Encounter ${String(enc.id || '').slice(0, 8)}`;
+            sel.innerHTML += `<option value="${enc.id}" ${this.selectedEncounter?.id === enc.id ? 'selected' : ''}>${this.escapeHtml(label)} (${this.escapeHtml(enc.status || '')})</option>`;
         }
     },
 
@@ -595,6 +734,7 @@ const App = {
     },
 
     addEvent(data) {
+        if (this._shouldRefetchSnapshotForEvent(data)) return;
         const feed = document.getElementById('eventFeed');
         const type = (data.type || data.event_type || 'system').toLowerCase();
         const payload = data.payload || data;
@@ -606,28 +746,30 @@ const App = {
         let content = `<span class="timestamp">${now}</span>`;
 
         if (type === 'narration') {
-            content += payload.narration || payload.message || JSON.stringify(payload);
+            content += this.formatPayloadSummary(type, payload, data);
         } else if (type === 'dialogue' || type === 'chat') {
             const speaker = payload.speaker || 'Unknown';
             const msg = payload.dialogue || payload.message || '';
-            content += `<span class="speaker">${speaker}:</span> ${msg}`;
+            content += `<span class="speaker">${this.escapeHtml(speaker)}:</span> ${this.escapeHtml(msg)}`;
         } else if (type === 'tool_call') {
             const tool = payload.tool_name || 'action';
-            content += `<strong>${tool.replace(/_/g, ' ')}</strong>`;
+            content += `<strong>${this.escapeHtml(tool.replace(/_/g, ' '))}</strong>`;
             if (payload.rolls) {
                 for (const r of payload.rolls) {
-                    content += `<div class="roll-result">${r.breakdown || JSON.stringify(r)}</div>`;
+                    content += `<div class="roll-result">${this.escapeHtml(r.breakdown || 'Roll resolved')}</div>`;
                 }
             }
             if (payload.result) {
-                const res = typeof payload.result === 'string' ? payload.result : JSON.stringify(payload.result);
-                content += `<div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">${res.substring(0, 200)}</div>`;
+                const res = typeof payload.result === 'string'
+                    ? payload.result
+                    : this.formatPayloadSummary(type, payload.result, data);
+                content += `<div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">${this.escapeHtml(res).substring(0, 200)}</div>`;
             }
         } else if (type === 'error') {
             item.classList.add('error');
-            content += payload.message || payload.error || JSON.stringify(payload);
+            content += this.escapeHtml(payload.message || payload.error || 'Error');
         } else {
-            content += payload.message || JSON.stringify(payload).substring(0, 200);
+            content += this.formatPayloadSummary(type, payload, data);
         }
 
         item.innerHTML = content;
@@ -635,6 +777,38 @@ const App = {
         feed.scrollTop = feed.scrollHeight;
 
         this.events.push(data);
+    },
+
+    _eventSequence(data) {
+        const seq = data?.seq_id ?? data?.sequence ?? data?.ledger_seq_id ?? data?.payload?.seq_id;
+        if (seq === undefined || seq === null || seq === '') return null;
+        const parsed = Number(seq);
+        return Number.isFinite(parsed) ? parsed : null;
+    },
+
+    _eventId(data) {
+        return data?.event_id || data?.payload?.event_id || null;
+    },
+
+    _shouldRefetchSnapshotForEvent(data) {
+        const eventId = this._eventId(data);
+        if (eventId && this.seenEventIds.has(String(eventId))) return true;
+
+        const seq = this._eventSequence(data);
+        if (seq !== null) {
+            if (this.lastEventSequence !== null && seq <= this.lastEventSequence) {
+                if (eventId) this.seenEventIds.add(String(eventId));
+                return true;
+            }
+            if (this.lastEventSequence !== null && seq > this.lastEventSequence + 1) {
+                this.addEvent({type: 'SYSTEM', payload: {message: 'Event stream gap detected. Refreshing player state...'}});
+                this.loadPlayerStateSnapshot();
+                return true;
+            }
+            this.lastEventSequence = seq;
+        }
+        if (eventId) this.seenEventIds.add(String(eventId));
+        return false;
     },
 
     async submitCommand() {
@@ -771,7 +945,8 @@ const App = {
                 try {
                     const resp = await fetch(`/api/encounters/${this.selectedEncounter.id}/advance`, {method: 'POST'});
                     const data = await resp.json();
-                    this.addEvent({type: 'SYSTEM', payload: {message: `Turn advanced to order ${data.current_turn_order}`}});
+                    const label = data.active_entity_name || data.current_entity_name || data.current_turn_order || 'next actor';
+                    this.addEvent({type: 'SYSTEM', payload: {message: `Turn advanced to ${label}`}});
                     await this.loadEncounterSlots();
                 } catch (e) {
                     this.addEvent({type: 'ERROR', payload: {message: e.message}});
@@ -783,9 +958,14 @@ const App = {
                 const text = parts.slice(1).join(' ');
                 try {
                     const resp = await fetch('/api/narrate', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({event_data: {}, context: text}),
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        campaign_id: this.campaign?.id,
+                        session_id: this.sessionId,
+                        event_data: {campaign_id: this.campaign?.id, campaign: this.campaign?.name},
+                        context: text,
+                    }),
                     });
                     const data = await resp.json();
                     if (data.narration) {
@@ -889,7 +1069,8 @@ const App = {
         try {
             const resp = await fetch(`/api/encounters/${this.selectedEncounter.id}/advance`, {method: 'POST'});
             const data = await resp.json();
-            this.addEvent({type: 'SYSTEM', payload: {message: `Turn advanced`}});
+            const label = data.active_entity_name || data.current_entity_name || data.current_turn_order || 'next actor';
+            this.addEvent({type: 'SYSTEM', payload: {message: `Turn advanced to ${label}`}});
             await this.loadEncounterSlots();
         } catch (e) {
             this.addEvent({type: 'ERROR', payload: {message: e.message}});
@@ -920,7 +1101,9 @@ const App = {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    event_data: {campaign: this.campaign?.name},
+                    campaign_id: this.campaign?.id,
+                    session_id: this.sessionId,
+                    event_data: {campaign_id: this.campaign?.id, campaign: this.campaign?.name},
                     context: 'Describe the current scene in the campaign.',
                 }),
             });
@@ -1228,6 +1411,33 @@ const App = {
     selectEncounter(encounterId) {
         this.selectedEncounter = this.encounters.find(e => e.id === encounterId) || null;
         this.loadEncounterSlots();
+    },
+
+    async startEncounter() {
+        if (!this.campaign || !this.sessionId) {
+            this.addEvent({type: 'ERROR', payload: {message: 'No active campaign/session'}});
+            return;
+        }
+        try {
+            const entityIds = (this.entities || [])
+                .filter(e => ['PC', 'NPC', 'MONSTER'].includes(e.entity_type) && e.status !== 'INACTIVE')
+                .slice(0, 12)
+                .map(e => e.id);
+            const resp = await fetch(`/api/campaigns/${this.campaign.id}/encounters`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({session_id: this.sessionId, entity_ids: entityIds}),
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                this.addEvent({type: 'ERROR', payload: {message: data.error || 'Encounter creation failed'}});
+                return;
+            }
+            this.addEvent({type: 'SYSTEM', payload: {message: 'Encounter started.'}});
+            await this.loadEncounters();
+        } catch (e) {
+            this.addEvent({type: 'ERROR', payload: {message: e.message}});
+        }
     },
 };
 

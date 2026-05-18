@@ -64,7 +64,8 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 42.7 | **Continuity API visibility hardening** - member-required NPC memory/promises, principal-scoped filtering, payload visibility contract lock | Done |
 | 42.8 | **Full Player State Snapshot** - principal-scoped runtime bundle for identity, controls, visible world, narrative state, legal actions, and event cursor | Done |
 | 42.9 | **1.0 Release Gate and Scope Freeze** - release scope, test matrix, security matrix, and RC checklist | Done |
-| 43+ | 1.0 RC hardening: local identity, snapshot/delta consistency, golden path, route/auth matrix, save/load, docs, perf/packaging | See [docs/release/1.0-scope.md](docs/release/1.0-scope.md) |
+| 43 | **1.0 Boot, Recovery, and Verification Hardening** - Windows boot path, save/load roundtrip tests, cursor-gap recovery, route/auth matrix, V1 golden-path smoke | Done |
+| 44+ | 1.0 RC hardening: fuller identity UI, snapshot/delta edge cases, route/auth completion, docs, perf/packaging | See [docs/release/1.0-scope.md](docs/release/1.0-scope.md) |
 
 
 ## Quickstart
@@ -121,6 +122,11 @@ make ci
 make verify-docker
 make verify-local
 make verify
+```
+
+Windows boot verification:
+```powershell
+.\scripts\verify_boot.ps1 -Mode docker
 ```
 
 Integration skip behavior when Docker runtime is unavailable:

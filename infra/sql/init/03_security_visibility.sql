@@ -6,8 +6,8 @@ CREATE POLICY session_ledger_visibility_read
   ON ledger.session_ledger
   FOR SELECT
   USING (
-    current_setting('app.principal_id', true) <> ''
-    AND current_setting('app.principal_id', true)::uuid = ANY(visible_to)
+    NULLIF(current_setting('app.principal_id', true), '') IS NOT NULL
+    AND NULLIF(current_setting('app.principal_id', true), '')::uuid = ANY(visible_to)
   );
 
 DROP POLICY IF EXISTS session_summaries_visibility_read ON ledger.session_summaries;
@@ -15,8 +15,8 @@ CREATE POLICY session_summaries_visibility_read
   ON ledger.session_summaries
   FOR SELECT
   USING (
-    current_setting('app.principal_id', true) <> ''
-    AND current_setting('app.principal_id', true)::uuid = ANY(visible_to)
+    NULLIF(current_setting('app.principal_id', true), '') IS NOT NULL
+    AND NULLIF(current_setting('app.principal_id', true), '')::uuid = ANY(visible_to)
   );
 
 DROP POLICY IF EXISTS session_ledger_service_write ON ledger.session_ledger;

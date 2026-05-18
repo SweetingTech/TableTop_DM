@@ -15,6 +15,49 @@ from shared.auth.principal import load_principal
 from shared.db.connection import execute_one, execute_query
 
 
+def ensure_ai_controller_principal(campaign_id: uuid.UUID) -> uuid.UUID | None:
+    """Return a campaign-scoped AI_NPC principal, creating one if needed."""
+    existing = execute_one(
+        """
+        SELECT p.id
+        FROM state.principals p
+        JOIN state.campaign_members cm ON cm.principal_id = p.id
+        WHERE cm.campaign_id = %s
+          AND p.principal_type = 'AI_NPC'
+          AND p.is_active = true
+        ORDER BY p.created_at
+        LIMIT 1
+        """,
+        (str(campaign_id),),
+    )
+    if existing:
+        return uuid.UUID(str(existing["id"]))
+
+    auth_subject = f"local:ai-npc:{campaign_id}"
+    row = execute_one(
+        """
+        INSERT INTO state.principals (principal_type, display_name, auth_subject)
+        VALUES ('AI_NPC', 'AI Party Controller', %s)
+        ON CONFLICT (auth_subject) DO UPDATE
+        SET is_active = true, updated_at = now()
+        RETURNING id
+        """,
+        (auth_subject,),
+    )
+    if not row:
+        return None
+    execute_one(
+        """
+        INSERT INTO state.campaign_members (campaign_id, principal_id, role)
+        VALUES (%s, %s, 'PLAYER')
+        ON CONFLICT (campaign_id, principal_id) DO UPDATE SET role = EXCLUDED.role
+        RETURNING principal_id
+        """,
+        (str(campaign_id), str(row["id"])),
+    )
+    return uuid.UUID(str(row["id"]))
+
+
 def maybe_trigger_combat(
     campaign_id: uuid.UUID,
     *,
@@ -104,7 +147,18 @@ class NPCAutonomy:
 
         principal_id = entity.get("controller_principal_id")
         if not principal_id:
-            return []
+            principal_id = ensure_ai_controller_principal(campaign_id)
+            if not principal_id:
+                return []
+            execute_one(
+                """
+                UPDATE state.entities
+                SET controller_principal_id = %s, updated_at = now()
+                WHERE id = %s
+                RETURNING id
+                """,
+                (str(principal_id), str(entity_id)),
+            )
 
         principal = load_principal(uuid.UUID(str(principal_id)), campaign_id)
         if not principal:
