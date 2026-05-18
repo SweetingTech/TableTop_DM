@@ -289,7 +289,10 @@ def _openai_client_for(provider: str, base_url: str | None):
     from openai import OpenAI
 
     final_base_url = resolve_provider_base_url(provider, base_url)
-    api_key = os.environ.get("OPENAI_API_KEY", "dev-local")
+    if (provider or "").lower() == "lmstudio":
+        api_key = os.environ.get("OPENAI_API_KEY") or "lmstudio-local"
+    else:
+        api_key = os.environ.get("OPENAI_API_KEY", "dev-local")
     return OpenAI(api_key=api_key, base_url=final_base_url)
 
 
