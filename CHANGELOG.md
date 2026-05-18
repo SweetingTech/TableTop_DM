@@ -6,58 +6,148 @@ The project tags features in **Phases** rather than semver — there's no public
 
 ---
 
-## Planned — next sprint
+## 2026-05-17 - Phase 42.9: 1.0 Release Gate and Scope Freeze
 
-Items I'm planning to take on next, in priority order. These are the natural extensions of the design doc's roadmap; happy to reorder if priorities shift.
+The core feature set is now frozen behind a release-candidate gate. The next work is 1.0 hardening: identity, reconnect consistency, golden-path playthrough, route/auth audit, save/load torture, docs, perf, and packaging.
 
-### Phase 40 — RAG-aware Session Intel
-**The loop**: when the extractor sees players mention "the bell" (and the campaign has Saint Orun lore loaded), the extractor should propose a `dm_only unresolved_thread` with the RAG chunk attached as evidence — not just rely on the LLM's training knowledge.
+- **Added** `docs/release/1.0-scope.md` - defines the 1.0 contract, in-scope surfaces, post-1.0 cutline, phase reordering, and known release risks.
+- **Added** `docs/release/1.0-test-matrix.md` - maps the release gate across boot, lifecycle, identity, player state, ledger, realtime, maps, combat, chat, RAG, Session Intel, save/load, docs, and perf.
+- **Added** `docs/release/1.0-security-matrix.md` - documents principal classes, route policy expectations, visibility surfaces, and blocker conditions for auth/visibility leaks.
+- **Added** `docs/release/1.0-rc-checklist.md` - captures severity rules, automated gate commands, manual acceptance, packaging requirements, performance smoke budgets, and RC exit criteria.
+- **Changed** `README.md` - records Phase 42.9 in the implementation table, points Phase 43+ at the 1.0 RC track, and updates stale party-decoherence wording now that Phase 41 scoped realtime delivery is in place.
 
-- Thread `retrieve_campaign_context(purpose="session_intel")` through `services/session_intel/extractor.py`.
-- `ExtractedStoryEvent.evidence[]` gains a `source_kind="rag_chunk"` variant so DM can audit the lore citation.
-- New rule: **RAG-supported inferences always set `requires_dm_review=True`** even at high confidence — observed play can auto-propose, but inferences pulled from lore require human sign-off.
+---
 
-### Phase 41 — Source citations in DM Packet + recaps
-The retriever already emits citations. Surface them.
+## 2026-05-17 - Phase 42.8: Full Player State Snapshot
 
-- `POST /api/sessions/<id>/dm_packet` payload gains a `citations: [{filename, page, chunk_id}]` array referenced by patches.
-- DM recap mode embeds inline citation markers (e.g. `…the Pale Saint [1]…`) when a recap line was lore-grounded.
-- Party recap omits citation markers entirely (they leak source filenames otherwise).
+The game client now has a canonical per-principal read model for boot/reload: one snapshot answers who the principal is, what they control, what they can see, what they know, what they can do, and where their visible event stream resumes.
 
-### Phase 42 — Per-principal WebSocket broadcaster
-Make the decoherence engine actually filter in real time. Right now `audience_for_event()` computes who *should* see an event, but `socketio.emit(..., room=str(campaign_id))` still yells to the whole room.
+- **Added** `shared/schemas/player_state.py` - Pydantic contracts for the snapshot envelope, controlled entities, visible world, turn state, legal actions, narrative projection, and UI state.
+- **Added** `services/player_state/` - read-only snapshot assembly, spatial visibility helpers, serializers, and conservative legal-action calculation.
+- **Added** `GET /api/sessions/<session_id>/player_state` - rejects anonymous/non-member access, blocks player `as_principal_id` widening, and allows GM inspection of a simulated player view.
+- **Changed** `/game` boot - after campaign/session/principal resolution, the client loads `player_state` first and renders controlled entities, visible entities, visible recent events, story indicators, and socket join context from that snapshot.
+- **Tests** - added service, contract, integration, and E2E coverage for auth, controlled-entity scope, DM-only continuity exclusion, principal-scoped event cursors, spatial entity/POI visibility, death state, legal actions, and reload stability.
 
-- Refactor `broadcast_game_event(event)` helper:
-  - Compute audience via `audience_for_event(campaign_id, map_id, x, y)`.
-  - Emit to per-principal Socket.IO rooms (`principal:<id>`), not the campaign room.
-  - DM principal always gets everything.
-  - Public/campaign-wide events still allowed to broadcast to `campaign:<id>`.
-- Client-side: each tab joins its own `principal:<id>` room on connect.
+---
 
-### Phase 43 — Per-chunk visibility UI override
-Right now chunk visibility is inferred from filename substrings (`dm-only`, `secret`, `party`). That's a stopgap.
+## 2026-05-17 - Phase 42.7: Continuity API visibility hardening
 
-- Knowledge Base tab gains a per-chunk visibility editor (party / dm_only / principal_scoped).
-- `tags[]` and `entity_ids[]` editable from the same panel — feeds the NPC `known_lore_tags` matching layer.
-- On save, the chunk's Qdrant payload is updated in place (no re-embedding required).
+Continuity memory endpoints now require campaign principal context and apply the same visibility rules to NPC memory and promises that already protect recaps and open threads.
 
-### Phase 44 — Reranker (cheap deterministic, then optional LLM)
-The doc's caveat is right: cosine top-k retrieves "shopping list, bell peppers, cult classic movies" eventually. Add a deterministic re-rank stage before any LLM polish.
+- **Changed** `services/session_intel/continuity.py` - `npc_memory`, `open_threads`, and `unresolved_promises` accept visibility scope plus principal id, and principal-scoped rows require `patch.visible_to` to include the requesting principal.
+- **Changed** continuity API routes - `/api/campaigns/<id>/npc_memory/<npc_id>`, `/open_threads`, and `/unresolved_promises` reject anonymous callers, reject non-members, and prevent non-DM principals from widening requests to `visibility=dm`.
+- **Added** `tests/integration/test_continuity_npc_memory_visibility.py` - covers DM access, player denial of dm-only memory, principal-scoped matching, non-member/anonymous rejection, unresolved-promises auth, and open-thread parity.
+- **Changed** realtime broadcaster payload construction - envelope visibility remains canonical when a payload carries a conflicting `visibility`, with a warning so future changes do not silently invert the leak-prevention rule.
+- **Tests** - added broadcaster contract coverage for canonical visibility overwrite and warning behavior.
 
-```text
-vector_score * 0.70 +
-entity_match_score * 0.15 +
-location_match_score * 0.10 +
-recency_score * 0.05
-```
+---
 
-Cross-encoder rerank as an optional second pass once the deterministic version proves out.
+## 2026-05-17 - Phase 42.6: App readiness triage
 
-### Phase 45+ — further out
+The app now explains readiness failures directly and the E2E suite can run real browser assertions against a cleanly booted stack instead of silently passing over a dead dashboard.
 
-- **Audio / transcript ingestion** — `services/transcript/` package mirroring `services/session_intel/`'s shape. Audio → diarized chunks → `ExtractedStoryEvent` proposals → DM review. Schema already supports `source_kind='transcript'`.
-- **Continuity timelines per NPC / location** — extension of `npc_memory(...)` that renders a timeline view.
-- **Map editor** — DM places POIs / decorations / walls manually in the Three.js renderer. Right now everything is procedural or API-driven.
+- **Changed** `GET /readyz` - returns structured `ready`, `status`, and per-check `postgres`, `migrations`, `redis`, and `qdrant` objects with `ok`, `latency_ms`, and error details when a dependency fails.
+- **Changed** database connections - app DB connections use a bounded `connect_timeout` so readiness and dashboard requests fail diagnostically instead of hanging on an unreachable database.
+- **Changed** E2E preflight - probes `/readyz?verbose=1`, writes `test-results-e2e/e2e-readyz.json` and `e2e-root-response.html`, and fails in CI unless `TTDM_E2E_ALLOW_SKIP=1` is set.
+- **Added** `tests/integration/test_readiness.py` - covers verbose readiness success, failed dependency identification, and the dashboard route returning 200.
+- **Tests** - Playwright E2E now executes the landing-tour and route assertions against a healthy live app instead of skipping.
+
+---
+
+## 2026-05-17 - Phase 42.5: E2E landing tour contract repair
+
+The dashboard guided tour remains a product contract, and the E2E suite now triggers it deterministically instead of depending on first-run localStorage timing.
+
+- **Changed** dashboard tour boot - `/?tour=1` clears the completed flag and starts the tour after DOM setup while preserving normal first-run behavior without the query parameter.
+- **Changed** dashboard navigation - exposes the Help route alongside Control Plane and Game Console.
+- **Changed** `tests/e2e/test_landing_tour.py` - starts each tour test at `/?tour=1` and keeps coverage for overlay, tooltip, wizard advancement, skip/restart, and the Local AI step.
+- **Changed** `tests/e2e/conftest.py` - preflights `/health`, `/readyz`, and `/`, skips cleanly when the app is not ready, and fails tests only on app-owned fatal browser console errors.
+- **Added** `tests/e2e/test_routes_smoke.py` - verifies `/`, `/game`, `/control`, and `/help` load with stable titles and navigation markers.
+
+---
+
+## 2026-05-17 - Phase 42: Verification harness + integration repair
+
+The integration suite now boots cross-platform through Python instead of bash path calls, and the realtime visibility layer has end-to-end Socket.IO coverage plus a RAG/Session-Intel/recap continuity matrix.
+
+- **Added** Python integration harness scripts - `scripts/db_reset.py`, `scripts/wait_ready.py`, `scripts/integration_boot.py`, and shared Docker/psql helpers.
+- **Changed** `tests/conftest.py` - loads `.env`, uses the Python boot harness, and gives direct RLS tests a non-owner `tabletop` database role.
+- **Added** `tests/integration/test_socket_visibility.py` - verifies DM-only, public, principal-scoped, spatial, explicit `visible_to`, and rejected join behavior through actual Socket.IO test clients.
+- **Added** `tests/integration/test_visibility_matrix.py` - proves a dm-only RAG-backed patch appears in DM recap/continuity with sources and stays out of party/public recaps and party continuity.
+- **Fixed** RLS empty-principal handling - policies now use `NULLIF(current_setting(...), '')::uuid` so `RESET app.principal_id` denies cleanly instead of throwing a UUID cast error.
+- **Changed** continuity open-thread queries - support visibility-scoped reads so party-facing continuity cannot see `dm_only` threads.
+- **Tests** - full `tests/integration` now passes on Windows through the Python harness.
+
+---
+
+## 2026-05-17 - Phase 41: Per-principal realtime broadcaster
+
+Realtime socket delivery now routes through a single broadcaster instead of raw campaign-room emits. Scoped events deliver by principal, DM-only events deliver only through the DM room, public events use the public campaign room, and spatial events reuse the party decoherence audience resolver.
+
+- **Added** `services/realtime/` - room naming, join validation, audience resolution, normalized `BroadcastEnvelope`, and `broadcast_game_event()`.
+- **Changed** app socket delivery - proposal results, NPC autonomy results, chat ledger events, and turn advancement now route through the broadcaster.
+- **Changed** socket join flow - `join_campaign` validates campaign membership and joins `principal:<id>` and `session:<id>`, then joins GM/system principals to `dm:<campaign_id>` and non-DM principals to `campaign:<campaign_id>:public`.
+- **Changed** frontend socket setup - the browser joins realtime rooms only after campaign, session, and principal context are known.
+- **Changed** orchestrator result payloads - committed proposal results now carry `campaign_id`, `session_id`, and `visible_to` so realtime delivery can honor ledger visibility.
+- **Tests** - added broadcaster coverage for DM-only, public, principal-scoped, explicit visible_to precedence, spatial routing, DM filtering, join rejection, and legacy campaign-room avoidance.
+
+---
+
+## 2026-05-17 - Phase 40: RAG-aware Session Intel + packet citations
+
+Session Intel now retrieves campaign lore with `retrieve_campaign_context(purpose="session_intel")` before the LLM extraction pass. RAG context is prompt-only: it can support a proposed story patch, but it cannot mutate `state.story_state` or bypass DM review.
+
+- **Added** `services/session_intel/rag_context.py` - builds extraction queries from ledger windows, retrieves RAG context, hydrates `rag_chunk` evidence with doc/chunk/filename/visibility/excerpt metadata, and converts evidence into API-facing `sources`.
+- **Changed** `shared.schemas.session_intel.Evidence` - adds `source_kind="rag_chunk"` plus doc/chunk/filename/page/visibility/excerpt/score fields.
+- **Changed** `services/session_intel/extractor.py` - LLM extraction receives lore context when available; RAG-backed events are forced to `requires_dm_review=True`; any event resting on `dm_only` lore is forced to `visibility="dm_only"`. RAG failures fail open and do not block normal extraction.
+- **Changed** recap and continuity surfaces - recap responses now include `sources`; continuity rows attach source metadata derived from patch evidence.
+- **Changed** `POST /api/sessions/<id>/dm_packet` - pending patches include `sources`, recaps include `party_recap_sources` / `dm_recap_sources`, and `citations` aliases DM-visible sources for packet consumers.
+- **Changed** Control Plane Session Intel cards - RAG evidence now renders with source filename, visibility, and excerpt alongside ledger quotes.
+- **Tests** - added focused coverage for RAG-backed extraction review rules, fail-open behavior, row source-kind compatibility, and recap source visibility filtering.
+
+---
+
+## Planned - 1.0 release-candidate track
+
+The immediate track is release hardening, not new feature expansion. The full gate lives under `docs/release/`.
+
+### Phase 43 - Local identity and join-flow hardening
+
+- Local principal selection/login screen.
+- DM principal protected by setup passphrase or local admin mode.
+- Player join codes or invite tokens.
+- Campaign and session membership enforced on every API and WebSocket path.
+- Players cannot pass another `principal_id` or widen visibility by query param.
+
+### Phase 44 - Snapshot/delta/reconnect consistency
+
+- `player_state` event cursor reconciles with WebSocket ledger ids/sequences.
+- Client detects cursor gaps and refetches the snapshot.
+- Reload/reconnect does not duplicate events or widen state.
+- Control handoff updates player state and socket context.
+
+### Phase 45 - V1 golden-path E2E playthrough
+
+- Clean stack boot.
+- Campaign/session/player setup.
+- Player joins `/game`, moves, discovers POI, chats, fights, saves, restarts, and resumes.
+- No DM-only leakage across reload or reconnect.
+
+### Phase 46+ - release gate closure
+
+- Route/auth/visibility matrix audit.
+- Save/load torture suite.
+- DM packet review UX hardening.
+- Docs reality pass.
+- Performance smoke and release packaging.
+
+### Post-1.0
+
+- RAG reranker.
+- Advanced per-chunk visibility UI polish, unless a smaller control is required for a 1.0 security gate.
+- Transcript/audio ingestion.
+- Continuity timelines per NPC/location.
+- Map editor and extra map themes.
 
 ---
 
