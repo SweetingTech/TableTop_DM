@@ -5,6 +5,7 @@ import traceback
 import socket
 import hashlib
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -14,10 +15,25 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import psycopg2
 import psycopg2.extras
 from werkzeug.utils import secure_filename
+from services.realtime.broadcaster import (
+    BroadcastEnvelope,
+    broadcast_game_event,
+    configure_socketio,
+    envelope_from_event,
+)
+from services.realtime.audience import validate_socket_join
+from services.realtime.rooms import (
+    campaign_public_room,
+    dm_room,
+    legacy_campaign_room,
+    principal_room,
+    session_room,
+)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+configure_socketio(socketio)
 
 REDIS_DEFAULT_HOST = "localhost"
 REDIS_DEFAULT_PORT = 6379
@@ -27,10 +43,14 @@ RAG_CHUNK_SIZE = 1000
 RAG_CHUNK_OVERLAP = 150
 RAG_WORKERS = int(os.environ.get("RAG_WORKERS", "2"))
 RAG_EXECUTOR = ThreadPoolExecutor(max_workers=max(1, RAG_WORKERS))
+DB_CONNECT_TIMEOUT = int(os.environ.get("DATABASE_CONNECT_TIMEOUT", "5"))
 
 
 def get_db():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    return psycopg2.connect(
+        os.environ["DATABASE_URL"],
+        connect_timeout=DB_CONNECT_TIMEOUT,
+    )
 
 
 @app.after_request
@@ -182,6 +202,75 @@ def health():
     return jsonify({"status": "alive"})
 
 
+def _expected_migration_version() -> str | None:
+    migration_dir = Path(__file__).resolve().parent / "infra" / "sql" / "migrations"
+    migrations = sorted(migration_dir.glob("*.sql"))
+    return migrations[-1].name if migrations else None
+
+
+def _readiness_check(name, fn):
+    start = time.perf_counter()
+    try:
+        details = fn() or {}
+        details.update({
+            "ok": True,
+            "latency_ms": round((time.perf_counter() - start) * 1000, 2),
+        })
+        return name, details
+    except Exception as exc:
+        return name, {
+            "ok": False,
+            "latency_ms": round((time.perf_counter() - start) * 1000, 2),
+            "error": str(exc),
+        }
+
+
+def _postgres_ready():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+    finally:
+        conn.close()
+    return {}
+
+
+def _migrations_ready():
+    expected = _expected_migration_version()
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT version FROM infra_meta.schema_migrations "
+            "ORDER BY version DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        cur.close()
+    finally:
+        conn.close()
+
+    current = row[0] if row else None
+    if expected and current != expected:
+        raise RuntimeError(f"current migration {current!r} does not match expected {expected!r}")
+    return {"current": current, "expected": expected}
+
+
+def _redis_ready():
+    host = os.environ.get("REDIS_HOST", REDIS_DEFAULT_HOST)
+    port = int(os.environ.get("REDIS_PORT", str(REDIS_DEFAULT_PORT)))
+    _tcp_reachable(host, port)
+    return {"host": host, "port": port}
+
+
+def _qdrant_ready():
+    host = os.environ.get("QDRANT_HOST", QDRANT_DEFAULT_HOST)
+    port = int(os.environ.get("QDRANT_HTTP_PORT", str(QDRANT_DEFAULT_HTTP_PORT)))
+    _tcp_reachable(host, port)
+    return {"host": host, "port": port}
+
+
 def _tcp_reachable(host: str, port: int, timeout: float = 1.5) -> bool:
     """Return True when a TCP endpoint is reachable within timeout."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -194,43 +283,18 @@ def _tcp_reachable(host: str, port: int, timeout: float = 1.5) -> bool:
 def readyz():
     """Readiness probe: verifies DB+migrations and Redis/Qdrant reachability."""
     checks = {}
-    ok = True
+    for name, fn in (
+        ("postgres", _postgres_ready),
+        ("migrations", _migrations_ready),
+        ("redis", _redis_ready),
+        ("qdrant", _qdrant_ready),
+    ):
+        key, details = _readiness_check(name, fn)
+        checks[key] = details
 
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM infra_meta.schema_migrations")
-        _ = cur.fetchone()
-        cur.close()
-        conn.close()
-        checks["database"] = "ok"
-    except Exception as exc:
-        checks["database"] = str(exc)
-        ok = False
-
-    try:
-        _tcp_reachable(
-            os.environ.get("REDIS_HOST", REDIS_DEFAULT_HOST),
-            int(os.environ.get("REDIS_PORT", str(REDIS_DEFAULT_PORT))),
-        )
-        checks["redis"] = "ok"
-    except Exception as exc:
-        checks["redis"] = str(exc)
-        ok = False
-
-    try:
-        qdrant_host = os.environ.get("QDRANT_HOST", QDRANT_DEFAULT_HOST)
-        qdrant_port = int(
-            os.environ.get("QDRANT_HTTP_PORT", str(QDRANT_DEFAULT_HTTP_PORT))
-        )
-        _tcp_reachable(qdrant_host, qdrant_port)
-        checks["qdrant"] = "ok"
-    except Exception as exc:
-        checks["qdrant"] = str(exc)
-        ok = False
-
+    ok = all(check["ok"] for check in checks.values())
     code = 200 if ok else 503
-    return jsonify({"status": "ready" if ok else "not_ready", "checks": checks}), code
+    return jsonify({"ready": ok, "status": "ready" if ok else "not_ready", "checks": checks}), code
 
 
 @app.route("/api/health")
@@ -289,7 +353,9 @@ def _openai_client_for(provider: str, base_url: str | None):
     from openai import OpenAI
 
     final_base_url = resolve_provider_base_url(provider, base_url)
-    api_key = os.environ.get("OPENAI_API_KEY", "dev-local")
+    api_key = os.environ.get(f"{(provider or '').upper()}_API_KEY") or os.environ.get("OPENAI_API_KEY") or "dev-local"
+    if (provider or "").lower() in {"lmstudio", "ollama"}:
+        api_key = api_key or "local-provider"
     return OpenAI(api_key=api_key, base_url=final_base_url)
 
 
@@ -409,6 +475,12 @@ def _search_qdrant(campaign_id: str, query_vector: list[float], top_k: int) -> l
 def _create_entity_record(campaign_id: str, data: dict):
     from shared.db.connection import execute_one
 
+    controller_principal_id = data.get("controller_principal_id")
+    controlled_by = data.get("controlled_by", "HUMAN")
+    if controlled_by in {"AI", "AI_NPC"} and not controller_principal_id:
+        from services.orchestrator.npc_autonomy import ensure_ai_controller_principal
+        controller_principal_id = str(ensure_ai_controller_principal(uuid.UUID(str(campaign_id))))
+
     return execute_one(
         """
         INSERT INTO state.entities (campaign_id, entity_type, name, tags, public_sheet, secret_sheet, hp_current, hp_max, ac, speed, controlled_by, controller_principal_id)
@@ -426,8 +498,8 @@ def _create_entity_record(campaign_id: str, data: dict):
             data.get("hp_max"),
             data.get("ac"),
             data.get("speed"),
-            data.get("controlled_by", "HUMAN"),
-            data.get("controller_principal_id"),
+            controlled_by,
+            controller_principal_id,
         ),
     )
 
@@ -607,23 +679,140 @@ def api_entities(campaign_id):
     return jsonify([_serialize(r) for r in rows])
 
 
-@app.route("/api/campaigns/<campaign_id>/encounters")
+@app.route("/api/campaigns/<campaign_id>/encounters", methods=["GET", "POST"])
 def api_encounters(campaign_id):
-    from shared.db.connection import execute_query
+    from shared.db.connection import execute_one, execute_query
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        session_id = data.get("session_id")
+        if not session_id:
+            session = execute_one(
+                """
+                SELECT id FROM state.sessions
+                WHERE campaign_id = %s AND status IN ('ACTIVE','PAUSED')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (campaign_id,),
+            )
+            if not session:
+                return jsonify({"error": "No active session"}), 400
+            session_id = str(session["id"])
+
+        participant_ids = data.get("entity_ids") or []
+        if not participant_ids:
+            rows = execute_query(
+                """
+                SELECT e.id
+                FROM state.entities e
+                LEFT JOIN state.session_characters sc
+                  ON sc.entity_id = e.id AND sc.session_id = %s
+                WHERE e.campaign_id = %s
+                  AND e.status = 'ACTIVE'
+                  AND e.entity_type IN ('PC','NPC','MONSTER')
+                  AND COALESCE(sc.status, 'ACTIVE') IN ('ACTIVE','DEAD')
+                ORDER BY e.entity_type, e.name
+                LIMIT 12
+                """,
+                (session_id, campaign_id),
+            )
+            participant_ids = [str(r["id"]) for r in rows]
+
+        if len(participant_ids) < 1:
+            return jsonify({"error": "No eligible encounter participants"}), 400
+
+        execute_one(
+            """
+            UPDATE state.encounters
+            SET status = 'COMPLETED', updated_at = now()
+            WHERE session_id = %s AND status = 'ACTIVE'
+            RETURNING id
+            """,
+            (session_id,),
+        )
+        encounter = execute_one(
+            """
+            INSERT INTO state.encounters (session_id, campaign_id, status, round_number, active_slot)
+            VALUES (%s, %s, 'ACTIVE', 1, 1)
+            RETURNING *
+            """,
+            (session_id, campaign_id),
+        )
+        for idx, entity_id in enumerate(participant_ids, start=1):
+            execute_one(
+                """
+                INSERT INTO state.encounter_slots
+                    (encounter_id, entity_id, initiative, turn_order, is_active, ap_current)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (encounter_id, entity_id) DO NOTHING
+                RETURNING id
+                """,
+                (
+                    str(encounter["id"]),
+                    str(entity_id),
+                    max(1, 20 - idx),
+                    idx,
+                    idx == 1,
+                    3,
+                ),
+            )
+        return jsonify({"encounter": _serialize(encounter)})
 
     rows = execute_query(
         """
-        SELECT * FROM state.encounters WHERE campaign_id = %s ORDER BY created_at DESC
+        SELECT *, concat('Encounter ', left(id::text, 8)) AS name
+        FROM state.encounters WHERE campaign_id = %s ORDER BY created_at DESC
     """,
         (campaign_id,),
     )
     return jsonify([_serialize(r) for r in rows])
 
 
-@app.route("/api/campaigns/<campaign_id>/members")
+@app.route("/api/campaigns/<campaign_id>/members", methods=["GET", "POST"])
 def api_campaign_members(campaign_id):
     """List all principals who are members of this campaign."""
-    from shared.db.connection import execute_query
+    from shared.db.connection import execute_one, execute_query
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        display_name = (data.get("display_name") or "").strip()
+        role = (data.get("role") or "PLAYER").upper()
+        if not display_name:
+            return jsonify({"error": "display_name is required"}), 400
+        if role not in {"PLAYER", "OBSERVER", "GM"}:
+            return jsonify({"error": "role must be PLAYER, OBSERVER, or GM"}), 400
+        auth_subject = data.get("auth_subject") or f"local:{campaign_id}:{display_name.lower().replace(' ', '-')}"
+        principal = execute_one(
+            """
+            INSERT INTO state.principals (principal_type, display_name, auth_subject)
+            VALUES ('HUMAN', %s, %s)
+            ON CONFLICT (auth_subject) DO UPDATE
+            SET display_name = EXCLUDED.display_name,
+                is_active = true,
+                updated_at = now()
+            RETURNING *
+            """,
+            (display_name, auth_subject),
+        )
+        execute_one(
+            """
+            INSERT INTO state.campaign_members (campaign_id, principal_id, role)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (campaign_id, principal_id) DO UPDATE SET role = EXCLUDED.role
+            RETURNING principal_id
+            """,
+            (campaign_id, str(principal["id"]), role),
+        )
+        return jsonify({
+            "principal": _serialize(principal),
+            "membership": {
+                "campaign_id": campaign_id,
+                "principal_id": str(principal["id"]),
+                "role": role,
+            },
+            "join_hint": f"/game?principal_id={principal['id']}",
+        })
 
     rows = execute_query(
         """
@@ -636,6 +825,50 @@ def api_campaign_members(campaign_id):
         (campaign_id,),
     )
     return jsonify([_serialize(r) for r in rows])
+
+
+def _principal_id_from_request():
+    return (
+        request.args.get("principal_id")
+        or request.headers.get("X-Principal-Id")
+        or request.headers.get("X-TTDM-Principal-Id")
+    )
+
+
+def _require_campaign_principal(campaign_id):
+    from shared.auth.principal import load_principal
+
+    principal_id = _principal_id_from_request()
+    if not principal_id:
+        return None, (jsonify({"error": "principal_id is required"}), 401)
+
+    try:
+        campaign_uuid = uuid.UUID(str(campaign_id))
+        principal_uuid = uuid.UUID(str(principal_id))
+    except (ValueError, TypeError):
+        return None, (jsonify({"error": "invalid campaign_id or principal_id"}), 400)
+
+    principal = load_principal(principal_uuid, campaign_uuid)
+    if not principal or not principal.role:
+        return None, (jsonify({"error": "principal is not a campaign member"}), 403)
+
+    return principal, None
+
+
+def _continuity_visibility_scope(principal, requested: str | None) -> str:
+    requested = (requested or "").lower()
+    if principal.is_gm() or principal.is_system():
+        return requested if requested in {"dm", "party", "principal", "public"} else "dm"
+    if requested == "public":
+        return "public"
+    if requested == "party":
+        return "party"
+    return "principal"
+
+
+def _expected_local_join_token(principal_id: str, role: str | None) -> str:
+    prefix = "dm" if str(role or "").upper() == "GM" else "player"
+    return f"{prefix}-smoke-join-{principal_id}"
 
 
 @app.route("/api/campaigns/<campaign_id>/session")
@@ -727,6 +960,13 @@ def api_join_session(session_id):
     if not principal or not principal.role:
         return jsonify({"error": "Principal is not a campaign member"}), 403
 
+    supplied_token = data.get("join_token") or data.get("invite_token")
+    require_token = os.environ.get("TTDM_REQUIRE_JOIN_TOKEN", "0").lower() in {"1", "true", "yes", "on"}
+    if supplied_token or require_token:
+        expected_token = _expected_local_join_token(str(principal_uuid), str(principal.role))
+        if supplied_token != expected_token:
+            return jsonify({"error": "Invalid join token"}), 403
+
     return jsonify(
         {
             "joined": True,
@@ -736,6 +976,31 @@ def api_join_session(session_id):
             "role": principal.role,
         }
     )
+
+
+@app.route("/api/sessions/<session_id>/player_state")
+def api_player_state(session_id):
+    from services.player_state.snapshot import PlayerStateError, build_player_state_snapshot
+
+    principal_id = _principal_id_from_request()
+    if not principal_id:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    as_principal = request.args.get("as_principal_id")
+    try:
+        snapshot = build_player_state_snapshot(
+            session_id=uuid.UUID(str(session_id)),
+            principal_id=uuid.UUID(str(principal_id)),
+            as_principal_id=uuid.UUID(str(as_principal)) if as_principal else None,
+            include_recent_events=request.args.get("include_recent_events", "1") != "0",
+            event_limit=int(request.args.get("event_limit", "100")),
+        )
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_id"}), 400
+    except PlayerStateError as exc:
+        return jsonify({"ok": False, "error": exc.code}), exc.status_code
+
+    return jsonify({"ok": True, "player_state": snapshot.model_dump(mode="json")})
 
 
 @app.route("/api/campaigns/<campaign_id>/mode", methods=["GET", "POST"])
@@ -1244,7 +1509,7 @@ def api_patch_edit(patch_id):
 @app.route("/api/sessions/<session_id>/recap")
 def api_session_recap(session_id):
     """Visibility-scoped recap. ?visibility=dm|party|principal|public."""
-    from services.session_intel.recap import generate_recap
+    from services.session_intel.recap import generate_recap, sources_for_recap
     from shared.db.connection import execute_one
 
     row = execute_one("SELECT campaign_id FROM state.sessions WHERE id=%s", (session_id,))
@@ -1256,7 +1521,13 @@ def api_session_recap(session_id):
         campaign_id=row["campaign_id"],
         visibility=visibility,
     )
-    return jsonify({"session_id": session_id, "visibility": visibility, "recap": text})
+    sources = sources_for_recap(uuid.UUID(session_id), visibility)
+    return jsonify({
+        "session_id": session_id,
+        "visibility": visibility,
+        "recap": text,
+        "sources": sources,
+    })
 
 
 @app.route("/api/sessions/<session_id>/dm_packet", methods=["POST"])
@@ -1265,8 +1536,9 @@ def api_session_dm_packet(session_id):
     the session's full ledger, assembles pending patches + DM recap +
     party recap + open threads + contradictions into one payload."""
     from services.session_intel.extractor import extract_and_queue
-    from services.session_intel.recap import generate_recap
+    from services.session_intel.recap import generate_recap, sources_for_recap
     from services.session_intel.continuity import open_threads, contradictions
+    from services.session_intel.rag_context import attach_sources
     from shared.schemas.session_intel import ExtractionRequest
     from shared.db.connection import execute_one, execute_query
 
@@ -1287,13 +1559,21 @@ def api_session_dm_packet(session_id):
         "WHERE session_id = %s AND status = 'PENDING' ORDER BY created_at",
         (session_id,),
     )
+    party_recap = generate_recap(uuid.UUID(session_id), uuid.UUID(cid), "party")
+    dm_recap = generate_recap(uuid.UUID(session_id), uuid.UUID(cid), "dm")
+    party_sources = sources_for_recap(uuid.UUID(session_id), "party")
+    dm_sources = sources_for_recap(uuid.UUID(session_id), "dm")
+    pending_with_sources = [attach_sources(_serialize(r)) for r in pending]
     return jsonify({
         "session_id": session_id,
         "campaign_id": cid,
         "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "pending_patches": [_serialize(r) for r in pending],
-        "party_recap": generate_recap(uuid.UUID(session_id), uuid.UUID(cid), "party"),
-        "dm_recap":    generate_recap(uuid.UUID(session_id), uuid.UUID(cid), "dm"),
+        "pending_patches": pending_with_sources,
+        "party_recap": party_recap,
+        "party_recap_sources": party_sources,
+        "dm_recap": dm_recap,
+        "dm_recap_sources": dm_sources,
+        "citations": dm_sources,
         "open_threads": [_serialize(r) for r in open_threads(uuid.UUID(cid))],
         "contradictions": [_serialize(r) for r in contradictions(uuid.UUID(cid))],
     })
@@ -1302,19 +1582,56 @@ def api_session_dm_packet(session_id):
 @app.route("/api/campaigns/<campaign_id>/open_threads")
 def api_open_threads(campaign_id):
     from services.session_intel.continuity import open_threads
-    return jsonify([_serialize(r) for r in open_threads(uuid.UUID(campaign_id))])
+
+    principal, error = _require_campaign_principal(campaign_id)
+    if error:
+        return error
+    visibility = _continuity_visibility_scope(principal, request.args.get("visibility"))
+    return jsonify([
+        _serialize(r)
+        for r in open_threads(
+            uuid.UUID(campaign_id),
+            visibility=visibility,
+            principal_id=None if visibility == "dm" else str(principal.principal_id),
+        )
+    ])
 
 
 @app.route("/api/campaigns/<campaign_id>/unresolved_promises")
 def api_unresolved_promises(campaign_id):
     from services.session_intel.continuity import unresolved_promises
-    return jsonify([_serialize(r) for r in unresolved_promises(uuid.UUID(campaign_id))])
+
+    principal, error = _require_campaign_principal(campaign_id)
+    if error:
+        return error
+    visibility = _continuity_visibility_scope(principal, request.args.get("visibility"))
+    return jsonify([
+        _serialize(r)
+        for r in unresolved_promises(
+            uuid.UUID(campaign_id),
+            visibility=visibility,
+            principal_id=None if visibility == "dm" else str(principal.principal_id),
+        )
+    ])
 
 
 @app.route("/api/campaigns/<campaign_id>/npc_memory/<npc_id>")
 def api_npc_memory(campaign_id, npc_id):
     from services.session_intel.continuity import npc_memory
-    return jsonify([_serialize(r) for r in npc_memory(uuid.UUID(campaign_id), npc_id)])
+
+    principal, error = _require_campaign_principal(campaign_id)
+    if error:
+        return error
+    visibility = _continuity_visibility_scope(principal, request.args.get("visibility"))
+    return jsonify([
+        _serialize(r)
+        for r in npc_memory(
+            uuid.UUID(campaign_id),
+            npc_id,
+            visibility=visibility,
+            principal_id=None if visibility == "dm" else str(principal.principal_id),
+        )
+    ])
 
 
 @app.route("/api/_debug/save_canvas", methods=["POST"])
@@ -1575,7 +1892,15 @@ def api_propose():
         session_id = proposal.session_id
         result = pipeline.process_proposal(proposal, principal, session_id)
 
-        socketio.emit("game_event", result, room=str(proposal.campaign_id))
+        broadcast_game_event(BroadcastEnvelope(
+            event_id=result.get("event_id", str(uuid.uuid4())),
+            campaign_id=str(proposal.campaign_id),
+            session_id=str(session_id),
+            event_type="game_event",
+            payload=result,
+            visibility="principal_scoped",
+            visible_to=[str(v) for v in result.get("visible_to", [])],
+        ))
 
         return jsonify(result)
 
@@ -1598,10 +1923,23 @@ def api_roll_dice():
 @app.route("/api/encounters/<encounter_id>/advance", methods=["POST"])
 def api_advance_turn(encounter_id):
     from services.orchestrator.state_machine import StateMachine
+    from shared.db.connection import execute_one
 
     sm = StateMachine()
     result = sm.advance_turn(uuid.UUID(encounter_id))
-    socketio.emit("turn_advanced", result, room="encounter_" + encounter_id)
+    encounter = execute_one(
+        "SELECT campaign_id, session_id FROM state.encounters WHERE id = %s",
+        (encounter_id,),
+    )
+    if encounter:
+        broadcast_game_event(BroadcastEnvelope(
+            event_id=str(uuid.uuid4()),
+            campaign_id=str(encounter["campaign_id"]),
+            session_id=str(encounter["session_id"]) if encounter.get("session_id") else None,
+            event_type="turn_advanced",
+            payload=result,
+            visibility="party",
+        ))
     return jsonify(result)
 
 
@@ -1659,9 +1997,16 @@ def api_auto_advance(encounter_id):
         entity_id=uuid.UUID(str(active_slot.get("entity_id"))),
     )
 
-    # Broadcast results
     for result in results:
-        socketio.emit("game_event", result, room=str(campaign_id))
+        broadcast_game_event(BroadcastEnvelope(
+            event_id=result.get("event_id", str(uuid.uuid4())),
+            campaign_id=str(campaign_id),
+            session_id=str(session_id),
+            event_type="game_event",
+            payload=result,
+            visibility="principal_scoped",
+            visible_to=[str(v) for v in result.get("visible_to", [])],
+        ))
 
     return jsonify({
         "processed": True,
@@ -1699,11 +2044,22 @@ def api_chat():
         for event in events:
             r = ledger.append_event(event)
             results.append(r)
-            socketio.emit(
-                "game_event",
-                _serialize(event.model_dump()),
-                room=str(data["campaign_id"]),
-            )
+            try:
+                envelope = envelope_from_event(event)
+            except Exception:
+                payload = event.model_dump() if hasattr(event, "model_dump") else dict(event)
+                envelope = BroadcastEnvelope(
+                    event_id=str(uuid.uuid4()),
+                    campaign_id=str(data["campaign_id"]),
+                    session_id=str(data.get("session_id")) if data.get("session_id") else None,
+                    event_type="game_event",
+                    payload=payload,
+                    visibility="party",
+                )
+            try:
+                broadcast_game_event(envelope)
+            except Exception as e:
+                app.logger.warning("chat realtime broadcast skipped: %s", e)
 
         return jsonify({"events_created": len(results), "results": results})
     except Exception as e:
@@ -2084,8 +2440,21 @@ def api_entity_update(entity_id):
     from shared.db.connection import execute_one
 
     data = request.get_json(silent=True) or {}
+    if data.get("controlled_by") in {"AI", "AI_NPC"} and not data.get("controller_principal_id"):
+        entity = execute_one(
+            "SELECT campaign_id FROM state.entities WHERE id = %s",
+            (entity_id,),
+        )
+        if entity:
+            from services.orchestrator.npc_autonomy import ensure_ai_controller_principal
+            data["controller_principal_id"] = str(
+                ensure_ai_controller_principal(uuid.UUID(str(entity["campaign_id"])))
+            )
     fields, params = [], []
-    for key in ("name", "tags", "public_sheet", "secret_sheet", "hp_current", "hp_max", "ac", "speed"):
+    for key in (
+        "name", "entity_type", "tags", "public_sheet", "secret_sheet",
+        "hp_current", "hp_max", "ac", "speed", "controlled_by", "controller_principal_id",
+    ):
         if key in data:
             fields.append(f"{key}=%s")
             val = json.dumps(data[key]) if key in {"public_sheet", "secret_sheet"} else data[key]
@@ -2107,15 +2476,25 @@ def api_entity_control(entity_id):
     from shared.db.connection import execute_one
 
     data = request.get_json(silent=True) or {}
-    if data.get("controlled_by") not in {"HUMAN", "AI"}:
-        return jsonify({"error": "controlled_by must be HUMAN or AI"}), 400
+    if data.get("controlled_by") not in {"HUMAN", "PLAYER", "GM", "AI", "AI_NPC"}:
+        return jsonify({"error": "controlled_by must be HUMAN, PLAYER, GM, AI, or AI_NPC"}), 400
+    controller_principal_id = data.get("controller_principal_id")
+    if data["controlled_by"] in {"AI", "AI_NPC"} and not controller_principal_id:
+        entity = execute_one(
+            "SELECT campaign_id FROM state.entities WHERE id = %s",
+            (entity_id,),
+        )
+        if not entity:
+            return jsonify({"error": "Not found"}), 404
+        from services.orchestrator.npc_autonomy import ensure_ai_controller_principal
+        controller_principal_id = str(ensure_ai_controller_principal(uuid.UUID(str(entity["campaign_id"]))))
     row = execute_one(
         """
         UPDATE state.entities
         SET controlled_by=%s, controller_principal_id=%s, control_version=control_version+1, updated_at=now()
         WHERE id=%s RETURNING *
         """,
-        (data["controlled_by"], data.get("controller_principal_id"), entity_id),
+        (data["controlled_by"], controller_principal_id, entity_id),
     )
     if not row:
         return jsonify({"error": "Not found"}), 404
@@ -2957,17 +3336,44 @@ def handle_connect():
 
 @socketio.on("join_campaign")
 def handle_join_campaign(data):
-    campaign_id = data.get("campaign_id")
-    if campaign_id:
-        join_room(str(campaign_id))
-        emit("joined", {"campaign_id": campaign_id})
+    data = data or {}
+    try:
+        meta = validate_socket_join(
+            campaign_id=data.get("campaign_id"),
+            principal_id=data.get("principal_id"),
+            session_id=data.get("session_id"),
+        )
+    except PermissionError as e:
+        emit("error", {"message": str(e)})
+        return
+    except ValueError as e:
+        emit("error", {"message": str(e)})
+        return
+
+    join_room(principal_room(meta["principal_id"]))
+    if meta.get("session_id"):
+        join_room(session_room(meta["session_id"]))
+    if meta["is_dm"]:
+        join_room(dm_room(meta["campaign_id"]))
+    else:
+        join_room(campaign_public_room(meta["campaign_id"]))
+    emit("joined", meta)
 
 
 @socketio.on("leave_campaign")
 def handle_leave_campaign(data):
+    data = data or {}
     campaign_id = data.get("campaign_id")
+    principal_id = data.get("principal_id")
+    session_id = data.get("session_id")
     if campaign_id:
-        leave_room(str(campaign_id))
+        leave_room(campaign_public_room(str(campaign_id)))
+        leave_room(dm_room(str(campaign_id)))
+        leave_room(legacy_campaign_room(str(campaign_id)))
+    if principal_id:
+        leave_room(principal_room(str(principal_id)))
+    if session_id:
+        leave_room(session_room(str(session_id)))
 
 
 @socketio.on("submit_intent")
@@ -2999,7 +3405,15 @@ def handle_submit_intent(data):
         pipeline = OrchestratorPipeline()
         result = pipeline.process_proposal(proposal, principal, proposal.session_id)
 
-        emit("game_event", result, room=str(proposal.campaign_id))
+        broadcast_game_event(BroadcastEnvelope(
+            event_id=result.get("event_id", str(uuid.uuid4())),
+            campaign_id=str(proposal.campaign_id),
+            session_id=str(proposal.session_id),
+            event_type="game_event",
+            payload=result,
+            visibility="principal_scoped",
+            visible_to=[str(v) for v in result.get("visible_to", [])],
+        ))
 
     except Exception as e:
         emit("error", {"message": str(e)})
@@ -3393,4 +3807,5 @@ def _serialize(obj):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
-    socketio.run(app, host="0.0.0.0", port=port, debug=True, allow_unsafe_werkzeug=True)
+    debug = os.environ.get("TTDM_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+    socketio.run(app, host="0.0.0.0", port=port, debug=debug, allow_unsafe_werkzeug=True)

@@ -8,7 +8,7 @@ Production-oriented VTT + RPG engine with deterministic state, append-only event
 
 See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart or [API Endpoints](#api-endpoints) for headless access.
 
-**See [CHANGELOG.md](CHANGELOG.md)** for a date-ordered history of feature drops plus the planned next sprint. The Implementation Status table below is a quick reference; the changelog is where I write down *what* and *why* per release window.
+**See [CHANGELOG.md](CHANGELOG.md)** for a date-ordered history of feature drops plus the current 1.0 release track. The Implementation Status table below is a quick reference; the changelog is where I write down *what* and *why* per release window.
 
 
 ## Implementation Status
@@ -42,7 +42,7 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 23 | **Hierarchical map system** — World → Area → Room tiers with parent_map_id, breadcrumbs, zoom transitions | Done |
 | 24 | **Themed scene generators + decorations** — biome-aware composers, FF-Tactics palette, billboard sprites for trees/barrels/chests/etc. | Done |
 | 25 | **POI proximity discovery** — class-modulated perception radius (ranger 5, fighter 2), Chebyshev distance, clickable drilldown markers | Done |
-| 26 | **Party decoherence foundation** — `entities.current_map_id`, audience_for_event(), transition_entity_map() | Done (broadcaster integration deferred) |
+| 26 | **Party decoherence foundation** - `entities.current_map_id`, audience_for_event(), transition_entity_map() | Done |
 | 27 | **Combat HUD** — JRPG-style Fight/Item/Spell/Move/End Turn/Flee menu | Done |
 | 28 | **Multi-provider AI scaffolding** — OpenRouter, DeepSeek, Anthropic alongside OpenAI/Ollama/LM Studio | Done |
 | 29 | **OpenRouter image generation** — server-tool flow with cheap host model + image model, supports Gemini/Flux/Seedream/etc. | Done |
@@ -56,7 +56,16 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 37 | **Visibility-scoped recaps** — DM / party / principal / public; falls back to deterministic bullets if no LLM | Done |
 | 38 | **Continuity queries** — open threads, unresolved promises, NPC memory, contradictions | Done |
 | 39 | **RAG-grounded DM/NPC cognition** — centralized retriever, visibility-filtered prompt injection, embedding-profile guard, north-star leak-prevention tests | Done |
-| 40+ | RAG-aware Session Intel, DM-packet citations, per-principal WebSocket broadcaster, per-chunk visibility UI, reranker, audio ingestion | See [CHANGELOG.md → Planned](CHANGELOG.md#planned--next-sprint) |
+| 40 | **RAG-aware Session Intel + packet citations** - extractor lore context, `rag_chunk` evidence, review enforcement, recap/packet sources | Done |
+| 41 | **Per-principal realtime broadcaster** - scoped Socket.IO rooms, DM-only routing, visible_to precedence, spatial audience delivery | Done |
+| 42 | **Verification harness + integration repair** - Python integration boot, socket visibility tests, cross-surface visibility matrix | Done |
+| 42.5 | **E2E landing tour contract repair** - deterministic `?tour=1` hook, Playwright preflight, app-owned console capture, route smokes | Done |
+| 42.6 | **App readiness triage** - structured `/readyz`, bounded DB readiness, dashboard route regression, strict CI E2E preflight | Done |
+| 42.7 | **Continuity API visibility hardening** - member-required NPC memory/promises, principal-scoped filtering, payload visibility contract lock | Done |
+| 42.8 | **Full Player State Snapshot** - principal-scoped runtime bundle for identity, controls, visible world, narrative state, legal actions, and event cursor | Done |
+| 42.9 | **1.0 Release Gate and Scope Freeze** - release scope, test matrix, security matrix, and RC checklist | Done |
+| 43 | **1.0 Boot, Recovery, and Verification Hardening** - Windows boot path, save/load roundtrip tests, cursor-gap recovery, route/auth matrix, V1 golden-path smoke | Done |
+| 44+ | 1.0 RC hardening: fuller identity UI, snapshot/delta edge cases, route/auth completion, docs, perf/packaging | See [docs/release/1.0-scope.md](docs/release/1.0-scope.md) |
 
 
 ## Quickstart
@@ -113,6 +122,11 @@ make ci
 make verify-docker
 make verify-local
 make verify
+```
+
+Windows boot verification:
+```powershell
+.\scripts\verify_boot.ps1 -Mode docker
 ```
 
 Integration skip behavior when Docker runtime is unavailable:
@@ -385,11 +399,11 @@ docs/                               Architecture specs
 ## WebSocket Events
 | Event | Direction | Description |
 |-------|-----------|-------------|
-| `join_campaign` | Client -> Server | Join campaign room |
-| `leave_campaign` | Client -> Server | Leave campaign room |
+| `join_campaign` | Client -> Server | Validate campaign/session/principal and join scoped realtime rooms |
+| `leave_campaign` | Client -> Server | Leave scoped realtime rooms |
 | `submit_intent` | Client -> Server | Submit game action |
-| `game_event` | Server -> Client | Broadcast game events |
-| `turn_advanced` | Server -> Client | Turn advancement notification |
+| `game_event` | Server -> Client | Visibility-filtered game events via public, principal, or DM rooms |
+| `turn_advanced` | Server -> Client | Visibility-filtered turn advancement notification |
 
 
 ## Game Console Commands
@@ -543,7 +557,7 @@ On the **World** and **Area** tiers all (non-hidden) POIs are visible as clickab
 
 ### Party decoherence
 
-Foundation laid in `services/domain/maps/decoherence.py`. Each entity has `current_map_id`; events get pushed to a player only if their PC is on the same map AND within their perception radius. Helper `audience_for_event(campaign_id, map_id, x, y)` returns the set of principals who should witness an event. `transition_entity_map()` moves a PC between maps (used by portal POI drilldown). WebSocket broadcaster integration is deferred — current behavior is still per-campaign-room broadcast.
+Foundation laid in `services/domain/maps/decoherence.py`. Each entity has `current_map_id`; events get pushed to a player only if their PC is on the same map AND within their perception radius. Helper `audience_for_event(campaign_id, map_id, x, y)` returns the set of principals who should witness an event. `transition_entity_map()` moves a PC between maps (used by portal POI drilldown). Phase 41 wires this into the realtime broadcaster: public events use `campaign:<campaign_id>:public`, scoped events use `principal:<principal_id>`, and DM-only or omniscient delivery uses `dm:<campaign_id>`. Scoped game events no longer use the legacy raw campaign room.
 
 ### Decoration sprites
 

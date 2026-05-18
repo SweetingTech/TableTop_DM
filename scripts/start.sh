@@ -82,6 +82,7 @@ wait_ready() {
 start_host_app() {
   export PYTHONUNBUFFERED=1
   export PORT="${PORT:-8000}"
+  export TTDM_DEBUG="${TTDM_DEBUG:-0}"
   if [[ -f "$APP_PID_FILE" ]] && kill -0 "$(cat "$APP_PID_FILE")" >/dev/null 2>&1; then
     echo "[start] App already running with PID $(cat "$APP_PID_FILE")"
     return 0
@@ -99,7 +100,15 @@ start_deps_docker() {
     echo "[start] ERROR: docker runtime is unavailable for docker dependency provider" >&2
     return 1
   fi
-  docker compose -f infra/docker-compose.yml up -d postgres redis qdrant
+  local compose=(docker compose --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/infra/docker-compose.yml")
+  "${compose[@]}" up -d postgres redis qdrant
+  for _ in $(seq 1 40); do
+    if "${compose[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  "${compose[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
   echo docker > "$DEPS_PROVIDER_FILE"
   echo "1" > "$DEPS_STARTED_FILE"
 }

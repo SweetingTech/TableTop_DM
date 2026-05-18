@@ -83,6 +83,10 @@ def _resolve_api_key(provider: str, cfg: dict) -> str:
 
     if raw:
         return decrypt_str(raw)
+    if provider in {"lmstudio", "ollama", "mock"}:
+        # OpenAI-compatible local servers still require the SDK field to be
+        # non-empty even though they do not authenticate requests.
+        return "local-provider"
     # Environment fallback for ops setups (e.g. shipping a key via .env).
     return (
         os.environ.get(f"{provider.upper()}_API_KEY")

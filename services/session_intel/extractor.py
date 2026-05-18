@@ -34,6 +34,10 @@ from shared.schemas.session_intel import (
     ExtractionRequest,
     ExtractionResult,
 )
+from services.session_intel.rag_context import (
+    hydrate_rag_evidence,
+    retrieve_session_intel_context,
+)
 
 
 log = logging.getLogger(__name__)
@@ -138,6 +142,13 @@ _EXTRACTOR_SCHEMA = {
                                 "source_kind": {"type": "string"},
                                 "source_id": {"type": "string"},
                                 "quote": {"type": "string"},
+                                "doc_id": {"type": "string"},
+                                "chunk_id": {"type": "string"},
+                                "filename": {"type": "string"},
+                                "page": {"type": ["integer", "null"]},
+                                "visibility": {"type": "string"},
+                                "excerpt": {"type": "string"},
+                                "score": {"type": "number"},
                             },
                             "required": ["source_kind", "source_id"],
                         },
@@ -186,12 +197,27 @@ def _llm_events(req: ExtractionRequest, rows: list[dict]) -> tuple[list[Extracte
     if not transcript.strip():
         return [], ["empty_transcript"]
 
+    rag = retrieve_session_intel_context(
+        campaign_id=req.campaign_id,
+        session_id=req.session_id,
+        rows=rows,
+    )
+
     user_prompt = (
         "Below is the recent session transcript and mechanical events. "
         "Extract narrative facts you would write into a DM tracking sheet. "
         "Cite quotes.\n\n"
         f"{transcript}\n"
     )
+    if rag.context_block:
+        user_prompt += (
+            "\n\nRelevant campaign lore follows. Use it only to support proposals; "
+            "never treat lore as an already-committed play fact. If a proposed "
+            "event depends on lore, include a rag_chunk evidence item using the "
+            "chunk id shown in the citation, set requires_dm_review=true, and "
+            "keep dm_only lore out of party/public visibility.\n\n"
+            f"{rag.context_block}\n"
+        )
     try:
         adapter = LLMAdapter(campaign_id=uuid.UUID(req.campaign_id), role="dm")
         raw = adapter.generate_structured(
@@ -207,10 +233,43 @@ def _llm_events(req: ExtractionRequest, rows: list[dict]) -> tuple[list[Extracte
     skips: list[str] = []
     for i, ev in enumerate(events_raw):
         try:
-            out.append(ExtractedStoryEvent(**ev))
+            evidence = ev.get("evidence") or []
+            if isinstance(evidence, list):
+                ev["evidence"] = hydrate_rag_evidence(evidence, rag)
+            event = ExtractedStoryEvent(**ev)
+            _enforce_rag_review_rules(event)
+            out.append(event)
         except ValidationError as e:
             skips.append(f"event_{i}_validation: {str(e)[:200]}")
     return out, skips
+
+
+def _enforce_rag_review_rules(event: ExtractedStoryEvent) -> None:
+    """RAG-supported inference always requires DM review.
+
+    DM-only lore also forces the proposed fact to DM-only visibility, so
+    a model cannot accidentally leak a secret implication into a party
+    recap or patch.
+    """
+    rag_items = [e for e in event.evidence if e.source_kind == "rag_chunk"]
+    if not rag_items:
+        return
+    event.requires_dm_review = True
+    if any((e.visibility or "").lower() == "dm_only" for e in rag_items):
+        event.visibility = "dm_only"
+
+
+def _row_source_kind(evidence: list[Evidence]) -> str:
+    """Pick a DB-level source_kind allowed by migration 013.
+
+    RAG chunks are evidence/provenance, but the proposal row still comes
+    from chat/transcript/ledger/dm_note. Avoid violating the existing
+    CHECK constraint.
+    """
+    for item in evidence:
+        if item.source_kind != "rag_chunk":
+            return item.source_kind
+    return "chat"
 
 
 # ---------------------------------------------------------------------
@@ -263,7 +322,7 @@ def extract_and_queue(req: ExtractionRequest) -> ExtractionResult:
                     (
                         req.campaign_id,
                         req.session_id,
-                        ev.evidence[0].source_kind if ev.evidence else "chat",
+                        _row_source_kind(ev.evidence),
                         json.dumps({"seq_ids": [e.source_id for e in ev.evidence]}),
                         ev.event_type,
                         ev.summary,

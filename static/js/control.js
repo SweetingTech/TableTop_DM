@@ -4,6 +4,7 @@ const state = {
     selectedSession: localStorage.getItem('control_session_id') || '',
     characters: [],
     sessionCharacters: [],
+    members: [],
     viewMode: 'list', // 'list' or 'cards'
     showDeleted: false,
 };
@@ -48,6 +49,7 @@ function buildCharacterFromForm() {
         name: name,
         entity_type: $('charEntityType').value,
         controlled_by: $('charControlledBy').value,
+        controller_principal_id: $('charControllerPrincipal')?.value || null,
         hp_max: parseInt($('charHp').value) || 10,
         hp_current: parseInt($('charHp').value) || 10,
         public_sheet: {
@@ -126,6 +128,7 @@ function clearCharacterForm() {
     // Reset selects
     $('charEntityType').value = 'PC';
     $('charControlledBy').value = 'PLAYER';
+    if ($('charControllerPrincipal')) $('charControllerPrincipal').value = '';
 }
 
 // Populate form from character object (for AI generation)
@@ -138,6 +141,10 @@ function populateFormFromCharacter(char) {
     $('charName').value = char.name || '';
     $('charEntityType').value = char.entity_type || 'PC';
     $('charControlledBy').value = char.controlled_by || 'PLAYER';
+    if ($('charControllerPrincipal')) {
+        populateMemberDropdown('charControllerPrincipal');
+        $('charControllerPrincipal').value = char.controller_principal_id || '';
+    }
     $('charRace').value = sheet.race || '';
     $('charClass').value = sheet.class || '';
     $('charLevel').value = sheet.level || 1;
@@ -310,6 +317,53 @@ async function loadSessions() {
     }).join('');
 }
 
+async function loadMembers() {
+    const el = $('memberList');
+    if (!el) return;
+    if (!state.selectedCampaign) {
+        el.innerHTML = '<div class="list-item-meta">Select a campaign to see players</div>';
+        return;
+    }
+    try {
+        state.members = await api(`/api/campaigns/${state.selectedCampaign}/members`);
+        if (!state.members.length) {
+            el.innerHTML = '<div class="list-item-meta">No campaign members found.</div>';
+            return;
+        }
+        el.innerHTML = state.members.map((m) => {
+            const gameHref = `/game?principal_id=${encodeURIComponent(m.principal_id)}`;
+            return `
+                <div class="list-item">
+                    <div class="list-item-info">
+                        <div class="list-item-name">${escapeHtml(m.display_name)}</div>
+                        <div class="list-item-meta">${escapeHtml(m.role)} &bull; ${escapeHtml(m.principal_type)} &bull; ${escapeHtml(m.principal_id)}</div>
+                    </div>
+                    <div class="list-item-actions">
+                        <a class="btn btn-secondary" href="${gameHref}">Open as Player</a>
+                    </div>
+                </div>`;
+        }).join('');
+        updateMemberDropdowns();
+    } catch (e) {
+        el.innerHTML = `<div class="list-item-meta">${escapeHtml(e.message)}</div>`;
+    }
+}
+
+function populateMemberDropdown(id) {
+    const select = $(id);
+    if (!select) return;
+    const current = select.value;
+    const players = (state.members || []).filter(m => m.role === 'PLAYER' && m.principal_type === 'HUMAN');
+    select.innerHTML = '<option value="">-- Select player principal --</option>' +
+        players.map(m => `<option value="${m.principal_id}">${escapeHtml(m.display_name)}</option>`).join('');
+    if (players.some(m => m.principal_id === current)) select.value = current;
+}
+
+function updateMemberDropdowns() {
+    populateMemberDropdown('charControllerPrincipal');
+    populateMemberDropdown('editCharControllerPrincipal');
+}
+
 async function loadCharacters() {
     if (!state.selectedCampaign) {
         $('characterList').innerHTML = '<div class="list-item-meta">Select a campaign first</div>';
@@ -368,7 +422,7 @@ function renderCharacterListItem(e) {
                 ` : `
                     <button class="btn btn-secondary" onclick="window.control.editCharacter('${e.id}')">Edit</button>
                     <button class="btn ${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'btn-primary' : 'btn-secondary'}"
-                            onclick="window.control.toggleControl('${e.id}','${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'HUMAN' : 'AI'}')">
+                            onclick="window.control.toggleControl('${e.id}','${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'PLAYER' : 'AI_NPC'}')">
                         ${e.controlled_by === 'AI' || e.controlled_by === 'AI_NPC' ? 'Human' : 'AI'}
                     </button>
                     <button class="btn btn-danger" onclick="window.control.deleteCharacter('${e.id}')">Delete</button>
@@ -490,6 +544,10 @@ function openEditModal(entity) {
     $('editCharName').value = entity.name || '';
     $('editCharEntityType').value = entity.entity_type || 'PC';
     $('editCharControlledBy').value = entity.controlled_by || 'PLAYER';
+    if ($('editCharControllerPrincipal')) {
+        populateMemberDropdown('editCharControllerPrincipal');
+        $('editCharControllerPrincipal').value = entity.controller_principal_id || '';
+    }
     $('editCharHpCurrent').value = entity.hp_current || 0;
     $('editCharHpMax').value = entity.hp_max || 0;
     $('editCharAc').value = entity.ac || 10;
@@ -811,6 +869,7 @@ window.control = {
                     name: $('editCharName').value,
                     entity_type: $('editCharEntityType').value,
                     controlled_by: $('editCharControlledBy').value,
+                    controller_principal_id: $('editCharControllerPrincipal')?.value || null,
                     hp_current: parseInt($('editCharHpCurrent').value) || 0,
                     hp_max: parseInt($('editCharHpMax').value) || 0,
                     ac: parseInt($('editCharAc').value) || 10,
@@ -969,6 +1028,7 @@ async function refreshAll() {
         await loadCampaigns();
         await loadCampaignModeBadge();
         await loadSessions();
+        await loadMembers();
         await loadArchives();
         await loadCharacters();
         await loadSessionParty();
@@ -1014,6 +1074,24 @@ window.addEventListener('DOMContentLoaded', async () => {
         try {
             await api(`/api/campaigns/${state.selectedCampaign}/sessions`, { method: 'POST' });
             await loadSessions();
+        } catch (e) {
+            showErr(e.message);
+        }
+    };
+
+    $('createPlayerMember').onclick = async () => {
+        if (!state.selectedCampaign) { showErr('Select a campaign first'); return; }
+        const name = ($('newPlayerName').value || '').trim();
+        if (!name) { showErr('Enter a player display name'); return; }
+        try {
+            await api(`/api/campaigns/${state.selectedCampaign}/members`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ display_name: name, role: 'PLAYER' }),
+            });
+            $('newPlayerName').value = '';
+            await loadMembers();
+            showErr('');
         } catch (e) {
             showErr(e.message);
         }
@@ -1399,9 +1477,15 @@ window.addEventListener('DOMContentLoaded', async () => {
             listEl.innerHTML = patches.map(p => {
                 const kindClass = PATCH_KIND_CLASS[p.event_type] || 'other';
                 const conf = Math.round((p.confidence || 0) * 100);
-                const evidence = (p.evidence || []).filter(e => e.quote).map(e =>
-                    `<div class="patch-evidence">"${escapeHtml(e.quote)}"</div>`
-                ).join('');
+                const evidence = (p.evidence || []).map(e => {
+                    if (e.source_kind === 'rag_chunk') {
+                        const file = e.filename || e.chunk_id || e.source_id || 'RAG source';
+                        const vis = e.visibility ? ` | ${escapeHtml(e.visibility)}` : '';
+                        const excerpt = e.excerpt || e.quote || '';
+                        return `<div class="patch-evidence">source: ${escapeHtml(file)}${vis}${excerpt ? ` - ${escapeHtml(excerpt)}` : ''}</div>`;
+                    }
+                    return e.quote ? `<div class="patch-evidence">"${escapeHtml(e.quote)}"</div>` : '';
+                }).join('');
                 const entityList = Array.isArray(p.entities) && p.entities.length
                     ? `<div class="patch-evidence">entities: ${p.entities.map(escapeHtml).join(', ')}</div>` : '';
                 return `

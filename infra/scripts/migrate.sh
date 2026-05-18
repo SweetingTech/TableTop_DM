@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$ROOT_DIR/infra"
+cd "$ROOT_DIR"
+COMPOSE=(docker compose --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/infra/docker-compose.yml")
 
 if [[ ! -f "$ROOT_DIR/.env" ]]; then
   cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
@@ -13,10 +14,25 @@ set -a
 source "$ROOT_DIR/.env"
 set +a
 
-if ! docker compose ps postgres >/dev/null 2>&1; then
+wait_for_postgres() {
+  for _ in $(seq 1 60); do
+    if "${COMPOSE[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Postgres did not become ready before migrations." >&2
+  "${COMPOSE[@]}" ps postgres >&2 || true
+  return 1
+}
+
+if ! "${COMPOSE[@]}" ps postgres >/dev/null 2>&1; then
   echo "Postgres service not found in compose. Run ./infra/scripts/phase1_up.sh first." >&2
   exit 1
 fi
+
+wait_for_postgres
 
 SQL_BOOTSTRAP=$(cat <<'SQL'
 CREATE SCHEMA IF NOT EXISTS infra_meta;
@@ -28,7 +44,7 @@ CREATE TABLE IF NOT EXISTS infra_meta.schema_migrations (
 SQL
 )
 
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$SQL_BOOTSTRAP"
+"${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$SQL_BOOTSTRAP"
 
 for migration in "$ROOT_DIR"/infra/sql/migrations/*.sql; do
   [[ -e "$migration" ]] || continue
@@ -40,7 +56,7 @@ for migration in "$ROOT_DIR"/infra/sql/migrations/*.sql; do
   fi
   checksum="$(sha256sum "$migration" | cut -d ' ' -f 1)"
 
-  applied_checksum=$(docker compose exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  applied_checksum=$("${COMPOSE[@]}" exec -T postgres psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
     -c "SELECT checksum FROM infra_meta.schema_migrations WHERE version = '$version';")
 
   if [[ -n "$applied_checksum" ]]; then
@@ -53,9 +69,9 @@ for migration in "$ROOT_DIR"/infra/sql/migrations/*.sql; do
   fi
 
   echo "Applying $version"
-  docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$migration"
+  "${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$migration"
 
-  docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  "${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
     -c "INSERT INTO infra_meta.schema_migrations(version, checksum) VALUES ('$version', '$checksum');"
 done
 

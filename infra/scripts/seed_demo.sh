@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$ROOT_DIR/infra"
+cd "$ROOT_DIR"
+COMPOSE=(docker compose --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/infra/docker-compose.yml")
 
 if [[ ! -f "$ROOT_DIR/.env" ]]; then
   cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
@@ -13,15 +14,30 @@ set -a
 source "$ROOT_DIR/.env"
 set +a
 
+wait_for_postgres() {
+  for _ in $(seq 1 60); do
+    if "${COMPOSE[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Postgres did not become ready before demo seed." >&2
+  "${COMPOSE[@]}" ps postgres >&2 || true
+  return 1
+}
+
+wait_for_postgres
+
 SEED_FILE="$ROOT_DIR/infra/sql/seed/001_demo_campaign.sql"
 
 echo "Applying demo seed: $(basename "$SEED_FILE")"
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$SEED_FILE"
+"${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$SEED_FILE"
 
 echo ""
 echo "Demo scenario IDs"
 echo "-----------------"
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+"${COMPOSE[@]}" exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
 SELECT * FROM (
   SELECT 'campaign_id' AS key, id::text AS value FROM state.campaigns WHERE id = '11111111-1111-1111-1111-111111111111'
   UNION ALL
@@ -35,7 +51,7 @@ ORDER BY CASE key WHEN 'campaign_id' THEN 1 WHEN 'session_id' THEN 2 WHEN 'encou
 
 echo ""
 echo "Principals"
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+"${COMPOSE[@]}" exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
 SELECT display_name, id, principal_type
 FROM state.principals
 WHERE id IN (
@@ -49,7 +65,7 @@ ORDER BY display_name;"
 
 echo ""
 echo "Entities"
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+"${COMPOSE[@]}" exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
 SELECT name, id, entity_type
 FROM state.entities
 WHERE id IN (

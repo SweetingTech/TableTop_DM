@@ -41,7 +41,10 @@ started_by_start=0
 
 if [[ "$MODE" == "docker" || ( "$provider" == "docker" && "$started_by_start" == "1" ) ]]; then
   if bash scripts/docker_runtime_available.sh; then
-    docker compose -f infra/docker-compose.yml down --remove-orphans
+    if [[ ! -f .env ]]; then
+      cp .env.example .env
+    fi
+    docker compose --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/infra/docker-compose.yml" down --remove-orphans
   fi
 fi
 

@@ -39,7 +39,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 FILE_MAGIC = b"ttdm-save:v1\n"
 KDF_ITERATIONS = 600_000  # NIST 2023 floor for PBKDF2-HMAC-SHA256
-SCHEMA_VERSION = 12       # bump when migrations 013+ land
+SCHEMA_VERSION = 14       # latest migration covered by the 1.0 RC save gate
 SUPPORTED_KINDS = ("game", "program")
 
 
