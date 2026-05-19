@@ -23,6 +23,17 @@ def test_control_plane_crud_and_rag(integration_stack):
         )
         assert campaign.status_code == 201
         campaign_id = campaign.get_json()["id"]
+        gm = client.post(
+            f"/api/campaigns/{campaign_id}/members",
+            json={
+                "display_name": "CP IT GM",
+                "auth_subject": f"test:cp-it-gm:{campaign_id}",
+                "role": "GM",
+            },
+        )
+        assert gm.status_code == 200
+        gm_id = gm.get_json()["membership"]["principal_id"]
+        gm_query = {"principal_id": gm_id, "join_token": f"dm-smoke-join-{gm_id}"}
 
         updated = client.put(f"/api/campaigns/{campaign_id}", json={"mode": "SOCIAL"})
         assert updated.status_code == 200
@@ -41,7 +52,11 @@ def test_control_plane_crud_and_rag(integration_stack):
         )
         assert ent.status_code == 201
         entity_id = ent.get_json()["id"]
-        control = client.post(f"/api/entities/{entity_id}/control", json={"controlled_by": "AI"})
+        control = client.post(
+            f"/api/entities/{entity_id}/control",
+            query_string=gm_query,
+            json={"controlled_by": "AI"},
+        )
         assert control.status_code == 200
         assert control.get_json()["controlled_by"] == "AI"
 

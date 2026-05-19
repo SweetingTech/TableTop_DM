@@ -851,6 +851,18 @@ def _join_token_from_request():
     )
 
 
+def _debug_errors_enabled() -> bool:
+    return os.environ.get("TTDM_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def _json_error(message: str, status: int = 400, *, exc: Exception | None = None):
+    payload = {"error": message}
+    if exc is not None and _debug_errors_enabled():
+        payload["detail"] = str(exc)
+        payload["trace"] = traceback.format_exc()
+    return jsonify(payload), status
+
+
 def _require_campaign_principal(campaign_id):
     from shared.auth.principal import load_principal
 
@@ -871,6 +883,30 @@ def _require_campaign_principal(campaign_id):
     return principal, None
 
 
+def _session_record(session_id):
+    from shared.db.connection import execute_one
+
+    try:
+        session_uuid = uuid.UUID(str(session_id))
+    except (ValueError, TypeError):
+        return None, (jsonify({"error": "invalid session_id"}), 400)
+
+    row = execute_one("SELECT * FROM state.sessions WHERE id = %s", (str(session_uuid),))
+    if not row:
+        return None, (jsonify({"error": "session not found"}), 404)
+    return row, None
+
+
+def _require_session_principal(session_id):
+    session, error = _session_record(session_id)
+    if error:
+        return None, None, error
+    principal, error = _require_campaign_principal(str(session["campaign_id"]))
+    if error:
+        return None, session, error
+    return principal, session, None
+
+
 def _require_campaign_gm(campaign_id, *, require_join_token: bool = False):
     principal, error = _require_campaign_principal(campaign_id)
     if error:
@@ -888,6 +924,32 @@ def _require_campaign_gm(campaign_id, *, require_join_token: bool = False):
     return principal, None
 
 
+def _require_session_gm(session_id, *, require_join_token: bool = True):
+    principal, session, error = _require_session_principal(session_id)
+    if error:
+        return None, session, error
+    if not (principal.is_gm() or principal.is_system()):
+        return None, session, (jsonify({"error": "GM or system principal required"}), 403)
+    if require_join_token:
+        supplied_token = _join_token_from_request()
+        expected_token = _expected_local_join_token(str(principal.principal_id), str(principal.role))
+        if supplied_token != expected_token:
+            return None, session, (jsonify({"error": "validated local GM identity required"}), 401)
+    return principal, session, None
+
+
+def _require_entity_gm(entity_id, *, require_join_token: bool = True):
+    from shared.db.connection import execute_one
+
+    entity = execute_one("SELECT id, campaign_id FROM state.entities WHERE id = %s", (entity_id,))
+    if not entity:
+        return None, None, (jsonify({"error": "Not found"}), 404)
+    principal, error = _require_campaign_gm(str(entity["campaign_id"]), require_join_token=require_join_token)
+    if error:
+        return None, entity, error
+    return principal, entity, None
+
+
 def _continuity_visibility_scope(principal, requested: str | None) -> str:
     requested = (requested or "").lower()
     if principal.is_gm() or principal.is_system():
@@ -897,6 +959,20 @@ def _continuity_visibility_scope(principal, requested: str | None) -> str:
     if requested == "party":
         return "party"
     return "principal"
+
+
+def _redact_story_state(row):
+    data = _serialize(row)
+    data.pop("dm_notes", None)
+    data.pop("dm_private_notes", None)
+    active_npcs = data.get("active_npcs")
+    if isinstance(active_npcs, list):
+        data["active_npcs"] = [
+            {k: v for k, v in npc.items() if k not in {"notes", "secret", "secrets", "dm_notes"}}
+            if isinstance(npc, dict) else npc
+            for npc in active_npcs
+        ]
+    return data
 
 
 def _expected_local_join_token(principal_id: str, role: str | None) -> str:
@@ -1047,7 +1123,11 @@ def api_campaign_mode(campaign_id):
         mode = sm.get_campaign_mode(uuid.UUID(campaign_id))
         return jsonify({"mode": mode.value})
 
-    data = request.get_json()
+    principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
+
+    data = request.get_json(silent=True) or {}
     new_mode = GameMode(data["mode"])
     result = sm.set_campaign_mode(uuid.UUID(campaign_id), new_mode)
     return jsonify(result)
@@ -1543,15 +1623,14 @@ def api_patch_edit(patch_id):
 def api_session_recap(session_id):
     """Visibility-scoped recap. ?visibility=dm|party|principal|public."""
     from services.session_intel.recap import generate_recap, sources_for_recap
-    from shared.db.connection import execute_one
 
-    row = execute_one("SELECT campaign_id FROM state.sessions WHERE id=%s", (session_id,))
-    if not row:
-        return jsonify({"error": "session not found"}), 404
-    visibility = request.args.get("visibility", "party")
+    principal, session, error = _require_session_principal(session_id)
+    if error:
+        return error
+    visibility = _continuity_visibility_scope(principal, request.args.get("visibility"))
     text = generate_recap(
         session_id=uuid.UUID(session_id),
-        campaign_id=row["campaign_id"],
+        campaign_id=session["campaign_id"],
         visibility=visibility,
     )
     sources = sources_for_recap(uuid.UUID(session_id), visibility)
@@ -1896,7 +1975,7 @@ def api_discovered_pois(entity_id):
 
 @app.route("/api/propose", methods=["POST"])
 def api_propose():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     try:
         from shared.schemas.contracts import InterventionProposal
         from shared.auth.principal import load_principal
@@ -1938,7 +2017,7 @@ def api_propose():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 400
+        return _json_error(str(e), 400, exc=e)
 
 
 @app.route("/api/dice/roll", methods=["POST"])
@@ -2058,7 +2137,7 @@ def api_auto_advance(encounter_id):
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     try:
         from services.conversations.manager import ConversationManager
 
@@ -2103,7 +2182,7 @@ def api_chat():
 
         return jsonify({"events_created": len(results), "results": results})
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 400
+        return _json_error(str(e), 400, exc=e)
 
 
 @app.route("/api/narrate", methods=["POST"])
@@ -2484,6 +2563,10 @@ def api_entity_create(campaign_id):
 def api_entity_update(entity_id):
     from shared.db.connection import execute_one
 
+    principal, entity, error = _require_entity_gm(entity_id, require_join_token=True)
+    if error:
+        return error
+
     data = request.get_json(silent=True) or {}
     if data.get("controlled_by") in {"AI", "AI_NPC"} and not data.get("controller_principal_id"):
         entity = execute_one(
@@ -2523,6 +2606,11 @@ def api_entity_control(entity_id):
     data = request.get_json(silent=True) or {}
     if data.get("controlled_by") not in {"HUMAN", "PLAYER", "GM", "AI", "AI_NPC"}:
         return jsonify({"error": "controlled_by must be HUMAN, PLAYER, GM, AI, or AI_NPC"}), 400
+
+    principal, entity, error = _require_entity_gm(entity_id, require_join_token=True)
+    if error:
+        return error
+
     controller_principal_id = data.get("controller_principal_id")
     if data["controlled_by"] in {"AI", "AI_NPC"} and not controller_principal_id:
         entity = execute_one(
@@ -2551,6 +2639,10 @@ def api_entity_delete(entity_id):
     """Soft delete (tombstone) an entity"""
     from shared.db.connection import execute_one
 
+    principal, entity, error = _require_entity_gm(entity_id, require_join_token=True)
+    if error:
+        return error
+
     row = execute_one(
         """
         UPDATE state.entities
@@ -2569,6 +2661,10 @@ def api_entity_delete(entity_id):
 def api_entity_restore(entity_id):
     """Restore a tombstoned entity"""
     from shared.db.connection import execute_one
+
+    principal, entity, error = _require_entity_gm(entity_id, require_join_token=True)
+    if error:
+        return error
 
     row = execute_one(
         """
@@ -2589,6 +2685,10 @@ def api_entity_image_upload(entity_id):
     """Upload an image for entity portrait"""
     from shared.db.connection import execute_one
     import base64
+
+    principal, entity, error = _require_entity_gm(entity_id, require_join_token=True)
+    if error:
+        return error
 
     # Check if entity exists
     entity = execute_one("SELECT id FROM state.entities WHERE id = %s", (entity_id,))
@@ -2637,6 +2737,10 @@ def api_entity_image_upload(entity_id):
 def api_entity_image_delete(entity_id):
     """Remove entity portrait"""
     from shared.db.connection import execute_one
+
+    principal, entity, error = _require_entity_gm(entity_id, require_join_token=True)
+    if error:
+        return error
 
     row = execute_one(
         "UPDATE state.entities SET image_url = NULL, updated_at = now() WHERE id = %s RETURNING *",
@@ -3474,6 +3578,10 @@ def api_get_story_state(session_id):
     """Get the current story state for a session"""
     from shared.db.connection import execute_one
 
+    principal, session, error = _require_session_principal(session_id)
+    if error:
+        return error
+
     row = execute_one(
         """
         SELECT ss.*, s.id as session_id, s.status as session_status
@@ -3485,6 +3593,8 @@ def api_get_story_state(session_id):
     )
     if not row:
         return jsonify({"error": "Story state not found"}), 404
+    if not (principal.is_gm() or principal.is_system()):
+        return jsonify(_redact_story_state(row))
     return jsonify(_serialize(row))
 
 
@@ -3492,6 +3602,10 @@ def api_get_story_state(session_id):
 def api_update_story_state(session_id):
     """Update the story state for a session"""
     from shared.db.connection import execute_one, transaction
+
+    principal, session, error = _require_session_gm(session_id, require_join_token=True)
+    if error:
+        return error
 
     data = request.get_json(silent=True) or {}
 
@@ -3526,9 +3640,8 @@ def api_update_story_state(session_id):
             return jsonify({"error": "No valid fields to update"}), 400
 
         updates.append("updated_at = now()")
-        if data.get("updated_by"):
-            updates.append("updated_by = %s")
-            values.append(data["updated_by"])
+        updates.append("updated_by = %s")
+        values.append(str(principal.principal_id))
 
         values.append(session_id)
         cur.execute(
@@ -3551,7 +3664,7 @@ def api_update_story_state(session_id):
                 json.dumps(_serialize(updated)),
                 change_type,
                 data.get("change_description", ""),
-                data.get("updated_by"),
+                str(principal.principal_id),
             ),
         )
 
@@ -3679,8 +3792,14 @@ def api_session_chat_history(session_id):
     """Get chat history for a session from ledger events"""
     from shared.db.connection import execute_query
 
+    principal, session, error = _require_session_principal(session_id)
+    if error:
+        return error
+
     limit = request.args.get("limit", 100, type=int)
     before_seq = request.args.get("before_seq")
+    event_types = ("CHAT", "ACTION", "NARRATION", "SYSTEM", "GM_WHISPER", "DIALOGUE")
+    is_dm = principal.is_gm() or principal.is_system()
 
     base_query = """
         SELECT sl.seq_id, sl.event_id, sl.type as event_type, sl.payload,
@@ -3690,15 +3809,21 @@ def api_session_chat_history(session_id):
         LEFT JOIN state.entities e ON sl.sender_entity_id = e.id
         LEFT JOIN state.principals p ON sl.sender_principal_id = p.id
         WHERE sl.session_id = %s
-          AND sl.type IN ('CHAT', 'ACTION', 'NARRATION', 'SYSTEM', 'GM_WHISPER')
+          AND sl.type = ANY(%s)
     """
+    params = [session_id, list(event_types)]
+    if not is_dm:
+        base_query += " AND %s = ANY(sl.visible_to)"
+        params.append(str(principal.principal_id))
 
     if before_seq:
         query = base_query + " AND sl.seq_id < %s ORDER BY sl.seq_id DESC LIMIT %s"
-        rows = execute_query(query, (session_id, int(before_seq), limit))
+        params.extend([int(before_seq), limit])
+        rows = execute_query(query, tuple(params))
     else:
         query = base_query + " ORDER BY sl.seq_id DESC LIMIT %s"
-        rows = execute_query(query, (session_id, limit))
+        params.append(limit)
+        rows = execute_query(query, tuple(params))
 
     # Return in chronological order
     return jsonify(list(reversed([_serialize(r) for r in rows])))
@@ -3708,6 +3833,10 @@ def api_session_chat_history(session_id):
 def api_session_resume_data(session_id):
     """Get session state for resuming play - returns story state and recent chat"""
     from shared.db.connection import execute_query, execute_one
+
+    principal, principal_session, error = _require_session_principal(session_id)
+    if error:
+        return error
 
     # Get session info
     session = execute_one(
@@ -3738,11 +3867,17 @@ def api_session_resume_data(session_id):
         LEFT JOIN state.entities e ON sl.sender_entity_id = e.id
         LEFT JOIN state.principals p ON sl.sender_principal_id = p.id
         WHERE sl.session_id = %s
-          AND sl.type IN ('CHAT', 'ACTION', 'NARRATION', 'SYSTEM', 'GM_WHISPER')
+          AND sl.type = ANY(%s)
+          AND (%s OR %s = ANY(sl.visible_to))
         ORDER BY sl.seq_id DESC
         LIMIT 50
         """,
-        (session_id,),
+        (
+            session_id,
+            ["CHAT", "ACTION", "NARRATION", "SYSTEM", "GM_WHISPER", "DIALOGUE"],
+            principal.is_gm() or principal.is_system(),
+            str(principal.principal_id),
+        ),
     )
 
     # Get party members
@@ -3760,7 +3895,11 @@ def api_session_resume_data(session_id):
 
     return jsonify({
         "session": _serialize(session),
-        "story_state": _serialize(story_state) if story_state else None,
+        "story_state": (
+            _serialize(story_state)
+            if story_state and (principal.is_gm() or principal.is_system())
+            else _redact_story_state(story_state) if story_state else None
+        ),
         "chat_history": list(reversed([_serialize(r) for r in chat_history])),
         "party": [_serialize(r) for r in party],
     })

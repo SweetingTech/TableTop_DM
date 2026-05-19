@@ -17,8 +17,19 @@ $bash = if (Test-Path $GitBashPath) {
     exit 1
 }
 
-if ($Mode -eq 'docker') {
-  & $bash 'scripts/start.sh' '--mode' 'docker'
-} else {
-  & $bash 'scripts/start.sh' '--mode' 'local'
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  if ($Mode -eq 'docker') {
+    & $bash 'scripts/start.sh' '--mode' 'docker'
+  } else {
+    & $bash 'scripts/start.sh' '--mode' 'local'
+  }
+  $exitCode = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $previousErrorActionPreference
+}
+
+if ($exitCode -ne 0) {
+  throw "scripts/start.sh failed with exit code $exitCode"
 }

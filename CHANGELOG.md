@@ -6,6 +6,20 @@ The project tags features in **Phases** rather than semver — there's no public
 
 ---
 
+## 2026-05-19 - Phase 44: 1.0 Route Auth, Visibility, and Runtime QA Closure
+
+Runtime QA findings from `gemini_code_review.md` are now treated as 1.0 blockers: route-layer auth and visibility must match the engine's principal-scoped architecture before release.
+
+- **Fixed** session read leaks - chat history, resume data, recaps, and Story State reads now require principal context and use non-widening visibility for players.
+- **Fixed** story-state and mode mutation auth - Story State writes and campaign mode changes now require validated local GM/system identity.
+- **Fixed** entity mutation auth - entity update, delete, restore, control, and portrait mutation routes now require validated local GM/system identity after resolving the entity's campaign.
+- **Fixed** missing NPC dialogue in history - `DIALOGUE` ledger events are included in chat history and resume data once filtered by visibility.
+- **Fixed** traceback disclosure - proposal and chat failures return structured errors without Python tracebacks unless `TTDM_DEBUG=1`.
+- **Fixed** Windows launcher handling - `scripts/start.ps1` no longer treats normal Docker Compose stderr/progress output as a terminating PowerShell error; it fails on actual nonzero exit codes.
+- **Tests** - expanded the route/auth matrix to cover anonymous/non-member rejection, player non-widening reads, GM-authorized mutation, DIALOGUE visibility, traceback suppression, and the updated release matrix rows.
+
+---
+
 ## 2026-05-18 - Phase 43.2: Browser QA Auth and Character Generation Fixes
 
 Manual browser QA issues #35, #36, and #37 are closed at the product contract level instead of only hiding symptoms.

@@ -112,6 +112,10 @@ def test_gm_switches_mode_to_combat(monkeypatch):
     with app.test_client() as client:
         response = client.post(
             "/api/campaigns/11111111-1111-1111-1111-111111111111/mode",
+            query_string={
+                "principal_id": "22222222-2222-2222-2222-222222222221",
+                "join_token": "dm-smoke-join-22222222-2222-2222-2222-222222222221",
+            },
             json={"mode": "COMBAT"},
         )
 
