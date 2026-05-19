@@ -17,6 +17,8 @@ const App = {
     controlledEntities: [],
     mapContext: null,
     playerState: null,
+    isGM: false,
+    viewedPrincipalId: null,
     lastEventSequence: null,
     seenEventIds: new Set(),
 
@@ -309,8 +311,7 @@ const App = {
         // halo + movement-target logic treats every PC as "yours" when you're
         // the GM. Regular players still only see halos on the PCs explicitly
         // tied to their principal_id.
-        const myMember = (this.members || []).find(m => m.principal_id === this.principalId);
-        const isGM = myMember?.role === 'GM';
+        const isGM = this.isAuthenticatedGM();
         if (!this.playerState) {
             this.controlledEntities = this.entities
                 .filter(e => isGM ? e.entity_type === 'PC' : e.controller_principal_id === this.principalId)
@@ -323,45 +324,117 @@ const App = {
         this.joinRealtimeRooms();
     },
 
-    populatePrincipalSelector() {
+    isAuthenticatedGM() {
+        const member = (this.members || []).find(m => m.principal_id === this.principalId);
+        return member?.role === 'GM' || member?.principal_type === 'SYSTEM';
+    },
+
+    localJoinTokenFor(member) {
+        if (!member?.principal_id) return null;
+        const prefix = member.role === 'GM' ? 'dm' : 'player';
+        return `${prefix}-smoke-join-${member.principal_id}`;
+    },
+
+    authenticatedMember() {
+        return (this.members || []).find(m => m.principal_id === this.principalId) || null;
+    },
+
+    activeViewMember() {
+        const viewId = this.viewedPrincipalId || this.principalId;
+        return (this.members || []).find(m => m.principal_id === viewId) || null;
+    },
+
+    updatePrincipalIdentityUI() {
         const select = document.getElementById('principalSelect');
-        const storageKey = this.campaign ? `ttdm_principal_id:${this.campaign.id}` : 'ttdm_principal_id';
-        const params = new URLSearchParams(window.location.search);
-        const requested = params.get('principal_id') || localStorage.getItem(storageKey);
-        const valid = (this.members || []).find(m => m.principal_id === requested);
-        const defaultMember = valid
-            || (this.members || []).find(m => m.role === 'GM')
-            || (this.members || []).find(m => m.principal_type === 'HUMAN')
-            || (this.members || [])[0];
+        const nameEl = document.getElementById('principalName');
+        const authMember = this.authenticatedMember();
+        const viewMember = this.activeViewMember() || authMember;
 
-        if (!defaultMember) return;
-        this.principalId = defaultMember.principal_id;
-        localStorage.setItem(storageKey, this.principalId);
+        if (nameEl) {
+            const label = viewMember?.display_name || this.principalId || '--';
+            nameEl.textContent = this.isGM && this.viewedPrincipalId && this.viewedPrincipalId !== this.principalId
+                ? `${label} (GM view)`
+                : label;
+        }
 
-        if (select) {
-            select.innerHTML = '';
+        if (!select) return;
+        select.innerHTML = '';
+        if (this.isGM) {
             for (const member of this.members || []) {
                 const option = document.createElement('option');
                 option.value = member.principal_id;
                 option.textContent = `${member.display_name} (${member.role})`;
-                option.selected = member.principal_id === this.principalId;
+                option.selected = member.principal_id === (this.viewedPrincipalId || this.principalId);
                 select.appendChild(option);
             }
             select.style.display = (this.members || []).length > 1 ? 'inline-block' : 'none';
+        } else {
+            select.style.display = 'none';
+            if (authMember) {
+                const option = document.createElement('option');
+                option.value = authMember.principal_id;
+                option.textContent = `${authMember.display_name} (${authMember.role})`;
+                option.selected = true;
+                select.appendChild(option);
+            }
         }
+    },
 
-        const nameEl = document.getElementById('principalName');
-        if (nameEl) nameEl.textContent = defaultMember.display_name;
+    updateDmControls() {
+        document.querySelectorAll('.dm-only-control').forEach((el) => {
+            el.style.display = this.isGM ? '' : 'none';
+            if ('disabled' in el) el.disabled = !this.isGM;
+            el.setAttribute('aria-hidden', this.isGM ? 'false' : 'true');
+        });
+    },
+
+    authQueryString() {
+        const params = new URLSearchParams();
+        params.set('principal_id', this.principalId);
+        const token = this.localJoinTokenFor(this.authenticatedMember());
+        if (token) params.set('join_token', token);
+        return params;
+    },
+
+    populatePrincipalSelector() {
+        const storageKey = this.campaign ? `ttdm_principal_id:${this.campaign.id}` : 'ttdm_principal_id';
+        const params = new URLSearchParams(window.location.search);
+        const requestedFromUrl = params.get('principal_id');
+        const requested = requestedFromUrl || localStorage.getItem(storageKey);
+        let valid = (this.members || []).find(m => m.principal_id === requested);
+        if (!requestedFromUrl && valid?.role === 'GM') {
+            valid = null;
+        }
+        const defaultMember = valid
+            || (this.members || []).find(m => m.role === 'PLAYER' && m.principal_type === 'HUMAN')
+            || (this.members || []).find(m => m.role === 'PLAYER')
+            || (this.members || []).find(m => m.principal_type === 'HUMAN')
+            || (this.members || []).find(m => m.role === 'GM')
+            || (this.members || [])[0];
+
+        if (!defaultMember) return;
+        this.principalId = defaultMember.principal_id;
+        this.viewedPrincipalId = null;
+        localStorage.setItem(storageKey, this.principalId);
+        this.isGM = this.isAuthenticatedGM();
+        this.updatePrincipalIdentityUI();
+        this.updateDmControls();
         console.log('Principal context set:', this.principalId, defaultMember.display_name);
     },
 
     async selectPrincipal(principalId) {
-        if (!principalId || principalId === this.principalId) return;
-        this.principalId = principalId;
-        if (this.campaign) localStorage.setItem(`ttdm_principal_id:${this.campaign.id}`, principalId);
-        const member = (this.members || []).find(m => m.principal_id === principalId);
-        const nameEl = document.getElementById('principalName');
-        if (nameEl) nameEl.textContent = member?.display_name || principalId;
+        if (!principalId) return;
+        if (!this.isGM && principalId !== this.principalId) {
+            console.warn('Ignoring non-GM principal switch attempt');
+            this.updatePrincipalIdentityUI();
+            return;
+        }
+        if (this.isGM) {
+            this.viewedPrincipalId = principalId === this.principalId ? null : principalId;
+        } else {
+            this.viewedPrincipalId = null;
+        }
+        this.updatePrincipalIdentityUI();
         this.playerState = null;
         this.lastEventSequence = null;
         this.seenEventIds = new Set();
@@ -373,14 +446,17 @@ const App = {
     async loadPlayerStateSnapshot() {
         if (!this.sessionId || !this.principalId) return false;
         try {
-            const resp = await fetch(
-                `/api/sessions/${this.sessionId}/player_state?principal_id=${this.principalId}`
-            );
+            const params = this.authQueryString();
+            if (this.isGM && this.viewedPrincipalId) params.set('as_principal_id', this.viewedPrincipalId);
+            const resp = await fetch(`/api/sessions/${this.sessionId}/player_state?${params.toString()}`);
             if (!resp.ok) return false;
             const data = await resp.json();
             if (!data.ok || !data.player_state) return false;
 
             this.playerState = data.player_state;
+            this.isGM = this.isAuthenticatedGM();
+            this.updatePrincipalIdentityUI();
+            this.updateDmControls();
             window.__TTDM_PLAYER_STATE_LOADED = true;
             this.lastEventSequence = this.playerState.visible_world?.event_cursor?.last_sequence ?? null;
             this.seenEventIds = new Set();
@@ -1067,8 +1143,12 @@ const App = {
     async advanceTurn() {
         if (!this.selectedEncounter) return;
         try {
-            const resp = await fetch(`/api/encounters/${this.selectedEncounter.id}/advance`, {method: 'POST'});
+            const resp = await fetch(`/api/encounters/${this.selectedEncounter.id}/advance?${this.authQueryString().toString()}`, {method: 'POST'});
             const data = await resp.json();
+            if (!resp.ok || data.error) {
+                this.addEvent({type: 'ERROR', payload: {message: data.error || 'Advance initiative failed'}});
+                return;
+            }
             const label = data.active_entity_name || data.current_entity_name || data.current_turn_order || 'next actor';
             this.addEvent({type: 'SYSTEM', payload: {message: `Turn advanced to ${label}`}});
             await this.loadEncounterSlots();
@@ -1097,7 +1177,7 @@ const App = {
 
     async requestNarration() {
         try {
-            const resp = await fetch('/api/narrate', {
+            const resp = await fetch(`/api/narrate?${this.authQueryString().toString()}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -1108,6 +1188,10 @@ const App = {
                 }),
             });
             const data = await resp.json();
+            if (!resp.ok || data.error) {
+                this.addEvent({type: 'ERROR', payload: {message: data.error || 'Narration failed'}});
+                return;
+            }
             if (data.narration) {
                 this.addEvent({type: 'NARRATION', payload: {narration: data.narration}});
             }
@@ -1423,7 +1507,7 @@ const App = {
                 .filter(e => ['PC', 'NPC', 'MONSTER'].includes(e.entity_type) && e.status !== 'INACTIVE')
                 .slice(0, 12)
                 .map(e => e.id);
-            const resp = await fetch(`/api/campaigns/${this.campaign.id}/encounters`, {
+            const resp = await fetch(`/api/campaigns/${this.campaign.id}/encounters?${this.authQueryString().toString()}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({session_id: this.sessionId, entity_ids: entityIds}),

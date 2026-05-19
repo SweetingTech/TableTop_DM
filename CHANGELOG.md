@@ -6,6 +6,19 @@ The project tags features in **Phases** rather than semver — there's no public
 
 ---
 
+## 2026-05-18 - Phase 43.2: Browser QA Auth and Character Generation Fixes
+
+Manual browser QA issues #35, #36, and #37 are closed at the product contract level instead of only hiding symptoms.
+
+- **Fixed** Game Console identity scope - regular player views no longer render a principal selector with DM, God, NPC-agent, or other-player identities; GM views keep an inspection selector.
+- **Changed** `/game` principal handling - the authenticated local principal stays distinct from a GM's inspected player view, and player-state calls include the local join-token context.
+- **Fixed** DM-only Game Console controls - Start Encounter, Advance Initiative, and AI Narration are hidden for non-GM users and remain visible for GM users.
+- **Added** backend enforcement for DM-only controls - encounter creation, initiative advancement, and `/api/narrate` now require a GM/system principal with validated local GM identity, returning 401/403 for missing or player context.
+- **Changed** Control Plane AI Generate - the primary button now saves the generated character immediately, reports `Created <name>`, refreshes the character list, and only clears the concept after a successful save.
+- **Tests** - added route-auth coverage for DM-only route denials/allowance, persisted AI generation coverage, and E2E assertions for player-vs-GM Game Console controls.
+
+---
+
 ## 2026-05-18 - Phase 43.1: Manual QA Defect Repair
 
 The first full manual QA pass found release-blocking gaps in the local LLM path, player identity flow, player-state visibility, combat setup, event-feed readability, AI autonomy, and DM packet recaps. This patch repairs those surfaces and adds regression coverage.

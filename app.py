@@ -684,6 +684,10 @@ def api_encounters(campaign_id):
     from shared.db.connection import execute_one, execute_query
 
     if request.method == "POST":
+        principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+        if error:
+            return error
+
         data = request.get_json(silent=True) or {}
         session_id = data.get("session_id")
         if not session_id:
@@ -835,6 +839,18 @@ def _principal_id_from_request():
     )
 
 
+def _join_token_from_request():
+    data = request.get_json(silent=True) or {}
+    return (
+        request.args.get("join_token")
+        or request.args.get("invite_token")
+        or request.headers.get("X-Join-Token")
+        or request.headers.get("X-TTDM-Join-Token")
+        or data.get("join_token")
+        or data.get("invite_token")
+    )
+
+
 def _require_campaign_principal(campaign_id):
     from shared.auth.principal import load_principal
 
@@ -851,6 +867,23 @@ def _require_campaign_principal(campaign_id):
     principal = load_principal(principal_uuid, campaign_uuid)
     if not principal or not principal.role:
         return None, (jsonify({"error": "principal is not a campaign member"}), 403)
+
+    return principal, None
+
+
+def _require_campaign_gm(campaign_id, *, require_join_token: bool = False):
+    principal, error = _require_campaign_principal(campaign_id)
+    if error:
+        return None, error
+
+    if not (principal.is_gm() or principal.is_system()):
+        return None, (jsonify({"error": "GM or system principal required"}), 403)
+
+    if require_join_token:
+        supplied_token = _join_token_from_request()
+        expected_token = _expected_local_join_token(str(principal.principal_id), str(principal.role))
+        if supplied_token != expected_token:
+            return None, (jsonify({"error": "validated local GM identity required"}), 401)
 
     return principal, None
 
@@ -1925,12 +1958,19 @@ def api_advance_turn(encounter_id):
     from services.orchestrator.state_machine import StateMachine
     from shared.db.connection import execute_one
 
-    sm = StateMachine()
-    result = sm.advance_turn(uuid.UUID(encounter_id))
     encounter = execute_one(
         "SELECT campaign_id, session_id FROM state.encounters WHERE id = %s",
         (encounter_id,),
     )
+    if not encounter:
+        return jsonify({"error": "Encounter not found"}), 404
+
+    principal, error = _require_campaign_gm(str(encounter["campaign_id"]), require_join_token=True)
+    if error:
+        return error
+
+    sm = StateMachine()
+    result = sm.advance_turn(uuid.UUID(encounter_id))
     if encounter:
         broadcast_game_event(BroadcastEnvelope(
             event_id=str(uuid.uuid4()),
@@ -2068,12 +2108,17 @@ def api_chat():
 
 @app.route("/api/narrate", methods=["POST"])
 def api_narrate():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     try:
         from services.llm.adapter import DMNarrationAgent
         import uuid as uuid_mod
 
         campaign_id = data.get("campaign_id")
+        if not campaign_id:
+            return jsonify({"error": "campaign_id is required"}), 400
+        principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+        if error:
+            return error
         campaign_uuid = uuid_mod.UUID(campaign_id) if campaign_id else None
         dm = DMNarrationAgent(campaign_id=campaign_uuid)
         narration = dm.narrate_event(

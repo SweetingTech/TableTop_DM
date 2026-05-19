@@ -112,7 +112,7 @@
                         onchange="App.selectEncounter(this.value)">
                     <option value="">No Encounter</option>
                 </select>
-                <button class="action-btn" onclick="App.startEncounter()" style="margin-top:8px">Start Encounter</button>
+                <button class="action-btn dm-only-control" onclick="App.startEncounter()" style="margin-top:8px">Start Encounter</button>
             </div>
 
             <div class="sidebar-section">
@@ -125,8 +125,8 @@
                 <button class="action-btn" onclick="App.rollDice()">Roll d20</button>
                 <button class="action-btn combat-btn" onclick="App.quickAttack()" title="Attack selected target">Attack Target</button>
                 <button class="action-btn combat-btn" onclick="App.quickEndTurn()" title="End your turn">End Turn</button>
-                <button class="action-btn" onclick="App.advanceTurn()">Advance Initiative</button>
-                <button class="action-btn" onclick="App.requestNarration()">AI Narration</button>
+                <button class="action-btn dm-only-control" onclick="App.advanceTurn()">Advance Initiative</button>
+                <button class="action-btn dm-only-control" onclick="App.requestNarration()">AI Narration</button>
             </div>
 
             <div class="combat-hud" id="combatHUD" style="display:none;">

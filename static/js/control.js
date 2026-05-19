@@ -1146,20 +1146,22 @@ window.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             showErr('');
+            if ($('generateCharacterStatus')) $('generateCharacterStatus').textContent = '';
             $('generateCharacter').disabled = true;
             $('generateCharacter').textContent = 'Generating...';
 
             const result = await api(`/api/campaigns/${state.selectedCampaign}/characters/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ concept: concept, populate_form: true })
+                body: JSON.stringify({ concept: concept })
             });
 
-            // Populate form with generated character
-            if (result.character) {
-                populateFormFromCharacter(result.character);
+            if (result.id || result.name) {
                 $('charConcept').value = '';
                 showErr('');
+                if ($('generateCharacterStatus')) {
+                    $('generateCharacterStatus').textContent = `Created ${result.name || 'character'}.`;
+                }
             }
             await loadCharacters();
         } catch (e) {

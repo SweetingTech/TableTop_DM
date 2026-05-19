@@ -7,6 +7,8 @@ import pytest
 from playwright.sync_api import Page, expect
 
 BASE_URL = os.environ.get("TTDM_BASE_URL", "http://localhost:8000")
+PLAYER_A_ID = "22222222-2222-2222-2222-222222222222"
+DM_ID = "22222222-2222-2222-2222-222222222221"
 
 pytestmark = pytest.mark.e2e
 
@@ -20,8 +22,8 @@ def test_game_boot_uses_player_state_snapshot_and_survives_reload(page: Page):
         else None,
     )
 
-    page.goto(f"{BASE_URL}/game")
-    page.wait_for_function("window.__TTDM_PLAYER_STATE_LOADED === true", timeout=10000)
+    page.goto(f"{BASE_URL}/game?principal_id={PLAYER_A_ID}")
+    page.wait_for_function("App?.playerState?.principal?.role === 'PLAYER'", timeout=10000)
 
     first = page.evaluate(
         """() => ({
@@ -40,7 +42,7 @@ def test_game_boot_uses_player_state_snapshot_and_survives_reload(page: Page):
     expect(page.locator("#principalName")).not_to_have_text("--")
 
     page.reload()
-    page.wait_for_function("window.__TTDM_PLAYER_STATE_LOADED === true", timeout=10000)
+    page.wait_for_function("App?.playerState?.principal?.role === 'PLAYER'", timeout=10000)
     second = page.evaluate(
         """() => ({
             principal: App?.playerState?.principal?.principal_id,
@@ -49,6 +51,28 @@ def test_game_boot_uses_player_state_snapshot_and_survives_reload(page: Page):
     )
 
     assert second == {"principal": first["principal"], "controlled": first["controlled"]}
+
+
+def test_player_game_hides_identity_switcher_and_dm_controls(page: Page):
+    page.goto(f"{BASE_URL}/game?principal_id={PLAYER_A_ID}")
+    page.wait_for_function("App?.playerState?.principal?.role === 'PLAYER'", timeout=10000)
+
+    role = page.evaluate("() => App?.playerState?.principal?.role")
+    assert role == "PLAYER"
+    expect(page.locator("#principalSelect")).to_be_hidden()
+    expect(page.get_by_role("button", name="Start Encounter")).to_be_hidden()
+    expect(page.get_by_role("button", name="Advance Initiative")).to_be_hidden()
+    expect(page.get_by_role("button", name="AI Narration")).to_be_hidden()
+
+
+def test_gm_game_keeps_identity_inspection_and_dm_controls(page: Page):
+    page.goto(f"{BASE_URL}/game?principal_id={DM_ID}")
+    page.wait_for_function("App?.playerState?.principal?.role === 'GM'", timeout=10000)
+
+    expect(page.locator("#principalSelect")).to_be_visible()
+    expect(page.get_by_role("button", name="Start Encounter")).to_be_visible()
+    expect(page.get_by_role("button", name="Advance Initiative")).to_be_visible()
+    expect(page.get_by_role("button", name="AI Narration")).to_be_visible()
 
 
 def test_game_refetches_player_state_on_event_cursor_gap(page: Page):
@@ -60,8 +84,8 @@ def test_game_refetches_player_state_on_event_cursor_gap(page: Page):
         else None,
     )
 
-    page.goto(f"{BASE_URL}/game")
-    page.wait_for_function("window.__TTDM_PLAYER_STATE_LOADED === true", timeout=10000)
+    page.goto(f"{BASE_URL}/game?principal_id={PLAYER_A_ID}")
+    page.wait_for_function("App?.playerState?.principal?.role === 'PLAYER'", timeout=10000)
     page.wait_for_function("App.lastEventSequence !== undefined", timeout=10000)
 
     initial_calls = len(player_state_calls)
@@ -80,8 +104,8 @@ def test_game_refetches_player_state_on_event_cursor_gap(page: Page):
 
 
 def test_game_ignores_duplicate_realtime_events(page: Page):
-    page.goto(f"{BASE_URL}/game")
-    page.wait_for_function("window.__TTDM_PLAYER_STATE_LOADED === true", timeout=10000)
+    page.goto(f"{BASE_URL}/game?principal_id={PLAYER_A_ID}")
+    page.wait_for_function("App?.playerState?.principal?.role === 'PLAYER'", timeout=10000)
 
     before = page.locator("#eventFeed .event-item").count()
     page.evaluate(

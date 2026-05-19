@@ -34,6 +34,7 @@ def test_campaign_can_create_active_encounter_from_session_characters(integratio
     campaign_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
     entity_id = str(uuid.uuid4())
+    gm_id = str(uuid.uuid4())
     execute_one(
         """
         INSERT INTO state.campaigns (id, slug, name, status, mode)
@@ -49,6 +50,22 @@ def test_campaign_can_create_active_encounter_from_session_characters(integratio
         RETURNING id
         """,
         (session_id, campaign_id),
+    )
+    execute_one(
+        """
+        INSERT INTO state.principals (id, principal_type, display_name, auth_subject, is_active)
+        VALUES (%s, 'HUMAN', 'QA GM', %s, true)
+        RETURNING id
+        """,
+        (gm_id, f"test:qa-gm-{gm_id[:8]}"),
+    )
+    execute_one(
+        """
+        INSERT INTO state.campaign_members (campaign_id, principal_id, role)
+        VALUES (%s, %s, 'GM')
+        RETURNING principal_id
+        """,
+        (campaign_id, gm_id),
     )
     execute_one(
         """
@@ -72,6 +89,7 @@ def test_campaign_can_create_active_encounter_from_session_characters(integratio
     with app.test_client() as client:
         response = client.post(
             f"/api/campaigns/{campaign_id}/encounters",
+            query_string={"principal_id": gm_id, "join_token": f"dm-smoke-join-{gm_id}"},
             json={"session_id": session_id},
         )
         assert response.status_code == 200
@@ -111,3 +129,68 @@ def test_dm_recap_falls_back_to_visible_ledger_events(integration_stack):
     recap = generate_recap(uuid.UUID(SESSION_ID), uuid.UUID(CAMPAIGN_ID), "dm")
 
     assert "QA bridge" in recap
+
+
+def test_ai_generate_character_default_mode_persists_entity(integration_stack, monkeypatch):
+    del integration_stack
+
+    class DummyLLM:
+        def __init__(self, **_kwargs):
+            pass
+
+        def generate_structured(self, *_args, **_kwargs):
+            return {
+                "name": "QA Saved Ranger",
+                "entity_type": "PC",
+                "controlled_by": "PLAYER",
+                "hp_max": 11,
+                "public_sheet": {
+                    "race": "Elf",
+                    "class": "Ranger",
+                    "level": 1,
+                    "background": "Outlander",
+                    "attributes": {
+                        "strength": 10,
+                        "dexterity": 16,
+                        "constitution": 12,
+                        "intelligence": 11,
+                        "wisdom": 14,
+                        "charisma": 9,
+                    },
+                    "armor_class": 14,
+                    "speed": 30,
+                    "skills": ["Survival", "Perception"],
+                    "languages": ["Common", "Elvish"],
+                    "personality": {
+                        "traits": "Quiet and watchful.",
+                        "ideals": "Protect the lost.",
+                        "bonds": "Owes a debt to the forest.",
+                        "flaws": "Distrusts cities.",
+                        "goals": "Find the vanished trail.",
+                    },
+                    "backstory": "A scout from the old woods.",
+                },
+                "secret_sheet": {
+                    "secrets": "Knows a forbidden pass.",
+                    "plot_hooks": "A rival hunter follows them.",
+                    "balance_notes": "Starter character.",
+                },
+                "tags": ["qa", "generated"],
+                "ac": 14,
+                "speed": 30,
+            }
+
+    monkeypatch.setattr("services.llm.adapter.LLMAdapter", DummyLLM)
+
+    with app.test_client() as client:
+        response = client.post(
+            f"/api/campaigns/{CAMPAIGN_ID}/characters/generate",
+            json={"concept": "elven ranger qa"},
+        )
+
+    assert response.status_code == 201
+    body = response.get_json()
+    assert body["id"]
+    assert body["name"] == "QA Saved Ranger"
+    assert body["public_sheet"]["x"] == 0
+    assert body["public_sheet"]["y"] == 0
