@@ -34,6 +34,24 @@ if [[ -f "$APP_PID_FILE" ]]; then
   rm -f "$APP_PID_FILE"
 fi
 
+stop_app_on_port() {
+  local port="${PORT:-8000}"
+  if ! curl -fsS --max-time 1 "http://localhost:${port}/health" >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command "\$p = Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess; if (\$p) { Stop-Process -Id \$p -Force -ErrorAction SilentlyContinue }" >/dev/null 2>&1 || true
+  elif command -v lsof >/dev/null 2>&1; then
+    local pid
+    pid="$(lsof -ti tcp:"${port}" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+    if [[ -n "$pid" ]]; then
+      kill "$pid" >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
+stop_app_on_port
+
 provider=""
 [[ -f "$DEPS_PROVIDER_FILE" ]] && provider="$(cat "$DEPS_PROVIDER_FILE")"
 started_by_start=0

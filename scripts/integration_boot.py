@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS infra_meta.schema_migrations (
         if applied_checksum:
             if applied_checksum != checksum:
                 raise RuntimeError(
-                    f"checksum mismatch for already-applied migration {version}"
+                    "checksum mismatch for already-applied migration "
+                    f"{version}. Rebuild a disposable Docker dev database with "
+                    "`./scripts/start.sh --mode docker --reset-db` or "
+                    "`.\\scripts\\start.ps1 -Mode docker -ResetDb`."
                 )
             print(f"Skipping {version} (already applied)")
             continue
