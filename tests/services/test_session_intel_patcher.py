@@ -5,7 +5,7 @@ in the right story_state field. The real DB integration is exercised by
 the manual smoke test at app boot.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 import uuid
 
 import pytest
@@ -28,6 +28,7 @@ def _make_patch(event_type, delta=None, visibility="party", summary="test"):
 
 def test_location_changed_sets_current_location():
     from services.session_intel.patcher import _apply_event
+
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
@@ -40,6 +41,7 @@ def test_location_changed_sets_current_location():
 
 def test_promise_made_appends_to_plot_threads():
     from services.session_intel.patcher import _apply_event
+
     conn = MagicMock()
     cur = MagicMock()
     cur.fetchone.return_value = ([],)  # empty existing JSONB list
@@ -52,10 +54,14 @@ def test_promise_made_appends_to_plot_threads():
 
 def test_retcon_writes_to_dm_notes():
     from services.session_intel.patcher import _apply_event
+
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
-    p = _make_patch("retcon_or_contradiction", summary="player said Joran died, but ledger has him alive")
+    p = _make_patch(
+        "retcon_or_contradiction",
+        summary="player said Joran died, but ledger has him alive",
+    )
     _apply_event(conn, p)
     sql_calls = [c.args[0] for c in cur.execute.call_args_list]
     assert any("dm_notes" in sql for sql in sql_calls)
@@ -63,10 +69,13 @@ def test_retcon_writes_to_dm_notes():
 
 def test_unknown_event_type_falls_through_to_dm_notes():
     from services.session_intel.patcher import _apply_event
+
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
-    p = _make_patch("entirely_new_event_kind", summary="something the schema didn't anticipate")
+    p = _make_patch(
+        "entirely_new_event_kind", summary="something the schema didn't anticipate"
+    )
     _apply_event(conn, p)
     sql_calls = [c.args[0] for c in cur.execute.call_args_list]
     assert any("dm_notes" in sql for sql in sql_calls)
@@ -74,11 +83,14 @@ def test_unknown_event_type_falls_through_to_dm_notes():
 
 def test_secret_revealed_routes_by_visibility():
     from services.session_intel.patcher import _apply_event
+
     # dm_only goes to dm_notes
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
-    p = _make_patch("secret_revealed", visibility="dm_only", summary="villain's true name")
+    p = _make_patch(
+        "secret_revealed", visibility="dm_only", summary="villain's true name"
+    )
     _apply_event(conn, p)
     sql_calls = [c.args[0] for c in cur.execute.call_args_list]
     assert any("dm_notes" in sql for sql in sql_calls)

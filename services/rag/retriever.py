@@ -25,8 +25,6 @@ from dataclasses import dataclass, field
 from typing import Optional, Literal
 from urllib import request as urllib_request, error as urllib_error
 
-from shared.db.connection import execute_one
-
 from .embedding_profile import (
     collection_for_campaign,
     legacy_collection_name,
@@ -41,8 +39,14 @@ from .filters import (
 log = logging.getLogger(__name__)
 
 
-Purpose = Literal["dm_narration", "npc_dialogue", "session_intel",
-                  "recap_dm", "recap_party", "recap_public"]
+Purpose = Literal[
+    "dm_narration",
+    "npc_dialogue",
+    "session_intel",
+    "recap_dm",
+    "recap_party",
+    "recap_public",
+]
 
 
 @dataclass
@@ -68,6 +72,7 @@ class RagContext:
 # ----- Qdrant HTTP plumbing -----
 # Kept private to this module so app.py can eventually drop its copies.
 
+
 def _qdrant_base_url() -> str:
     host = os.environ.get("QDRANT_HOST", "localhost")
     port = int(os.environ.get("QDRANT_HTTP_PORT", "6333"))
@@ -77,8 +82,9 @@ def _qdrant_base_url() -> str:
 def _qdrant_request(method: str, path: str, payload: dict | None = None) -> dict:
     url = f"{_qdrant_base_url()}{path}"
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib_request.Request(url, method=method, data=data,
-                                 headers={"Content-Type": "application/json"})
+    req = urllib_request.Request(
+        url, method=method, data=data, headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib_request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -113,6 +119,7 @@ def _resolve_collection(campaign_id: str) -> Optional[str]:
 
 # ----- Public API -----
 
+
 def retrieve_campaign_context(
     campaign_id: str,
     query: str,
@@ -132,30 +139,51 @@ def retrieve_campaign_context(
     LLM prompt is built so missing context is graceful.
     """
     if not query or not campaign_id:
-        return RagContext(query=query or "", chunks=[], context_block="",
-                          citations=[], skipped_reason="empty_query_or_campaign")
+        return RagContext(
+            query=query or "",
+            chunks=[],
+            context_block="",
+            citations=[],
+            skipped_reason="empty_query_or_campaign",
+        )
 
     # 1. Embed the query.
     try:
         from services.llm.adapter import LLMAdapter
         import uuid as _uuid
+
         adapter = LLMAdapter(campaign_id=_uuid.UUID(campaign_id), role="dm")
         embed = adapter.embed_texts([query])
         vectors = embed.get("vectors") or []
         if not vectors:
-            return RagContext(query=query, chunks=[], context_block="",
-                              citations=[], skipped_reason="empty_embedding")
+            return RagContext(
+                query=query,
+                chunks=[],
+                context_block="",
+                citations=[],
+                skipped_reason="empty_embedding",
+            )
         query_vector = vectors[0]
     except Exception as e:
         log.info("RAG: embedding failed (%s); returning empty context", e)
-        return RagContext(query=query, chunks=[], context_block="",
-                          citations=[], skipped_reason=f"embed_failed: {e}")
+        return RagContext(
+            query=query,
+            chunks=[],
+            context_block="",
+            citations=[],
+            skipped_reason=f"embed_failed: {e}",
+        )
 
     # 2. Resolve collection.
     collection = _resolve_collection(campaign_id)
     if not collection:
-        return RagContext(query=query, chunks=[], context_block="",
-                          citations=[], skipped_reason="no_collection")
+        return RagContext(
+            query=query,
+            chunks=[],
+            context_block="",
+            citations=[],
+            skipped_reason="no_collection",
+        )
 
     # 3. Server-side filter.
     allowed_vis = list(ACCESS_MATRIX.get(purpose, {"public"}))
@@ -180,26 +208,36 @@ def retrieve_campaign_context(
         )
     except RuntimeError as e:
         log.info("RAG: qdrant search failed (%s); returning empty", e)
-        return RagContext(query=query, chunks=[], context_block="",
-                          citations=[], skipped_reason=str(e))
+        return RagContext(
+            query=query,
+            chunks=[],
+            context_block="",
+            citations=[],
+            skipped_reason=str(e),
+        )
 
     # 5. Normalize + re-check visibility client-side.
     raw = response.get("result") or []
     chunks_raw = []
     for r in raw:
         payload = r.get("payload") or {}
-        chunks_raw.append({
-            "doc_id": payload.get("doc_id", ""),
-            "chunk_id": payload.get("chunk_id", ""),
-            "filename": payload.get("source_filename") or payload.get("filename", ""),
-            "page": payload.get("page"),
-            "text": payload.get("text", ""),
-            "score": float(r.get("score") or 0.0),
-            "metadata": payload,
-        })
+        chunks_raw.append(
+            {
+                "doc_id": payload.get("doc_id", ""),
+                "chunk_id": payload.get("chunk_id", ""),
+                "filename": payload.get("source_filename")
+                or payload.get("filename", ""),
+                "page": payload.get("page"),
+                "text": payload.get("text", ""),
+                "score": float(r.get("score") or 0.0),
+                "metadata": payload,
+            }
+        )
     filtered = filter_chunk_visibility(
-        chunks_raw, purpose,
-        principal_id=principal_id, npc_known_tags=npc_known_tags,
+        chunks_raw,
+        purpose,
+        principal_id=principal_id,
+        npc_known_tags=npc_known_tags,
     )
 
     # 6. Re-rank deterministically (vector score with a small recency bias),
@@ -207,13 +245,13 @@ def retrieve_campaign_context(
     def _final_score(c):
         score = c["score"]
         return score
+
     filtered.sort(key=_final_score, reverse=True)
     final = filtered[:top_k]
 
     chunks = [RagChunk(**c) for c in final]
     block, cits = _build_context_block(chunks, purpose)
-    return RagContext(query=query, chunks=chunks, context_block=block,
-                      citations=cits)
+    return RagContext(query=query, chunks=chunks, context_block=block, citations=cits)
 
 
 def _build_context_block(chunks: list[RagChunk], purpose: str) -> tuple[str, list[str]]:
@@ -222,12 +260,12 @@ def _build_context_block(chunks: list[RagChunk], purpose: str) -> tuple[str, lis
     if not chunks:
         return "", []
     label = {
-        "dm_narration":  "CAMPAIGN LORE CONTEXT (use when relevant; do not invent beyond these facts)",
-        "npc_dialogue":  "NPC KNOWLEDGE CONTEXT (only what this NPC could plausibly know)",
+        "dm_narration": "CAMPAIGN LORE CONTEXT (use when relevant; do not invent beyond these facts)",
+        "npc_dialogue": "NPC KNOWLEDGE CONTEXT (only what this NPC could plausibly know)",
         "session_intel": "LORE CONTEXT (cite these in evidence when an inference rests on them)",
-        "recap_dm":      "LORE TIE-INS (DM-visible; cite source filenames)",
-        "recap_party":   "LORE TIE-INS (party-safe)",
-        "recap_public":  "PUBLIC LORE TIE-INS",
+        "recap_dm": "LORE TIE-INS (DM-visible; cite source filenames)",
+        "recap_party": "LORE TIE-INS (party-safe)",
+        "recap_public": "PUBLIC LORE TIE-INS",
     }.get(purpose, "LORE CONTEXT")
 
     lines = [label]

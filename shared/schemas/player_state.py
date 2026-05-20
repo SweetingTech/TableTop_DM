@@ -83,5 +83,7 @@ class PlayerStateSnapshot(BaseModel):
     controlled_entities: list[ControlledEntitySnapshot] = Field(default_factory=list)
     visible_world: VisibleWorldSnapshot = Field(default_factory=VisibleWorldSnapshot)
     turn_state: TurnStateSnapshot
-    narrative_state: NarrativeStateSnapshot = Field(default_factory=NarrativeStateSnapshot)
+    narrative_state: NarrativeStateSnapshot = Field(
+        default_factory=NarrativeStateSnapshot
+    )
     ui_state: UiStateSnapshot = Field(default_factory=UiStateSnapshot)

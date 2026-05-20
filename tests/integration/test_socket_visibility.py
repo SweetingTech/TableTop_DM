@@ -80,14 +80,16 @@ def test_dm_only_event_reaches_dm_and_no_player(integration_stack):
     dm = _client(DM_ID)
     player = _client(PLAYER_A_ID)
 
-    broadcast_game_event(BroadcastEnvelope(
-        event_id=str(uuid.uuid4()),
-        campaign_id=CAMPAIGN_ID,
-        session_id=SESSION_ID,
-        event_type="game_event",
-        payload={"message": "dm secret"},
-        visibility="dm_only",
-    ))
+    broadcast_game_event(
+        BroadcastEnvelope(
+            event_id=str(uuid.uuid4()),
+            campaign_id=CAMPAIGN_ID,
+            session_id=SESSION_ID,
+            event_type="game_event",
+            payload={"message": "dm secret"},
+            visibility="dm_only",
+        )
+    )
 
     assert _event_names(dm) == ["game_event"]
     assert _event_names(player) == []
@@ -99,15 +101,17 @@ def test_principal_scoped_event_reaches_listed_principal_and_dm_only(integration
     player_a = _client(PLAYER_A_ID)
     player_b = _client(PLAYER_B_ID)
 
-    broadcast_game_event(BroadcastEnvelope(
-        event_id=str(uuid.uuid4()),
-        campaign_id=CAMPAIGN_ID,
-        session_id=SESSION_ID,
-        event_type="game_event",
-        payload={"message": "for A"},
-        visibility="principal_scoped",
-        visible_to=[PLAYER_A_ID],
-    ))
+    broadcast_game_event(
+        BroadcastEnvelope(
+            event_id=str(uuid.uuid4()),
+            campaign_id=CAMPAIGN_ID,
+            session_id=SESSION_ID,
+            event_type="game_event",
+            payload={"message": "for A"},
+            visibility="principal_scoped",
+            visible_to=[PLAYER_A_ID],
+        )
+    )
 
     assert _event_names(dm) == ["game_event"]
     assert _event_names(player_a) == ["game_event"]
@@ -120,14 +124,16 @@ def test_public_event_reaches_public_players_and_dm_once(integration_stack):
     player_a = _client(PLAYER_A_ID)
     player_b = _client(PLAYER_B_ID)
 
-    broadcast_game_event(BroadcastEnvelope(
-        event_id=str(uuid.uuid4()),
-        campaign_id=CAMPAIGN_ID,
-        session_id=SESSION_ID,
-        event_type="game_event",
-        payload={"message": "public"},
-        visibility="public",
-    ))
+    broadcast_game_event(
+        BroadcastEnvelope(
+            event_id=str(uuid.uuid4()),
+            campaign_id=CAMPAIGN_ID,
+            session_id=SESSION_ID,
+            event_type="game_event",
+            payload={"message": "public"},
+            visibility="public",
+        )
+    )
 
     assert _event_names(dm) == ["game_event"]
     assert _event_names(player_a) == ["game_event"]
@@ -141,17 +147,19 @@ def test_spatial_event_excludes_pc_on_another_map(integration_stack, postgres_ds
     player_a = _client(PLAYER_A_ID)
     player_b = _client(PLAYER_B_ID)
 
-    broadcast_game_event(BroadcastEnvelope(
-        event_id=str(uuid.uuid4()),
-        campaign_id=CAMPAIGN_ID,
-        session_id=SESSION_ID,
-        event_type="game_event",
-        payload={"message": "near A"},
-        visibility="spatial",
-        map_id=MAP_A,
-        x=5,
-        y=5,
-    ))
+    broadcast_game_event(
+        BroadcastEnvelope(
+            event_id=str(uuid.uuid4()),
+            campaign_id=CAMPAIGN_ID,
+            session_id=SESSION_ID,
+            event_type="game_event",
+            payload={"message": "near A"},
+            visibility="spatial",
+            map_id=MAP_A,
+            x=5,
+            y=5,
+        )
+    )
 
     assert _event_names(dm) == ["game_event"]
     assert _event_names(player_a) == ["game_event"]
@@ -165,18 +173,20 @@ def test_explicit_visible_to_beats_spatial_widening(integration_stack, postgres_
     player_a = _client(PLAYER_A_ID)
     player_b = _client(PLAYER_B_ID)
 
-    broadcast_game_event(BroadcastEnvelope(
-        event_id=str(uuid.uuid4()),
-        campaign_id=CAMPAIGN_ID,
-        session_id=SESSION_ID,
-        event_type="game_event",
-        payload={"message": "explicit only B"},
-        visibility="spatial",
-        visible_to=[PLAYER_B_ID],
-        map_id=MAP_A,
-        x=5,
-        y=5,
-    ))
+    broadcast_game_event(
+        BroadcastEnvelope(
+            event_id=str(uuid.uuid4()),
+            campaign_id=CAMPAIGN_ID,
+            session_id=SESSION_ID,
+            event_type="game_event",
+            payload={"message": "explicit only B"},
+            visibility="spatial",
+            visible_to=[PLAYER_B_ID],
+            map_id=MAP_A,
+            x=5,
+            y=5,
+        )
+    )
 
     assert _event_names(dm) == ["game_event"]
     assert _event_names(player_a) == []

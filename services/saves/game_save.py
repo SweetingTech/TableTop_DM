@@ -15,7 +15,6 @@ LocalPlayer principal_id, but they share auth_subject='local:player').
 
 import json
 import uuid
-from typing import Optional
 
 from shared.db.connection import get_connection, execute_one, execute_query
 
@@ -23,6 +22,7 @@ from shared.db.connection import get_connection, execute_one, execute_query
 # ------------------------------------------------------------------------
 # Export
 # ------------------------------------------------------------------------
+
 
 def _rows(table: str, where: str, params: tuple) -> list[dict]:
     """Run a SELECT and return JSON-safe dicts. UUIDs become strings, etc."""
@@ -86,13 +86,19 @@ def export_campaign(campaign_id: uuid.UUID) -> dict:
     maps = _rows("state.maps", "campaign_id = %s", cid)
     map_ids = [m["id"] for m in maps]
     map_nodes = (
-        _rows("state.map_nodes", "map_id = ANY(%s::uuid[])", (map_ids,)) if map_ids else []
+        _rows("state.map_nodes", "map_id = ANY(%s::uuid[])", (map_ids,))
+        if map_ids
+        else []
     )
     map_pois = (
-        _rows("state.map_pois", "map_id = ANY(%s::uuid[])", (map_ids,)) if map_ids else []
+        _rows("state.map_pois", "map_id = ANY(%s::uuid[])", (map_ids,))
+        if map_ids
+        else []
     )
     map_decorations = (
-        _rows("state.map_decorations", "map_id = ANY(%s::uuid[])", (map_ids,)) if map_ids else []
+        _rows("state.map_decorations", "map_id = ANY(%s::uuid[])", (map_ids,))
+        if map_ids
+        else []
     )
 
     entities = _rows("state.entities", "campaign_id = %s", cid)
@@ -109,6 +115,11 @@ def export_campaign(campaign_id: uuid.UUID) -> dict:
     ledger_events = _rows(
         "ledger.session_ledger", "campaign_id = %s ORDER BY seq_id", cid
     )
+    rag_embedding_profiles = _rows(
+        "state.rag_embedding_profiles", "campaign_id = %s", cid
+    )
+    rag_documents = _rows("state.rag_documents", "campaign_id = %s", cid)
+    rag_chunks = _rows("state.rag_chunks", "campaign_id = %s", cid)
 
     return {
         "campaign": {k: _jsonify(v) for k, v in campaign.items()},
@@ -123,12 +134,16 @@ def export_campaign(campaign_id: uuid.UUID) -> dict:
         "encounters": encounters,
         "encounter_slots": encounter_slots,
         "ledger_events": ledger_events,
+        "rag_embedding_profiles": rag_embedding_profiles,
+        "rag_documents": rag_documents,
+        "rag_chunks": rag_chunks,
     }
 
 
 # ------------------------------------------------------------------------
 # Import
 # ------------------------------------------------------------------------
+
 
 def _ensure_principal(conn, principal_spec: dict) -> str:
     """Find an existing principal by auth_subject, or create one.
@@ -150,7 +165,11 @@ def _ensure_principal(conn, principal_spec: dict) -> str:
         VALUES (%s, %s, %s, true)
         RETURNING id
         """,
-        (principal_spec["principal_type"], principal_spec["display_name"], principal_spec["auth_subject"]),
+        (
+            principal_spec["principal_type"],
+            principal_spec["display_name"],
+            principal_spec["auth_subject"],
+        ),
     )
     new_id = str(cur.fetchone()[0])
     cur.close()
@@ -158,55 +177,20 @@ def _ensure_principal(conn, principal_spec: dict) -> str:
 
 
 def _purge_campaign(conn, campaign_id: str):
-    """Same cascade-delete logic as /api/campaigns/<id>/purge, but run on the
-    caller's connection so it joins the import transaction."""
-    cur = conn.cursor()
-    cid = (campaign_id,)
-    cur.execute("ALTER TABLE state.sessions DISABLE TRIGGER trg_archive_session")
-    try:
-        for sql in (
-            "DELETE FROM ledger.session_ledger WHERE campaign_id = %s",
-            "DELETE FROM state.encounter_slots WHERE encounter_id IN (SELECT id FROM state.encounters WHERE campaign_id = %s)",
-            "DELETE FROM state.conditions WHERE entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s) OR encounter_id IN (SELECT id FROM state.encounters WHERE campaign_id = %s)",
-            "DELETE FROM state.intents WHERE campaign_id = %s",
-            "DELETE FROM state.interventions WHERE campaign_id = %s",
-            "DELETE FROM state.divine_standings WHERE campaign_id = %s",
-            "DELETE FROM state.faction_memberships WHERE entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s) OR faction_id IN (SELECT id FROM state.factions WHERE campaign_id = %s)",
-            "DELETE FROM state.faction_wars WHERE campaign_id = %s",
-            "DELETE FROM state.bounties WHERE campaign_id = %s",
-            "DELETE FROM state.shop_inventory WHERE shop_id IN (SELECT id FROM state.shops WHERE campaign_id = %s) OR item_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s)",
-            "DELETE FROM state.location_metrics WHERE location_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s)",
-            "DELETE FROM state.property_ownership WHERE property_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s) OR owner_entity_id IN (SELECT id FROM state.entities WHERE campaign_id = %s)",
-            "DELETE FROM state.reaction_triggers WHERE campaign_id = %s",
-            "DELETE FROM state.entity_death_history WHERE campaign_id = %s",
-            "DELETE FROM state.session_characters WHERE session_id IN (SELECT id FROM state.sessions WHERE campaign_id = %s)",
-            "DELETE FROM state.price_modifiers WHERE campaign_id = %s",
-            "DELETE FROM state.encounters WHERE campaign_id = %s",
-            "DELETE FROM state.shops WHERE campaign_id = %s",
-            "DELETE FROM state.factions WHERE campaign_id = %s",
-            "DELETE FROM state.map_nodes WHERE map_id IN (SELECT id FROM state.maps WHERE campaign_id = %s)",
-            "DELETE FROM state.map_decorations WHERE map_id IN (SELECT id FROM state.maps WHERE campaign_id = %s)",
-            "DELETE FROM state.map_pois WHERE map_id IN (SELECT id FROM state.maps WHERE campaign_id = %s)",
-            "DELETE FROM state.entities WHERE campaign_id = %s",
-            "DELETE FROM state.maps WHERE campaign_id = %s",
-            "DELETE FROM state.story_state_history WHERE session_id IN (SELECT id FROM state.sessions WHERE campaign_id = %s)",
-            "DELETE FROM state.story_state WHERE campaign_id = %s",
-            "DELETE FROM state.session_archives WHERE campaign_id = %s",
-            "DELETE FROM state.sessions WHERE campaign_id = %s",
-            "DELETE FROM state.rag_chunks WHERE campaign_id = %s",
-            "DELETE FROM state.rag_documents WHERE campaign_id = %s",
-            "DELETE FROM state.campaign_settings WHERE campaign_id = %s",
-            "DELETE FROM state.campaign_members WHERE campaign_id = %s",
-            "DELETE FROM state.campaigns WHERE id = %s",
-        ):
-            cur.execute(sql, cid * sql.count("%s"))
-    finally:
-        cur.execute("ALTER TABLE state.sessions ENABLE TRIGGER trg_archive_session")
-        cur.close()
+    """Delete the target campaign inside the caller's import transaction."""
+    from services.campaigns.lifecycle import hard_delete_campaign
+
+    hard_delete_campaign(campaign_id, conn=conn)
 
 
-def _insert_row(conn, table: str, row: dict, principal_remap: dict = None,
-                jsonb_cols: tuple = (), array_cols: tuple = ()) -> None:
+def _insert_row(
+    conn,
+    table: str,
+    row: dict,
+    principal_remap: dict = None,
+    jsonb_cols: tuple = (),
+    array_cols: tuple = (),
+) -> None:
     """Insert one row, remapping principal_ids, json-encoding jsonb cols, and
     leaving array columns as Python lists for psycopg2 to handle natively."""
     cols = list(row.keys())
@@ -225,10 +209,7 @@ def _insert_row(conn, table: str, row: dict, principal_remap: dict = None,
             except json.JSONDecodeError:
                 pass
         vals.append(v)
-    placeholders = ", ".join(
-        f"%s::jsonb" if c in jsonb_cols else "%s"
-        for c in cols
-    )
+    placeholders = ", ".join("%s::jsonb" if c in jsonb_cols else "%s" for c in cols)
     cur = conn.cursor()
     cur.execute(
         f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders})",
@@ -281,8 +262,15 @@ def import_campaign(payload: dict, *, replace: bool = False) -> str:
             cur.close()
 
         if payload.get("ai_config"):
-            _insert_row(conn, "state.campaign_settings", payload["ai_config"],
-                        jsonb_cols=("settings",))
+            _insert_row(
+                conn,
+                "state.campaign_settings",
+                payload["ai_config"],
+                jsonb_cols=("settings",),
+            )
+
+        for profile in payload.get("rag_embedding_profiles", []):
+            _insert_row(conn, "state.rag_embedding_profiles", profile)
 
         for m in payload.get("maps", []):
             _insert_row(conn, "state.maps", m)
@@ -294,9 +282,13 @@ def import_campaign(payload: dict, *, replace: bool = False) -> str:
             _insert_row(conn, "state.map_decorations", d, jsonb_cols=("metadata",))
 
         for e in payload.get("entities", []):
-            _insert_row(conn, "state.entities", e,
-                        principal_remap=principal_remap,
-                        jsonb_cols=("public_sheet", "secret_sheet"))
+            _insert_row(
+                conn,
+                "state.entities",
+                e,
+                principal_remap=principal_remap,
+                jsonb_cols=("public_sheet", "secret_sheet"),
+            )
 
         for s in payload.get("sessions", []):
             _insert_row(conn, "state.sessions", s)
@@ -312,9 +304,18 @@ def import_campaign(payload: dict, *, replace: bool = False) -> str:
             # ordered). parent_event_id references event_id (UUID), not seq_id,
             # so the parent chain survives.
             ev = {k: v for k, v in ev.items() if k != "seq_id"}
-            _insert_row(conn, "ledger.session_ledger", ev,
-                        jsonb_cols=("payload",),
-                        array_cols=("domain_tags", "visible_to"))
+            _insert_row(
+                conn,
+                "ledger.session_ledger",
+                ev,
+                jsonb_cols=("payload",),
+                array_cols=("domain_tags", "visible_to"),
+            )
+
+        for doc in payload.get("rag_documents", []):
+            _insert_row(conn, "state.rag_documents", doc)
+        for chunk in payload.get("rag_chunks", []):
+            _insert_row(conn, "state.rag_chunks", chunk, jsonb_cols=("metadata",))
 
         conn.commit()
     except Exception:

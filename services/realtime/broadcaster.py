@@ -47,7 +47,9 @@ def _event_name(event_type: str) -> str:
     return "game_event"
 
 
-def _payload_for(envelope: BroadcastEnvelope, *, scope: str, reason: str, room: str) -> dict[str, Any]:
+def _payload_for(
+    envelope: BroadcastEnvelope, *, scope: str, reason: str, room: str
+) -> dict[str, Any]:
     payload = dict(envelope.payload or {})
     payload.setdefault("event_id", str(envelope.event_id))
     payload.setdefault("event_type", envelope.event_type)
@@ -69,7 +71,9 @@ def _payload_for(envelope: BroadcastEnvelope, *, scope: str, reason: str, room: 
     return payload
 
 
-def broadcast_game_event(envelope: BroadcastEnvelope, *, socketio=None) -> list[dict[str, str]]:
+def broadcast_game_event(
+    envelope: BroadcastEnvelope, *, socketio=None
+) -> list[dict[str, str]]:
     """Emit an envelope to the rooms allowed by its visibility.
 
     Returns delivery records for tests and optional diagnostics.
@@ -92,28 +96,69 @@ def broadcast_game_event(envelope: BroadcastEnvelope, *, socketio=None) -> list[
 
     if envelope.visibility == "public" and not envelope.visible_to:
         room = campaign_public_room(str(envelope.campaign_id))
-        sio.emit(event_name, _payload_for(envelope, scope="public", reason="public_campaign", room=room), room=room)
-        deliveries.append({"event": event_name, "room": room, "scope": "public", "reason": "public_campaign"})
+        sio.emit(
+            event_name,
+            _payload_for(envelope, scope="public", reason="public_campaign", room=room),
+            room=room,
+        )
+        deliveries.append(
+            {
+                "event": event_name,
+                "room": room,
+                "scope": "public",
+                "reason": "public_campaign",
+            }
+        )
     else:
         for principal_id in sorted(principals):
             room = principal_room(principal_id)
-            sio.emit(event_name, _payload_for(envelope, scope=envelope.visibility, reason=reason, room=room), room=room)
-            deliveries.append({"event": event_name, "room": room, "scope": envelope.visibility, "reason": reason})
+            sio.emit(
+                event_name,
+                _payload_for(
+                    envelope, scope=envelope.visibility, reason=reason, room=room
+                ),
+                room=room,
+            )
+            deliveries.append(
+                {
+                    "event": event_name,
+                    "room": room,
+                    "scope": envelope.visibility,
+                    "reason": reason,
+                }
+            )
 
     if envelope.include_dm:
         room = dm_room(str(envelope.campaign_id))
-        sio.emit(event_name, _payload_for(envelope, scope="dm", reason="dm_receives_all", room=room), room=room)
-        deliveries.append({"event": event_name, "room": room, "scope": "dm", "reason": "dm_receives_all"})
+        sio.emit(
+            event_name,
+            _payload_for(envelope, scope="dm", reason="dm_receives_all", room=room),
+            room=room,
+        )
+        deliveries.append(
+            {
+                "event": event_name,
+                "room": room,
+                "scope": "dm",
+                "reason": "dm_receives_all",
+            }
+        )
 
     return deliveries
 
 
-def envelope_from_event(event: Any, *, visibility: VisibilityScope | None = None) -> BroadcastEnvelope:
+def envelope_from_event(
+    event: Any, *, visibility: VisibilityScope | None = None
+) -> BroadcastEnvelope:
     """Create a broadcast envelope from an EventEnvelope-like object."""
-    data = event.model_dump(mode="json") if hasattr(event, "model_dump") else dict(event)
+    data = (
+        event.model_dump(mode="json") if hasattr(event, "model_dump") else dict(event)
+    )
     payload = data.get("payload") or data
     visible_to = [str(v) for v in (data.get("visible_to") or [])]
-    inferred_visibility: VisibilityScope = visibility or ("principal_scoped" if visible_to else "public")
+    inferred_visibility: VisibilityScope = visibility or (
+        "principal_scoped" if visible_to else "public"
+    )
     return BroadcastEnvelope(
         event_id=str(data.get("event_id") or data.get("id") or ""),
         campaign_id=str(data["campaign_id"]),

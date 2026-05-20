@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import re
 import sys
-from pathlib import Path
 
 from integration_common import ROOT, ensure_env_file, psql, wait_for_postgres
 import db_reset
@@ -28,7 +27,9 @@ CREATE TABLE IF NOT EXISTS infra_meta.schema_migrations (
     for migration in sorted((ROOT / "infra" / "sql" / "migrations").glob("*.sql")):
         version = migration.name
         if not MIGRATION_RE.match(version):
-            print(f"Skipping migration with unsafe filename: {version}", file=sys.stderr)
+            print(
+                f"Skipping migration with unsafe filename: {version}", file=sys.stderr
+            )
             continue
 
         sql = migration.read_text(encoding="utf-8")
@@ -42,7 +43,9 @@ CREATE TABLE IF NOT EXISTS infra_meta.schema_migrations (
         applied_checksum = (result.stdout or "").strip()
         if applied_checksum:
             if applied_checksum != checksum:
-                raise RuntimeError(f"checksum mismatch for already-applied migration {version}")
+                raise RuntimeError(
+                    f"checksum mismatch for already-applied migration {version}"
+                )
             print(f"Skipping {version} (already applied)")
             continue
 
@@ -62,11 +65,13 @@ def _seed_demo() -> None:
     run_dir = ROOT / ".run"
     run_dir.mkdir(exist_ok=True)
     (run_dir / "smoke_join_tokens.txt").write_text(
-        "\n".join([
-            "DM=dm-smoke-join-22222222-2222-2222-2222-222222222221",
-            "PLAYER=player-smoke-join-22222222-2222-2222-2222-222222222222",
-            "",
-        ]),
+        "\n".join(
+            [
+                "DM=dm-smoke-join-22222222-2222-2222-2222-222222222221",
+                "PLAYER=player-smoke-join-22222222-2222-2222-2222-222222222222",
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
 

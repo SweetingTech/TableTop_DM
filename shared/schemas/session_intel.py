@@ -50,9 +50,14 @@ class Evidence(BaseModel):
     confidence score as a hat. We require it so the DM can audit each
     item in the review queue before approving.
     """
+
     source_kind: SourceKind
-    source_id: str = Field(..., description="ledger seq_id, chat message id, or transcript chunk id")
-    quote: Optional[str] = Field(None, description="verbatim text the inference rests on")
+    source_id: str = Field(
+        ..., description="ledger seq_id, chat message id, or transcript chunk id"
+    )
+    quote: Optional[str] = Field(
+        None, description="verbatim text the inference rests on"
+    )
     timestamp_start: Optional[str] = None
     timestamp_end: Optional[str] = None
     doc_id: Optional[str] = None
@@ -72,9 +77,14 @@ class ExtractedStoryEvent(BaseModel):
     that's where the canonical "this delta applies to that story_state
     field" mapping lives.
     """
+
     event_type: StoryEventType
-    summary: str = Field(..., max_length=400, description="one-line description for the review queue")
-    entities: list[str] = Field(default_factory=list, description="entity UUIDs or pre-canonical names")
+    summary: str = Field(
+        ..., max_length=400, description="one-line description for the review queue"
+    )
+    entities: list[str] = Field(
+        default_factory=list, description="entity UUIDs or pre-canonical names"
+    )
     proposed_state_delta: dict = Field(default_factory=dict)
     evidence: list[Evidence] = Field(default_factory=list)
     confidence: float = Field(..., ge=0, le=1)
@@ -84,6 +94,7 @@ class ExtractedStoryEvent(BaseModel):
 
 class ExtractionRequest(BaseModel):
     """Input shape for the extractor service."""
+
     campaign_id: str
     session_id: str
     # Limit how far back to look. Default behavior is "since last extraction".
@@ -96,6 +107,7 @@ class ExtractionRequest(BaseModel):
 
 class ExtractionResult(BaseModel):
     """Output of the extractor — what we wrote into the review queue."""
+
     proposed_count: int
     patch_ids: list[str]
     skipped: list[str] = Field(
@@ -111,6 +123,7 @@ class DMReviewPacket(BaseModel):
     attention. The DM can approve/reject/edit each patch from a single
     surface instead of clicking through ten tabs.
     """
+
     session_id: str
     campaign_id: str
     generated_at: str

@@ -12,7 +12,7 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 
 
 ## Implementation Status
-**TODO phases are tracked and regularly audited.** See `TODO.md` for the full checklist.
+**Release phases are tracked and regularly audited.** See `docs/release/1.0-rc-checklist.md` for the release checklist and `docs/release/1.0-scope.md` for the 1.0 scope cutline.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -65,7 +65,35 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 42.8 | **Full Player State Snapshot** - principal-scoped runtime bundle for identity, controls, visible world, narrative state, legal actions, and event cursor | Done |
 | 42.9 | **1.0 Release Gate and Scope Freeze** - release scope, test matrix, security matrix, and RC checklist | Done |
 | 43 | **1.0 Boot, Recovery, and Verification Hardening** - Windows boot path, save/load roundtrip tests, cursor-gap recovery, route/auth matrix, V1 golden-path smoke | Done |
-| 44+ | 1.0 RC hardening: fuller identity UI, snapshot/delta edge cases, route/auth completion, docs, perf/packaging | See [docs/release/1.0-scope.md](docs/release/1.0-scope.md) |
+| 44 | **1.0 Route Auth, Visibility, and Runtime QA Closure** - route-layer auth parity, DIALOGUE history, traceback suppression, launcher stderr handling | Done |
+| 45 | **Gemini Review Closure** - blueprint registration, API helper extraction, registry state-delta dispatcher, DB-owned cascade cleanup, local embedding defaults, Session Intel retry, JS module entrypoints | Done |
+| 46 | **Doc Cleanup** - Gemini closure authorship, blueprint-scope caveat, stale checklist pointer cleanup | Done |
+| 47 | **Local Identity & Join UX** - revocable join codes, strict join-token enforcement hooks, Control Plane join-code surface | Done |
+| 48 | **Snapshot / Delta / Reconnect Edge Cases** - reconnect snapshot refresh, control-handoff refetch, duplicate/gap E2E coverage, two-tab identity checks | Done |
+| 49 | **V1 Golden-Path E2E Expansion** - DM setup, player join/play, movement/chat/combat/save conflict/reload, manual QA script | Done |
+| 50 | **Route/Auth/Visibility Matrix Completion** - explicit Flask route inventory and contract test preventing untracked route additions | Done |
+| 51 | **Save/Load Torture Suite** - corruption-path clean errors, future-schema guard, RAG metadata/profile roundtrip coverage | Done |
+| 52 | **DM Packet Review UX** - batch approve/reject, supersede flow, ledger evidence labels, recap refresh after review | Done |
+| 53 | **Docs Reality Pass** - stale TODO pointer cleanup, missing Characters help page, Gemini review purpose note, docs checklist update | Done |
+| 54 | **Performance Smoke Baseline** - local player_state, WebSocket fanout, RAG, save export, and boot budget docs/tests | Done |
+| 55 | **Packaging Gate** - release README, package script, checksum generation, `.env.example` audit coverage | Done |
+| 56 | **RC Burn-Down and Tag Prep** - checklist status pass, known limitations, final gate prep | Done |
+
+### Current 1.0 RC Posture
+
+As of **2026-05-19**, the actionable runtime blockers and follow-up engineering recommendations from `gemini_code_review.md` are closed on the active RC track:
+
+- `app.py` is now a small entrypoint; the Flask application implementation is registered through `services/api/application.py` and shared auth/error helpers live under `services/api/`.
+- State deltas commit through a registry-backed dispatcher instead of hardcoded orchestration branches.
+- Campaign delete/import replacement uses a shared lifecycle service and database-owned cascade behavior from migration `015_campaign_cascade_cleanup.sql`.
+- Local LM Studio/Ollama RAG no longer silently falls back to OpenAI embeddings; local embedding readiness is explicit and missing local embedding models fail cleanly.
+- Session Intel extraction has stricter structured-output enums, safe alias canonicalization, one correction retry, and diagnostic skip reasons.
+- Game Console and Control Plane JavaScript now load through ES module entrypoints while preserving compatibility facades for existing templates.
+- Release gates passing after this closure include compile, Ruff, mypy, Node syntax checks, services/contracts/integration tests, Docker boot verification, and live E2E browser smoke.
+
+The remaining 1.0 work is not a new architecture feature wave; it is RC hardening: product-grade identity UI, more reconnect edge-case proof, documentation reality pass, packaging, and performance smoke.
+
+`gemini_code_review.md` is a historical review-and-closure record: Gemini CLI authored the original architecture review, and Codex appended the closure pass that tracks what was fixed for the RC. Treat `README.md`, `CHANGELOG.md`, and `docs/release/` as the current user-facing release truth.
 
 
 ## Quickstart

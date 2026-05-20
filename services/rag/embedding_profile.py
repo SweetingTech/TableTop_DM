@@ -30,7 +30,9 @@ def signature_for(provider: str, embedding_model: str) -> str:
     """8-char stable hash of (provider|model). Short enough for a
     collection name suffix; collisions across legitimate model names
     are astronomically unlikely."""
-    raw = f"{(provider or '').lower()}|{(embedding_model or '').lower()}".encode("utf-8")
+    raw = f"{(provider or '').lower()}|{(embedding_model or '').lower()}".encode(
+        "utf-8"
+    )
     return hashlib.sha1(raw).hexdigest()[:8]
 
 
@@ -44,7 +46,7 @@ def resolve_active_profile(
     embedding_model: str,
     *,
     create_if_missing: bool = True,
-) -> dict:
+) -> dict | None:
     """Return the active profile row for this campaign's current
     (provider, model). Creates one if missing and `create_if_missing`.
     Side effect: retires any other ACTIVE profiles for this campaign
@@ -96,7 +98,13 @@ def resolve_active_profile(
         "  (campaign_id, provider, embedding_model, signature, qdrant_collection) "
         "VALUES (%s, %s, %s, %s, %s) "
         "RETURNING *",
-        (campaign_id, provider, embedding_model, sig, _collection_name(campaign_id, sig)),
+        (
+            campaign_id,
+            provider,
+            embedding_model,
+            sig,
+            _collection_name(campaign_id, sig),
+        ),
     )
     return dict(new_row)
 

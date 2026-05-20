@@ -39,7 +39,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 FILE_MAGIC = b"ttdm-save:v1\n"
 KDF_ITERATIONS = 600_000  # NIST 2023 floor for PBKDF2-HMAC-SHA256
-SCHEMA_VERSION = 14       # latest migration covered by the 1.0 RC save gate
+SCHEMA_VERSION = 14  # latest migration covered by the 1.0 RC save gate
 SUPPORTED_KINDS = ("game", "program")
 
 
@@ -47,7 +47,9 @@ class SaveFileError(Exception):
     """Anything that goes wrong reading or writing a save file."""
 
 
-def _derive_key(passphrase: str, salt: bytes, iterations: int = KDF_ITERATIONS) -> bytes:
+def _derive_key(
+    passphrase: str, salt: bytes, iterations: int = KDF_ITERATIONS
+) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -95,7 +97,7 @@ def decrypt_save(blob: bytes, *, passphrase: str, expected_kind: str = None) -> 
     """
     if not blob.startswith(FILE_MAGIC):
         raise SaveFileError("Not a TableTop DM save file (missing magic header).")
-    rest = blob[len(FILE_MAGIC):]
+    rest = blob[len(FILE_MAGIC) :]
     try:
         header_line, _, token = rest.partition(b"\n")
         header = json.loads(header_line.decode("utf-8"))
@@ -106,6 +108,18 @@ def decrypt_save(blob: bytes, *, passphrase: str, expected_kind: str = None) -> 
         raise SaveFileError(f"Unexpected file format: {header.get('format')!r}")
     if header.get("version") != 1:
         raise SaveFileError(f"Unsupported save file version: {header.get('version')}")
+    schema_version = header.get("schema_version")
+    if schema_version is not None:
+        try:
+            schema_int = int(schema_version)
+        except (TypeError, ValueError):
+            raise SaveFileError(
+                f"Unsupported save schema version: {schema_version}"
+            ) from None
+        if schema_int > SCHEMA_VERSION:
+            raise SaveFileError(
+                f"Save schema version {schema_int} is newer than this app supports ({SCHEMA_VERSION})."
+            )
     kind = header.get("kind")
     if kind not in SUPPORTED_KINDS:
         raise SaveFileError(f"Unknown save kind: {kind}")
@@ -138,7 +152,7 @@ def peek_header(blob: bytes) -> dict[str, Any]:
     passphrase."""
     if not blob.startswith(FILE_MAGIC):
         raise SaveFileError("Not a TableTop DM save file.")
-    header_line, _, _ = blob[len(FILE_MAGIC):].partition(b"\n")
+    header_line, _, _ = blob[len(FILE_MAGIC) :].partition(b"\n")
     try:
         return json.loads(header_line.decode("utf-8"))
     except Exception as e:

@@ -115,6 +115,7 @@ def transition_entity_map(
         sheet["x"] = int(x)
         sheet["y"] = int(y)
         import json as _json
+
         row = execute_one(
             "UPDATE state.entities SET current_map_id = %s, public_sheet = %s::jsonb, "
             "updated_at = now() WHERE id = %s RETURNING *",

@@ -68,7 +68,9 @@ def docker_compose(
     )
 
 
-def psql(*args: str, sql: str | None = None, capture: bool = False) -> subprocess.CompletedProcess:
+def psql(
+    *args: str, sql: str | None = None, capture: bool = False
+) -> subprocess.CompletedProcess:
     env = load_env()
     return docker_compose(
         "exec",
@@ -96,7 +98,7 @@ def wait_for_postgres(timeout_seconds: int = 60) -> None:
             "exec",
             "-T",
             "postgres",
-        "pg_isready",
+            "pg_isready",
             "-U",
             env.get("POSTGRES_USER", "postgres"),
             "-d",
@@ -108,4 +110,6 @@ def wait_for_postgres(timeout_seconds: int = 60) -> None:
             return
         last_error = (result.stderr or result.stdout or "").strip()
         time.sleep(1)
-    raise RuntimeError(f"postgres did not become ready within {timeout_seconds}s: {last_error}")
+    raise RuntimeError(
+        f"postgres did not become ready within {timeout_seconds}s: {last_error}"
+    )

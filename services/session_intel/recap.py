@@ -46,10 +46,10 @@ def sources_for_recap(
 ) -> list[dict]:
     """Return source objects for the patches visible in this recap."""
     visibility_filters = {
-        "dm":        ["public", "party", "dm_only", "principal_scoped"],
-        "party":     ["public", "party"],
+        "dm": ["public", "party", "dm_only", "principal_scoped"],
+        "party": ["public", "party"],
         "principal": ["public", "party", "principal_scoped"],
-        "public":    ["public"],
+        "public": ["public"],
     }
     filt = visibility_filters.get(visibility, visibility_filters["party"])
     patches = _patches_for(str(session_id), filt)
@@ -89,7 +89,11 @@ def _ledger_events_for_recap(session_id: str, visibility: str) -> list[dict]:
 
 def _format_ledger_event(event: dict) -> str:
     payload = event.get("payload") or {}
-    event_type = str(event.get("type") or payload.get("type") or "event").replace("_", " ").title()
+    event_type = (
+        str(event.get("type") or payload.get("type") or "event")
+        .replace("_", " ")
+        .title()
+    )
     if payload.get("message"):
         return f"{event_type}: {payload['message']}"
     if payload.get("narration"):
@@ -103,7 +107,9 @@ def _format_ledger_event(event: dict) -> str:
     return f"{event_type}: game state changed."
 
 
-def _format_bullets(patches: list[dict], ledger_events: list[dict] | None = None) -> str:
+def _format_bullets(
+    patches: list[dict], ledger_events: list[dict] | None = None
+) -> str:
     ledger_events = ledger_events or []
     if not patches and not ledger_events:
         return "Nothing significant recorded this session."
@@ -138,10 +144,10 @@ def generate_recap(
 ) -> str:
     """Return a recap string for the given visibility scope."""
     visibility_filters = {
-        "dm":        ["public", "party", "dm_only", "principal_scoped"],
-        "party":     ["public", "party"],
+        "dm": ["public", "party", "dm_only", "principal_scoped"],
+        "party": ["public", "party"],
         "principal": ["public", "party", "principal_scoped"],
-        "public":    ["public"],
+        "public": ["public"],
     }
     filt = visibility_filters.get(visibility, visibility_filters["party"])
     patches = _patches_for(str(session_id), filt)
@@ -152,6 +158,7 @@ def generate_recap(
     # Try LLM polish; fall back to bullets if anything fails.
     try:
         from services.llm.adapter import LLMAdapter
+
         adapter = LLMAdapter(campaign_id=campaign_id, role="dm")
         prose = adapter.generate_structured(
             system_prompt=_RECAP_SYSTEM,

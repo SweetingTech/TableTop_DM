@@ -3,6 +3,7 @@
 Assumes the Flask app is already running at BASE_URL (default http://localhost:8000).
 Run with:  pytest tests/e2e/test_landing_tour.py -v
 """
+
 from __future__ import annotations
 
 import os
@@ -63,9 +64,11 @@ def test_step2_highlights_new_campaign_button_and_pauses(page: Page):
 
 def test_clicking_new_campaign_opens_wizard_and_advances_tour(page: Page):
     page.locator(".tour-tooltip [data-tour-next]").click()  # 1 -> 2
-    page.locator("[data-open-wizard]").first.click()        # opens wizard, fires event
+    page.locator("[data-open-wizard]").first.click()  # opens wizard, fires event
 
-    expect(page.locator("#wizardModal")).to_have_class(re.compile(r"\bopen\b"), timeout=3000)
+    expect(page.locator("#wizardModal")).to_have_class(
+        re.compile(r"\bopen\b"), timeout=3000
+    )
 
     tooltip = page.locator(".tour-tooltip")
     expect(tooltip.locator("h4")).to_have_text("Name your campaign", timeout=3000)
@@ -85,15 +88,19 @@ def test_take_the_guided_tour_link_restarts(page: Page):
     expect(page.locator(".tour-overlay")).not_to_have_class(re.compile(r"\bshow\b"))
 
     page.locator("[data-restart-tour]").first.click()
-    expect(page.locator(".tour-overlay")).to_have_class(re.compile(r"\bshow\b"), timeout=2000)
+    expect(page.locator(".tour-overlay")).to_have_class(
+        re.compile(r"\bshow\b"), timeout=2000
+    )
     expect(page.locator(".tour-tooltip h4")).to_have_text("Welcome to Tabletop DM")
 
 
 def test_local_ai_block_step_renders(page: Page):
     """Walk to step 4 (Local AI auto-detect) and assert the spotlight finds the block."""
     page.locator(".tour-tooltip [data-tour-next]").click()  # 1 -> 2
-    page.locator("[data-open-wizard]").first.click()        # opens wizard, 2 -> 3
-    expect(page.locator(".tour-tooltip h4")).to_have_text("Name your campaign", timeout=3000)
+    page.locator("[data-open-wizard]").first.click()  # opens wizard, 2 -> 3
+    expect(page.locator(".tour-tooltip h4")).to_have_text(
+        "Name your campaign", timeout=3000
+    )
 
     page.locator(".tour-tooltip [data-tour-next]").click()  # 3 -> 4
     tooltip = page.locator(".tour-tooltip")

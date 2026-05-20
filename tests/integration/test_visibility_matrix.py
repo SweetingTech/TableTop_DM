@@ -20,15 +20,17 @@ def test_dm_only_rag_patch_stays_dm_only_across_recaps_and_continuity(
 ) -> None:
     del integration_stack
     patch_id = uuid.uuid4()
-    evidence = [{
-        "source_kind": "rag_chunk",
-        "source_id": "black-bell-c1",
-        "doc_id": "doc-black-bell",
-        "chunk_id": "black-bell-c1",
-        "filename": "black_bell_dm-only.md",
-        "visibility": "dm_only",
-        "excerpt": "The Black Bell binds the Ashen Choir.",
-    }]
+    evidence = [
+        {
+            "source_kind": "rag_chunk",
+            "source_id": "black-bell-c1",
+            "doc_id": "doc-black-bell",
+            "chunk_id": "black-bell-c1",
+            "filename": "black_bell_dm-only.md",
+            "visibility": "dm_only",
+            "excerpt": "The Black Bell binds the Ashen Choir.",
+        }
+    ]
 
     conn = psycopg2.connect(postgres_dsn)
     conn.autocommit = True
@@ -75,5 +77,11 @@ def test_dm_only_rag_patch_stays_dm_only_across_recaps_and_continuity(
     assert sources_for_recap(SESSION_ID, "party") == []
     assert sources_for_recap(SESSION_ID, "public") == []
 
-    assert any(str(row["id"]) == str(patch_id) for row in open_threads(CAMPAIGN_ID, visibility="dm"))
-    assert all(str(row["id"]) != str(patch_id) for row in open_threads(CAMPAIGN_ID, visibility="party"))
+    assert any(
+        str(row["id"]) == str(patch_id)
+        for row in open_threads(CAMPAIGN_ID, visibility="dm")
+    )
+    assert all(
+        str(row["id"]) != str(patch_id)
+        for row in open_threads(CAMPAIGN_ID, visibility="party")
+    )

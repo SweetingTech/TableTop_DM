@@ -24,7 +24,10 @@ def test_legal_actions_mark_my_turn_for_active_controlled_entity():
         mode="COMBAT",
         session_status="ACTIVE",
         controlled_entities=[{"id": "pc-a"}],
-        visible_entities=[{"id": "pc-a", "entity_type": "PC"}, {"id": "npc-a", "entity_type": "NPC"}],
+        visible_entities=[
+            {"id": "pc-a", "entity_type": "PC"},
+            {"id": "npc-a", "entity_type": "NPC"},
+        ],
         encounter={"id": "enc-1"},
         active_slot={"entity_id": "pc-a"},
     )

@@ -553,6 +553,11 @@
                     <div class="panel">
                         <h3>Pending Patches <span id="intelPendingCount" class="status-badge"></span></h3>
                         <p class="help-text">Patches waiting for DM review. Each one cites the source event and (where the LLM extractor ran) a verbatim quote.</p>
+                        <div class="form-row" style="margin-bottom:8px;">
+                            <button id="btnIntelBatchApprove" class="btn btn-primary btn-sm">Approve Selected</button>
+                            <button id="btnIntelBatchReject" class="btn btn-danger btn-sm">Reject Selected</button>
+                            <span class="help-text">Batch actions apply only checked pending cards.</span>
+                        </div>
                         <div id="intelPatchList" class="item-list">
                             <div class="list-item-meta">Select a session, then click "Run Extractor".</div>
                         </div>
@@ -745,7 +750,8 @@
                             </div>
                             <div class="form-group">
                                 <label>Embedding Model</label>
-                                <input type="text" id="embedModel" class="input-field" placeholder="text-embedding-3-small">
+                                <input type="text" id="embedModel" class="input-field" placeholder="auto from provider">
+                                <div id="embedStatus" class="help-text"></div>
                             </div>
                         </div>
                         <div class="form-row" style="margin-top: 16px;">
@@ -853,6 +859,6 @@
         </div>
     </div>
 
-    <script src="/static/js/control.js"></script>
+    <script type="module" src="/static/js/control/main.js"></script>
 </body>
 </html>

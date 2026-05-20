@@ -9,7 +9,6 @@ gives the destination machine those auth_subjects in the first place.
 """
 
 import json
-import uuid
 
 from shared.db.connection import get_connection, execute_query
 
@@ -38,11 +37,13 @@ def export_program() -> dict:
         # Strip vault wrappers so the file is portable across machines.
         if isinstance(value, dict):
             value = decrypt_dict_values(value)
-        settings_out.append({
-            "key": r["key"],
-            "value": value,
-            "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-        })
+        settings_out.append(
+            {
+                "key": r["key"],
+                "value": value,
+                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+            }
+        )
 
     return {
         "global_settings": settings_out,
@@ -112,7 +113,12 @@ def import_program(payload: dict) -> dict:
                     is_active = EXCLUDED.is_active,
                     updated_at = now()
                 """,
-                (p["principal_type"], p["display_name"], p["auth_subject"], p.get("is_active", True)),
+                (
+                    p["principal_type"],
+                    p["display_name"],
+                    p["auth_subject"],
+                    p.get("is_active", True),
+                ),
             )
         conn.commit()
         cur.close()

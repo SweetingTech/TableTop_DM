@@ -73,7 +73,9 @@ def build_dm_narration_context(
         )
         if row and row.get("current_location"):
             location = row["current_location"]
-    retrieval_query = query_hint or " ".join(filter(None, [location, user_context]))[:400]
+    retrieval_query = (
+        query_hint or " ".join(filter(None, [location, user_context]))[:400]
+    )
 
     rag = retrieve_campaign_context(
         campaign_id=campaign_id,

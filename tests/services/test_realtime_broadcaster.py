@@ -76,7 +76,11 @@ def test_principal_scoped_event_goes_to_listed_principals_and_dm(monkeypatch):
         socketio=fake,
     )
 
-    assert [c["room"] for c in fake.calls] == ["principal:p1", "principal:p2", "dm:camp-1"]
+    assert [c["room"] for c in fake.calls] == [
+        "principal:p1",
+        "principal:p2",
+        "dm:camp-1",
+    ]
     assert fake.calls[0]["payload"]["delivery"]["reason"] == "explicit_visible_to"
 
 
@@ -107,7 +111,9 @@ def test_explicit_visible_to_does_not_widen_through_spatial(monkeypatch):
     from services.realtime import audience
 
     monkeypatch.setattr(audience, "dm_principals", lambda campaign_id: set())
-    monkeypatch.setattr(audience, "spatial_principals", lambda **kwargs: {"pc-a", "pc-b"})
+    monkeypatch.setattr(
+        audience, "spatial_principals", lambda **kwargs: {"pc-a", "pc-b"}
+    )
 
     principals, reason = audience.resolve_principal_audience(
         campaign_id="camp-1",
@@ -142,7 +148,9 @@ def test_spatial_audience_filters_dm_principals(monkeypatch):
 def test_validate_socket_join_rejects_unknown_principal(monkeypatch):
     from services.realtime import audience
 
-    monkeypatch.setattr(audience, "load_principal", lambda principal_id, campaign_id: None)
+    monkeypatch.setattr(
+        audience, "load_principal", lambda principal_id, campaign_id: None
+    )
 
     with pytest.raises(PermissionError):
         audience.validate_socket_join(

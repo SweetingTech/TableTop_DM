@@ -23,16 +23,19 @@ change") on top of those raw deltas.
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, get_args
 
 from pydantic import ValidationError
 
-from shared.db.connection import execute_query, execute_one, get_connection
+from shared.db.connection import execute_query, get_connection
 from shared.schemas.session_intel import (
     ExtractedStoryEvent,
     Evidence,
     ExtractionRequest,
     ExtractionResult,
+    SourceKind,
+    StoryEventType,
+    Visibility,
 )
 from services.session_intel.rag_context import (
     hydrate_rag_evidence,
@@ -46,6 +49,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------
 # Deterministic path: ledger rows → ExtractedStoryEvent
 # ---------------------------------------------------------------------
+
 
 def _deterministic_events(rows: list[dict]) -> list[ExtractedStoryEvent]:
     """Convert raw ledger rows into ExtractedStoryEvent for things we
@@ -61,40 +65,63 @@ def _deterministic_events(rows: list[dict]) -> list[ExtractedStoryEvent]:
         # the first move into a "named" location; raw tile movement is too
         # granular). We keep it simple here — emit a location_changed event
         # only when the tool_call carries a location_name field.
-        if kind == "TOOL_CALL" and (payload.get("tool_name") in ("move_entity", "transition_map")):
+        if kind == "TOOL_CALL" and (
+            payload.get("tool_name") in ("move_entity", "transition_map")
+        ):
             loc = payload.get("location_name") or payload.get("destination_name")
             if loc:
-                out.append(ExtractedStoryEvent(
-                    event_type="location_changed",
-                    summary=f"Party entered {loc}",
-                    entities=[],
-                    proposed_state_delta={"current_location": loc},
-                    evidence=[Evidence(source_kind="ledger_event", source_id=seq_id)],
-                    confidence=1.0,
-                    visibility="party",
-                    requires_dm_review=False,
-                ))
+                out.append(
+                    ExtractedStoryEvent(
+                        event_type="location_changed",
+                        summary=f"Party entered {loc}",
+                        entities=[],
+                        proposed_state_delta={"current_location": loc},
+                        evidence=[
+                            Evidence(
+                                source_kind="ledger_event", source_id=seq_id, quote=None
+                            )
+                        ],
+                        confidence=1.0,
+                        visibility="party",
+                        requires_dm_review=False,
+                    )
+                )
 
         # Combat death → consequence_created
         if kind == "STATE_DELTA":
             deltas = payload.get("deltas") or []
             for d in deltas:
-                if d.get("table") == "state.entities" and isinstance(d.get("changes"), dict):
+                if d.get("table") == "state.entities" and isinstance(
+                    d.get("changes"), dict
+                ):
                     changes = d["changes"]
-                    if changes.get("hp_current") == 0 and changes.get("status") in ("DEAD", "DOWN"):
-                        out.append(ExtractedStoryEvent(
-                            event_type="consequence_created",
-                            summary=f"Entity {d.get('entity_id', '?')[:8]} dropped (hp=0)",
-                            entities=[d.get("entity_id")] if d.get("entity_id") else [],
-                            proposed_state_delta={
-                                "kind": "death",
-                                "entity_id": d.get("entity_id"),
-                            },
-                            evidence=[Evidence(source_kind="ledger_event", source_id=seq_id)],
-                            confidence=1.0,
-                            visibility="party",
-                            requires_dm_review=True,
-                        ))
+                    if changes.get("hp_current") == 0 and changes.get("status") in (
+                        "DEAD",
+                        "DOWN",
+                    ):
+                        out.append(
+                            ExtractedStoryEvent(
+                                event_type="consequence_created",
+                                summary=f"Entity {d.get('entity_id', '?')[:8]} dropped (hp=0)",
+                                entities=[d.get("entity_id")]
+                                if d.get("entity_id")
+                                else [],
+                                proposed_state_delta={
+                                    "kind": "death",
+                                    "entity_id": d.get("entity_id"),
+                                },
+                                evidence=[
+                                    Evidence(
+                                        source_kind="ledger_event",
+                                        source_id=seq_id,
+                                        quote=None,
+                                    )
+                                ],
+                                confidence=1.0,
+                                visibility="party",
+                                requires_dm_review=True,
+                            )
+                        )
     return out
 
 
@@ -130,7 +157,10 @@ _EXTRACTOR_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "event_type": {"type": "string"},
+                    "event_type": {
+                        "type": "string",
+                        "enum": list(get_args(StoryEventType)),
+                    },
                     "summary": {"type": "string"},
                     "entities": {"type": "array", "items": {"type": "string"}},
                     "proposed_state_delta": {"type": "object"},
@@ -139,14 +169,20 @@ _EXTRACTOR_SCHEMA = {
                         "items": {
                             "type": "object",
                             "properties": {
-                                "source_kind": {"type": "string"},
+                                "source_kind": {
+                                    "type": "string",
+                                    "enum": list(get_args(SourceKind)),
+                                },
                                 "source_id": {"type": "string"},
                                 "quote": {"type": "string"},
                                 "doc_id": {"type": "string"},
                                 "chunk_id": {"type": "string"},
                                 "filename": {"type": "string"},
                                 "page": {"type": ["integer", "null"]},
-                                "visibility": {"type": "string"},
+                                "visibility": {
+                                    "type": "string",
+                                    "enum": list(get_args(Visibility)),
+                                },
                                 "excerpt": {"type": "string"},
                                 "score": {"type": "number"},
                             },
@@ -154,7 +190,10 @@ _EXTRACTOR_SCHEMA = {
                         },
                     },
                     "confidence": {"type": "number"},
-                    "visibility": {"type": "string"},
+                    "visibility": {
+                        "type": "string",
+                        "enum": list(get_args(Visibility)),
+                    },
                     "requires_dm_review": {"type": "boolean"},
                 },
                 "required": ["event_type", "summary", "confidence", "visibility"],
@@ -163,6 +202,21 @@ _EXTRACTOR_SCHEMA = {
     },
     "required": ["events"],
 }
+
+
+_EVENT_TYPE_ALIASES = {
+    "npc_relationship_changed": "npc_attitude_changed",
+    "npc_relation_changed": "npc_attitude_changed",
+    "relationship_changed": "npc_attitude_changed",
+}
+
+
+def _canonicalize_event_payload(event: dict) -> dict:
+    cloned = dict(event)
+    event_type = cloned.get("event_type")
+    if isinstance(event_type, str):
+        cloned["event_type"] = _EVENT_TYPE_ALIASES.get(event_type, event_type)
+    return cloned
 
 
 def _format_chat_window(rows: list[dict]) -> str:
@@ -185,7 +239,9 @@ def _format_chat_window(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _llm_events(req: ExtractionRequest, rows: list[dict]) -> tuple[list[ExtractedStoryEvent], list[str]]:
+def _llm_events(
+    req: ExtractionRequest, rows: list[dict]
+) -> tuple[list[ExtractedStoryEvent], list[str]]:
     """Ask the LLM for narrative-inference events. Returns (events, skips).
     Empty list if no LLM is configured or the call fails."""
     try:
@@ -218,6 +274,24 @@ def _llm_events(req: ExtractionRequest, rows: list[dict]) -> tuple[list[Extracte
             "keep dm_only lore out of party/public visibility.\n\n"
             f"{rag.context_block}\n"
         )
+
+    def parse_events(raw: dict) -> tuple[list[ExtractedStoryEvent], list[str]]:
+        events_raw = raw.get("events") or []
+        parsed: list[ExtractedStoryEvent] = []
+        local_skips: list[str] = []
+        for i, ev in enumerate(events_raw):
+            try:
+                ev = _canonicalize_event_payload(ev)
+                evidence = ev.get("evidence") or []
+                if isinstance(evidence, list):
+                    ev["evidence"] = hydrate_rag_evidence(evidence, rag)
+                event = ExtractedStoryEvent(**ev)
+                _enforce_rag_review_rules(event)
+                parsed.append(event)
+            except ValidationError as e:
+                local_skips.append(f"event_{i}_validation: {str(e)[:200]}")
+        return parsed, local_skips
+
     try:
         adapter = LLMAdapter(campaign_id=uuid.UUID(req.campaign_id), role="dm")
         raw = adapter.generate_structured(
@@ -228,19 +302,29 @@ def _llm_events(req: ExtractionRequest, rows: list[dict]) -> tuple[list[Extracte
     except Exception as e:
         return [], [f"llm_call_failed: {e}"]
 
-    events_raw = raw.get("events") or []
-    out: list[ExtractedStoryEvent] = []
-    skips: list[str] = []
-    for i, ev in enumerate(events_raw):
+    out, skips = parse_events(raw)
+    if skips:
         try:
-            evidence = ev.get("evidence") or []
-            if isinstance(evidence, list):
-                ev["evidence"] = hydrate_rag_evidence(evidence, rag)
-            event = ExtractedStoryEvent(**ev)
-            _enforce_rag_review_rules(event)
-            out.append(event)
-        except ValidationError as e:
-            skips.append(f"event_{i}_validation: {str(e)[:200]}")
+            retry_prompt = (
+                f"{user_prompt}\n\nYour previous response failed validation:\n"
+                + "\n".join(skips)
+                + "\nReturn only valid JSON matching the schema. Use only these event_type values: "
+                + ", ".join(get_args(StoryEventType))
+                + "."
+            )
+            retry_raw = adapter.generate_structured(
+                system_prompt=_EXTRACTOR_SYSTEM,
+                user_prompt=retry_prompt,
+                response_schema=_EXTRACTOR_SCHEMA,
+            )
+            retry_out, retry_skips = parse_events(retry_raw)
+            if retry_out:
+                out = retry_out
+                skips = [f"retry_recovered_after: {s}" for s in skips] + retry_skips
+            else:
+                skips.extend(f"retry_{s}" for s in retry_skips)
+        except Exception as e:
+            skips.append(f"llm_retry_failed: {e}")
     return out, skips
 
 
@@ -275,6 +359,7 @@ def _row_source_kind(evidence: list[Evidence]) -> str:
 # ---------------------------------------------------------------------
 # Public API: extract + persist to proposed_story_patches
 # ---------------------------------------------------------------------
+
 
 def extract_and_queue(req: ExtractionRequest) -> ExtractionResult:
     """Run the extractor over a session window and write proposals to

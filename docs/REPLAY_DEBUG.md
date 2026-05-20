@@ -1,2 +1,4 @@
 # REPLAY_DEBUG
-Status: Placeholder initialized for Phase 0. Detailed content will be implemented in subsequent TODO phases.
+Status: Historical Phase 0 placeholder. Replay/export debugging remains
+available through the append-only ledger and export helpers; release-candidate
+validation is tracked in `docs/release/`.
