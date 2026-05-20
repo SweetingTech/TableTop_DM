@@ -23,7 +23,9 @@ def build_extraction_query(rows: list[dict], *, max_chars: int = 900) -> str:
         payload = row.get("payload") or {}
         kind = row.get("type")
         if kind == "DIALOGUE":
-            speaker = payload.get("speaker_name") or payload.get("speaker_entity_id") or "?"
+            speaker = (
+                payload.get("speaker_name") or payload.get("speaker_entity_id") or "?"
+            )
             text = payload.get("dialogue") or payload.get("message") or ""
             if text:
                 lines.append(f"{speaker}: {text}")
@@ -35,7 +37,9 @@ def build_extraction_query(rows: list[dict], *, max_chars: int = 900) -> str:
             tool = payload.get("tool_name")
             location = payload.get("location_name") or payload.get("destination_name")
             if tool or location:
-                lines.append(" ".join(filter(None, [str(tool or ""), str(location or "")])))
+                lines.append(
+                    " ".join(filter(None, [str(tool or ""), str(location or "")]))
+                )
     return "\n".join(lines)[-max_chars:]
 
 
@@ -49,8 +53,13 @@ def retrieve_session_intel_context(
     """Retrieve lore for extraction. Fail open: empty context on errors."""
     query = build_extraction_query(rows)
     if not query.strip():
-        return RagContext(query="", chunks=[], context_block="", citations=[],
-                          skipped_reason="empty_extraction_query")
+        return RagContext(
+            query="",
+            chunks=[],
+            context_block="",
+            citations=[],
+            skipped_reason="empty_extraction_query",
+        )
     try:
         return retrieve_campaign_context(
             campaign_id=campaign_id,
@@ -61,8 +70,13 @@ def retrieve_session_intel_context(
         )
     except Exception as exc:
         log.info("session-intel RAG retrieval skipped: %s", exc)
-        return RagContext(query=query, chunks=[], context_block="", citations=[],
-                          skipped_reason=f"rag_failed: {exc}")
+        return RagContext(
+            query=query,
+            chunks=[],
+            context_block="",
+            citations=[],
+            skipped_reason=f"rag_failed: {exc}",
+        )
 
 
 def chunk_evidence(chunk: RagChunk) -> dict[str, Any]:
@@ -84,7 +98,9 @@ def chunk_evidence(chunk: RagChunk) -> dict[str, Any]:
     }
 
 
-def hydrate_rag_evidence(evidence: list[dict[str, Any]], rag: Optional[RagContext]) -> list[dict[str, Any]]:
+def hydrate_rag_evidence(
+    evidence: list[dict[str, Any]], rag: Optional[RagContext]
+) -> list[dict[str, Any]]:
     """Fill model-returned rag_chunk evidence with retriever metadata."""
     if not rag or not rag.chunks:
         return evidence
@@ -99,7 +115,10 @@ def hydrate_rag_evidence(evidence: list[dict[str, Any]], rag: Optional[RagContex
         if not chunk:
             hydrated.append(item)
             continue
-        merged = {**chunk_evidence(chunk), **{k: v for k, v in item.items() if v is not None}}
+        merged = {
+            **chunk_evidence(chunk),
+            **{k: v for k, v in item.items() if v is not None},
+        }
         if not merged.get("source_id"):
             merged["source_id"] = chunk.chunk_id
         hydrated.append(merged)
@@ -112,7 +131,9 @@ def evidence_sources(evidence: Iterable[dict[str, Any]]) -> list[dict[str, Any]]
     seen: set[tuple[str, str]] = set()
     for item in evidence or []:
         kind = item.get("source_kind") or item.get("kind")
-        source_id = str(item.get("source_id") or item.get("id") or item.get("chunk_id") or "")
+        source_id = str(
+            item.get("source_id") or item.get("id") or item.get("chunk_id") or ""
+        )
         if not kind or not source_id:
             continue
         key = (str(kind), source_id)
@@ -120,25 +141,29 @@ def evidence_sources(evidence: Iterable[dict[str, Any]]) -> list[dict[str, Any]]
             continue
         seen.add(key)
         if kind == "rag_chunk":
-            sources.append({
-                "kind": "rag_chunk",
-                "id": source_id,
-                "doc_id": item.get("doc_id"),
-                "chunk_id": item.get("chunk_id") or source_id,
-                "filename": item.get("filename"),
-                "page": item.get("page"),
-                "visibility": item.get("visibility"),
-                "excerpt": item.get("excerpt") or item.get("quote"),
-                "score": item.get("score"),
-            })
+            sources.append(
+                {
+                    "kind": "rag_chunk",
+                    "id": source_id,
+                    "doc_id": item.get("doc_id"),
+                    "chunk_id": item.get("chunk_id") or source_id,
+                    "filename": item.get("filename"),
+                    "page": item.get("page"),
+                    "visibility": item.get("visibility"),
+                    "excerpt": item.get("excerpt") or item.get("quote"),
+                    "score": item.get("score"),
+                }
+            )
         else:
-            sources.append({
-                "kind": kind,
-                "id": source_id,
-                "quote": item.get("quote"),
-                "timestamp_start": item.get("timestamp_start"),
-                "timestamp_end": item.get("timestamp_end"),
-            })
+            sources.append(
+                {
+                    "kind": kind,
+                    "id": source_id,
+                    "quote": item.get("quote"),
+                    "timestamp_start": item.get("timestamp_start"),
+                    "timestamp_end": item.get("timestamp_end"),
+                }
+            )
     return sources
 
 

@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from shared.schemas.events import EventEnvelope
 from shared.schemas.enums import EventType
@@ -11,14 +11,16 @@ if TYPE_CHECKING:
     from openai import OpenAI
 
 
-
-
 def get_campaign_ai_config(campaign_id: Optional[uuid.UUID]) -> dict:
     if campaign_id is None:
         return {}
     try:
         from shared.db.connection import execute_one
-        row = execute_one("SELECT * FROM state.campaign_settings WHERE campaign_id=%s", (str(campaign_id),))
+
+        row = execute_one(
+            "SELECT * FROM state.campaign_settings WHERE campaign_id=%s",
+            (str(campaign_id),),
+        )
         return row or {}
     except Exception:
         logging.exception(
@@ -29,19 +31,27 @@ def get_campaign_ai_config(campaign_id: Optional[uuid.UUID]) -> dict:
 
 PROVIDER_DEFAULTS = {
     # Local
-    "ollama":     "http://localhost:11434/v1/",
-    "lmstudio":   "http://localhost:1234/v1",
+    "ollama": "http://localhost:11434/v1/",
+    "lmstudio": "http://localhost:1234/v1",
     # Hosted, OpenAI-compatible
-    "openai":     None,  # SDK default
+    "openai": None,  # SDK default
     "openrouter": "https://openrouter.ai/api/v1",
-    "deepseek":   "https://api.deepseek.com/v1",
+    "deepseek": "https://api.deepseek.com/v1",
     # Hosted, Anthropic-native (separate SDK path; base_url not used by OpenAI SDK)
-    "anthropic":  "https://api.anthropic.com",
-    "mock":       None,
+    "anthropic": "https://api.anthropic.com",
+    "mock": None,
 }
 
 # Keep this in sync with the providers the API/UI offers.
 SUPPORTED_PROVIDERS = set(PROVIDER_DEFAULTS.keys())
+
+EMBEDDING_MODEL_DEFAULTS = {
+    "openai": "text-embedding-3-small",
+    "ollama": "nomic-embed-text",
+    "mock": "mock-embedding-16",
+}
+
+EMBEDDING_MODEL_HINTS = ("embed", "embedding", "nomic", "bge", "e5")
 
 
 def resolve_provider_base_url(provider: str, base_url: Optional[str]) -> Optional[str]:
@@ -49,6 +59,30 @@ def resolve_provider_base_url(provider: str, base_url: Optional[str]) -> Optiona
     if base_url:
         return base_url
     return PROVIDER_DEFAULTS.get(provider)
+
+
+def select_embedding_model(
+    provider: str,
+    configured: Optional[str] = None,
+    available_models: Optional[list[str]] = None,
+) -> Optional[str]:
+    provider = (provider or "mock").lower()
+    configured = (configured or "").strip()
+    if configured:
+        if (
+            provider in {"lmstudio", "ollama"}
+            and configured == "text-embedding-3-small"
+        ):
+            return EMBEDDING_MODEL_DEFAULTS.get(provider)
+        return configured
+    if provider == "lmstudio":
+        for model in available_models or []:
+            low = model.lower()
+            if any(hint in low for hint in EMBEDDING_MODEL_HINTS):
+                return model
+        return None
+    return EMBEDDING_MODEL_DEFAULTS.get(provider)
+
 
 def _resolve_api_key(provider: str, cfg: dict) -> str:
     """Pull the API key for the LLM provider from (in priority):
@@ -61,6 +95,7 @@ def _resolve_api_key(provider: str, cfg: dict) -> str:
     if isinstance(settings, str):
         try:
             import json as _json
+
             settings = _json.loads(settings)
         except Exception:
             settings = {}
@@ -76,6 +111,7 @@ def _resolve_api_key(provider: str, cfg: dict) -> str:
             gkeys = (row or {}).get("value") or {}
             if isinstance(gkeys, str):
                 import json as _json
+
                 gkeys = _json.loads(gkeys)
             raw = gkeys.get(provider)
         except Exception:
@@ -88,10 +124,11 @@ def _resolve_api_key(provider: str, cfg: dict) -> str:
         # non-empty even though they do not authenticate requests.
         return "local-provider"
     # Environment fallback for ops setups (e.g. shipping a key via .env).
-    return (
+    return cast(
+        str,
         os.environ.get(f"{provider.upper()}_API_KEY")
         or os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
-        or os.environ.get("OPENAI_API_KEY", "")
+        or os.environ.get("OPENAI_API_KEY", ""),
     )
 
 
@@ -105,23 +142,31 @@ def get_openai_client(provider: str = "openai", cfg: Optional[dict] = None) -> "
 
 
 class LLMAdapter:
-    def __init__(self, model: str = "gpt-4o-mini", campaign_id: Optional[uuid.UUID] = None, role: str = "dm"):
+    def __init__(
+        self,
+        model: str = "gpt-4o-mini",
+        campaign_id: Optional[uuid.UUID] = None,
+        role: str = "dm",
+    ):
         self.mode = os.environ.get("TTDM_LLM_MODE", "live").lower()
         cfg = get_campaign_ai_config(campaign_id)
         provider = cfg.get("llm_provider", os.environ.get("AI_PROVIDER", "mock"))
         base_url = resolve_provider_base_url(provider, cfg.get("llm_base_url"))
         self.client: Optional["OpenAI"] = (
-            None if self.mode == "mock" or provider == "mock"
+            None
+            if self.mode == "mock" or provider == "mock"
             else get_openai_client(provider=provider, cfg=cfg)
         )
         if self.client is not None and base_url:
-            self.client.base_url = base_url
+            self.client.base_url = base_url  # type: ignore[assignment]
         default_model = model
         if role == "npc":
             self.model = cfg.get("npc_model") or default_model
         else:
             self.model = cfg.get("dm_model") or default_model
-        self.embedding_model = cfg.get("embedding_model", "text-embedding-3-small")
+        self.embedding_model = select_embedding_model(
+            provider, cfg.get("embedding_model")
+        )
         self.max_retries = 2
         self.timeout = 30
 
@@ -204,7 +249,11 @@ class LLMAdapter:
         if self.mode == "mock" or self.client is None:
             vectors = [[float((i + 1) % 7) for i in range(16)] for _ in texts]
             return {"vectors": vectors, "dimensions": 16}
-        response = self.client.embeddings.create(model=self.embedding_model, input=texts)
+        if not self.embedding_model:
+            raise ValueError("embedding_model_required")
+        response = self.client.embeddings.create(
+            model=self.embedding_model, input=texts
+        )
         vectors = [d.embedding for d in response.data]
         dims = len(vectors[0]) if vectors else 0
         return {"vectors": vectors, "dimensions": dims}
@@ -250,7 +299,7 @@ Respond in JSON format with a single "narration" field containing your narrative
         *,
         session_id: Optional[uuid.UUID] = None,
         return_citations: bool = False,
-    ) -> str:
+    ) -> str | dict[str, Any]:
         """Generate narration. When `session_id` is provided, the DM
         retrieves the campaign's RAG context (lore docs uploaded via the
         Knowledge Base tab) tagged for dm_narration purpose and injects
@@ -262,6 +311,7 @@ Respond in JSON format with a single "narration" field containing your narrative
         if self.campaign_id is not None:
             try:
                 from services.rag.context_builder import build_dm_narration_context
+
                 rag_prefix, rag_ctx = build_dm_narration_context(
                     campaign_id=str(self.campaign_id),
                     session_id=str(session_id) if session_id else None,
@@ -362,6 +412,7 @@ Respond in JSON with "dialogue" (what the NPC says) and "action" (brief physical
         if self.campaign_id is not None:
             try:
                 from services.rag.context_builder import build_npc_dialogue_context
+
                 rag_prefix, _ = build_npc_dialogue_context(
                     campaign_id=str(self.campaign_id),
                     session_id=str(session_id) if session_id else None,

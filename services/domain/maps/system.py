@@ -170,16 +170,17 @@ class ProceduralMapGenerator:
     The composers return a flat list of {x, y, terrain, is_wall, difficult}
     dicts. ``generate_map`` writes those to ``state.map_nodes``.
     """
+
     TERRAIN_TYPES = ["stone_floor", "grass", "dirt", "water", "sand", "wood"]
 
     # Biome → (dominant terrain, secondary terrain, path terrain, is_arid)
     BIOMES = {
-        "forest":  ("grass", "dirt",        "dirt",        False),
-        "plains":  ("grass", "dirt",        "dirt",        False),
-        "desert":  ("sand",  "dirt",        "dirt",        True),
-        "coastal": ("sand",  "water",       "sand",        False),
-        "tundra":  ("dirt",  "stone_floor", "stone_floor", False),
-        "town":    ("stone_floor", "wood",  "stone_floor", False),
+        "forest": ("grass", "dirt", "dirt", False),
+        "plains": ("grass", "dirt", "dirt", False),
+        "desert": ("sand", "dirt", "dirt", True),
+        "coastal": ("sand", "water", "sand", False),
+        "tundra": ("dirt", "stone_floor", "stone_floor", False),
+        "town": ("stone_floor", "wood", "stone_floor", False),
     }
 
     def generate_map(
@@ -220,7 +221,11 @@ class ProceduralMapGenerator:
                 collision = "0" * 16 if walkable else "1" + "0" * 15
                 terrain_type = "wall" if t["is_wall"] else t["terrain"]
                 map_system.set_map_node(
-                    map_id, 0, t["x"], t["y"], collision,
+                    map_id,
+                    0,
+                    t["x"],
+                    t["y"],
+                    collision,
                     {"type": terrain_type, "difficult": t["difficult"]},
                     conn,
                 )
@@ -230,8 +235,14 @@ class ProceduralMapGenerator:
                     INSERT INTO state.map_decorations (map_id, x, y, kind, facing, metadata)
                     VALUES (%s, %s, %s, %s, %s, %s::jsonb)
                     """,
-                    (str(map_id), d["x"], d["y"], d["kind"], d.get("facing", 0),
-                     json.dumps(d.get("metadata") or {})),
+                    (
+                        str(map_id),
+                        d["x"],
+                        d["y"],
+                        d["kind"],
+                        d.get("facing", 0),
+                        json.dumps(d.get("metadata") or {}),
+                    ),
                 )
             conn.commit()
             cur.close()
@@ -278,9 +289,11 @@ class ProceduralMapGenerator:
         # 2. Wall ring minus doorway tiles.
         walls = set()
         for x in range(w):
-            walls.add((x, 0)); walls.add((x, h - 1))
+            walls.add((x, 0))
+            walls.add((x, h - 1))
         for y in range(h):
-            walls.add((0, y)); walls.add((w - 1, y))
+            walls.add((0, y))
+            walls.add((w - 1, y))
         walls -= doorways
 
         # 3. Optional interior pillars (0-3).
@@ -321,24 +334,65 @@ class ProceduralMapGenerator:
         for y in range(h):
             for x in range(w):
                 if (x, y) in walls:
-                    out.append({"x": x, "y": y, "terrain": "wall", "is_wall": True, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": "wall",
+                            "is_wall": True,
+                            "difficult": False,
+                        }
+                    )
                 elif (x, y) in water:
-                    out.append({"x": x, "y": y, "terrain": "water", "is_wall": False, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": "water",
+                            "is_wall": False,
+                            "difficult": False,
+                        }
+                    )
                 elif (x, y) in rubble:
                     t = rng.choice(["stone_floor", "dirt"])
-                    out.append({"x": x, "y": y, "terrain": t, "is_wall": False, "difficult": True})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": t,
+                            "is_wall": False,
+                            "difficult": True,
+                        }
+                    )
                     floor_tiles.append((x, y))
                 elif (x, y) in wood_patch:
-                    out.append({"x": x, "y": y, "terrain": "wood", "is_wall": False, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": "wood",
+                            "is_wall": False,
+                            "difficult": False,
+                        }
+                    )
                     floor_tiles.append((x, y))
                 else:
-                    out.append({"x": x, "y": y, "terrain": "stone_floor", "is_wall": False, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": "stone_floor",
+                            "is_wall": False,
+                            "difficult": False,
+                        }
+                    )
                     floor_tiles.append((x, y))
 
         # 7. Decorations: barrels/crates near walls, a chest, torches by walls,
         # maybe a table. Pick distinct floor tiles so we don't double up.
         decorations = []
         used = set()
+
         def pick_unused():
             tries = 0
             while tries < 30:
@@ -348,12 +402,19 @@ class ProceduralMapGenerator:
                     used.add(cand)
                     return cand
             return None
+
         # Helper: is a tile adjacent to a wall? Torches go there.
-        wall_adj = {(x, y) for (x, y) in floor_tiles
-                    if any((x + dx, y + dy) in walls for dx, dy in ((-1,0),(1,0),(0,-1),(0,1)))}
+        wall_adj = {
+            (x, y)
+            for (x, y) in floor_tiles
+            if any(
+                (x + dx, y + dy) in walls
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1))
+            )
+        }
         wall_adj_list = list(wall_adj)
         rng.shuffle(wall_adj_list)
-        for (tx, ty) in wall_adj_list[:rng.randint(1, 3)]:
+        for tx, ty in wall_adj_list[: rng.randint(1, 3)]:
             if (tx, ty) in used:
                 continue
             used.add((tx, ty))
@@ -361,7 +422,13 @@ class ProceduralMapGenerator:
         for _ in range(rng.randint(1, 3)):
             spot = pick_unused()
             if spot:
-                decorations.append({"x": spot[0], "y": spot[1], "kind": rng.choice(["BARREL","CRATE"])})
+                decorations.append(
+                    {
+                        "x": spot[0],
+                        "y": spot[1],
+                        "kind": rng.choice(["BARREL", "CRATE"]),
+                    }
+                )
         if rng.random() < 0.7:
             spot = pick_unused()
             if spot:
@@ -371,8 +438,8 @@ class ProceduralMapGenerator:
             if spot:
                 decorations.append({"x": spot[0], "y": spot[1], "kind": "TABLE"})
                 # chair next to the table if there's room
-                for dx, dy in ((1,0),(-1,0),(0,1),(0,-1)):
-                    nb = (spot[0]+dx, spot[1]+dy)
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nb = (spot[0] + dx, spot[1] + dy)
                     if nb in floor_tiles and nb not in used:
                         used.add(nb)
                         decorations.append({"x": nb[0], "y": nb[1], "kind": "CHAIR"})
@@ -406,12 +473,20 @@ class ProceduralMapGenerator:
             if rng.random() < 0.3:
                 path.add((max(0, min(w - 1, x + rng.choice([-1, 1]))), y))
             # bias toward opposite edge
-            dx = rng.choice([-1, 0, 0, 1, 1]) if edge == "w" else \
-                 rng.choice([-1, -1, 0, 0, 1]) if edge == "e" else \
-                 rng.choice([-1, 0, 0, 1])
-            dy = rng.choice([0, 0, 1]) if edge == "n" else \
-                 rng.choice([-1, 0, 0]) if edge == "s" else \
-                 rng.choice([-1, 0, 0, 1])
+            dx = (
+                rng.choice([-1, 0, 0, 1, 1])
+                if edge == "w"
+                else rng.choice([-1, -1, 0, 0, 1])
+                if edge == "e"
+                else rng.choice([-1, 0, 0, 1])
+            )
+            dy = (
+                rng.choice([0, 0, 1])
+                if edge == "n"
+                else rng.choice([-1, 0, 0])
+                if edge == "s"
+                else rng.choice([-1, 0, 0, 1])
+            )
             x = max(0, min(w - 1, x + dx))
             y = max(0, min(h - 1, y + dy))
 
@@ -438,38 +513,76 @@ class ProceduralMapGenerator:
         for y in range(h):
             for x in range(w):
                 if (x, y) in rocks:
-                    out.append({"x": x, "y": y, "terrain": "wall", "is_wall": True, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": "wall",
+                            "is_wall": True,
+                            "difficult": False,
+                        }
+                    )
                 elif (x, y) in path:
-                    out.append({"x": x, "y": y, "terrain": path_terrain, "is_wall": False, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": path_terrain,
+                            "is_wall": False,
+                            "difficult": False,
+                        }
+                    )
                     floor_tiles.append((x, y, "path"))
                 elif (x, y) in cluster:
-                    out.append({"x": x, "y": y, "terrain": cluster_terrain, "is_wall": False, "difficult": cluster_difficult})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": cluster_terrain,
+                            "is_wall": False,
+                            "difficult": cluster_difficult,
+                        }
+                    )
                     floor_tiles.append((x, y, "cluster"))
                 else:
                     t = secondary if rng.random() < 0.08 else dom
-                    out.append({"x": x, "y": y, "terrain": t, "is_wall": False, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": t,
+                            "is_wall": False,
+                            "difficult": False,
+                        }
+                    )
                     floor_tiles.append((x, y, "dom"))
 
         # Decorations vary by biome.
         flora_kinds = {
-            "forest":  ["TREE","TREE","TREE","BUSH","FLOWER"],
-            "plains":  ["BUSH","FLOWER","FLOWER","ROCK","TREE"],
-            "desert":  ["CACTUS","CACTUS","ROCK","ROCK"],
-            "coastal": ["ROCK","BUSH","FLOWER"],
-            "tundra":  ["ROCK","ROCK","BUSH"],
-            "town":    ["BARREL","CRATE","BANNER","TABLE"],
+            "forest": ["TREE", "TREE", "TREE", "BUSH", "FLOWER"],
+            "plains": ["BUSH", "FLOWER", "FLOWER", "ROCK", "TREE"],
+            "desert": ["CACTUS", "CACTUS", "ROCK", "ROCK"],
+            "coastal": ["ROCK", "BUSH", "FLOWER"],
+            "tundra": ["ROCK", "ROCK", "BUSH"],
+            "town": ["BARREL", "CRATE", "BANNER", "TABLE"],
         }
-        kinds = flora_kinds.get(biome, ["ROCK","BUSH"])
+        kinds = flora_kinds.get(biome, ["ROCK", "BUSH"])
         decorations = []
         used = set()
         # density: forest dense, desert sparse, town moderate
-        density = {"forest": 0.10, "plains": 0.05, "desert": 0.04,
-                   "coastal": 0.05, "tundra": 0.04, "town": 0.07}.get(biome, 0.06)
+        density = {
+            "forest": 0.10,
+            "plains": 0.05,
+            "desert": 0.04,
+            "coastal": 0.05,
+            "tundra": 0.04,
+            "town": 0.07,
+        }.get(biome, 0.06)
         target = int(w * h * density)
         # Don't decorate path tiles (it should look traversable).
         candidates = [(x, y) for (x, y, kind) in floor_tiles if kind != "path"]
         rng.shuffle(candidates)
-        for (cx, cy) in candidates[:target]:
+        for cx, cy in candidates[:target]:
             if (cx, cy) in used:
                 continue
             used.add((cx, cy))
@@ -487,11 +600,13 @@ class ProceduralMapGenerator:
         seed_count = rng.randint(5, 7)
         seeds = []
         for _ in range(seed_count):
-            seeds.append((
-                rng.randint(0, w - 1),
-                rng.randint(0, h - 1),
-                rng.choice(list(self.BIOMES.keys())),
-            ))
+            seeds.append(
+                (
+                    rng.randint(0, w - 1),
+                    rng.randint(0, h - 1),
+                    rng.choice(list(self.BIOMES.keys())),
+                )
+            )
 
         # 2. Mountain ridge — a Bresenham-ish line of wall tiles.
         ridge = set()
@@ -514,13 +629,23 @@ class ProceduralMapGenerator:
         for y in range(h):
             for x in range(w):
                 if (x, y) in ridge:
-                    out.append({"x": x, "y": y, "terrain": "wall", "is_wall": True, "difficult": False})
+                    out.append(
+                        {
+                            "x": x,
+                            "y": y,
+                            "terrain": "wall",
+                            "is_wall": True,
+                            "difficult": False,
+                        }
+                    )
                     continue
                 best = min(seeds, key=lambda s: (s[0] - x) ** 2 + (s[1] - y) ** 2)
                 _, _, biome = best
                 dom, secondary, _, _ = self.BIOMES[biome]
                 t = secondary if rng.random() < 0.1 else dom
-                out.append({"x": x, "y": y, "terrain": t, "is_wall": False, "difficult": False})
+                out.append(
+                    {"x": x, "y": y, "terrain": t, "is_wall": False, "difficult": False}
+                )
                 tile_biome[(x, y)] = biome
 
         # World decorations: a few prominent landmarks per region. Trees in forest
@@ -528,15 +653,21 @@ class ProceduralMapGenerator:
         # detailed scene.
         decorations = []
         kind_for_biome = {
-            "forest": "TREE", "plains": "BUSH", "desert": "CACTUS",
-            "coastal": "ROCK", "tundra": "ROCK", "town": "BANNER",
+            "forest": "TREE",
+            "plains": "BUSH",
+            "desert": "CACTUS",
+            "coastal": "ROCK",
+            "tundra": "ROCK",
+            "town": "BANNER",
         }
         candidates = list(tile_biome.keys())
         rng.shuffle(candidates)
         target = int(w * h * 0.025)  # ~2.5% density
-        for (cx, cy) in candidates[:target]:
+        for cx, cy in candidates[:target]:
             biome = tile_biome[(cx, cy)]
-            decorations.append({"x": cx, "y": cy, "kind": kind_for_biome.get(biome, "ROCK")})
+            decorations.append(
+                {"x": cx, "y": cy, "kind": kind_for_biome.get(biome, "ROCK")}
+            )
         return out, decorations
 
     def generate_starter_world(

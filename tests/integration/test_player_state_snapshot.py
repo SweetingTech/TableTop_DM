@@ -86,7 +86,15 @@ def player_state_seed(integration_stack, postgres_dsn: str):
                 WHERE session_id = %s
                 """,
                 (
-                    json.dumps([{"id": NPC_ID, "name": "Ashfang Scout", "notes": "Secret motive"}]),
+                    json.dumps(
+                        [
+                            {
+                                "id": NPC_ID,
+                                "name": "Ashfang Scout",
+                                "notes": "Secret motive",
+                            }
+                        ]
+                    ),
                     SESSION_ID,
                 ),
             )
@@ -119,12 +127,16 @@ def player_state_seed(integration_stack, postgres_dsn: str):
                     CAMPAIGN_ID,
                     SESSION_ID,
                     json.dumps([NPC_ID]),
-                    json.dumps([{
-                        "source_kind": "rag_chunk",
-                        "filename": "ashfang_dm-only.md",
-                        "visibility": "dm_only",
-                        "excerpt": "Ashfang serves the bell.",
-                    }]),
+                    json.dumps(
+                        [
+                            {
+                                "source_kind": "rag_chunk",
+                                "filename": "ashfang_dm-only.md",
+                                "visibility": "dm_only",
+                                "excerpt": "Ashfang serves the bell.",
+                            }
+                        ]
+                    ),
                     str(uuid.uuid4()),
                     CAMPAIGN_ID,
                     SESSION_ID,
@@ -146,14 +158,28 @@ def player_state_seed(integration_stack, postgres_dsn: str):
                     CAMPAIGN_ID,
                     SESSION_ID,
                     DM_ID,
-                    json.dumps({"message": "Player A sees the rune.", "map_id": MAP_ID, "x": 6, "y": 5}),
+                    json.dumps(
+                        {
+                            "message": "Player A sees the rune.",
+                            "map_id": MAP_ID,
+                            "x": 6,
+                            "y": 5,
+                        }
+                    ),
                     PLAYER_A_ID,
                     str(uuid.uuid4()),
                     str(uuid.uuid4()),
                     CAMPAIGN_ID,
                     SESSION_ID,
                     DM_ID,
-                    json.dumps({"message": "Player B hears distant glass.", "map_id": MAP_ID, "x": 14, "y": 14}),
+                    json.dumps(
+                        {
+                            "message": "Player B hears distant glass.",
+                            "map_id": MAP_ID,
+                            "x": 14,
+                            "y": 14,
+                        }
+                    ),
                     PLAYER_B_ID,
                     str(uuid.uuid4()),
                 ),
@@ -191,14 +217,18 @@ def test_player_state_non_member_forbidden(player_state_seed):
     assert response.get_json()["error"] == "forbidden"
 
 
-def test_player_receives_only_own_controlled_entities_and_no_other_private_fields(player_state_seed):
+def test_player_receives_only_own_controlled_entities_and_no_other_private_fields(
+    player_state_seed,
+):
     with app.test_client() as client:
         snapshot = _state(_get_state(client, PLAYER_A_ID))
 
     controlled_ids = {e["entity_id"] for e in snapshot["controlled_entities"]}
     assert controlled_ids == {PC_A_ID}
     assert snapshot["controlled_entities"][0]["private_sheet"] == {}
-    visible_pc_b = [e for e in snapshot["visible_world"]["visible_entities"] if e["id"] == PC_B_ID]
+    visible_pc_b = [
+        e for e in snapshot["visible_world"]["visible_entities"] if e["id"] == PC_B_ID
+    ]
     assert visible_pc_b == []
     assert "secret_sheet" not in snapshot["visible_world"]["visible_entities"][0]
 
@@ -220,8 +250,14 @@ def test_principal_scoped_event_appears_only_for_matching_principal(player_state
         player_a = _state(_get_state(client, PLAYER_A_ID))
         player_b = _state(_get_state(client, PLAYER_B_ID))
 
-    a_messages = [e["payload"]["message"] for e in player_a["visible_world"]["visible_recent_events"]]
-    b_messages = [e["payload"]["message"] for e in player_b["visible_world"]["visible_recent_events"]]
+    a_messages = [
+        e["payload"]["message"]
+        for e in player_a["visible_world"]["visible_recent_events"]
+    ]
+    b_messages = [
+        e["payload"]["message"]
+        for e in player_b["visible_world"]["visible_recent_events"]
+    ]
     assert "Player A sees the rune." in a_messages
     assert "Player A sees the rune." not in b_messages
     assert "Player B hears distant glass." in b_messages
@@ -231,7 +267,9 @@ def test_spatial_entity_and_poi_visibility(player_state_seed):
     with app.test_client() as client:
         snapshot = _state(_get_state(client, PLAYER_A_ID))
 
-    visible_entity_ids = {e["id"] for e in snapshot["visible_world"]["visible_entities"]}
+    visible_entity_ids = {
+        e["id"] for e in snapshot["visible_world"]["visible_entities"]
+    }
     visible_pois = {p["name"] for p in snapshot["visible_world"]["visible_pois"]}
     assert NPC_ID in visible_entity_ids
     assert PC_B_ID not in visible_entity_ids
@@ -239,7 +277,9 @@ def test_spatial_entity_and_poi_visibility(player_state_seed):
     assert "Distant Cache" not in visible_pois
 
 
-def test_dead_session_character_state_is_reflected(player_state_seed, postgres_dsn: str):
+def test_dead_session_character_state_is_reflected(
+    player_state_seed, postgres_dsn: str
+):
     conn = psycopg2.connect(postgres_dsn)
     conn.autocommit = True
     try:
@@ -257,18 +297,25 @@ def test_dead_session_character_state_is_reflected(player_state_seed, postgres_d
     assert snapshot["controlled_entities"][0]["can_command"] is False
 
 
-def test_legal_actions_disable_attack_when_no_visible_target_exists(player_state_seed, postgres_dsn: str):
+def test_legal_actions_disable_attack_when_no_visible_target_exists(
+    player_state_seed, postgres_dsn: str
+):
     conn = psycopg2.connect(postgres_dsn)
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE state.entities SET current_map_id = NULL WHERE id = %s", (NPC_ID,))
+            cur.execute(
+                "UPDATE state.entities SET current_map_id = NULL WHERE id = %s",
+                (NPC_ID,),
+            )
         with app.test_client() as client:
             snapshot = _state(_get_state(client, PLAYER_A_ID))
     finally:
         conn.close()
 
-    attack = next(a for a in snapshot["turn_state"]["legal_actions"] if a["action"] == "attack")
+    attack = next(
+        a for a in snapshot["turn_state"]["legal_actions"] if a["action"] == "attack"
+    )
     assert attack["enabled"] is False
 
 
@@ -278,7 +325,10 @@ def test_dm_can_inspect_simulated_player_view_and_player_cannot(player_state_see
         player_response = _get_state(client, PLAYER_A_ID, as_principal_id=PLAYER_B_ID)
 
     assert dm_response.status_code == 200
-    assert dm_response.get_json()["player_state"]["principal"]["principal_id"] == PLAYER_A_ID
+    assert (
+        dm_response.get_json()["player_state"]["principal"]["principal_id"]
+        == PLAYER_A_ID
+    )
     assert player_response.status_code == 403
 
 

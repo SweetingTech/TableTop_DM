@@ -20,4 +20,3 @@ def dm_room(campaign_id: str) -> str:
 def legacy_campaign_room(campaign_id: str) -> str:
     """Old broad campaign room. Keep only for leave/backcompat cleanup."""
     return str(campaign_id)
-

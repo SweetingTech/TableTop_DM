@@ -27,18 +27,22 @@ VISIBILITY_SCOPES = ("public", "party", "dm_only", "principal_scoped")
 
 # Which RAG-chunk visibility levels are allowed for a given consumer.
 ACCESS_MATRIX = {
-    "dm_narration":   {"public", "party", "dm_only"},
-    "npc_dialogue":   {"public", "party"},  # tightened per-NPC below
-    "session_intel":  {"public", "party", "dm_only"},
-    "recap_dm":       {"public", "party", "dm_only", "principal_scoped"},
-    "recap_party":    {"public", "party"},
-    "recap_public":   {"public"},
+    "dm_narration": {"public", "party", "dm_only"},
+    "npc_dialogue": {"public", "party"},  # tightened per-NPC below
+    "session_intel": {"public", "party", "dm_only"},
+    "recap_dm": {"public", "party", "dm_only", "principal_scoped"},
+    "recap_party": {"public", "party"},
+    "recap_public": {"public"},
 }
 
 
-def filter_chunk_visibility(chunks: Iterable[dict], purpose: str,
-                            *, principal_id: str = None,
-                            npc_known_tags: set = None) -> list[dict]:
+def filter_chunk_visibility(
+    chunks: Iterable[dict],
+    purpose: str,
+    *,
+    principal_id: str = None,
+    npc_known_tags: set = None,
+) -> list[dict]:
     """Drop any chunk whose visibility metadata isn't allowed for
     ``purpose``. Chunks without a `visibility` field in metadata
     default to 'public' (so legacy data stays usable, but new uploads

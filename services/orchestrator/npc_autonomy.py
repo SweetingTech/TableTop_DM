@@ -4,6 +4,7 @@ NPC Autonomy - AI turn processing for AI-controlled entities.
 When an AI_NPC entity's turn comes up in combat, this module decides
 and executes their action without human intervention.
 """
+
 import random
 import uuid
 from typing import Optional
@@ -86,7 +87,8 @@ def maybe_trigger_combat(
     )
     pcs = [r for r in rows if r["entity_type"] == "PC"]
     hostiles = [
-        r for r in rows
+        r
+        for r in rows
         if r["entity_type"] in ("NPC", "MONSTER")
         and (r.get("tags") or [])
         and any(t in ("enemy", "hostile", "monster") for t in (r.get("tags") or []))
@@ -135,8 +137,7 @@ class NPCAutonomy:
         Returns list of action results.
         """
         entity = execute_one(
-            "SELECT * FROM state.entities WHERE id = %s",
-            (str(entity_id),)
+            "SELECT * FROM state.entities WHERE id = %s", (str(entity_id),)
         )
         if not entity:
             return []
@@ -234,10 +235,9 @@ class NPCAutonomy:
             JOIN state.entities e ON es.entity_id = e.id
             WHERE es.encounter_id = %s AND e.hp_current > 0
             """,
-            (str(encounter_id),)
+            (str(encounter_id),),
         )
 
-        my_tags = set(entity.get("tags") or [])
         my_sheet = entity.get("public_sheet") or {}
         my_x = my_sheet.get("x", 0)
         my_y = my_sheet.get("y", 0)
@@ -253,10 +253,10 @@ class NPCAutonomy:
 
             # Consider PCs as enemies for monsters/NPCs
             is_enemy = (
-                slot_type == "PC" or
-                "pc" in slot_tags or
-                "party_alpha" in slot_tags or
-                "party" in slot_tags
+                slot_type == "PC"
+                or "pc" in slot_tags
+                or "party_alpha" in slot_tags
+                or "party" in slot_tags
             )
 
             if is_enemy:
@@ -264,12 +264,14 @@ class NPCAutonomy:
                 sx = slot_sheet.get("x", 0)
                 sy = slot_sheet.get("y", 0)
                 dist = abs(sx - my_x) + abs(sy - my_y)  # Manhattan distance
-                enemies.append({
-                    "entity": slot,
-                    "distance": dist,
-                    "x": sx,
-                    "y": sy,
-                })
+                enemies.append(
+                    {
+                        "entity": slot,
+                        "distance": dist,
+                        "x": sx,
+                        "y": sy,
+                    }
+                )
 
         # Sort by distance
         enemies.sort(key=lambda x: x["distance"])
@@ -278,14 +280,16 @@ class NPCAutonomy:
             nearest = enemies[0]
             if nearest["distance"] <= 1:
                 # In melee range - attack
-                actions.append({
-                    "type": "ATTACK",
-                    "params": {
-                        "attacker_id": str(entity["id"]),
-                        "target_id": str(nearest["entity"]["entity_id"]),
-                        "weapon": "melee",
+                actions.append(
+                    {
+                        "type": "ATTACK",
+                        "params": {
+                            "attacker_id": str(entity["id"]),
+                            "target_id": str(nearest["entity"]["entity_id"]),
+                            "weapon": "melee",
+                        },
                     }
-                })
+                )
             else:
                 # Move toward nearest enemy (one step closer)
                 target_x = nearest["x"]
@@ -308,14 +312,16 @@ class NPCAutonomy:
                 new_x = my_x + dx
                 new_y = my_y + dy
 
-                actions.append({
-                    "type": "MOVE",
-                    "params": {
-                        "entity_id": str(entity["id"]),
-                        "destination_x": new_x,
-                        "destination_y": new_y,
+                actions.append(
+                    {
+                        "type": "MOVE",
+                        "params": {
+                            "entity_id": str(entity["id"]),
+                            "destination_x": new_x,
+                            "destination_y": new_y,
+                        },
                     }
-                })
+                )
 
         return actions
 
@@ -346,7 +352,7 @@ class NPCAutonomy:
             # Check if entity is AI-controlled
             entity = execute_one(
                 "SELECT controlled_by FROM state.entities WHERE id = %s",
-                (str(entity_id),)
+                (str(entity_id),),
             )
 
             if not entity or entity.get("controlled_by") not in ("AI", "AI_NPC"):

@@ -7,7 +7,7 @@ import psycopg2
 import pytest
 
 from app import app
-from services.saves.crypto import decrypt_save, peek_header
+from services.saves.crypto import decrypt_save, encrypt_save, peek_header
 
 pytestmark = pytest.mark.integration
 
@@ -27,7 +27,18 @@ def _upload(blob: bytes, *, replace: bool = False, passphrase: str = PASSPHRASE)
     }
 
 
-def test_game_save_export_import_conflict_replace_and_player_state(integration_stack, postgres_dsn):
+def _rewrite_header(blob: bytes, **updates) -> bytes:
+    import json
+
+    magic, header_line, token = blob.split(b"\n", 2)
+    header = json.loads(header_line.decode("utf-8"))
+    header.update(updates)
+    return magic + b"\n" + json.dumps(header).encode("utf-8") + b"\n" + token
+
+
+def test_game_save_export_import_conflict_replace_and_player_state(
+    integration_stack, postgres_dsn
+):
     del integration_stack
     conn = psycopg2.connect(postgres_dsn)
     conn.autocommit = True
@@ -44,7 +55,14 @@ def test_game_save_export_import_conflict_replace_and_player_state(integration_s
                     ARRAY[%s]::uuid[], ARRAY['save_roundtrip'], %s
                 )
                 """,
-                (str(uuid.uuid4()), CAMPAIGN_ID, SESSION_ID, PLAYER_ID, PLAYER_ID, "save-roundtrip-event"),
+                (
+                    str(uuid.uuid4()),
+                    CAMPAIGN_ID,
+                    SESSION_ID,
+                    PLAYER_ID,
+                    PLAYER_ID,
+                    "save-roundtrip-event",
+                ),
             )
     finally:
         conn.close()
@@ -79,7 +97,10 @@ def test_game_save_export_import_conflict_replace_and_player_state(integration_s
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE state.entities SET name = 'Broken Roundtrip Name' WHERE id = %s", (PC_ID,))
+            cur.execute(
+                "UPDATE state.entities SET name = 'Broken Roundtrip Name' WHERE id = %s",
+                (PC_ID,),
+            )
     finally:
         conn.close()
 
@@ -106,7 +127,9 @@ def test_game_save_export_import_conflict_replace_and_player_state(integration_s
     assert all("visible_to" in event for event in payload["ledger_events"])
 
 
-def test_program_save_exports_clear_keys_and_import_reencrypts(integration_stack, postgres_dsn):
+def test_program_save_exports_clear_keys_and_import_reencrypts(
+    integration_stack, postgres_dsn
+):
     del integration_stack
     with app.test_client() as client:
         saved = client.put(
@@ -125,7 +148,9 @@ def test_program_save_exports_clear_keys_and_import_reencrypts(integration_stack
         assert peek_header(blob)["kind"] == "program"
 
     payload = decrypt_save(blob, passphrase=PASSPHRASE, expected_kind="program")
-    api_keys = next(row for row in payload["global_settings"] if row["key"] == "api_keys")
+    api_keys = next(
+        row for row in payload["global_settings"] if row["key"] == "api_keys"
+    )
     assert api_keys["value"]["openrouter"] == "sk-test-openrouter"
 
     conn = psycopg2.connect(postgres_dsn)
@@ -148,9 +173,134 @@ def test_program_save_exports_clear_keys_and_import_reencrypts(integration_stack
     conn = psycopg2.connect(postgres_dsn)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT value FROM state.global_settings WHERE key = 'api_keys'")
+            cur.execute(
+                "SELECT value FROM state.global_settings WHERE key = 'api_keys'"
+            )
             value = cur.fetchone()[0]
     finally:
         conn.close()
 
     assert value["openrouter"].startswith("vault:v1:")
+
+
+def test_game_save_corruption_paths_return_clean_400s(integration_stack):
+    del integration_stack
+    with app.test_client() as client:
+        exported = client.post(
+            "/api/saves/game/export",
+            json={"campaign_id": CAMPAIGN_ID, "passphrase": PASSPHRASE},
+        )
+        assert exported.status_code == 200
+        blob = exported.data
+
+        cases = [
+            b"not-a-ttdm-file",
+            b"ttdm-save:v1\n{bad-json\nbody",
+            blob[:40],
+            _rewrite_header(blob, format="WRONG_FORMAT"),
+            _rewrite_header(blob, version=999),
+            _rewrite_header(blob, schema_version=999),
+            encrypt_save(
+                {"global_settings": []}, kind="program", passphrase=PASSPHRASE
+            ),
+        ]
+        for case in cases:
+            response = client.post(
+                "/api/saves/game/import",
+                data=_upload(case, replace=True),
+                content_type="multipart/form-data",
+            )
+            assert response.status_code == 400
+            body = response.get_json()
+            assert "error" in body
+            assert "Traceback" not in str(body)
+
+
+def test_game_save_roundtrip_preserves_rag_metadata_and_profiles(
+    integration_stack, postgres_dsn
+):
+    del integration_stack
+    profile_id = str(uuid.uuid4())
+    doc_id = str(uuid.uuid4())
+    chunk_id = str(uuid.uuid4())
+
+    conn = psycopg2.connect(postgres_dsn)
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO state.rag_embedding_profiles (
+                    id, campaign_id, provider, embedding_model, vector_dim,
+                    signature, qdrant_collection, active
+                )
+                VALUES (%s, %s, 'lmstudio', 'bge-small-en', 384, %s, %s, true)
+                ON CONFLICT (campaign_id, signature) DO UPDATE
+                SET embedding_model = EXCLUDED.embedding_model
+                """,
+                (
+                    profile_id,
+                    CAMPAIGN_ID,
+                    f"qa{profile_id[:6]}",
+                    f"qa_{profile_id[:6]}",
+                ),
+            )
+            cur.execute(
+                """
+                INSERT INTO state.rag_documents (
+                    id, campaign_id, filename, storage_path, status,
+                    enabled, embedding_profile_id, needs_reindex
+                )
+                VALUES (%s, %s, 'qa_lore.md', 'data/rag/qa_lore.md', 'READY',
+                        true, %s, false)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                (doc_id, CAMPAIGN_ID, profile_id),
+            )
+            cur.execute(
+                """
+                INSERT INTO state.rag_chunks (
+                    id, doc_id, campaign_id, chunk_id, page, text,
+                    qdrant_point_id, metadata
+                )
+                VALUES (%s, %s, %s, 'chunk-1', 1, 'QA lore chunk',
+                        'point-1', '{"visibility":"party"}'::jsonb)
+                ON CONFLICT (doc_id, chunk_id) DO UPDATE
+                SET text = EXCLUDED.text
+                """,
+                (chunk_id, doc_id, CAMPAIGN_ID),
+            )
+    finally:
+        conn.close()
+
+    with app.test_client() as client:
+        exported = client.post(
+            "/api/saves/game/export",
+            json={"campaign_id": CAMPAIGN_ID, "passphrase": PASSPHRASE},
+        )
+        assert exported.status_code == 200
+        payload = decrypt_save(
+            exported.data, passphrase=PASSPHRASE, expected_kind="game"
+        )
+        assert any(row["id"] == profile_id for row in payload["rag_embedding_profiles"])
+        assert any(row["id"] == doc_id for row in payload["rag_documents"])
+        assert any(row["id"] == chunk_id for row in payload["rag_chunks"])
+
+        restored = client.post(
+            "/api/saves/game/import",
+            data=_upload(exported.data, replace=True),
+            content_type="multipart/form-data",
+        )
+        assert restored.status_code == 200
+
+    conn = psycopg2.connect(postgres_dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT filename FROM state.rag_documents WHERE id = %s", (doc_id,)
+            )
+            assert cur.fetchone()[0] == "qa_lore.md"
+            cur.execute("SELECT text FROM state.rag_chunks WHERE id = %s", (chunk_id,))
+            assert cur.fetchone()[0] == "QA lore chunk"
+    finally:
+        conn.close()

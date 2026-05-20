@@ -7,6 +7,7 @@ from typing import Iterable, Optional
 
 from shared.auth.principal import load_principal
 from shared.db.connection import execute_one, execute_query
+from services.api.local_identity import strict_join_tokens_required, validate_join_token
 
 
 def _as_str_set(values: Iterable[object] | None) -> set[str]:
@@ -64,12 +65,14 @@ def spatial_principals(
 ) -> set[str]:
     from services.domain.maps.decoherence import audience_for_event
 
-    audience = set(audience_for_event(
-        campaign_id=uuid.UUID(str(campaign_id)),
-        map_id=uuid.UUID(str(map_id)) if map_id else None,
-        x=x,
-        y=y,
-    ))
+    audience = set(
+        audience_for_event(
+            campaign_id=uuid.UUID(str(campaign_id)),
+            map_id=uuid.UUID(str(map_id)) if map_id else None,
+            x=x,
+            y=y,
+        )
+    )
     return audience - dm_principals(campaign_id)
 
 
@@ -101,7 +104,9 @@ def resolve_principal_audience(
         return set(), "principal_scoped_empty"
 
     if visibility == "spatial" and map_id and x is not None and y is not None:
-        return spatial_principals(campaign_id=campaign_id, map_id=map_id, x=x, y=y), "spatial"
+        return spatial_principals(
+            campaign_id=campaign_id, map_id=map_id, x=x, y=y
+        ), "spatial"
 
     if visibility == "party":
         return party_principals(campaign_id) - dms, "party"
@@ -117,6 +122,7 @@ def validate_socket_join(
     campaign_id: str,
     principal_id: str,
     session_id: Optional[str] = None,
+    join_token: Optional[str] = None,
 ) -> dict:
     """Validate a client-requested room join and return join metadata."""
     try:
@@ -140,11 +146,23 @@ def validate_socket_join(
         if str(row["campaign_id"]) != str(campaign_uuid):
             raise PermissionError("session does not belong to campaign")
 
+    if strict_join_tokens_required():
+        validation = validate_join_token(
+            campaign_id=str(campaign_uuid),
+            session_id=str(session_uuid) if session_uuid else None,
+            principal_id=str(principal_uuid),
+            role=str(principal.role),
+            token=join_token,
+        )
+        if not validation.ok:
+            raise PermissionError(validation.reason or "invalid join token")
+
     return {
         "campaign_id": str(campaign_uuid),
         "principal_id": str(principal_uuid),
         "session_id": str(session_uuid) if session_uuid else None,
-        "role": str(principal.role.value if hasattr(principal.role, "value") else principal.role),
+        "role": str(
+            principal.role.value if hasattr(principal.role, "value") else principal.role
+        ),
         "is_dm": principal.is_gm() or principal.is_system(),
     }
-

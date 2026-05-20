@@ -29,7 +29,9 @@ def test_campaign_members_can_create_local_player(integration_stack):
     assert body["join_hint"].startswith("/game?principal_id=")
 
 
-def test_campaign_can_create_active_encounter_from_session_characters(integration_stack):
+def test_campaign_can_create_active_encounter_from_session_characters(
+    integration_stack,
+):
     del integration_stack
     campaign_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
@@ -89,7 +91,10 @@ def test_campaign_can_create_active_encounter_from_session_characters(integratio
     with app.test_client() as client:
         response = client.post(
             f"/api/campaigns/{campaign_id}/encounters",
-            query_string={"principal_id": gm_id, "join_token": f"dm-smoke-join-{gm_id}"},
+            query_string={
+                "principal_id": gm_id,
+                "join_token": f"dm-smoke-join-{gm_id}",
+            },
             json={"session_id": session_id},
         )
         assert response.status_code == 200
@@ -131,7 +136,9 @@ def test_dm_recap_falls_back_to_visible_ledger_events(integration_stack):
     assert "QA bridge" in recap
 
 
-def test_ai_generate_character_default_mode_persists_entity(integration_stack, monkeypatch):
+def test_ai_generate_character_default_mode_persists_entity(
+    integration_stack, monkeypatch
+):
     del integration_stack
 
     class DummyLLM:

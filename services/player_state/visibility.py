@@ -17,7 +17,9 @@ def _position(entity: dict) -> tuple[int | None, int | None]:
 def is_spatially_visible(viewers: list[dict], entity: dict) -> bool:
     if not viewers:
         return False
-    if entity.get("entity_type") == "PC" and any(str(v["id"]) == str(entity["id"]) for v in viewers):
+    if entity.get("entity_type") == "PC" and any(
+        str(v["id"]) == str(entity["id"]) for v in viewers
+    ):
         return True
 
     entity_map = str(entity.get("current_map_id") or "")
@@ -31,7 +33,9 @@ def is_spatially_visible(viewers: list[dict], entity: dict) -> bool:
         vx, vy = _position(viewer)
         if vx is None or vy is None:
             continue
-        if max(abs(int(vx) - int(ex)), abs(int(vy) - int(ey))) <= perception_radius(viewer):
+        if max(abs(int(vx) - int(ex)), abs(int(vy) - int(ey))) <= perception_radius(
+            viewer
+        ):
             return True
     return False
 
@@ -55,7 +59,9 @@ def visible_entities(
     )
     if principal.is_gm() or principal.is_system():
         return [row_dict(r) for r in rows]
-    return [row_dict(r) for r in rows if is_spatially_visible(controlled_entities, dict(r))]
+    return [
+        row_dict(r) for r in rows if is_spatially_visible(controlled_entities, dict(r))
+    ]
 
 
 def visible_pois(controlled_entities: list[dict]) -> list[dict]:
@@ -64,7 +70,9 @@ def visible_pois(controlled_entities: list[dict]) -> list[dict]:
         map_id = entity.get("current_map_id")
         if not map_id:
             continue
-        pois = execute_query("SELECT * FROM state.map_pois WHERE map_id = %s", (str(map_id),))
+        pois = execute_query(
+            "SELECT * FROM state.map_pois WHERE map_id = %s", (str(map_id),)
+        )
         for poi in discovered_pois(entity, [dict(p) for p in pois]):
             if poi.get("is_hidden"):
                 continue
@@ -73,7 +81,13 @@ def visible_pois(controlled_entities: list[dict]) -> list[dict]:
 
 
 def visible_decorations(controlled_entities: list[dict]) -> list[dict]:
-    map_ids = sorted({str(e.get("current_map_id")) for e in controlled_entities if e.get("current_map_id")})
+    map_ids = sorted(
+        {
+            str(e.get("current_map_id"))
+            for e in controlled_entities
+            if e.get("current_map_id")
+        }
+    )
     if not map_ids:
         return []
     rows = execute_query(

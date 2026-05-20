@@ -9,7 +9,6 @@ it) or a `data:` URL of the generated PNG bytes. Either format plugs straight
 into `state.map_pois.image_url` and the Three.js renderer's TextureLoader.
 """
 
-import base64
 import logging
 import json
 import uuid
@@ -75,8 +74,8 @@ def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
             settings = json.loads(settings)
         except Exception:
             settings = {}
-    image_gen = (settings.get("image_gen") or {})
-    api_keys = (settings.get("api_keys") or {})
+    image_gen = settings.get("image_gen") or {}
+    api_keys = settings.get("api_keys") or {}
 
     # Fall back to installation-wide settings if the campaign hasn't set its
     # own. Lookup chain for any value: campaign.image_gen → global.image_gen
@@ -85,7 +84,9 @@ def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
     g_image_gen = gs.get("image_gen") or {}
     g_api_keys = gs.get("api_keys") or {}
 
-    provider = (image_gen.get("provider") or g_image_gen.get("provider") or "openrouter").lower()
+    provider = (
+        image_gen.get("provider") or g_image_gen.get("provider") or "openrouter"
+    ).lower()
 
     raw_key = (
         api_keys.get(f"image_{provider}")
@@ -96,7 +97,9 @@ def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
     api_key = decrypt_str(raw_key) if raw_key else _env_key_for(provider)
     return {
         "provider": provider,
-        "model": image_gen.get("model") or g_image_gen.get("model") or DEFAULT_IMAGE_MODEL,
+        "model": image_gen.get("model")
+        or g_image_gen.get("model")
+        or DEFAULT_IMAGE_MODEL,
         # OpenRouter only — the chat model that drives the server-tool call.
         "host_model": (
             image_gen.get("host_model")
@@ -110,6 +113,7 @@ def _campaign_image_config(campaign_id: uuid.UUID) -> dict:
 
 def _env_key_for(provider: str) -> Optional[str]:
     import os
+
     if provider == "openrouter":
         return os.environ.get("OPENROUTER_API_KEY")
     if provider == "openai":
@@ -144,7 +148,9 @@ def generate_poi_image(
             "Add one in Control Plane → AI Settings → Image Generation."
         )
 
-    prompt = _build_prompt(name=name, kind=kind, description=description, style=style_hint)
+    prompt = _build_prompt(
+        name=name, kind=kind, description=description, style=style_hint
+    )
 
     if cfg["provider"] == "openrouter":
         return _call_openrouter_image(cfg, prompt)
@@ -153,15 +159,17 @@ def generate_poi_image(
     raise ImageGenError(f"Unsupported image provider: {cfg['provider']}")
 
 
-def _build_prompt(*, name: str, kind: str, description: Optional[str], style: str) -> str:
+def _build_prompt(
+    *, name: str, kind: str, description: Optional[str], style: str
+) -> str:
     kind_hint = {
         "BUILDING": "small top-down view of a single building",
-        "NPC":      "single character portrait",
-        "SIGN":     "wooden signpost",
-        "HAZARD":   "ominous warning marker",
+        "NPC": "single character portrait",
+        "SIGN": "wooden signpost",
+        "HAZARD": "ominous warning marker",
         "TREASURE": "treasure pile or shiny item",
-        "PORTAL":   "magical portal",
-        "GENERIC":  "generic landmark icon",
+        "PORTAL": "magical portal",
+        "GENERIC": "generic landmark icon",
     }.get(kind.upper(), "single object icon")
     parts = [f"{kind_hint}: {name}"]
     if description:
@@ -187,17 +195,23 @@ def _call_openrouter_image(cfg: dict, prompt: str) -> str:
     Reference: https://openrouter.ai/docs/features/server-tools/image-generation
     """
     url = cfg["base_url"].rstrip("/") + "/chat/completions"
-    body = json.dumps({
-        "model": cfg["host_model"],
-        "messages": [{"role": "user", "content": f"Please generate this image: {prompt}"}],
-        "tools": [{
-            "type": "openrouter:image_generation",
-            "parameters": {
-                "model": cfg["model"],
-                "output_format": "png",
-            },
-        }],
-    }).encode("utf-8")
+    body = json.dumps(
+        {
+            "model": cfg["host_model"],
+            "messages": [
+                {"role": "user", "content": f"Please generate this image: {prompt}"}
+            ],
+            "tools": [
+                {
+                    "type": "openrouter:image_generation",
+                    "parameters": {
+                        "model": cfg["model"],
+                        "output_format": "png",
+                    },
+                }
+            ],
+        }
+    ).encode("utf-8")
     req = urllib_request.Request(
         url,
         data=body,
@@ -232,7 +246,7 @@ def _extract_image_url(payload: dict) -> str:
     # 1. Direct `images` array on the assistant message (Gemini-style)
     choice = (payload.get("choices") or [{}])[0]
     message = choice.get("message") or {}
-    for img in (message.get("images") or []):
+    for img in message.get("images") or []:
         u = (img.get("image_url") or {}).get("url") if isinstance(img, dict) else None
         if u:
             return u
@@ -264,7 +278,7 @@ def _extract_image_url(payload: dict) -> str:
                     pass
     # Server-tool result message style — OpenRouter may include it in choices
     # as a separate tool-role message.
-    for c in (payload.get("choices") or []):
+    for c in payload.get("choices") or []:
         m = c.get("message") or {}
         if m.get("role") == "tool":
             try:
@@ -272,13 +286,16 @@ def _extract_image_url(payload: dict) -> str:
                 if tr.get("imageUrl"):
                     return tr["imageUrl"]
                 if tr.get("status") == "error":
-                    raise ImageGenError(f"Image tool error: {tr.get('error', 'unknown')}")
+                    raise ImageGenError(
+                        f"Image tool error: {tr.get('error', 'unknown')}"
+                    )
             except json.JSONDecodeError:
                 pass
 
     # 4. Markdown image syntax in plain content
     if isinstance(content, str):
         import re
+
         m = re.search(r"!\[[^\]]*\]\((https?://[^)\s]+|data:image/[^)\s]+)\)", content)
         if m:
             return m.group(1)
@@ -293,12 +310,14 @@ def _extract_image_url(payload: dict) -> str:
 def _call_openai_image(cfg: dict, prompt: str) -> str:
     """OpenAI Images API returns base64-encoded PNG bytes. We wrap as data URL."""
     url = cfg["base_url"].rstrip("/") + "/images/generations"
-    body = json.dumps({
-        "model": cfg["model"],
-        "prompt": prompt,
-        "size": "1024x1024",
-        "response_format": "b64_json",
-    }).encode("utf-8")
+    body = json.dumps(
+        {
+            "model": cfg["model"],
+            "prompt": prompt,
+            "size": "1024x1024",
+            "response_format": "b64_json",
+        }
+    ).encode("utf-8")
     req = urllib_request.Request(
         url,
         data=body,
@@ -312,7 +331,9 @@ def _call_openai_image(cfg: dict, prompt: str) -> str:
         with urllib_request.urlopen(req, timeout=60) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except urllib_error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else ""
+        err_body = (
+            e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else ""
+        )
         raise ImageGenError(f"OpenAI HTTP {e.code}: {err_body[:300]}")
     except Exception as e:
         raise ImageGenError(f"OpenAI request failed: {e}")

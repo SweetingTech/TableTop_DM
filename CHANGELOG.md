@@ -6,6 +6,120 @@ The project tags features in **Phases** rather than semver — there's no public
 
 ---
 
+## 2026-05-19 - Phase 56: RC Burn-Down and Tag Prep
+
+The 1.0 RC checklist now reflects the implemented release gates and known limitations.
+
+- **Changed** `docs/release/1.0-rc-checklist.md` from generic pending rows to concrete automated/manual status for boot, demo mode, DM setup, join flow, player state, movement, combat, visibility, reconnect, save/load, DM packet review, readiness, and docs.
+- **Added** `docs/release/1.0-known-limitations.md` documenting local identity scope, deferred route/frontend physical decomposition, local-provider embedding requirements, small-model Session Intel reliability, and final clean-VM packaging verification.
+- **Changed** README implementation status to mark Phase 56 as RC burn-down/tag prep complete.
+
+## 2026-05-19 - Phase 55: Packaging Gate
+
+The release artifact path now has a script, first-run instructions, checksums, and an env-template guard.
+
+- **Added** `release/README-FIRST.md` with prerequisites, first-run commands, local LLM notes, troubleshooting, and verification commands.
+- **Added** `scripts/package_release.ps1` to produce `release/TableTopDM-v1.0.0.zip` and `release/checksums.txt`.
+- **Changed** `.env.example` to include runtime variables used by the app and scripts, including local identity, local provider, readiness, vault, RAG, and debug controls.
+- **Added** `tests/contracts/test_env_example.py` so runtime environment variables referenced by Python code cannot drift away from `.env.example`.
+
+## 2026-05-19 - Phase 54: Performance Smoke Baseline
+
+The release budgets now have an automated smoke test and baseline document.
+
+- **Added** `tests/integration/test_v1_perf_smoke.py` covering local `player_state`, WebSocket fanout, RAG query response behavior, and save export budgets.
+- **Added** `docs/release/1.0-perf-baseline.md` documenting the budgets, commands, automated coverage, and known local-demo limits.
+- **Changed** release test matrix to point at the perf smoke and boot verification gate.
+
+## 2026-05-19 - Phase 53: Docs Reality Pass
+
+The user-facing docs now line up with the current RC surface.
+
+- **Added** `docs/wiki/characters.md` so README/help links to character creation no longer point at a missing page.
+- **Changed** README - removed stale `TODO.md` references, documented `gemini_code_review.md` as a historical review-and-closure record, and pointed release truth at README/CHANGELOG/release docs.
+- **Changed** old placeholder docs - Phase 0 placeholder language now identifies historical stubs instead of promising future TODO phases.
+- **Changed** release docs - docs checklist and test matrix now reflect the completed docs reality pass.
+
+## 2026-05-19 - Phase 52: DM Packet Review UX
+
+The Session Intel review surface now supports release-grade batch review and correction workflows.
+
+- **Added** `/api/patches/batch` for batch approve/apply and batch reject of selected pending patches.
+- **Added** `/api/patches/<id>/supersede` so a DM can retire an existing proposal and create a new pending replacement instead of losing provenance.
+- **Changed** Control Plane Session Intel - patch cards now have checkboxes, batch approve/reject controls, ledger seq/id evidence labels, and a Supersede action.
+- **Changed** recap workflow - batch approval refreshes continuity and the DM recap so edited/applied state is less likely to leave stale review text on screen.
+- **Tests** - integration coverage proves batch approval applies state and supersede creates a pending replacement while marking the original `SUPERSEDED`.
+
+## 2026-05-19 - Phase 51: Save/Load Torture Suite
+
+The encrypted `.ttdm` path now has broader failure-mode and RAG metadata coverage.
+
+- **Changed** save decryption - future save schema versions now fail clearly instead of attempting an unsafe import.
+- **Changed** game saves - campaign export/import now includes RAG embedding profiles, document records, and chunk metadata so knowledge-base state survives replace restores.
+- **Tests** - save/load integration now covers bad magic, corrupt header, truncation, wrong format, unsupported file version, future schema version, wrong save kind, wrong passphrase, replace conflict, replace restore, player state after restore, and RAG metadata/profile roundtrip.
+- **Docs** - manual golden-path QA now includes save/load torture checks and cross-install program-save validation.
+
+## 2026-05-19 - Phase 50: Route/Auth/Visibility Matrix Completion
+
+The route/auth matrix now has a generated inventory of every registered Flask route.
+
+- **Changed** `docs/release/1.0-route-auth-matrix.md` - added an explicit route inventory with route path, methods, endpoint name, and policy-family pointer for every non-static Flask route.
+- **Added** `tests/contracts/test_route_auth_matrix_inventory.py` - fails if a registered route is absent from the route/auth matrix, preventing future untracked API surface growth.
+
+## 2026-05-19 - Phase 49: V1 Golden-Path E2E Expansion
+
+The golden-path release test now walks a real DM/player flow instead of only probing the seeded demo.
+
+- **Changed** `tests/e2e/test_v1_golden_path.py` - creates a fresh campaign/session/player, generates a join code, creates and seats a PC/NPC, opens `/game` as the player, sends chat, moves, starts combat as DM, exports a save, verifies conflict import behavior, reloads, and checks for DM-only leakage.
+- **Added** `docs/release/1.0-golden-path-manual-qa.md` - manual release script matching the automated golden path for fresh checkout or release-artifact validation.
+
+## 2026-05-19 - Phase 48: Snapshot / Delta / Reconnect Edge Cases
+
+The `/game` runtime now treats reconnect and ownership-change events as reasons to refresh the authoritative `player_state` snapshot.
+
+- **Changed** socket reconnect behavior - when the Socket.IO connection reconnects after session/principal context is known, `/game` rejoins scoped rooms and refetches `player_state`.
+- **Changed** realtime delta handling - control-handoff shaped events (`entity_control_changed`, `control_version`, or `controller_principal_id`) trigger a snapshot refetch so commandability cannot stay stale.
+- **Tests** - E2E now covers reconnect-triggered snapshot refresh, control-handoff refresh, duplicate realtime event suppression, cursor-gap refetch, and two tabs using the same player principal without exposing the identity selector.
+
+## 2026-05-19 - Phase 47: Local Identity and Join UX
+
+The local identity surface now has revocable join-code infrastructure instead of relying only on deterministic smoke tokens.
+
+- **Added** `state.local_join_codes` in migration `016_local_join_codes.sql` for campaign/session-bound local join codes with revoke support.
+- **Added** local identity helpers for strict join-token mode, token hashing, smoke-token compatibility, code creation, validation, listing, and revocation.
+- **Changed** session principal enforcement - when `TTDM_REQUIRE_JOIN_TOKEN=1`, session-scoped principal guards require a validated join token instead of accepting `principal_id` alone.
+- **Changed** `/api/sessions/<id>/join`, `/api/sessions/<id>/player_state`, and Socket.IO `join_campaign` to validate real local join codes in strict mode.
+- **Added** Control Plane join-code management - campaign members can get a generated join link and active codes can be revoked.
+- **Tests** - route-auth matrix now covers strict-mode join-token rejection, code creation, session join, player-state access, list, revoke, and post-revoke denial.
+
+## 2026-05-19 - Phase 46: Doc Cleanup
+
+The closure-review docs now read consistently before final RC stamping.
+
+- **Docs** - `gemini_code_review.md` now distinguishes the original Gemini CLI review from the Codex closure-pass authorship.
+- **Docs** - Section 4.2 clarifies that the route surface is centralized behind a blueprint, while per-domain route-module splitting remains post-1.0 maintainability work.
+- **Docs** - README no longer points to deleted `TODO.md`; it points to the release checklist and scope docs.
+
+## 2026-05-19 - Gemini Review Closure
+
+The remaining actionable items from `gemini_code_review.md` have moved from deferred cleanup into implementation work.
+
+- **Docs** - fixed the Gemini review byline so the original review remains attributed to Gemini CLI while the closure pass is clearly authored by Codex.
+- **Docs** - clarified that Phase 45 centralized the route surface behind a blueprint and extracted shared helpers, while a per-domain split of `services/api/application.py` is deferred to post-1.0.
+- **Docs** - removed the stale README `TODO.md` pointer and replaced it with the release checklist/scope docs.
+- **Changed** API structure - public routes now register through a Flask blueprint and shared route helpers moved into `services/api/` for auth, error responses, serialization, and story-state redaction.
+- **Changed** app entrypoint - root `app.py` is now a small launcher/composition surface that imports the configured Flask app and Socket.IO instance from `services/api/application.py`, while preserving the public launcher contract.
+- **Changed** state mutation - `OrchestratorPipeline` now delegates committed state deltas to `StateDeltaDispatcher` instead of hardcoding table/operation branches inline.
+- **Changed** campaign purge/import replacement - purge and save import replacement share a campaign lifecycle service, backed by migration `015_campaign_cascade_cleanup.sql` so database cascades own dependent state cleanup.
+- **Fixed** local-provider RAG setup - LM Studio/Ollama no longer silently inherit OpenAI's `text-embedding-3-small`; local providers require or detect local embedding-capable models and fail RAG setup clearly when missing.
+- **Fixed** Session Intel local-model resilience - extractor schemas now use explicit enums, safe event aliases are canonicalized, and invalid local-model structured output gets one constrained correction retry.
+- **Changed** frontend loading - Game Console and Control Plane now load ES module entrypoints under `static/js/game/` and `static/js/control/`, while compatibility stubs preserve the old asset paths.
+- **Added** broad-exception boundary guard - route-layer broad `Exception` catches must be explicitly marked as defensive boundaries, with a contract test preventing silent reintroduction.
+- **Docs** - added `docs/architecture/gemini-review-closure.md` to document the new dispatcher, cascade ownership, local embedding behavior, and extractor retry policy.
+- **Docs** - README and `gemini_code_review.md` now record the closure status and remaining RC posture.
+- **Tests** - added dispatcher, local embedding default, Session Intel retry, route registration, and exception-boundary coverage.
+- **Verified** - `python -m compileall -q app.py services shared tests infra`, `ruff check .`, `ruff format --check .`, `mypy .`, Node syntax checks for the game/control module entrypoints, `pytest tests\services tests\contracts tests\integration -q`, `.\scripts\verify_boot.ps1 -Mode docker`, and live E2E browser smoke all pass.
+
 ## 2026-05-19 - Phase 44: 1.0 Route Auth, Visibility, and Runtime QA Closure
 
 Runtime QA findings from `gemini_code_review.md` are now treated as 1.0 blockers: route-layer auth and visibility must match the engine's principal-scoped architecture before release.

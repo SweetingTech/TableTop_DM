@@ -102,6 +102,7 @@ def _append_dm_note(conn, session_id: str, note: str):
 # Dispatch table — event_type → field-of-story_state-affected
 # ---------------------------------------------------------------------
 
+
 def _apply_event(conn, patch: dict):
     event_type = patch["event_type"]
     session_id = patch["session_id"]
@@ -114,32 +115,65 @@ def _apply_event(conn, patch: dict):
             _set_scalar(conn, session_id, "current_location", loc)
 
     elif event_type == "scene_started":
-        _append_jsonb_list(conn, session_id, "recent_events",
-                           {"kind": "scene_started", "summary": summary, "at": delta})
+        _append_jsonb_list(
+            conn,
+            session_id,
+            "recent_events",
+            {"kind": "scene_started", "summary": summary, "at": delta},
+        )
 
     elif event_type == "scene_ended":
-        _append_jsonb_list(conn, session_id, "recent_events",
-                           {"kind": "scene_ended", "summary": summary})
+        _append_jsonb_list(
+            conn,
+            session_id,
+            "recent_events",
+            {"kind": "scene_ended", "summary": summary},
+        )
 
     elif event_type in ("npc_introduced", "npc_updated", "npc_attitude_changed"):
-        _append_jsonb_list(conn, session_id, "active_npcs",
-                           {"kind": event_type, "summary": summary, **delta})
+        _append_jsonb_list(
+            conn,
+            session_id,
+            "active_npcs",
+            {"kind": event_type, "summary": summary, **delta},
+        )
 
     elif event_type in ("quest_introduced", "quest_updated"):
-        _append_jsonb_list(conn, session_id, "active_quests",
-                           {"kind": event_type, "summary": summary, **delta})
+        _append_jsonb_list(
+            conn,
+            session_id,
+            "active_quests",
+            {"kind": event_type, "summary": summary, **delta},
+        )
 
-    elif event_type in ("unresolved_thread", "promise_made", "threat_created", "consequence_created"):
-        _append_jsonb_list(conn, session_id, "plot_threads",
-                           {"kind": event_type, "summary": summary, **delta})
+    elif event_type in (
+        "unresolved_thread",
+        "promise_made",
+        "threat_created",
+        "consequence_created",
+    ):
+        _append_jsonb_list(
+            conn,
+            session_id,
+            "plot_threads",
+            {"kind": event_type, "summary": summary, **delta},
+        )
 
     elif event_type == "loot_gained":
-        _append_jsonb_list(conn, session_id, "party_resources",
-                           {"kind": "loot", "summary": summary, **delta})
+        _append_jsonb_list(
+            conn,
+            session_id,
+            "party_resources",
+            {"kind": "loot", "summary": summary, **delta},
+        )
 
     elif event_type == "item_used":
-        _append_jsonb_list(conn, session_id, "recent_events",
-                           {"kind": "item_used", "summary": summary, **delta})
+        _append_jsonb_list(
+            conn,
+            session_id,
+            "recent_events",
+            {"kind": "item_used", "summary": summary, **delta},
+        )
 
     elif event_type == "secret_revealed":
         # Visibility decides where this goes. Public/party → recent_events;
@@ -147,8 +181,12 @@ def _apply_event(conn, patch: dict):
         if patch.get("visibility") == "dm_only":
             _append_dm_note(conn, session_id, f"[SECRET] {summary}")
         else:
-            _append_jsonb_list(conn, session_id, "recent_events",
-                               {"kind": "secret_revealed", "summary": summary})
+            _append_jsonb_list(
+                conn,
+                session_id,
+                "recent_events",
+                {"kind": "secret_revealed", "summary": summary},
+            )
 
     elif event_type == "retcon_or_contradiction":
         # Never auto-applied; surfaced for DM resolution only.
@@ -169,7 +207,10 @@ def apply_patch(patch_id: uuid.UUID, *, reviewed_by: uuid.UUID = None) -> dict:
     if not patch:
         raise PatchError(f"Patch {patch_id} not found")
     if patch["status"] == "APPLIED":
-        return {"already_applied": True, "applied_event_id": patch.get("applied_event_id")}
+        return {
+            "already_applied": True,
+            "applied_event_id": patch.get("applied_event_id"),
+        }
     if patch["status"] not in ("APPROVED", "EDITED"):
         raise PatchError(
             f"Patch {patch_id} is {patch['status']}; only APPROVED or EDITED patches can apply"

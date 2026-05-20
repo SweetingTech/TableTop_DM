@@ -6,6 +6,7 @@ CLI flags still override these defaults.
 
 Artifacts land in ``test-results-e2e/`` at the repo root.
 """
+
 from __future__ import annotations
 
 import json

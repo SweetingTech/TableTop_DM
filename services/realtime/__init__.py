@@ -1,2 +1,1 @@
 """Realtime delivery boundary."""
-

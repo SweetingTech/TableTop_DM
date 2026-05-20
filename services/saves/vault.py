@@ -30,7 +30,7 @@ API:
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -47,7 +47,9 @@ def _vault_fernet() -> Fernet:
     # Env var override takes precedence (handy for CI / containerized deploys).
     env_key = os.environ.get("TTDM_VAULT_KEY")
     if env_key:
-        _fernet_cache = Fernet(env_key.encode() if isinstance(env_key, str) else env_key)
+        _fernet_cache = Fernet(
+            env_key.encode() if isinstance(env_key, str) else env_key
+        )
         return _fernet_cache
     if not _VAULT_KEY_PATH.exists():
         _VAULT_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -81,7 +83,7 @@ def decrypt_str(s: str) -> str:
     values still load (we'll re-encrypt on next save)."""
     if not is_encrypted(s):
         return s
-    token = s[len(VAULT_PREFIX):].encode("ascii")
+    token = s[len(VAULT_PREFIX) :].encode("ascii")
     try:
         return _vault_fernet().decrypt(token).decode("utf-8")
     except InvalidToken:
@@ -105,7 +107,7 @@ def encrypt_dict_values(d: dict, *, key_names: Optional[set] = None) -> dict:
     """Walk a dict and encrypt string values. If key_names is given, only
     encrypt values whose dict key is in that set. Used by API-key blobs
     where the whole map is sensitive."""
-    out = {}
+    out: dict[str, Any] = {}
     for k, v in (d or {}).items():
         if isinstance(v, str) and (key_names is None or k in key_names):
             out[k] = encrypt_str(v)
@@ -118,7 +120,7 @@ def encrypt_dict_values(d: dict, *, key_names: Optional[set] = None) -> dict:
 
 def decrypt_dict_values(d: dict) -> dict:
     """Inverse of encrypt_dict_values — pulls plaintext back out for use."""
-    out = {}
+    out: dict[str, Any] = {}
     for k, v in (d or {}).items():
         if isinstance(v, str) and is_encrypted(v):
             out[k] = decrypt_str(v)
@@ -132,7 +134,7 @@ def decrypt_dict_values(d: dict) -> dict:
 def redact_dict_values(d: dict, *, sensitive_keys: Optional[set] = None) -> dict:
     """Replace sensitive values with redaction markers for safe API GET
     responses. If sensitive_keys is None, redact every encrypted value."""
-    out = {}
+    out: dict[str, Any] = {}
     for k, v in (d or {}).items():
         if isinstance(v, dict):
             out[k] = redact_dict_values(v, sensitive_keys=sensitive_keys)

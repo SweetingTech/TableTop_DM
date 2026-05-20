@@ -62,6 +62,7 @@ def _dm_only_lore_chunk(text=BLACK_BELL_TEXT):
 def test_north_star_dm_narration_sees_the_secret():
     """DM narration is the one consumer that's allowed dm_only lore."""
     from services.rag.filters import filter_chunk_visibility
+
     out = filter_chunk_visibility([_dm_only_lore_chunk()], "dm_narration")
     assert len(out) == 1
     assert "Black Bell" in out[0]["text"]
@@ -71,18 +72,21 @@ def test_north_star_npc_dialogue_does_not_leak_the_secret():
     """If a tavern NPC happens to be relevant to a bell question, they
     must NOT receive the dm_only chunk. This is the leak-prevention test."""
     from services.rag.filters import filter_chunk_visibility
+
     out = filter_chunk_visibility([_dm_only_lore_chunk()], "npc_dialogue")
     assert out == [], "dm_only lore leaked into NPC dialogue context"
 
 
 def test_north_star_party_recap_omits_the_secret():
     from services.rag.filters import filter_chunk_visibility
+
     out = filter_chunk_visibility([_dm_only_lore_chunk()], "recap_party")
     assert out == []
 
 
 def test_north_star_public_recap_omits_the_secret():
     from services.rag.filters import filter_chunk_visibility
+
     out = filter_chunk_visibility([_dm_only_lore_chunk()], "recap_public")
     assert out == []
 
@@ -91,6 +95,7 @@ def test_north_star_dm_recap_includes_the_secret_with_metadata():
     """The DM's recap should see the secret AND know which file it came
     from so the GM can verify provenance."""
     from services.rag.filters import filter_chunk_visibility
+
     out = filter_chunk_visibility([_dm_only_lore_chunk()], "recap_dm")
     assert len(out) == 1
     assert out[0]["metadata"]["source_filename"] == "saint_orun_dm-only.md"
@@ -102,6 +107,7 @@ def test_north_star_npc_with_chapel_tag_still_blocked_from_dm_only():
     STILL be blocked from a dm_only chunk regardless of tag overlap.
     Visibility outranks knowledge tags."""
     from services.rag.filters import filter_chunk_visibility
+
     out = filter_chunk_visibility(
         [_dm_only_lore_chunk()],
         "npc_dialogue",
@@ -115,6 +121,7 @@ def test_north_star_party_chunk_about_same_topic_reaches_npc():
     NPCs with the right knowledge tags SHOULD see it. (Otherwise the
     filter is just blanket-blocking everything.)"""
     from services.rag.filters import filter_chunk_visibility
+
     party_chunk = _dm_only_lore_chunk(
         "The chapel of Saint Orun is locally famous for its midnight choir."
     )

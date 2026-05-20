@@ -21,11 +21,16 @@ DM_ID = "22222222-2222-2222-2222-222222222221"
 PLAYER_ID = "22222222-2222-2222-2222-222222222222"
 ENCOUNTER_ID = "55555555-5555-5555-5555-555555555551"
 GM_QUERY = {"principal_id": DM_ID, "join_token": f"dm-smoke-join-{DM_ID}"}
-PLAYER_QUERY = {"principal_id": PLAYER_ID, "join_token": f"player-smoke-join-{PLAYER_ID}"}
+PLAYER_QUERY = {
+    "principal_id": PLAYER_ID,
+    "join_token": f"player-smoke-join-{PLAYER_ID}",
+}
 
 
 def test_route_auth_matrix_document_has_release_gate_columns():
-    matrix = (ROOT / "docs" / "release" / "1.0-route-auth-matrix.md").read_text(encoding="utf-8")
+    matrix = (ROOT / "docs" / "release" / "1.0-route-auth-matrix.md").read_text(
+        encoding="utf-8"
+    )
     for column in (
         "Anonymous",
         "GM",
@@ -38,7 +43,13 @@ def test_route_auth_matrix_document_has_release_gate_columns():
         "Test coverage",
     ):
         assert column in matrix
-    for family in ("Player state", "Realtime join", "Continuity/recaps", "Save/load", "Global/API settings"):
+    for family in (
+        "Player state",
+        "Realtime join",
+        "Continuity/recaps",
+        "Save/load",
+        "Global/API settings",
+    ):
         assert family in matrix
 
 
@@ -54,7 +65,9 @@ def test_principal_scoped_routes_reject_anonymous_and_non_member(integration_sta
         )
         assert non_member_state.status_code == 403
 
-        anonymous_memory = client.get(f"/api/campaigns/{CAMPAIGN_ID}/npc_memory/{NPC_ID}")
+        anonymous_memory = client.get(
+            f"/api/campaigns/{CAMPAIGN_ID}/npc_memory/{NPC_ID}"
+        )
         assert anonymous_memory.status_code == 401
 
         non_member_join = client.post(
@@ -73,18 +86,29 @@ def test_dm_only_game_routes_reject_anonymous_and_players(integration_stack):
         )
         player_encounter = client.post(
             f"/api/campaigns/{CAMPAIGN_ID}/encounters",
-            query_string={"principal_id": PLAYER_ID, "join_token": f"player-smoke-join-{PLAYER_ID}"},
+            query_string={
+                "principal_id": PLAYER_ID,
+                "join_token": f"player-smoke-join-{PLAYER_ID}",
+            },
             json={"session_id": SESSION_ID},
         )
         anonymous_advance = client.post(f"/api/encounters/{ENCOUNTER_ID}/advance")
         player_advance = client.post(
             f"/api/encounters/{ENCOUNTER_ID}/advance",
-            query_string={"principal_id": PLAYER_ID, "join_token": f"player-smoke-join-{PLAYER_ID}"},
+            query_string={
+                "principal_id": PLAYER_ID,
+                "join_token": f"player-smoke-join-{PLAYER_ID}",
+            },
         )
-        anonymous_narrate = client.post("/api/narrate", json={"campaign_id": CAMPAIGN_ID})
+        anonymous_narrate = client.post(
+            "/api/narrate", json={"campaign_id": CAMPAIGN_ID}
+        )
         player_narrate = client.post(
             "/api/narrate",
-            query_string={"principal_id": PLAYER_ID, "join_token": f"player-smoke-join-{PLAYER_ID}"},
+            query_string={
+                "principal_id": PLAYER_ID,
+                "join_token": f"player-smoke-join-{PLAYER_ID}",
+            },
             json={"campaign_id": CAMPAIGN_ID},
         )
 
@@ -96,7 +120,9 @@ def test_dm_only_game_routes_reject_anonymous_and_players(integration_stack):
     assert player_narrate.status_code == 403
 
 
-def test_gm_can_use_dm_only_game_routes_with_valid_local_identity(integration_stack, monkeypatch):
+def test_gm_can_use_dm_only_game_routes_with_valid_local_identity(
+    integration_stack, monkeypatch
+):
     del integration_stack
 
     class DummyStateMachine:
@@ -110,7 +136,9 @@ def test_gm_can_use_dm_only_game_routes_with_valid_local_identity(integration_st
         def narrate_event(self, **_kwargs):
             return "The scene continues."
 
-    monkeypatch.setattr("services.orchestrator.state_machine.StateMachine", DummyStateMachine)
+    monkeypatch.setattr(
+        "services.orchestrator.state_machine.StateMachine", DummyStateMachine
+    )
     monkeypatch.setattr("services.llm.adapter.DMNarrationAgent", DummyNarrator)
     gm_query = {"principal_id": DM_ID, "join_token": f"dm-smoke-join-{DM_ID}"}
 
@@ -120,7 +148,9 @@ def test_gm_can_use_dm_only_game_routes_with_valid_local_identity(integration_st
             query_string=gm_query,
             json={"session_id": SESSION_ID},
         )
-        advance = client.post(f"/api/encounters/{ENCOUNTER_ID}/advance", query_string=gm_query)
+        advance = client.post(
+            f"/api/encounters/{ENCOUNTER_ID}/advance", query_string=gm_query
+        )
         narrate = client.post(
             "/api/narrate",
             query_string=gm_query,
@@ -172,8 +202,12 @@ def test_session_reads_require_principal_and_do_not_widen_visibility(integration
             f"/api/sessions/{SESSION_ID}/chat_history",
             query_string={"principal_id": NON_MEMBER_ID},
         )
-        player_chat = client.get(f"/api/sessions/{SESSION_ID}/chat_history", query_string=PLAYER_QUERY)
-        dm_chat = client.get(f"/api/sessions/{SESSION_ID}/chat_history", query_string=GM_QUERY)
+        player_chat = client.get(
+            f"/api/sessions/{SESSION_ID}/chat_history", query_string=PLAYER_QUERY
+        )
+        dm_chat = client.get(
+            f"/api/sessions/{SESSION_ID}/chat_history", query_string=GM_QUERY
+        )
         player_recap = client.get(
             f"/api/sessions/{SESSION_ID}/recap",
             query_string={**PLAYER_QUERY, "visibility": "dm"},
@@ -195,14 +229,20 @@ def test_session_reads_require_principal_and_do_not_widen_visibility(integration
     assert player_recap.get_json()["visibility"] != "dm"
 
 
-def test_story_state_requires_principal_redacts_player_reads_and_requires_gm_for_writes(integration_stack):
+def test_story_state_requires_principal_redacts_player_reads_and_requires_gm_for_writes(
+    integration_stack,
+):
     del integration_stack
     fake_updater = str(uuid.uuid4())
 
     with app.test_client() as client:
         anonymous_get = client.get(f"/api/sessions/{SESSION_ID}/story_state")
-        player_get = client.get(f"/api/sessions/{SESSION_ID}/story_state", query_string=PLAYER_QUERY)
-        anonymous_put = client.put(f"/api/sessions/{SESSION_ID}/story_state", json={"dm_private_notes": "leak"})
+        player_get = client.get(
+            f"/api/sessions/{SESSION_ID}/story_state", query_string=PLAYER_QUERY
+        )
+        anonymous_put = client.put(
+            f"/api/sessions/{SESSION_ID}/story_state", json={"dm_private_notes": "leak"}
+        )
         player_put = client.put(
             f"/api/sessions/{SESSION_ID}/story_state",
             query_string=PLAYER_QUERY,
@@ -225,10 +265,14 @@ def test_story_state_requires_principal_redacts_player_reads_and_requires_gm_for
     assert gm_put.get_json()["updated_by"] == DM_ID
 
 
-def test_campaign_mode_and_entity_mutations_require_validated_gm_identity(integration_stack):
+def test_campaign_mode_and_entity_mutations_require_validated_gm_identity(
+    integration_stack,
+):
     del integration_stack
     with app.test_client() as client:
-        anonymous_mode = client.post(f"/api/campaigns/{CAMPAIGN_ID}/mode", json={"mode": "SOCIAL"})
+        anonymous_mode = client.post(
+            f"/api/campaigns/{CAMPAIGN_ID}/mode", json={"mode": "SOCIAL"}
+        )
         player_mode = client.post(
             f"/api/campaigns/{CAMPAIGN_ID}/mode",
             query_string=PLAYER_QUERY,
@@ -241,10 +285,16 @@ def test_campaign_mode_and_entity_mutations_require_validated_gm_identity(integr
         )
 
         anonymous_entity = client.put(f"/api/entities/{PC_ID}", json={"hp_current": 1})
-        player_entity = client.put(f"/api/entities/{PC_ID}", query_string=PLAYER_QUERY, json={"hp_current": 1})
-        gm_entity = client.put(f"/api/entities/{PC_ID}", query_string=GM_QUERY, json={"hp_current": 7})
+        player_entity = client.put(
+            f"/api/entities/{PC_ID}", query_string=PLAYER_QUERY, json={"hp_current": 1}
+        )
+        gm_entity = client.put(
+            f"/api/entities/{PC_ID}", query_string=GM_QUERY, json={"hp_current": 7}
+        )
         anonymous_delete = client.delete(f"/api/entities/{PC_ID}")
-        player_delete = client.delete(f"/api/entities/{PC_ID}", query_string=PLAYER_QUERY)
+        player_delete = client.delete(
+            f"/api/entities/{PC_ID}", query_string=PLAYER_QUERY
+        )
 
     assert anonymous_mode.status_code == 401
     assert player_mode.status_code == 403
@@ -257,7 +307,9 @@ def test_campaign_mode_and_entity_mutations_require_validated_gm_identity(integr
     assert player_delete.status_code == 403
 
 
-def test_propose_validation_errors_do_not_expose_tracebacks_when_debug_is_off(integration_stack, monkeypatch):
+def test_propose_validation_errors_do_not_expose_tracebacks_when_debug_is_off(
+    integration_stack, monkeypatch
+):
     del integration_stack
     monkeypatch.setenv("TTDM_DEBUG", "0")
     with app.test_client() as client:
@@ -269,3 +321,64 @@ def test_propose_validation_errors_do_not_expose_tracebacks_when_debug_is_off(in
     assert "trace" not in body
     assert "E:\\TableTop_DM" not in str(body)
     assert "Traceback" not in str(body)
+
+
+def test_strict_join_token_mode_accepts_revocable_join_codes(
+    integration_stack, monkeypatch
+):
+    del integration_stack
+    monkeypatch.setenv("TTDM_REQUIRE_JOIN_TOKEN", "1")
+
+    with app.test_client() as client:
+        missing_token = client.get(
+            f"/api/sessions/{SESSION_ID}/player_state",
+            query_string={"principal_id": PLAYER_ID},
+        )
+        assert missing_token.status_code == 401
+
+        created = client.post(
+            f"/api/campaigns/{CAMPAIGN_ID}/join_codes",
+            query_string=GM_QUERY,
+            json={
+                "principal_id": PLAYER_ID,
+                "session_id": SESSION_ID,
+                "label": "QA strict token",
+            },
+        )
+        assert created.status_code == 200
+        code = created.get_json()["join_code"]
+        assert code["join_token"].startswith("ttdm-")
+        assert PLAYER_ID in code["join_url"]
+
+        joined = client.post(
+            f"/api/sessions/{SESSION_ID}/join",
+            json={"principal_id": PLAYER_ID, "join_token": code["join_token"]},
+        )
+        assert joined.status_code == 200
+
+        state = client.get(
+            f"/api/sessions/{SESSION_ID}/player_state",
+            query_string={"principal_id": PLAYER_ID, "join_token": code["join_token"]},
+        )
+        assert state.status_code == 200
+        assert (
+            state.get_json()["player_state"]["principal"]["principal_id"] == PLAYER_ID
+        )
+
+        listed = client.get(
+            f"/api/campaigns/{CAMPAIGN_ID}/join_codes", query_string=GM_QUERY
+        )
+        assert listed.status_code == 200
+        assert any(row["id"] == code["id"] for row in listed.get_json())
+
+        revoked = client.delete(
+            f"/api/campaigns/{CAMPAIGN_ID}/join_codes/{code['id']}",
+            query_string=GM_QUERY,
+        )
+        assert revoked.status_code == 200
+
+        rejected = client.post(
+            f"/api/sessions/{SESSION_ID}/join",
+            json={"principal_id": PLAYER_ID, "join_token": code["join_token"]},
+        )
+        assert rejected.status_code == 403

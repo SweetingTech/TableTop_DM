@@ -8,9 +8,6 @@ Lookup is intentionally hardcoded for now. A future migration can move it to
 state.classes or per-entity overrides; the call site won't change.
 """
 
-import uuid
-from typing import Optional
-
 # Tiles. Chebyshev distance (king-move) so 4 = 9x9 area centered on the entity.
 CLASS_RADIUS = {
     "ranger": 5,

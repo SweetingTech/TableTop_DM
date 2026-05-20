@@ -91,13 +91,15 @@ def seeded_npc_memory(integration_stack, postgres_dsn: str):
                 conn,
                 summary="Ashfang Scout secretly serves the Black Bell.",
                 visibility="dm_only",
-                evidence=[{
-                    "source_kind": "rag_chunk",
-                    "chunk_id": "black-bell-npc",
-                    "filename": "black_bell_dm-only.md",
-                    "visibility": "dm_only",
-                    "excerpt": "Ashfang Scout carries orders from the Black Bell.",
-                }],
+                evidence=[
+                    {
+                        "source_kind": "rag_chunk",
+                        "chunk_id": "black-bell-npc",
+                        "filename": "black_bell_dm-only.md",
+                        "visibility": "dm_only",
+                        "excerpt": "Ashfang Scout carries orders from the Black Bell.",
+                    }
+                ],
             ),
             "scoped_a": _insert_patch(
                 conn,
@@ -144,7 +146,9 @@ def test_npc_memory_dm_can_see_dm_only_patch(seeded_npc_memory):
     assert "Ashfang Scout privately warned Player B." in summaries
 
 
-def test_npc_memory_player_cannot_see_dm_only_patch_even_if_dm_requested(seeded_npc_memory):
+def test_npc_memory_player_cannot_see_dm_only_patch_even_if_dm_requested(
+    seeded_npc_memory,
+):
     with app.test_client() as client:
         response = _npc_memory(client, PLAYER_A_ID, "dm")
 
@@ -155,7 +159,9 @@ def test_npc_memory_player_cannot_see_dm_only_patch_even_if_dm_requested(seeded_
     assert "Ashfang Scout promised the party a map." in summaries
 
 
-def test_npc_memory_principal_scoped_only_visible_to_matching_principal(seeded_npc_memory):
+def test_npc_memory_principal_scoped_only_visible_to_matching_principal(
+    seeded_npc_memory,
+):
     with app.test_client() as client:
         response_a = _npc_memory(client, PLAYER_A_ID, "principal")
         response_b = _npc_memory(client, PLAYER_B_ID, "principal")
@@ -184,7 +190,9 @@ def test_npc_memory_anonymous_rejected(seeded_npc_memory):
     assert response.status_code == 401
 
 
-def test_unresolved_promises_api_requires_member_and_filters_visibility(seeded_npc_memory):
+def test_unresolved_promises_api_requires_member_and_filters_visibility(
+    seeded_npc_memory,
+):
     with app.test_client() as client:
         anonymous = client.get(f"/api/campaigns/{CAMPAIGN_ID}/unresolved_promises")
         player = client.get(

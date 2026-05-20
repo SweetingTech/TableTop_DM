@@ -1,4 +1,5 @@
 """Playwright smoke coverage for the documented GUI entry points."""
+
 from __future__ import annotations
 
 import os
@@ -19,15 +20,25 @@ def test_dashboard_exposes_primary_routes(page: Page):
     expect(page.get_by_role("link", name="Game Console", exact=True)).to_be_visible()
     expect(page.get_by_role("link", name="Control Plane", exact=True)).to_be_visible()
     expect(page.get_by_role("link", name="Help", exact=True)).to_be_visible()
-    expect(page.get_by_role("heading", name=re.compile(r"Tabletop DM", re.I))).to_be_visible()
+    expect(
+        page.get_by_role("heading", name=re.compile(r"Tabletop DM", re.I))
+    ).to_be_visible()
 
 
 @pytest.mark.parametrize(
     ("path", "title", "markers"),
     [
         ("/game", r"Tabletop DM.*Game Console", ("Control Plane", "Help")),
-        ("/control", r"Tabletop DM.*Control Plane", ("Dashboard", "Game Console", "Help")),
-        ("/help", r"TableTop DM.*Help", ("Dashboard", "Game Console", "Control Plane", "Documentation")),
+        (
+            "/control",
+            r"Tabletop DM.*Control Plane",
+            ("Dashboard", "Game Console", "Help"),
+        ),
+        (
+            "/help",
+            r"TableTop DM.*Help",
+            ("Dashboard", "Game Console", "Control Plane", "Documentation"),
+        ),
     ],
 )
 def test_primary_route_loads_with_navigation(
