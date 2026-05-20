@@ -43,6 +43,7 @@ def open_threads(
     visibility: str = "dm",
     *,
     principal_id: str | None = None,
+    conn=None,
 ) -> list[dict]:
     """Plot threads that haven't been resolved yet. A thread is 'open'
     if it has an APPLIED unresolved_thread/promise/threat/consequence
@@ -62,6 +63,7 @@ def open_threads(
         ORDER BY created_at DESC
         """,
         (str(campaign_id), _visibility_filter(visibility), *scoped_params),
+        conn=conn,
     )
     return [attach_sources(dict(r)) for r in rows]
 
@@ -71,6 +73,7 @@ def unresolved_promises(
     visibility: str = "dm",
     *,
     principal_id: str | None = None,
+    conn=None,
 ) -> list[dict]:
     """Specifically PROMISES — the "did the party promise that NPC a
     favor" thread that AI DMs forget at session 3 if you don't trip them
@@ -88,6 +91,7 @@ def unresolved_promises(
         ORDER BY created_at DESC
         """,
         (str(campaign_id), _visibility_filter(visibility), *scoped_params),
+        conn=conn,
     )
     return [attach_sources(dict(r)) for r in rows]
 
@@ -98,6 +102,7 @@ def npc_memory(
     *,
     visibility: str = "dm",
     principal_id: str | None = None,
+    conn=None,
 ) -> list[dict]:
     """Everything the patch log has recorded about one NPC.
     `npc_id` can be a UUID string or a pre-canonical name — we match
@@ -121,6 +126,7 @@ def npc_memory(
             *scoped_params,
             '["%s"]' % npc_id.replace('"', '\\"'),
         ),
+        conn=conn,
     )
     return [attach_sources(dict(r)) for r in rows]
 

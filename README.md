@@ -126,6 +126,18 @@ Docker mode (strict; requires usable Docker runtime):
 python3 scripts/audit_todo.py --full --strict --mode docker
 ```
 
+If a disposable local Docker database drifts from the current migration files
+(for example, an already-applied migration checksum mismatch), rebuild the
+local dependency volumes and reseed the demo campaign:
+```powershell
+.\scripts\start.ps1 -Mode docker -ResetDb
+```
+```bash
+./scripts/start.sh --mode docker --reset-db
+```
+This deletes local Postgres, Redis, and Qdrant Docker volume data. Export any
+campaigns you want to keep before using it.
+
 Local mode (host app process):
 ```bash
 DEPS_PROVIDER=auto ./scripts/start.sh --mode local

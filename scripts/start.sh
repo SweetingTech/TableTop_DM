@@ -5,11 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 MODE="docker"
+RESET_DB=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode)
       MODE="$2"
       shift 2
+      ;;
+    --reset-db)
+      RESET_DB=1
+      shift
       ;;
     *)
       echo "[start] Unknown argument: $1" >&2
@@ -20,6 +25,10 @@ done
 
 if [[ "$MODE" != "docker" && "$MODE" != "local" ]]; then
   echo "[start] Invalid --mode '$MODE' (expected docker|local)" >&2
+  exit 1
+fi
+if [[ "$RESET_DB" == "1" && "$MODE" != "docker" ]]; then
+  echo "[start] ERROR: --reset-db is only supported with --mode docker" >&2
   exit 1
 fi
 
@@ -83,9 +92,22 @@ start_host_app() {
   export PYTHONUNBUFFERED=1
   export PORT="${PORT:-8000}"
   export TTDM_DEBUG="${TTDM_DEBUG:-0}"
-  if [[ -f "$APP_PID_FILE" ]] && kill -0 "$(cat "$APP_PID_FILE")" >/dev/null 2>&1; then
-    echo "[start] App already running with PID $(cat "$APP_PID_FILE")"
+  local ready_url="${VTT_READY_URL:-http://localhost:${PORT}/readyz}"
+  if curl -fsS --max-time 2 "$ready_url" >/dev/null 2>&1; then
+    echo "[start] App already ready at $ready_url"
     return 0
+  fi
+  if [[ -f "$APP_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$APP_PID_FILE")"
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill "$pid" || true
+      sleep 1
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" >/dev/null 2>&1 || true
+      fi
+    fi
+    rm -f "$APP_PID_FILE"
   fi
   nohup python app.py > "$APP_LOG_FILE" 2>&1 &
   echo $! > "$APP_PID_FILE"
@@ -93,6 +115,32 @@ start_host_app() {
 
 docker_runtime_available() {
   bash scripts/docker_runtime_available.sh
+}
+
+reset_docker_deps() {
+  if [[ "$MODE" != "docker" ]]; then
+    echo "[start] ERROR: --reset-db is only supported with --mode docker" >&2
+    return 1
+  fi
+  if ! docker_runtime_available; then
+    echo "[start] ERROR: docker runtime is unavailable for --reset-db" >&2
+    return 1
+  fi
+  if [[ -f "$APP_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$APP_PID_FILE")"
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill "$pid" || true
+      sleep 1
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" >/dev/null 2>&1 || true
+      fi
+    fi
+    rm -f "$APP_PID_FILE"
+  fi
+  local compose=(docker compose --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/infra/docker-compose.yml")
+  echo "[start] Resetting Docker dependency volumes. This deletes local Postgres, Redis, and Qdrant data."
+  "${compose[@]}" down --volumes --remove-orphans
 }
 
 start_deps_docker() {
@@ -181,6 +229,9 @@ start_docker_mode() {
 }
 
 if [[ "$MODE" == "docker" ]]; then
+  if [[ "$RESET_DB" == "1" ]]; then
+    reset_docker_deps
+  fi
   start_docker_mode
 else
   start_local_mode

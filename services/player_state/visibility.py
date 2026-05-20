@@ -45,6 +45,7 @@ def visible_entities(
     campaign_id: uuid.UUID,
     principal: PrincipalContext,
     controlled_entities: list[dict],
+    conn=None,
 ) -> list[dict]:
     rows = execute_query(
         """
@@ -56,6 +57,7 @@ def visible_entities(
         ORDER BY entity_type, name
         """,
         (str(campaign_id),),
+        conn=conn,
     )
     if principal.is_gm() or principal.is_system():
         return [row_dict(r) for r in rows]
@@ -64,14 +66,16 @@ def visible_entities(
     ]
 
 
-def visible_pois(controlled_entities: list[dict]) -> list[dict]:
+def visible_pois(controlled_entities: list[dict], *, conn=None) -> list[dict]:
     out: dict[str, dict] = {}
     for entity in controlled_entities:
         map_id = entity.get("current_map_id")
         if not map_id:
             continue
         pois = execute_query(
-            "SELECT * FROM state.map_pois WHERE map_id = %s", (str(map_id),)
+            "SELECT * FROM state.map_pois WHERE map_id = %s",
+            (str(map_id),),
+            conn=conn,
         )
         for poi in discovered_pois(entity, [dict(p) for p in pois]):
             if poi.get("is_hidden"):
@@ -80,7 +84,7 @@ def visible_pois(controlled_entities: list[dict]) -> list[dict]:
     return list(out.values())
 
 
-def visible_decorations(controlled_entities: list[dict]) -> list[dict]:
+def visible_decorations(controlled_entities: list[dict], *, conn=None) -> list[dict]:
     map_ids = sorted(
         {
             str(e.get("current_map_id"))
@@ -93,6 +97,7 @@ def visible_decorations(controlled_entities: list[dict]) -> list[dict]:
     rows = execute_query(
         "SELECT * FROM state.map_decorations WHERE map_id = ANY(%s::uuid[]) ORDER BY map_id, y, x",
         (map_ids,),
+        conn=conn,
     )
     return [row_dict(r) for r in rows]
 
@@ -102,6 +107,7 @@ def visible_recent_events(
     session_id: uuid.UUID,
     principal_id: uuid.UUID,
     limit: int,
+    conn=None,
 ) -> tuple[list[dict], dict]:
     rows = execute_query(
         """
@@ -113,6 +119,7 @@ def visible_recent_events(
         LIMIT %s
         """,
         (str(session_id), str(principal_id), int(limit)),
+        conn=conn,
     )
     ordered = [row_dict(r) for r in reversed(rows)]
     last = ordered[-1] if ordered else None

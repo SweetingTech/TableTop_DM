@@ -62,6 +62,9 @@ for migration in "$ROOT_DIR"/infra/sql/migrations/*.sql; do
   if [[ -n "$applied_checksum" ]]; then
     if [[ "$applied_checksum" != "$checksum" ]]; then
       echo "Checksum mismatch for already-applied migration $version" >&2
+      echo "This local database was migrated with different SQL than the current checkout." >&2
+      echo "For a disposable Docker dev database, rebuild it with: ./scripts/start.sh --mode docker --reset-db" >&2
+      echo "On Windows: .\\scripts\\start.ps1 -Mode docker -ResetDb" >&2
       exit 1
     fi
     echo "Skipping $version (already applied)"

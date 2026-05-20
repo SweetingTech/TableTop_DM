@@ -39,6 +39,10 @@ copy .env.example .env
   Qdrant, and migrations.
 - If Docker is unhealthy, restart Docker Desktop and run `.\scripts\stop.ps1
   -Mode docker` before starting again.
+- If a disposable local Docker database reports an already-applied migration
+  checksum mismatch, rebuild the local dependency volumes with
+  `.\scripts\start.ps1 -Mode docker -ResetDb`. This deletes local Postgres,
+  Redis, and Qdrant Docker volume data.
 - For local LLM use, configure provider/model/base URL in Control Plane -> AI
   Settings. RAG requires a reachable embedding model for local providers.
 

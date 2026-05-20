@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import uuid
 
 from shared.auth.principal import PrincipalContext, load_principal
-from shared.db.connection import execute_one, execute_query
+from shared.db.connection import execute_one, execute_query, get_connection
 from shared.schemas.player_state import (
     ControlledEntitySnapshot,
     EventCursor,
@@ -47,8 +47,12 @@ def _permissions(principal: PrincipalContext) -> list[str]:
     return perms
 
 
-def _session(session_id: uuid.UUID) -> dict:
-    row = execute_one("SELECT * FROM state.sessions WHERE id = %s", (str(session_id),))
+def _session(session_id: uuid.UUID, *, conn=None) -> dict:
+    row = execute_one(
+        "SELECT * FROM state.sessions WHERE id = %s",
+        (str(session_id),),
+        conn=conn,
+    )
     if not row:
         raise PlayerStateError("session_not_found", 404)
     return dict(row)
@@ -59,16 +63,17 @@ def _target_principal(
     session: dict,
     principal_id: uuid.UUID,
     as_principal_id: uuid.UUID | None,
+    conn=None,
 ) -> tuple[PrincipalContext, PrincipalContext]:
     campaign_id = uuid.UUID(str(session["campaign_id"]))
-    requester = load_principal(principal_id, campaign_id)
+    requester = load_principal(principal_id, campaign_id, conn=conn)
     if not requester or not requester.role:
         raise PlayerStateError("forbidden", 403)
 
     if as_principal_id and str(as_principal_id) != str(principal_id):
         if not (requester.is_gm() or requester.is_system()):
             raise PlayerStateError("forbidden", 403)
-        target = load_principal(as_principal_id, campaign_id)
+        target = load_principal(as_principal_id, campaign_id, conn=conn)
         if not target or not target.role:
             raise PlayerStateError("forbidden", 403)
         return requester, target
@@ -81,6 +86,7 @@ def _controlled_entities(
     session_id: uuid.UUID,
     campaign_id: uuid.UUID,
     principal: PrincipalContext,
+    conn=None,
 ) -> list[dict]:
     if principal.is_gm() or principal.is_system():
         rows = execute_query(
@@ -94,6 +100,7 @@ def _controlled_entities(
             ORDER BY e.name
             """,
             (str(session_id), str(campaign_id)),
+            conn=conn,
         )
     else:
         rows = execute_query(
@@ -110,6 +117,7 @@ def _controlled_entities(
             ORDER BY e.name
             """,
             (str(session_id), str(campaign_id), str(principal.principal_id)),
+            conn=conn,
         )
     return [dict(r) for r in rows]
 
@@ -164,7 +172,7 @@ def _entity_snapshot(
     )
 
 
-def _current_maps(controlled: list[dict]) -> list[dict]:
+def _current_maps(controlled: list[dict], *, conn=None) -> list[dict]:
     map_ids = sorted(
         {str(e.get("current_map_id")) for e in controlled if e.get("current_map_id")}
     )
@@ -173,6 +181,7 @@ def _current_maps(controlled: list[dict]) -> list[dict]:
     rows = execute_query(
         "SELECT id, campaign_id, name, kind, width, height, parent_map_id FROM state.maps WHERE id = ANY(%s::uuid[])",
         (map_ids,),
+        conn=conn,
     )
     return [row_dict(r) for r in rows]
 
@@ -183,6 +192,7 @@ def _turn_state(
     session: dict,
     controlled: list[dict],
     visible: list[dict],
+    conn=None,
 ) -> TurnStateSnapshot:
     encounter = execute_one(
         """
@@ -192,12 +202,14 @@ def _turn_state(
         LIMIT 1
         """,
         (str(session["id"]),),
+        conn=conn,
     )
     active_slot = None
     if encounter:
         active_slot = execute_one(
             "SELECT * FROM state.encounter_slots WHERE encounter_id = %s AND is_active = true LIMIT 1",
             (str(encounter["id"]),),
+            conn=conn,
         )
     legal = legal_actions_for(
         mode=campaign.get("mode") or "EXPLORATION",
@@ -225,9 +237,12 @@ def _narrative_state(
     campaign_id: uuid.UUID,
     principal: PrincipalContext,
     visible_entity_rows: list[dict],
+    conn=None,
 ) -> NarrativeStateSnapshot:
     story = execute_one(
-        "SELECT * FROM state.story_state WHERE session_id = %s", (str(session_id),)
+        "SELECT * FROM state.story_state WHERE session_id = %s",
+        (str(session_id),),
+        conn=conn,
     )
     story = dict(story or {})
     visibility = "dm" if principal.is_gm() or principal.is_system() else "principal"
@@ -241,6 +256,7 @@ def _narrative_state(
                 str(entity["id"]),
                 visibility=visibility,
                 principal_id=principal_id,
+                conn=conn,
             )
 
     is_dm = principal.is_gm() or principal.is_system()
@@ -278,10 +294,10 @@ def _narrative_state(
         known_plot_threads=visible_items(story.get("plot_threads")),
         known_party_resources=story.get("party_resources") or {},
         visible_open_threads=open_threads(
-            campaign_id, visibility=visibility, principal_id=principal_id
+            campaign_id, visibility=visibility, principal_id=principal_id, conn=conn
         ),
         visible_unresolved_promises=unresolved_promises(
-            campaign_id, visibility=visibility, principal_id=principal_id
+            campaign_id, visibility=visibility, principal_id=principal_id, conn=conn
         ),
         visible_npc_memory=npc_memory_map,
     )
@@ -295,80 +311,99 @@ def build_player_state_snapshot(
     include_recent_events: bool = True,
     event_limit: int = 100,
 ) -> PlayerStateSnapshot:
-    session = _session(session_id)
-    requester, principal = _target_principal(
-        session=session,
-        principal_id=principal_id,
-        as_principal_id=as_principal_id,
-    )
-    campaign_id = uuid.UUID(str(session["campaign_id"]))
-    campaign = execute_one(
-        "SELECT * FROM state.campaigns WHERE id = %s", (str(campaign_id),)
-    )
-    if not campaign:
-        raise PlayerStateError("session_not_found", 404)
-
-    controlled = _controlled_entities(
-        session_id=session_id, campaign_id=campaign_id, principal=principal
-    )
-    _assert_principal_in_session(principal, controlled)
-    visible = visible_entities(
-        campaign_id=campaign_id, principal=principal, controlled_entities=controlled
-    )
-    recent, cursor = (
-        visible_recent_events(
-            session_id=session_id,
-            principal_id=principal.principal_id,
-            limit=event_limit,
+    conn = get_connection()
+    try:
+        session = _session(session_id, conn=conn)
+        requester, principal = _target_principal(
+            session=session,
+            principal_id=principal_id,
+            as_principal_id=as_principal_id,
+            conn=conn,
         )
-        if include_recent_events
-        else ([], {"last_ledger_id": None, "last_sequence": None})
-    )
-    turn_state = _turn_state(
-        campaign=dict(campaign), session=session, controlled=controlled, visible=visible
-    )
-    selected = str(controlled[0]["id"]) if controlled else None
+        campaign_id = uuid.UUID(str(session["campaign_id"]))
+        campaign = execute_one(
+            "SELECT * FROM state.campaigns WHERE id = %s",
+            (str(campaign_id),),
+            conn=conn,
+        )
+        if not campaign:
+            raise PlayerStateError("session_not_found", 404)
 
-    return PlayerStateSnapshot(
-        campaign_id=str(campaign_id),
-        session_id=str(session_id),
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        principal=PrincipalSnapshot(
-            principal_id=str(principal.principal_id),
-            role=str(
-                principal.role.value
-                if principal.role and hasattr(principal.role, "value")
-                else principal.role
-            ),
-            permissions=_permissions(principal),
-        ),
-        controlled_entities=[
-            _entity_snapshot(
-                e,
-                can_command=str(requester.principal_id) == str(principal_id)
-                or requester.is_gm(),
-                include_private=principal.is_gm() or principal.is_system(),
-            )
-            for e in controlled
-        ],
-        visible_world=VisibleWorldSnapshot(
-            current_maps=_current_maps(controlled),
-            visible_entities=visible,
-            visible_pois=visible_pois(controlled),
-            visible_decorations=visible_decorations(controlled),
-            visible_recent_events=recent,
-            event_cursor=EventCursor(**cursor),
-        ),
-        turn_state=turn_state,
-        narrative_state=_narrative_state(
+        controlled = _controlled_entities(
             session_id=session_id,
             campaign_id=campaign_id,
             principal=principal,
-            visible_entity_rows=visible,
-        ),
-        ui_state=UiStateSnapshot(
-            selected_entity_id=selected,
-            command_locked=not bool(controlled),
-            reconnect_required=False,
-        ),
-    )
+            conn=conn,
+        )
+        _assert_principal_in_session(principal, controlled)
+        visible = visible_entities(
+            campaign_id=campaign_id,
+            principal=principal,
+            controlled_entities=controlled,
+            conn=conn,
+        )
+        recent, cursor = (
+            visible_recent_events(
+                session_id=session_id,
+                principal_id=principal.principal_id,
+                limit=event_limit,
+                conn=conn,
+            )
+            if include_recent_events
+            else ([], {"last_ledger_id": None, "last_sequence": None})
+        )
+        turn_state = _turn_state(
+            campaign=dict(campaign),
+            session=session,
+            controlled=controlled,
+            visible=visible,
+            conn=conn,
+        )
+        selected = str(controlled[0]["id"]) if controlled else None
+
+        return PlayerStateSnapshot(
+            campaign_id=str(campaign_id),
+            session_id=str(session_id),
+            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            principal=PrincipalSnapshot(
+                principal_id=str(principal.principal_id),
+                role=str(
+                    principal.role.value
+                    if principal.role and hasattr(principal.role, "value")
+                    else principal.role
+                ),
+                permissions=_permissions(principal),
+            ),
+            controlled_entities=[
+                _entity_snapshot(
+                    e,
+                    can_command=str(requester.principal_id) == str(principal_id)
+                    or requester.is_gm(),
+                    include_private=principal.is_gm() or principal.is_system(),
+                )
+                for e in controlled
+            ],
+            visible_world=VisibleWorldSnapshot(
+                current_maps=_current_maps(controlled, conn=conn),
+                visible_entities=visible,
+                visible_pois=visible_pois(controlled, conn=conn),
+                visible_decorations=visible_decorations(controlled, conn=conn),
+                visible_recent_events=recent,
+                event_cursor=EventCursor(**cursor),
+            ),
+            turn_state=turn_state,
+            narrative_state=_narrative_state(
+                session_id=session_id,
+                campaign_id=campaign_id,
+                principal=principal,
+                visible_entity_rows=visible,
+                conn=conn,
+            ),
+            ui_state=UiStateSnapshot(
+                selected_entity_id=selected,
+                command_locked=not bool(controlled),
+                reconnect_required=False,
+            ),
+        )
+    finally:
+        conn.close()

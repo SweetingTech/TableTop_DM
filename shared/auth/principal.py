@@ -29,13 +29,14 @@ class PrincipalContext(BaseModel):
 
 
 def load_principal(
-    principal_id: uuid.UUID, campaign_id: uuid.UUID = None
+    principal_id: uuid.UUID, campaign_id: uuid.UUID = None, conn=None
 ) -> Optional[PrincipalContext]:
     from shared.db.connection import execute_one
 
     row = execute_one(
         "SELECT id, principal_type, display_name FROM state.principals WHERE id = %s AND is_active = true",
         (str(principal_id),),
+        conn=conn,
     )
     if not row:
         return None
@@ -51,6 +52,7 @@ def load_principal(
         member = execute_one(
             "SELECT role FROM state.campaign_members WHERE campaign_id = %s AND principal_id = %s",
             (str(campaign_id), str(principal_id)),
+            conn=conn,
         )
         if member:
             ctx.role = member["role"]
@@ -60,6 +62,7 @@ def load_principal(
         entities = execute_query(
             "SELECT id FROM state.entities WHERE controller_principal_id = %s AND campaign_id = %s",
             (str(principal_id), str(campaign_id)),
+            conn=conn,
         )
         ctx.controlled_entity_ids = [
             e["id"] if isinstance(e["id"], uuid.UUID) else uuid.UUID(e["id"])
