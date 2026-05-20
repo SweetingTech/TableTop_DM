@@ -1,5 +1,9 @@
 # Headless Multi-Agent AI-Driven VTT Engine
 
+<p align="center">
+  <img src="static/img/tabletop-dm-logo.png" alt="TableTop DM logo" width="160">
+</p>
+
 Production-oriented VTT + RPG engine with deterministic state, append-only event ledger, strict visibility filtering, and multi-agent LLM layer (DM, NPCs, Gods, Factions) that can only propose schema-validated actions.
 
 **Two ways to use TableTop DM:**
