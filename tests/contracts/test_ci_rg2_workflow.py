@@ -20,6 +20,13 @@ def test_ci_integration_job_runs_infra_migrate_seed_and_smoke() -> None:
     assert "run: make ci-integration" in workflow
 
 
+def test_compose_smoke_uses_qdrant_http_readiness() -> None:
+    smoke = Path("infra/scripts/compose_smoke.sh").read_text(encoding="utf-8")
+
+    assert 'curl -fsS "http://localhost:${QDRANT_HTTP_PORT:-6333}/healthz"' in smoke
+    assert "State.Health.Status}}' tabletop_qdrant" not in smoke
+
+
 def test_ci_workflow_does_not_require_openai_secrets() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
