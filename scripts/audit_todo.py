@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 audit_todo.py
-Repo auditor that treats TODO.md as a contract and verifies:
+Repo auditor that treats todo.md/TODO.md as a contract and verifies:
 - All checkboxes are checked
 - Referenced files/paths exist
 - Canonical commands exist and succeed (ci, up/down, migrate, seed, rg1)
@@ -22,7 +22,6 @@ import datetime as dt
 import os
 import platform
 import re
-import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -62,6 +61,7 @@ def read_text(path: Path) -> str:
 
 def which(cmd: str) -> Optional[str]:
     from shutil import which as _which
+
     return _which(cmd)
 
 
@@ -114,9 +114,24 @@ def extract_code_spans(text: str) -> List[str]:
 
 def looks_like_path(token: str) -> bool:
     # Heuristic: contains a path separator, wildcard, extension, or starts with dot or known dir
-    if any(ch in token for ch in ["/", "\\", "*", "?", ".github", "docs/", "infra/", "services/", "scripts/"]):
+    if any(
+        ch in token
+        for ch in [
+            "/",
+            "\\",
+            "*",
+            "?",
+            ".github",
+            "docs/",
+            "infra/",
+            "services/",
+            "scripts/",
+        ]
+    ):
         return True
-    if token.endswith((".md", ".yml", ".yaml", ".json", ".sql", ".sh", ".ps1", "Dockerfile")):
+    if token.endswith(
+        (".md", ".yml", ".yaml", ".json", ".sql", ".sh", ".ps1", "Dockerfile")
+    ):
         return True
     return False
 
@@ -143,12 +158,20 @@ def find_make_targets(makefile: Path) -> set:
 
 def resolve_compose_file(root: Path, override: Optional[str]) -> Optional[Path]:
     if override:
-        p = (root / override).resolve() if not Path(override).is_absolute() else Path(override)
+        p = (
+            (root / override).resolve()
+            if not Path(override).is_absolute()
+            else Path(override)
+        )
         return p if p.exists() else None
 
     env_cf = os.environ.get("COMPOSE_FILE")
     if env_cf:
-        p = (root / env_cf).resolve() if not Path(env_cf).is_absolute() else Path(env_cf)
+        p = (
+            (root / env_cf).resolve()
+            if not Path(env_cf).is_absolute()
+            else Path(env_cf)
+        )
         if p.exists():
             return p
 
@@ -168,7 +191,7 @@ def resolve_compose_file(root: Path, override: Optional[str]) -> Optional[Path]:
 def resolve_health_url(override: Optional[str]) -> str:
     if override:
         return override
-    return os.environ.get("VTT_HEALTH_URL", "http://localhost:8000/health")
+    return os.environ.get("VTT_HEALTH_URL", "http://localhost:8000/readyz")
 
 
 def http_get(url: str, timeout_s: int = 5) -> Tuple[bool, str]:
@@ -183,7 +206,24 @@ def http_get(url: str, timeout_s: int = 5) -> Tuple[bool, str]:
         return False, f"{type(e).__name__}: {e}"
 
 
-def pick_command(root: Path, make_targets: set, prefer_make: bool, target: str, script_fallback: Optional[Path]) -> Optional[List[str]]:
+def fmt_cmd(cmd: Optional[List[str]]) -> str:
+    return " ".join(cmd) if cmd else "(none)"
+
+
+def docker_runtime_usable() -> bool:
+    rc, _ = run_cmd(
+        ["bash", "scripts/docker_runtime_available.sh"], cwd=repo_root(), timeout_s=20
+    )
+    return rc == 0
+
+
+def pick_command(
+    root: Path,
+    make_targets: set,
+    prefer_make: bool,
+    target: str,
+    script_fallback: Optional[Path],
+) -> Optional[List[str]]:
     """
     Returns a command list to execute a canonical operation.
     target = make target (e.g., "ci", "up", "down", "seed", "migrate", "rg1")
@@ -198,7 +238,12 @@ def pick_command(root: Path, make_targets: set, prefer_make: bool, target: str, 
             if not pwsh:
                 return None
             return [pwsh, "-ExecutionPolicy", "Bypass", "-File", str(script_fallback)]
-        return [str(script_fallback)]
+        cmd = [str(script_fallback)]
+        if script_fallback.name in {"start.sh", "stop.sh", "rg1.sh"}:
+            mode = os.environ.get("AUDIT_MODE_HINT")
+            if mode in {"docker", "local"}:
+                cmd += ["--mode", mode]
+        return cmd
 
     return None
 
@@ -216,11 +261,13 @@ def scan_markdown_links(md_path: Path, root: Path) -> List[AuditFinding]:
         link = link.split("#", 1)[0].split("?", 1)[0]
         p = (md_path.parent / link).resolve()
         if not p.exists():
-            findings.append(AuditFinding(
-                name=f"Docs image exists: {md_path.relative_to(root)} -> {link}",
-                status="FAIL",
-                details=f"Missing file: {p}"
-            ))
+            findings.append(
+                AuditFinding(
+                    name=f"Docs image exists: {md_path.relative_to(root)} -> {link}",
+                    status="FAIL",
+                    details=f"Missing file: {p}",
+                )
+            )
 
     # Links
     for link in MD_LINK_RE.findall(text):
@@ -234,11 +281,13 @@ def scan_markdown_links(md_path: Path, root: Path) -> List[AuditFinding]:
         if "/" in link_no_anchor or "." in Path(link_no_anchor).name:
             p = (md_path.parent / link_no_anchor).resolve()
             if not p.exists():
-                findings.append(AuditFinding(
-                    name=f"Docs link exists: {md_path.relative_to(root)} -> {link}",
-                    status="FAIL",
-                    details=f"Missing file: {p}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name=f"Docs link exists: {md_path.relative_to(root)} -> {link}",
+                        status="FAIL",
+                        details=f"Missing file: {p}",
+                    )
+                )
 
     return findings
 
@@ -246,21 +295,60 @@ def scan_markdown_links(md_path: Path, root: Path) -> List[AuditFinding]:
 def main() -> int:
     root = repo_root()
 
-    ap = argparse.ArgumentParser(description="Audit TODO.md completion and repo readiness.")
-    ap.add_argument("--todo", default="TODO.md", help="Path to TODO.md relative to repo root.")
-    ap.add_argument("--full", action="store_true", help="Run full audit (docker compose config/build, RG0, RG1, CI command).")
-    ap.add_argument("--strict", action="store_true", help="Fail on unverifiable TODO lines (WARN becomes FAIL).")
-    ap.add_argument("--compose-file", default=None, help="Override docker compose file path.")
+    ap = argparse.ArgumentParser(
+        description="Audit todo.md/TODO.md completion and repo readiness."
+    )
+    ap.add_argument(
+        "--todo",
+        default="TODO.md",
+        help="Path to todo.md/TODO.md relative to repo root.",
+    )
+    ap.add_argument(
+        "--full",
+        action="store_true",
+        help="Run full audit (docker compose config/build, RG0, RG1, CI command).",
+    )
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail on unverifiable TODO lines (WARN becomes FAIL).",
+    )
+    ap.add_argument(
+        "--compose-file", default=None, help="Override docker compose file path."
+    )
+    ap.add_argument(
+        "--mode",
+        choices=["docker", "local"],
+        default="docker",
+        help="Verification mode (docker or local).",
+    )
     ap.add_argument("--health-url", default=None, help="Override health URL for RG0.")
-    ap.add_argument("--report", default="burn-bag/todo-audit-report.md", help="Report path (relative to repo root).")
-    ap.add_argument("--skip-build", action="store_true", help="Skip docker compose build in full mode.")
-    ap.add_argument("--skip-rg1", action="store_true", help="Skip RG1 smoke in full mode.")
+    ap.add_argument(
+        "--report",
+        default="burn-bag/todo-audit-report.md",
+        help="Report path (relative to repo root).",
+    )
+    ap.add_argument(
+        "--skip-build",
+        action="store_true",
+        help="Skip docker compose build in full mode.",
+    )
+    ap.add_argument(
+        "--skip-rg1", action="store_true", help="Skip RG1 smoke in full mode."
+    )
     args = ap.parse_args()
+
+    os.environ["AUDIT_MODE_HINT"] = args.mode
 
     todo_path = (root / args.todo).resolve()
     if not todo_path.exists():
-        print(f"FAIL: TODO file not found: {todo_path}", file=sys.stderr)
-        return 2
+        fallback_name = "TODO.md" if Path(args.todo).name == "todo.md" else "todo.md"
+        fallback = (root / fallback_name).resolve()
+        if fallback.exists():
+            todo_path = fallback
+        else:
+            print(f"FAIL: TODO file not found: {todo_path}", file=sys.stderr)
+            return 2
 
     # Prepare report output path
     report_path = (root / args.report).resolve()
@@ -272,22 +360,30 @@ def main() -> int:
     # 1) Check unchecked items
     unchecked = [it for it in items if not it.checked]
     if unchecked:
-        details = "\n".join([f"- L{it.line_no}: {it.text} ({' > '.join(it.section_path)})" for it in unchecked[:50]])
-        findings.append(AuditFinding(
-            name="TODO completeness",
-            status="FAIL",
-            details=f"Found {len(unchecked)} unchecked items.\n{details}"
-        ))
+        details = "\n".join(
+            [
+                f"- L{it.line_no}: {it.text} ({' > '.join(it.section_path)})"
+                for it in unchecked[:50]
+            ]
+        )
+        findings.append(
+            AuditFinding(
+                name="TODO completeness",
+                status="FAIL",
+                details=f"Found {len(unchecked)} unchecked items.\n{details}",
+            )
+        )
     else:
-        findings.append(AuditFinding(
-            name="TODO completeness",
-            status="PASS",
-            details=f"All {len(items)} checkbox items are checked."
-        ))
+        findings.append(
+            AuditFinding(
+                name="TODO completeness",
+                status="PASS",
+                details=f"All {len(items)} checkbox items are checked.",
+            )
+        )
 
     # 2) Extract referenced paths from backticks and verify they exist
     referenced_paths_fail = []
-    referenced_paths_warn = []
 
     for it in items:
         spans = extract_code_spans(it.text)
@@ -312,33 +408,50 @@ def main() -> int:
                     referenced_paths_fail.append((it, token, "glob matched nothing"))
                 continue
 
-            p = (root / token).resolve() if not Path(token).is_absolute() else Path(token)
+            p = (
+                (root / token).resolve()
+                if not Path(token).is_absolute()
+                else Path(token)
+            )
             if not p.exists():
                 referenced_paths_fail.append((it, token, f"missing: {p}"))
 
     if referenced_paths_fail:
-        details = "\n".join([f"- L{it.line_no}: `{tok}` -> {why}" for it, tok, why in referenced_paths_fail[:100]])
-        findings.append(AuditFinding(
-            name="Referenced file/path checks",
-            status="FAIL",
-            details=f"Missing {len(referenced_paths_fail)} referenced paths.\n{details}"
-        ))
+        details = "\n".join(
+            [
+                f"- L{it.line_no}: `{tok}` -> {why}"
+                for it, tok, why in referenced_paths_fail[:100]
+            ]
+        )
+        findings.append(
+            AuditFinding(
+                name="Referenced file/path checks",
+                status="FAIL",
+                details=f"Missing {len(referenced_paths_fail)} referenced paths.\n{details}",
+            )
+        )
     else:
-        findings.append(AuditFinding(
-            name="Referenced file/path checks",
-            status="PASS",
-            details="All referenced backtick paths/globs appear to exist."
-        ))
+        findings.append(
+            AuditFinding(
+                name="Referenced file/path checks",
+                status="PASS",
+                details="All referenced backtick paths/globs appear to exist.",
+            )
+        )
 
     # 3) Baseline required files (these are implied by your TODO)
     must_exist = [
         "README.md",
-        "TODO.md",
         ".env.example",
         ".github/workflows/ci.yml",
     ]
+    if not (root / "TODO.md").exists() and not (root / "todo.md").exists():
+        must_exist.append("TODO.md")
     # Optional: accept ci.yaml
-    if not (root / ".github/workflows/ci.yml").exists() and (root / ".github/workflows/ci.yaml").exists():
+    if (
+        not (root / ".github/workflows/ci.yml").exists()
+        and (root / ".github/workflows/ci.yaml").exists()
+    ):
         must_exist.remove(".github/workflows/ci.yml")
         must_exist.append(".github/workflows/ci.yaml")
 
@@ -367,17 +480,22 @@ def main() -> int:
 
     missing_baseline = [p for p in must_exist if not (root / p).exists()]
     if missing_baseline:
-        findings.append(AuditFinding(
-            name="Baseline required files",
-            status="FAIL",
-            details="Missing required files:\n" + "\n".join([f"- {p}" for p in missing_baseline])
-        ))
+        findings.append(
+            AuditFinding(
+                name="Baseline required files",
+                status="FAIL",
+                details="Missing required files:\n"
+                + "\n".join([f"- {p}" for p in missing_baseline]),
+            )
+        )
     else:
-        findings.append(AuditFinding(
-            name="Baseline required files",
-            status="PASS",
-            details="All expected baseline files exist."
-        ))
+        findings.append(
+            AuditFinding(
+                name="Baseline required files",
+                status="PASS",
+                details="All expected baseline files exist.",
+            )
+        )
 
     # 4) README and docs link/image integrity checks
     md_files = [root / "README.md"]
@@ -391,18 +509,24 @@ def main() -> int:
 
     if md_link_findings:
         # Aggregate as FAIL if any missing assets
-        details = "\n".join([f"- {f.name}: {f.details}" for f in md_link_findings[:200]])
-        findings.append(AuditFinding(
-            name="Docs/README link & diagram asset integrity",
-            status="FAIL",
-            details=f"Found {len(md_link_findings)} broken links/images.\n{details}"
-        ))
+        details = "\n".join(
+            [f"- {f.name}: {f.details}" for f in md_link_findings[:200]]
+        )
+        findings.append(
+            AuditFinding(
+                name="Docs/README link & diagram asset integrity",
+                status="FAIL",
+                details=f"Found {len(md_link_findings)} broken links/images.\n{details}",
+            )
+        )
     else:
-        findings.append(AuditFinding(
-            name="Docs/README link & diagram asset integrity",
-            status="PASS",
-            details="No broken relative links/images detected in README/docs."
-        ))
+        findings.append(
+            AuditFinding(
+                name="Docs/README link & diagram asset integrity",
+                status="PASS",
+                details="No broken relative links/images detected in README/docs.",
+            )
+        )
 
     # 5) Determine canonical commands
     makefile = root / "Makefile"
@@ -412,26 +536,65 @@ def main() -> int:
     compose_file = resolve_compose_file(root, args.compose_file)
     health_url = resolve_health_url(args.health_url)
 
+    if args.mode == "local":
+        start_target, start_script_name = "up-local", "start"
+        stop_target, stop_script_name = "down-local", "stop"
+    else:
+        start_target, start_script_name = "up", "start"
+        stop_target, stop_script_name = "down", "stop"
+
     start_cmd = pick_command(
-        root, targets, prefer_make, "up",
-        root / "scripts/start.sh" if (root / "scripts/start.sh").exists() else (root / "scripts/start.ps1")
+        root,
+        targets,
+        prefer_make,
+        start_target,
+        root / f"scripts/{start_script_name}.sh"
+        if (root / f"scripts/{start_script_name}.sh").exists()
+        else (root / f"scripts/{start_script_name}.ps1"),
     )
     stop_cmd = pick_command(
-        root, targets, prefer_make, "down",
-        root / "scripts/stop.sh" if (root / "scripts/stop.sh").exists() else (root / "scripts/stop.ps1")
+        root,
+        targets,
+        prefer_make,
+        stop_target,
+        root / f"scripts/{stop_script_name}.sh"
+        if (root / f"scripts/{stop_script_name}.sh").exists()
+        else (root / f"scripts/{stop_script_name}.ps1"),
     )
+
     migrate_cmd = pick_command(root, targets, prefer_make, "migrate", None)
     seed_cmd = pick_command(root, targets, prefer_make, "seed", None)
-    ci_cmd = pick_command(
-        root, targets, prefer_make, "ci",
-        root / "scripts/test.sh" if (root / "scripts/test.sh").exists() else None
-    )
-    rg1_cmd = pick_command(
-        root, targets, prefer_make, "rg1",
-        (root / "scripts/rg1.sh") if (root / "scripts/rg1.sh").exists() else (
-            (root / "scripts/smoke_rg1.sh") if (root / "scripts/smoke_rg1.sh").exists() else None
+
+    if args.mode == "local":
+        ci_cmd = pick_command(root, targets, prefer_make, "ci", None)
+        rg1_cmd = pick_command(
+            root,
+            targets,
+            prefer_make,
+            "rg1-local",
+            (root / "scripts/rg1.sh") if (root / "scripts/rg1.sh").exists() else None,
         )
-    )
+    else:
+        ci_cmd = pick_command(
+            root,
+            targets,
+            prefer_make,
+            "ci",
+            root / "scripts/test.sh" if (root / "scripts/test.sh").exists() else None,
+        )
+        rg1_cmd = pick_command(
+            root,
+            targets,
+            prefer_make,
+            "rg1",
+            (root / "scripts/rg1.sh")
+            if (root / "scripts/rg1.sh").exists()
+            else (
+                (root / "scripts/smoke_rg1.sh")
+                if (root / "scripts/smoke_rg1.sh").exists()
+                else None
+            ),
+        )
 
     # Command existence checks
     cmd_missing = []
@@ -439,103 +602,190 @@ def main() -> int:
         if cmd is None:
             cmd_missing.append(name)
     if cmd_missing:
-        findings.append(AuditFinding(
-            name="Canonical command discovery",
-            status="FAIL",
-            details=f"Could not determine canonical command(s): {', '.join(cmd_missing)}. "
-                    f"Expected Makefile targets or scripts to exist."
-        ))
-    else:
-        findings.append(AuditFinding(
-            name="Canonical command discovery",
-            status="PASS",
-            details=(
-                f"start_cmd={' '.join(start_cmd)}\n"
-                f"stop_cmd={' '.join(stop_cmd)}\n"
-                f"ci_cmd={' '.join(ci_cmd)}\n"
-                f"migrate_cmd={' '.join(migrate_cmd) if migrate_cmd else '(none)'}\n"
-                f"seed_cmd={' '.join(seed_cmd) if seed_cmd else '(none)'}\n"
-                f"rg1_cmd={' '.join(rg1_cmd) if rg1_cmd else '(none)'}\n"
-                f"compose_file={compose_file if compose_file else '(none found)'}\n"
-                f"health_url={health_url}"
+        findings.append(
+            AuditFinding(
+                name="Canonical command discovery",
+                status="FAIL",
+                details=f"Could not determine canonical command(s): {', '.join(cmd_missing)}. "
+                f"Expected Makefile targets or scripts to exist.",
             )
-        ))
+        )
+    else:
+        findings.append(
+            AuditFinding(
+                name="Canonical command discovery",
+                status="PASS",
+                details=(
+                    f"start_cmd={fmt_cmd(start_cmd)}\n"
+                    f"stop_cmd={fmt_cmd(stop_cmd)}\n"
+                    f"ci_cmd={fmt_cmd(ci_cmd)}\n"
+                    f"migrate_cmd={fmt_cmd(migrate_cmd)}\n"
+                    f"seed_cmd={fmt_cmd(seed_cmd)}\n"
+                    f"rg1_cmd={fmt_cmd(rg1_cmd)}\n"
+                    f"compose_file={compose_file if compose_file else '(none found)'}\n"
+                    f"health_url={health_url}"
+                ),
+            )
+        )
 
     # If full mode, do heavy checks
     cmd_logs_dir = root / "burn-bag" / "audit-logs"
     cmd_logs_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-    def log_run(name: str, cmd: List[str], timeout_s: int = 1800) -> Tuple[int, str, Path]:
+    def log_run(
+        name: str, cmd: List[str], timeout_s: int = 1800
+    ) -> Tuple[int, str, Path]:
         log_path = cmd_logs_dir / f"{timestamp}-{name}.log"
         rc, out = run_cmd(cmd, cwd=root, timeout_s=timeout_s)
         log_path.write_text(out, encoding="utf-8", errors="replace")
         return rc, out, log_path
 
     if args.full:
-        # Docker compose validation/build
-        if compose_file and which("docker"):
-            # config
-            rc, out, lp = log_run("docker-compose-config", ["docker", "compose", "-f", str(compose_file), "config"], timeout_s=600)
-            if rc != 0:
-                findings.append(AuditFinding(
-                    name="Docker compose config",
-                    status="FAIL",
-                    details=f"`docker compose config` failed. Log: {lp}"
-                ))
-            else:
-                findings.append(AuditFinding(
-                    name="Docker compose config",
-                    status="PASS",
-                    details=f"Compose config valid. Log: {lp}"
-                ))
-
-            if not args.skip_build:
-                rc, out, lp = log_run("docker-compose-build", ["docker", "compose", "-f", str(compose_file), "build"], timeout_s=3600)
+        # Docker compose validation/build (skip in local mode)
+        if args.mode == "docker":
+            if compose_file and docker_runtime_usable():
+                # config
+                rc, out, lp = log_run(
+                    "docker-compose-config",
+                    ["docker", "compose", "-f", str(compose_file), "config"],
+                    timeout_s=600,
+                )
                 if rc != 0:
-                    findings.append(AuditFinding(
-                        name="Docker compose build",
-                        status="FAIL",
-                        details=f"`docker compose build` failed. Log: {lp}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="Docker compose config",
+                            status="FAIL",
+                            details=f"`docker compose config` failed. Log: {lp}",
+                        )
+                    )
                 else:
-                    findings.append(AuditFinding(
-                        name="Docker compose build",
-                        status="PASS",
-                        details=f"Compose services build OK. Log: {lp}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="Docker compose config",
+                            status="PASS",
+                            details=f"Compose config valid. Log: {lp}",
+                        )
+                    )
+
+                if not args.skip_build:
+                    rc, out, lp = log_run(
+                        "docker-compose-build",
+                        ["docker", "compose", "-f", str(compose_file), "build"],
+                        timeout_s=3600,
+                    )
+                    if rc != 0:
+                        findings.append(
+                            AuditFinding(
+                                name="Docker compose build",
+                                status="FAIL",
+                                details=f"`docker compose build` failed. Log: {lp}",
+                            )
+                        )
+                    else:
+                        findings.append(
+                            AuditFinding(
+                                name="Docker compose build",
+                                status="PASS",
+                                details=f"Compose services build OK. Log: {lp}",
+                            )
+                        )
+            else:
+                findings.append(
+                    AuditFinding(
+                        name="Docker checks",
+                        status="FAIL",
+                        details=(
+                            f"Docker mode requires usable Docker runtime and compose file. "
+                            f"docker={which('docker') is not None}, compose_file_exists={bool(compose_file and compose_file.exists())}, runtime_usable={docker_runtime_usable()}"
+                        ),
+                    )
+                )
         else:
-            findings.append(AuditFinding(
-                name="Docker checks",
-                status="WARN",
-                details="Docker or compose file not found. Skipping docker validation/build."
-            ))
+            findings.append(
+                AuditFinding(
+                    name="Docker checks",
+                    status="PASS",
+                    details="Skipped in local mode.",
+                )
+            )
 
         # Run CI command locally (equivalent)
         if ci_cmd:
             rc, out, lp = log_run("ci", ci_cmd, timeout_s=3600)
             if rc != 0:
-                findings.append(AuditFinding(
-                    name="Local CI command",
-                    status="FAIL",
-                    details=f"CI command failed: {' '.join(ci_cmd)}\nLog: {lp}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="Local CI command",
+                        status="FAIL",
+                        details=f"Local CI command failed: {' '.join(ci_cmd)}\nLog: {lp}",
+                    )
+                )
             else:
-                findings.append(AuditFinding(
-                    name="Local CI command",
-                    status="PASS",
-                    details=f"CI command passed: {' '.join(ci_cmd)}\nLog: {lp}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="Local CI command",
+                        status="PASS",
+                        details=f"Local CI command passed: {' '.join(ci_cmd)}\nLog: {lp}",
+                    )
+                )
+
+        ci_skip_marker = root / "burn-bag" / "ci-integration-skipped.txt"
+        if ci_cmd:
+            if args.mode == "docker":
+                if ci_skip_marker.exists():
+                    findings.append(
+                        AuditFinding(
+                            name="CI integration skip marker (docker mode)",
+                            status="FAIL",
+                            details=f"Skip marker must not exist in docker mode: {ci_skip_marker}",
+                        )
+                    )
+            else:
+                if docker_runtime_usable():
+                    if ci_skip_marker.exists():
+                        findings.append(
+                            AuditFinding(
+                                name="CI integration skip marker (local mode, docker usable)",
+                                status="FAIL",
+                                details=(
+                                    "Docker runtime is usable, so integration must not be skipped; "
+                                    f"unexpected marker present at {ci_skip_marker}."
+                                ),
+                            )
+                        )
+                else:
+                    if ci_skip_marker.exists():
+                        findings.append(
+                            AuditFinding(
+                                name="CI integration skip marker (local mode, docker unavailable)",
+                                status="PASS",
+                                details=f"Detected expected skip marker: {ci_skip_marker}",
+                            )
+                        )
+                    else:
+                        findings.append(
+                            AuditFinding(
+                                name="CI integration skip marker (local mode, docker unavailable)",
+                                status="FAIL",
+                                details=(
+                                    "Expected integration skip marker was not produced. "
+                                    "Check Makefile ci-integration target and scripts/docker_runtime_available.sh."
+                                ),
+                            )
+                        )
 
         # RG0: up -> health -> down
         if start_cmd and stop_cmd:
             rc, out, lp = log_run("rg0-up", start_cmd, timeout_s=1800)
             if rc != 0:
-                findings.append(AuditFinding(
-                    name="RG0 start",
-                    status="FAIL",
-                    details=f"Start command failed. Log: {lp}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="RG0 start",
+                        status="FAIL",
+                        details=f"Start command failed. Log: {lp}",
+                    )
+                )
             else:
                 # Poll health a bit
                 ok = False
@@ -545,60 +795,79 @@ def main() -> int:
                     if ok:
                         break
                     import time
+
                     time.sleep(2)
 
                 if not ok:
-                    findings.append(AuditFinding(
-                        name="RG0 health",
-                        status="FAIL",
-                        details=f"Health check failed for {health_url}. Last: {last_msg}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="RG0 health",
+                            status="FAIL",
+                            details=f"Health check failed for {health_url}. Last: {last_msg}",
+                        )
+                    )
                 else:
-                    findings.append(AuditFinding(
-                        name="RG0 health",
-                        status="PASS",
-                        details=f"Health OK at {health_url}. {last_msg}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="RG0 health",
+                            status="PASS",
+                            details=f"Health OK at {health_url}. {last_msg}",
+                        )
+                    )
 
             rc, out, lp = log_run("rg0-down", stop_cmd, timeout_s=900)
             if rc != 0:
-                findings.append(AuditFinding(
-                    name="RG0 stop",
-                    status="FAIL",
-                    details=f"Stop command failed. Log: {lp}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="RG0 stop",
+                        status="FAIL",
+                        details=f"Stop command failed. Log: {lp}",
+                    )
+                )
             else:
-                findings.append(AuditFinding(
-                    name="RG0 stop",
-                    status="PASS",
-                    details=f"Stop command succeeded. Log: {lp}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="RG0 stop",
+                        status="PASS",
+                        details=f"Stop command succeeded. Log: {lp}",
+                    )
+                )
 
             # Optional: confirm compose ps shows nothing running
-            if compose_file and which("docker"):
-                rc, out, lp = log_run("docker-compose-ps", ["docker", "compose", "-f", str(compose_file), "ps"], timeout_s=60)
+            if compose_file and docker_runtime_usable():
+                rc, out, lp = log_run(
+                    "docker-compose-ps",
+                    ["docker", "compose", "-f", str(compose_file), "ps"],
+                    timeout_s=60,
+                )
                 # If ps output still lists running containers, warn/fail
                 if "Up" in out:
-                    findings.append(AuditFinding(
-                        name="RG0 orphan container check",
-                        status="WARN",
-                        details=f"Compose still reports containers as Up. Inspect: {lp}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="RG0 orphan container check",
+                            status="WARN",
+                            details=f"Compose still reports containers as Up. Inspect: {lp}",
+                        )
+                    )
                 else:
-                    findings.append(AuditFinding(
-                        name="RG0 orphan container check",
-                        status="PASS",
-                        details=f"No 'Up' containers detected in compose ps. Log: {lp}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="RG0 orphan container check",
+                            status="PASS",
+                            details=f"No 'Up' containers detected in compose ps. Log: {lp}",
+                        )
+                    )
 
         # RG1 smoke
         if not args.skip_rg1:
             if rg1_cmd is None:
-                findings.append(AuditFinding(
-                    name="RG1 smoke",
-                    status="FAIL" if args.strict else "WARN",
-                    details="No RG1 runner found (expected `make rg1` target or scripts/rg1.sh or scripts/smoke_rg1.sh)."
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="RG1 smoke",
+                        status="FAIL" if args.strict else "WARN",
+                        details="No RG1 runner found (expected make rg1/rg1-local target or scripts/rg1.sh).",
+                    )
+                )
             else:
                 # Bring stack up again for rg1
                 if start_cmd:
@@ -610,24 +879,32 @@ def main() -> int:
 
                 rc, out, lp = log_run("rg1", rg1_cmd, timeout_s=1800)
                 if rc != 0:
-                    findings.append(AuditFinding(
-                        name="RG1 smoke",
-                        status="FAIL",
-                        details=f"RG1 command failed: {' '.join(rg1_cmd)}\nLog: {lp}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="RG1 smoke",
+                            status="FAIL",
+                            details=f"RG1 command failed: {' '.join(rg1_cmd)}\nLog: {lp}",
+                        )
+                    )
                 else:
-                    findings.append(AuditFinding(
-                        name="RG1 smoke",
-                        status="PASS",
-                        details=f"RG1 passed: {' '.join(rg1_cmd)}\nLog: {lp}"
-                    ))
+                    findings.append(
+                        AuditFinding(
+                            name="RG1 smoke",
+                            status="PASS",
+                            details=f"RG1 passed: {' '.join(rg1_cmd)}\nLog: {lp}",
+                        )
+                    )
 
                 if stop_cmd:
                     log_run("rg1-down", stop_cmd, timeout_s=900)
 
         # RG2 local equivalent: workflow file must call canonical scripts/commands
         wf = root / ".github" / "workflows"
-        wf_file = (wf / "ci.yml") if (wf / "ci.yml").exists() else ((wf / "ci.yaml") if (wf / "ci.yaml").exists() else None)
+        wf_file = (
+            (wf / "ci.yml")
+            if (wf / "ci.yml").exists()
+            else ((wf / "ci.yaml") if (wf / "ci.yaml").exists() else None)
+        )
         if wf_file and wf_file.exists():
             y = read_text(wf_file)
             # Basic checks
@@ -639,75 +916,97 @@ def main() -> int:
 
             missing = [m for m in must_mention if m not in y]
             if missing:
-                findings.append(AuditFinding(
-                    name="RG2 workflow calls canonical CI command",
-                    status="FAIL" if args.strict else "WARN",
-                    details=f"Workflow {wf_file} does not appear to call: {', '.join(missing)}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="RG2 workflow calls canonical CI command",
+                        status="FAIL" if args.strict else "WARN",
+                        details=f"Workflow {wf_file} does not appear to call: {', '.join(missing)}",
+                    )
+                )
             else:
-                findings.append(AuditFinding(
-                    name="RG2 workflow calls canonical CI command",
-                    status="PASS",
-                    details=f"Workflow {wf_file} appears to call canonical CI command(s): {', '.join(must_mention)}"
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="RG2 workflow calls canonical CI command",
+                        status="PASS",
+                        details=f"Workflow {wf_file} appears to call canonical CI command(s): {', '.join(must_mention)}",
+                    )
+                )
 
             # Check for obvious secret dependence
             bad_markers = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"]
             found_bad = [m for m in bad_markers if m in y]
             if found_bad:
-                findings.append(AuditFinding(
-                    name="CI secret dependence scan",
-                    status="WARN",
-                    details=f"Workflow references possible secret keys: {', '.join(found_bad)}. "
-                            f"CI should pass without secrets using MockLLM."
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="CI secret dependence scan",
+                        status="WARN",
+                        details=f"Workflow references possible secret keys: {', '.join(found_bad)}. "
+                        f"CI should pass without secrets using MockLLM.",
+                    )
+                )
             else:
-                findings.append(AuditFinding(
-                    name="CI secret dependence scan",
-                    status="PASS",
-                    details="No obvious secret key references found in CI workflow."
-                ))
+                findings.append(
+                    AuditFinding(
+                        name="CI secret dependence scan",
+                        status="PASS",
+                        details="No obvious secret key references found in CI workflow.",
+                    )
+                )
         else:
-            findings.append(AuditFinding(
-                name="RG2 workflow presence",
-                status="FAIL" if args.strict else "WARN",
-                details="No CI workflow file found under .github/workflows/ci.yml(ci.yaml)."
-            ))
+            findings.append(
+                AuditFinding(
+                    name="RG2 workflow presence",
+                    status="FAIL" if args.strict else "WARN",
+                    details="No CI workflow file found under .github/workflows/ci.yml(ci.yaml).",
+                )
+            )
 
     # 6) Identify unverifiable TODO lines (line-by-line honesty)
     # Rule: if a checked line has no backtick references and is not inside RG headings, we cannot directly verify it.
     unverifiable = []
     for it in items:
         spans = extract_code_spans(it.text)
-        in_rg = any("RG0" in s or "RG1" in s or "RG2" in s or "Reality Gates" in s for s in it.section_path)
+        in_rg = any(
+            "RG0" in s or "RG1" in s or "RG2" in s or "Reality Gates" in s
+            for s in it.section_path
+        )
         if it.checked and not spans and not in_rg:
             unverifiable.append(it)
 
     if unverifiable:
         # In strict mode, fail. Otherwise warn.
         status = "FAIL" if args.strict else "WARN"
-        details = "\n".join([f"- L{it.line_no}: {it.text} ({' > '.join(it.section_path)})" for it in unverifiable[:60]])
-        findings.append(AuditFinding(
-            name="Line-by-line verifiability",
-            status=status,
-            details=(
-                f"{len(unverifiable)} checked TODO items have no machine-verifiable evidence "
-                f"(no paths/commands in backticks and not under RG sections).\n"
-                f"Recommendation: add evidence tags or a mapping file tying each item to a test/gate.\n"
-                f"{details}"
+        details = "\n".join(
+            [
+                f"- L{it.line_no}: {it.text} ({' > '.join(it.section_path)})"
+                for it in unverifiable[:60]
+            ]
+        )
+        findings.append(
+            AuditFinding(
+                name="Line-by-line verifiability",
+                status=status,
+                details=(
+                    f"{len(unverifiable)} checked TODO items have no machine-verifiable evidence "
+                    f"(no paths/commands in backticks and not under RG sections).\n"
+                    f"Recommendation: add evidence tags or a mapping file tying each item to a test/gate.\n"
+                    f"{details}"
+                ),
             )
-        ))
+        )
     else:
-        findings.append(AuditFinding(
-            name="Line-by-line verifiability",
-            status="PASS",
-            details="All checked TODO items have some evidence signal (paths/commands or RG coverage)."
-        ))
+        findings.append(
+            AuditFinding(
+                name="Line-by-line verifiability",
+                status="PASS",
+                details="All checked TODO items have some evidence signal (paths/commands or RG coverage).",
+            )
+        )
 
     # Write report
     now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
     report_lines = []
-    report_lines.append(f"# TODO Audit Report\n")
+    report_lines.append("# TODO Audit Report\n")
     report_lines.append(f"- Timestamp (UTC): {now}\n")
     report_lines.append(f"- Repo: {root}\n")
     report_lines.append(f"- Platform: {platform.platform()}\n")

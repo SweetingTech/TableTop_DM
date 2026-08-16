@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabletop DM - Control Plane</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/static/img/tabletop-dm-logo-192.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    <meta property="og:image" content="/static/img/tabletop-dm-logo.png">
+    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="/static/css/control.css">
+</head>
+<body>
+    <div class="control-layout">
+        <div class="top-bar">
+            <h1>TABLETOP DM</h1>
+            <span class="nav-separator">|</span>
+            <a href="/" class="control-link">Dashboard</a>
+            <a href="/game" class="control-link">Game Console</a>
+            <a href="/help" class="control-link">Help</a>
+            <span class="page-title">Control Plane</span>
+            <div class="campaign-selector">
+                <label>Campaign:</label>
+                <select id="campaignContext" class="select-input"></select>
+                <button id="refreshAll" class="btn btn-secondary btn-sm">Refresh</button>
+            </div>
+        </div>
+
+        <div class="control-content">
+            <div class="tabs">
+                <button class="tab active" data-tab="campaigns">Campaigns</button>
+                <button class="tab" data-tab="sessions">Sessions</button>
+                <button class="tab" data-tab="characters">Characters</button>
+                <button class="tab" data-tab="kb">Knowledge Base</button>
+                <button class="tab" data-tab="intel">Session Intel</button>
+                <button class="tab" data-tab="keys">API Keys</button>
+                <button class="tab" data-tab="ai">AI Settings</button>
+                <button class="tab" data-tab="saves">Save / Load</button>
+            </div>
+
+            <div class="tab-panels">
+                <!-- Campaigns Tab -->
+                <section id="campaigns" class="tab-panel active">
+                    <div class="panel">
+                        <h3>Create Campaign</h3>
+                        <div class="form-row">
+                            <input type="text" id="campName" class="input-field" placeholder="Campaign Name">
+                            <input type="text" id="campSlug" class="input-field" placeholder="slug">
+                            <select id="campStatus" class="select-input">
+                                <option value="ACTIVE">ACTIVE</option>
+                                <option value="DRAFT">DRAFT</option>
+                            </select>
+                            <select id="campMode" class="select-input">
+                                <option value="EXPLORATION">EXPLORATION</option>
+                                <option value="SOCIAL">SOCIAL</option>
+                                <option value="COMBAT">COMBAT</option>
+                                <option value="CUTSCENE">CUTSCENE</option>
+                                <option value="DOWNTIME">DOWNTIME</option>
+                            </select>
+                            <button id="createCampaign" class="btn btn-primary">Create</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Campaign List</h3>
+                        <div id="campaignList" class="item-list"></div>
+                    </div>
+                </section>
+
+                <!-- Sessions Tab -->
+                <section id="sessions" class="tab-panel">
+                    <div class="panel">
+                        <h3>Session Actions</h3>
+                        <div class="form-row">
+                            <button id="createSession" class="btn btn-primary">Create Session (soft restart)</button>
+                            <button id="resumeCampaign" class="btn btn-secondary">Resume Campaign</button>
+                        </div>
+                        <div class="form-row" style="margin-top: 8px; align-items:center;">
+                            <span style="font-size:12px;color:var(--text-secondary);">Mode:</span>
+                            <span id="campModeBadge" class="mode-badge" style="font-size:11px;padding:2px 8px;">--</span>
+                            <button id="btnEnterCombat" class="btn btn-danger">Enter Combat</button>
+                            <button id="btnExitCombat" class="btn btn-secondary">Exit Combat</button>
+                        </div>
+                        <p class="help-text">GM-controlled combat trigger. In AI-DM campaigns the orchestrator calls the same endpoint via NPCAutonomy when hostile proximity is met.</p>
+                    </div>
+                    <div class="panel">
+                        <h3>Sessions</h3>
+                        <div id="sessionList" class="item-list"></div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Players / Join</h3>
+                        <p class="help-text">Create a local player principal and use the generated Game Console link for that player.</p>
+                        <div class="form-row">
+                            <input type="text" id="newPlayerName" class="input-field" placeholder="Player display name">
+                            <button id="createPlayerMember" class="btn btn-primary">Create Player</button>
+                        </div>
+                        <div id="memberList" class="item-list">
+                            <div class="list-item-meta">Select a campaign to see players</div>
+                        </div>
+                    </div>
+
+                    <!-- Session Archives Panel -->
+                    <div class="panel">
+                        <h3>Session Archives</h3>
+                        <p class="help-text">View archived sessions and their chat history</p>
+                        <div id="sessionArchives" class="item-list">
+                            <div class="list-item-meta">Select a campaign to see archived sessions</div>
+                        </div>
+                    </div>
+
+                    <!-- Session History Viewer Modal -->
+                    <div id="sessionHistoryModal" class="modal" style="display:none;">
+                        <div class="modal-content modal-large">
+                            <div class="modal-header">
+                                <h3>Session History</h3>
+                                <button onclick="control.closeHistoryModal()" class="btn-close">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="history-meta" id="historyMeta"></div>
+                                <div class="history-story-state" id="historyStoryState"></div>
+                                <div class="history-chat" id="historyChatLog"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button onclick="control.deleteArchive()" class="btn btn-danger">Delete Archive</button>
+                                <button onclick="control.closeHistoryModal()" class="btn btn-secondary">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Characters Tab -->
+                <section id="characters" class="tab-panel">
+                    <!-- Quick Actions -->
+                    <div class="panel">
+                        <h3>Quick Character Creation</h3>
+                        <div class="form-row">
+                            <input type="text" id="charConcept" class="input-field input-wide" placeholder="Character concept (e.g., 'elven ranger with dark past')">
+                            <button id="generateCharacter" class="btn btn-primary">AI Generate</button>
+                        </div>
+                        <p id="generateCharacterStatus" class="help-text"></p>
+                        <p class="help-text">Enter a concept and let AI generate a complete character sheet</p>
+                    </div>
+
+                    <!-- Character Builder Form -->
+                    <div class="panel">
+                        <h3>Character Builder</h3>
+                        <p class="help-text">Fill in the sections below to create a detailed character</p>
+
+                        <!-- Identity Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('identity')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Identity &amp; Basics</span>
+                            </div>
+                            <div id="identity" class="section-content">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Character Name *</label>
+                                        <input type="text" id="charName" class="input-field" placeholder="Thorin Ironforge">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Entity Type</label>
+                                        <select id="charEntityType" class="select-input">
+                                            <option value="PC">Player Character (PC)</option>
+                                            <option value="NPC">Non-Player Character (NPC)</option>
+                                            <option value="MONSTER">Monster</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Race/Species</label>
+                                        <input type="text" id="charRace" class="input-field" placeholder="Human, Elf, Dwarf...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Class/Archetype</label>
+                                        <input type="text" id="charClass" class="input-field" placeholder="Fighter, Wizard, Rogue...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Level</label>
+                                        <input type="number" id="charLevel" class="input-field" value="1" min="1" max="20">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Background</label>
+                                        <input type="text" id="charBackground" class="input-field" placeholder="Soldier, Noble, Outlander...">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Attributes Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('attributes')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Attributes &amp; Stats</span>
+                            </div>
+                            <div id="attributes" class="section-content">
+                                <div class="form-grid stats-grid">
+                                    <div class="form-group">
+                                        <label>Strength</label>
+                                        <input type="number" id="charStr" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Dexterity</label>
+                                        <input type="number" id="charDex" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Constitution</label>
+                                        <input type="number" id="charCon" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Intelligence</label>
+                                        <input type="number" id="charInt" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Wisdom</label>
+                                        <input type="number" id="charWis" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Charisma</label>
+                                        <input type="number" id="charCha" class="input-field" value="10" min="1" max="30">
+                                    </div>
+                                </div>
+                                <div class="form-grid" style="margin-top: 12px;">
+                                    <div class="form-group">
+                                        <label>Hit Points</label>
+                                        <input type="number" id="charHp" class="input-field" value="10" min="1">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Armor Class</label>
+                                        <input type="number" id="charAc" class="input-field" value="10" min="1">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Speed (ft)</label>
+                                        <input type="number" id="charSpeed" class="input-field" value="30" min="0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Initiative Bonus</label>
+                                        <input type="number" id="charInit" class="input-field" value="0">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Abilities Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('abilities')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Abilities &amp; Skills</span>
+                            </div>
+                            <div id="abilities" class="section-content">
+                                <div class="form-group">
+                                    <label>Proficient Skills (comma-separated)</label>
+                                    <input type="text" id="charSkills" class="input-field" placeholder="Perception, Stealth, Athletics...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Languages (comma-separated)</label>
+                                    <input type="text" id="charLanguages" class="input-field" placeholder="Common, Elvish, Dwarvish...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Special Abilities</label>
+                                    <textarea id="charAbilities" class="textarea-field" rows="3" placeholder="Darkvision 60ft, Rage (3/day), Spellcasting..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Actions Available Per Turn</label>
+                                    <textarea id="charActions" class="textarea-field" rows="2" placeholder="Attack (melee/ranged), Cast Spell, Dash, Dodge..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Equipment Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('equipment')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Equipment &amp; Inventory</span>
+                            </div>
+                            <div id="equipment" class="section-content">
+                                <div class="form-group">
+                                    <label>Weapons</label>
+                                    <textarea id="charWeapons" class="textarea-field" rows="2" placeholder="Longsword (1d8 slashing), Shortbow (1d6 piercing)..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Armor &amp; Shield</label>
+                                    <input type="text" id="charArmor" class="input-field" placeholder="Chain mail, Shield">
+                                </div>
+                                <div class="form-group">
+                                    <label>Other Equipment</label>
+                                    <textarea id="charEquipment" class="textarea-field" rows="2" placeholder="Backpack, bedroll, torches, rope..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Gold/Currency</label>
+                                    <input type="number" id="charGold" class="input-field" value="0" min="0">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Personality Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('personality')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Personality &amp; Roleplay</span>
+                            </div>
+                            <div id="personality" class="section-content">
+                                <div class="form-group">
+                                    <label>Personality Traits</label>
+                                    <textarea id="charTraits" class="textarea-field" rows="2" placeholder="Brave but reckless, speaks in riddles..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Ideals</label>
+                                    <input type="text" id="charIdeals" class="input-field" placeholder="Freedom, Honor, Knowledge...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Bonds</label>
+                                    <input type="text" id="charBonds" class="input-field" placeholder="My family, a sacred oath, my mentor...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Flaws</label>
+                                    <input type="text" id="charFlaws" class="input-field" placeholder="Overconfident, fears the dark...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Goals &amp; Motivation</label>
+                                    <textarea id="charGoals" class="textarea-field" rows="2" placeholder="Seek revenge, find lost artifact, protect the innocent..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Backstory Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('backstory')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>Backstory &amp; Connections</span>
+                            </div>
+                            <div id="backstory" class="section-content">
+                                <div class="form-group">
+                                    <label>Backstory</label>
+                                    <textarea id="charBackstory" class="textarea-field" rows="4" placeholder="Character history, origin, key life events..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Allies &amp; Organizations</label>
+                                    <input type="text" id="charAllies" class="input-field" placeholder="The Thieves Guild, Order of Paladins...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Enemies &amp; Rivals</label>
+                                    <input type="text" id="charEnemies" class="input-field" placeholder="The Shadow King, rival adventurer...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- DM Notes Section -->
+                        <div class="form-section">
+                            <div class="section-header" onclick="toggleSection('dmnotes')">
+                                <span class="section-icon">&#9658;</span>
+                                <span>DM Notes &amp; Meta</span>
+                            </div>
+                            <div id="dmnotes" class="section-content">
+                                <div class="form-group">
+                                    <label>Secret Information (hidden from player)</label>
+                                    <textarea id="charSecrets" class="textarea-field" rows="2" placeholder="True identity, hidden curse, secret mission..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Plot Hooks</label>
+                                    <textarea id="charPlotHooks" class="textarea-field" rows="2" placeholder="Can be used to introduce quests or story arcs..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Balance Notes</label>
+                                    <textarea id="charBalance" class="textarea-field" rows="2" placeholder="Power level considerations, special rules..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Control Mode</label>
+                                    <select id="charControlledBy" class="select-input">
+                                        <option value="PLAYER">Player Controlled</option>
+                                        <option value="AI_NPC">AI Controlled (NPC)</option>
+                                        <option value="GM">GM Controlled</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Player Controller</label>
+                                    <select id="charControllerPrincipal" class="select-input">
+                                        <option value="">-- Select player principal --</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="form-row" style="margin-top: 16px;">
+                            <button id="createCharacterForm" class="btn btn-primary">Create Character</button>
+                            <button id="randomizeStats" class="btn btn-secondary">Randomize Stats</button>
+                            <button id="clearCharacterForm" class="btn btn-secondary">Clear Form</button>
+                        </div>
+                    </div>
+
+                    <!-- JSON Import (collapsed by default) -->
+                    <div class="panel">
+                        <div class="section-header" onclick="toggleSection('jsonimport')">
+                            <span class="section-icon">&#9658;</span>
+                            <span>Advanced: JSON Import</span>
+                        </div>
+                        <div id="jsonimport" class="section-content">
+                            <textarea id="characterJson" class="textarea-field" rows="6" placeholder='{"name":"Aria","entity_type":"PC","public_sheet":{}}'></textarea>
+                            <div class="form-row">
+                                <button id="createCharacter" class="btn btn-primary">Create from JSON</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Session Party Panel -->
+                    <div class="panel">
+                        <h3>Current Session Party</h3>
+                        <p class="help-text">Characters active in the current session</p>
+                        <div id="sessionParty" class="item-list">
+                            <div class="list-item-meta">Select a session to see party members</div>
+                        </div>
+                        <div class="form-row" style="margin-top: 12px;">
+                            <select id="addCharacterSelect" class="select-input" style="flex: 1;">
+                                <option value="">-- Add Character to Session --</option>
+                            </select>
+                            <button id="addToSession" class="btn btn-primary">Add to Session</button>
+                        </div>
+                    </div>
+
+                    <!-- Character List -->
+                    <div class="panel">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h3 style="margin: 0;">All Characters</h3>
+                            <div class="view-toggle">
+                                <button id="viewList" class="btn btn-sm btn-secondary active" title="List View">&#9776;</button>
+                                <button id="viewCards" class="btn btn-sm btn-secondary" title="Card View">&#9638;</button>
+                                <label class="checkbox-label" style="margin-left: 12px;">
+                                    <input type="checkbox" id="showDeleted"> Show Deleted
+                                </label>
+                            </div>
+                        </div>
+                        <div id="characterList" class="item-list"></div>
+                        <div id="characterCards" class="card-grid" style="display: none;"></div>
+                    </div>
+
+                    <!-- Edit Character Modal -->
+                    <div id="editCharacterModal" class="modal" style="display: none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Edit Character</h3>
+                                <button class="modal-close" onclick="closeEditModal()">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <input type="hidden" id="editCharId">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Name</label>
+                                        <input type="text" id="editCharName" class="input-field">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Entity Type</label>
+                                        <select id="editCharEntityType" class="select-input">
+                                            <option value="PC">PC</option>
+                                            <option value="NPC">NPC</option>
+                                            <option value="MONSTER">Monster</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Control Mode</label>
+                                        <select id="editCharControlledBy" class="select-input">
+                                            <option value="PLAYER">Player</option>
+                                            <option value="AI_NPC">AI</option>
+                                            <option value="GM">GM</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Player Controller</label>
+                                        <select id="editCharControllerPrincipal" class="select-input">
+                                            <option value="">-- Select player principal --</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>HP Current / Max</label>
+                                        <div style="display: flex; gap: 8px;">
+                                            <input type="number" id="editCharHpCurrent" class="input-field" style="width: 80px;">
+                                            <span style="align-self: center;">/</span>
+                                            <input type="number" id="editCharHpMax" class="input-field" style="width: 80px;">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>AC</label>
+                                        <input type="number" id="editCharAc" class="input-field">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Speed</label>
+                                        <input type="number" id="editCharSpeed" class="input-field">
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-top: 12px;">
+                                    <label>Portrait Image</label>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input type="file" id="editCharImage" class="file-input" accept="image/*">
+                                        <button id="uploadCharImage" class="btn btn-secondary">Upload</button>
+                                        <button id="removeCharImage" class="btn btn-danger">Remove</button>
+                                    </div>
+                                    <div id="editCharImagePreview" style="margin-top: 8px;"></div>
+                                </div>
+                                <div class="form-group" style="margin-top: 12px;">
+                                    <label>Public Sheet (JSON)</label>
+                                    <textarea id="editCharPublicSheet" class="textarea-field" rows="4"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button id="saveCharacterEdit" class="btn btn-primary">Save Changes</button>
+                                <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Knowledge Base Tab -->
+                <section id="kb" class="tab-panel">
+                    <div class="panel">
+                        <h3>Upload Document</h3>
+                        <div class="form-row">
+                            <input type="file" id="ragFile" class="file-input">
+                            <button id="uploadRag" class="btn btn-primary">Upload</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h3>Documents</h3>
+                        <div id="docList" class="item-list"></div>
+                    </div>
+                    <div class="panel">
+                        <h3>Test Retrieval</h3>
+                        <div class="form-row">
+                            <input type="text" id="ragQuery" class="input-field input-wide" placeholder="Search query...">
+                            <button id="testRetrieval" class="btn btn-secondary">Test Retrieval</button>
+                        </div>
+                        <pre id="retrievalOut" class="output-pre"></pre>
+                    </div>
+                </section>
+
+                <!-- Session Intel Tab -->
+                <section id="intel" class="tab-panel">
+                    <div class="panel">
+                        <h3>Session Intelligence</h3>
+                        <p class="help-text">
+                            Narrative state compiler. Observes chat + ledger, proposes patches to
+                            <code>state.story_state</code>, queues them here for DM review. Approve / edit /
+                            reject each item. Approved patches commit to <code>story_state</code> via the
+                            per-event-type dispatcher. Cleartext lives only in your DB — keys/secrets stay on
+                            the server.
+                        </p>
+                        <div class="form-row" style="align-items:center;">
+                            <label for="intelSession" style="font-size:12px;color:var(--text-secondary);">Session:</label>
+                            <select id="intelSession" class="select-input" style="flex:1;"></select>
+                            <button id="btnIntelExtract" class="btn btn-primary">Run Extractor</button>
+                            <button id="btnIntelExtractLLM" class="btn btn-secondary" title="Includes LLM narrative-inference path (uses your API key)">Run Extractor + LLM</button>
+                            <button id="btnIntelPacket" class="btn btn-secondary">Generate DM Packet</button>
+                            <button id="btnIntelRefresh" class="btn btn-secondary">Refresh</button>
+                        </div>
+                        <pre id="intelOut" class="output-pre"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Pending Patches <span id="intelPendingCount" class="status-badge"></span></h3>
+                        <p class="help-text">Patches waiting for DM review. Each one cites the source event and (where the LLM extractor ran) a verbatim quote.</p>
+                        <div class="form-row" style="margin-bottom:8px;">
+                            <button id="btnIntelBatchApprove" class="btn btn-primary btn-sm">Approve Selected</button>
+                            <button id="btnIntelBatchReject" class="btn btn-danger btn-sm">Reject Selected</button>
+                            <span class="help-text">Batch actions apply only checked pending cards.</span>
+                        </div>
+                        <div id="intelPatchList" class="item-list">
+                            <div class="list-item-meta">Select a session, then click "Run Extractor".</div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Recaps</h3>
+                        <div class="form-row" style="margin-bottom:8px;">
+                            <button id="btnRecapDm" class="btn btn-secondary btn-sm">DM Recap</button>
+                            <button id="btnRecapParty" class="btn btn-secondary btn-sm">Party Recap</button>
+                            <button id="btnRecapPublic" class="btn btn-secondary btn-sm">Public Recap</button>
+                            <span class="help-text">Visibility separation: party recap omits dm-only secrets; DM recap includes them and flagged contradictions.</span>
+                        </div>
+                        <pre id="intelRecap" class="output-pre" style="min-height:80px;"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Continuity</h3>
+                        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div>
+                                <h4 style="margin-top:0;">Open Threads</h4>
+                                <div id="intelOpenThreads" class="item-list">
+                                    <div class="list-item-meta">No open threads.</div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="margin-top:0;">Unresolved Promises</h4>
+                                <div id="intelPromises" class="item-list">
+                                    <div class="list-item-meta">No outstanding promises.</div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="margin-top:0;">Contradictions / Retcons</h4>
+                                <div id="intelContradictions" class="item-list">
+                                    <div class="list-item-meta">No contradictions flagged.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Edit Patch Modal -->
+                    <div id="patchEditModal" class="modal" style="display:none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Edit Patch</h3>
+                                <button class="modal-close" onclick="document.getElementById('patchEditModal').style.display='none'">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <input type="hidden" id="patchEditId" />
+                                <div class="form-group">
+                                    <label>Summary</label>
+                                    <input type="text" id="patchEditSummary" class="input-field">
+                                </div>
+                                <div class="form-group">
+                                    <label>Visibility</label>
+                                    <select id="patchEditVisibility" class="select-input">
+                                        <option value="public">public</option>
+                                        <option value="party">party</option>
+                                        <option value="dm_only">dm_only</option>
+                                        <option value="principal_scoped">principal_scoped</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Patch payload (JSON)</label>
+                                    <textarea id="patchEditPatch" class="textarea-field" rows="6"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button id="patchEditSave" class="btn btn-primary">Save (status → EDITED)</button>
+                                <button id="patchEditApply" class="btn btn-primary">Save + Apply now</button>
+                                <button class="btn btn-secondary" onclick="document.getElementById('patchEditModal').style.display='none'">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- API Keys Tab -->
+                <section id="keys" class="tab-panel">
+                    <div class="panel">
+                        <h3>API Keys</h3>
+                        <p class="help-text">
+                            Keys are stored installation-wide. <strong>Encrypted at rest</strong> with a
+                            vault key at <code>.local-run/vault.key</code> (host filesystem, outside Docker).
+                            The server never echoes a saved key back — once you save, only <code>********</code>
+                            is shown. Leave a field blank to keep an existing saved key; type a new value to
+                            replace; clear the field and click Save to delete.
+                        </p>
+                        <div class="form-grid" style="grid-template-columns: 1fr 200px auto;">
+                            <div class="form-group">
+                                <label>OpenRouter</label>
+                                <input type="password" id="key_openrouter" class="input-field" autocomplete="off" placeholder="sk-or-…">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_openrouter" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+
+                            <div class="form-group">
+                                <label>OpenAI</label>
+                                <input type="password" id="key_openai" class="input-field" autocomplete="off" placeholder="sk-proj-…">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_openai" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Anthropic</label>
+                                <input type="password" id="key_anthropic" class="input-field" autocomplete="off" placeholder="sk-ant-…">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_anthropic" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+
+                            <div class="form-group">
+                                <label>DeepSeek</label>
+                                <input type="password" id="key_deepseek" class="input-field" autocomplete="off">
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <span id="status_deepseek" class="help-text">no key saved</span>
+                            </div>
+                            <div class="form-group" style="display:flex; align-items:end;">
+                                <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener" class="help-text">Get a key →</a>
+                            </div>
+                        </div>
+                        <div class="form-row" style="margin-top: 16px;">
+                            <button id="saveApiKeys" class="btn btn-primary">Save Keys</button>
+                            <span id="apiKeysStatus" class="help-text"></span>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Vault Info</h3>
+                        <p class="help-text">
+                            Saved keys live in <code>state.global_settings.value.api_keys</code>, each
+                            value encrypted with Fernet using the per-installation vault key.
+                            The image-gen and LLM layers automatically decrypt when making API calls.
+                            Per-campaign overrides in AI Settings still take priority when set.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- AI Settings Tab -->
+                <section id="ai" class="tab-panel">
+                    <div class="panel">
+                        <h3>LLM Provider Configuration</h3>
+                        <p class="help-text">
+                            Cloud providers need an API key. Get one from
+                            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai</a>,
+                            <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a>,
+                            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>, or
+                            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+                            Keys are stored per-campaign in <code>state.campaign_settings.settings.api_keys</code>.
+                        </p>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Provider</label>
+                                <select id="provider" class="select-input">
+                                    <option value="mock">Mock (Testing)</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="openrouter">OpenRouter</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="ollama">Ollama (local)</option>
+                                    <option value="lmstudio">LM Studio (local)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Base URL <span class="help-text">(blank = default)</span></label>
+                                <input type="text" id="baseUrl" class="input-field" placeholder="auto from provider">
+                            </div>
+                            <div class="form-group">
+                                <label>API Key</label>
+                                <input type="password" id="apiKey" class="input-field" placeholder="leave blank to keep saved key" autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label>DM Model</label>
+                                <input type="text" id="dmModel" class="input-field" placeholder="e.g. gpt-4o-mini, claude-sonnet-4-6, deepseek-chat">
+                            </div>
+                            <div class="form-group">
+                                <label>NPC Model</label>
+                                <input type="text" id="npcModel" class="input-field" placeholder="cheaper model is fine">
+                            </div>
+                            <div class="form-group">
+                                <label>Embedding Model</label>
+                                <input type="text" id="embedModel" class="input-field" placeholder="auto from provider">
+                                <div id="embedStatus" class="help-text"></div>
+                            </div>
+                        </div>
+                        <div class="form-row" style="margin-top: 16px;">
+                            <button id="saveAi" class="btn btn-primary">Save Settings</button>
+                            <button id="listModels" class="btn btn-secondary">List Models</button>
+                            <button id="testProvider" class="btn btn-secondary">Test Provider</button>
+                        </div>
+                        <pre id="aiOut" class="output-pre"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Image Generation</h3>
+                        <p class="help-text">
+                            Tile and POI artwork via
+                            <a href="https://openrouter.ai/docs/features/server-tools/image-generation" target="_blank" rel="noopener">OpenRouter's image-generation server tool</a>.
+                            A cheap chat model (Host Model) drives the tool, which invokes the Image Model to produce the picture.
+                        </p>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Image Provider</label>
+                                <select id="imgProvider" class="select-input">
+                                    <option value="openrouter">OpenRouter</option>
+                                    <option value="openai">OpenAI (direct)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Host Chat Model <span class="help-text">(tool-capable; OpenRouter only)</span></label>
+                                <input type="text" id="imgHostModel" class="input-field" placeholder="openai/gpt-4o-mini" list="hostModelChoices">
+                                <datalist id="hostModelChoices">
+                                    <option value="openai/gpt-4o-mini"></option>
+                                    <option value="openai/gpt-5.2"></option>
+                                    <option value="anthropic/claude-sonnet-4"></option>
+                                    <option value="anthropic/claude-haiku-4"></option>
+                                    <option value="deepseek/deepseek-chat"></option>
+                                </datalist>
+                            </div>
+                            <div class="form-group">
+                                <label>Image Model</label>
+                                <input type="text" id="imgModel" class="input-field" placeholder="google/gemini-2.5-flash-image" list="imgModelChoices">
+                                <datalist id="imgModelChoices">
+                                    <option value="google/gemini-2.5-flash-image"></option>
+                                    <option value="google/gemini-3.1-flash-image-preview"></option>
+                                    <option value="google/gemini-3-pro-image-preview"></option>
+                                    <option value="bytedance-seed/seedream-4.5"></option>
+                                    <option value="openai/gpt-5.4-image-2"></option>
+                                    <option value="openai/gpt-5-image-mini"></option>
+                                    <option value="black-forest-labs/flux.2-pro"></option>
+                                    <option value="sourceful/riverflow-v2-fast"></option>
+                                </datalist>
+                            </div>
+                            <div class="form-group">
+                                <label>Image API Key <span class="help-text">(blank = reuse provider key)</span></label>
+                                <input type="password" id="imgApiKey" class="input-field" placeholder="leave blank to use provider key" autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="form-row" style="margin-top: 12px;">
+                            <button id="saveImgSettings" class="btn btn-primary">Save Image Settings</button>
+                            <button id="testImgGen" class="btn btn-secondary">Test Image Gen</button>
+                        </div>
+                        <pre id="imgOut" class="output-pre"></pre>
+                        <img id="imgPreview" alt="" style="display:none; max-width:256px; max-height:256px; border:1px solid var(--border-color); border-radius:4px; margin-top:8px; image-rendering: pixelated;" />
+                    </div>
+                </section>
+
+                <!-- Save / Load Tab -->
+                <section id="saves" class="tab-panel">
+                    <div class="panel">
+                        <h3>Program Save</h3>
+                        <p class="help-text">
+                            Installation-wide configuration: API keys (OpenRouter / OpenAI / etc.), default
+                            image-gen model, the LocalPlayer principal. Export once, import on a new machine to
+                            restore your setup. <strong>Encrypted</strong> — you'll need the same passphrase to
+                            load it again. Save it outside Docker (Desktop, USB, your password manager — wherever
+                            you keep portable credentials).
+                        </p>
+                        <div class="form-row">
+                            <button id="btnExportProgram" class="btn btn-primary">Export Program Save</button>
+                            <input type="file" id="importProgramFile" class="file-input" accept=".ttdm,application/octet-stream" />
+                            <button id="btnImportProgram" class="btn btn-secondary">Import Program Save</button>
+                        </div>
+                        <pre id="programSaveOut" class="output-pre"></pre>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Game Save (current campaign)</h3>
+                        <p class="help-text">
+                            Everything tied to <em><span id="currentCampaignLabel">(no campaign selected)</span></em>:
+                            maps, entities, POIs, decorations, sessions, ledger events. Carry a campaign between
+                            machines — or just keep a backup before you do something risky. <strong>Encrypted.</strong>
+                        </p>
+                        <div class="form-row">
+                            <button id="btnExportGame" class="btn btn-primary">Export Game Save</button>
+                            <input type="file" id="importGameFile" class="file-input" accept=".ttdm,application/octet-stream" />
+                            <button id="btnImportGame" class="btn btn-secondary">Import Game Save</button>
+                            <label class="checkbox-label" style="margin-left:8px;">
+                                <input type="checkbox" id="importReplace" /> Replace if same id exists
+                            </label>
+                        </div>
+                        <pre id="gameSaveOut" class="output-pre"></pre>
+                    </div>
+                </section>
+            </div>
+
+            <div id="error" class="error-banner"></div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/control/main.js"></script>
+</body>
+</html>

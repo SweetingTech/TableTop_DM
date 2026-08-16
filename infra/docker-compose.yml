@@ -38,7 +38,7 @@ services:
       start_period: 5s
 
   qdrant:
-    image: qdrant/qdrant:v1.9.6
+    image: qdrant/qdrant:v1.9.0
     container_name: tabletop_qdrant
     restart: unless-stopped
     ports:
@@ -46,12 +46,6 @@ services:
       - "${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/healthz"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
 
 volumes:
   postgres_data:

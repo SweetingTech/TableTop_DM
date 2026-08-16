@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir uv && uv pip install --system --no-cache -r pypro
 
 COPY . .
 
-EXPOSE 5000
+EXPOSE 8000
 
 ENV PYTHONUNBUFFERED=1
 

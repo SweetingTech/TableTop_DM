@@ -25,3 +25,11 @@ def test_ci_workflow_does_not_require_openai_secrets() -> None:
 
     assert "OPENAI_API_KEY" not in workflow
     assert "AI_INTEGRATIONS_OPENAI_API_KEY" not in workflow
+
+
+def test_make_ci_integration_writes_skip_marker_when_docker_unavailable() -> None:
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+
+    assert "scripts/docker_runtime_available.sh" in makefile
+    assert "burn-bag/ci-integration-skipped.txt" in makefile
+    assert "SKIP: Docker runtime unavailable; integration tests skipped" in makefile

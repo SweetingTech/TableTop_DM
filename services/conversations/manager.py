@@ -9,10 +9,11 @@ from services.visibility.filter import VisibilityResolver
 
 
 class ConversationManager:
-    def __init__(self):
-        self.llm = LLMAdapter()
-        self.dm_agent = DMNarrationAgent()
-        self.npc_agent = NPCDialogueAgent()
+    def __init__(self, campaign_id: Optional[uuid.UUID] = None):
+        self.campaign_id = campaign_id
+        self.llm = LLMAdapter(campaign_id=campaign_id)
+        self.dm_agent = DMNarrationAgent(campaign_id=campaign_id)
+        self.npc_agent = NPCDialogueAgent(campaign_id=campaign_id)
         self.ledger = LedgerWriter()
         self.visibility = VisibilityResolver()
 

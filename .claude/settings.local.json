@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -ExecutionPolicy Bypass -File scripts/start.ps1:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(node --check:*)",
+      "Read(//d/**)",
+      "Bash(docker exec:*)"
+    ]
+  }
+}

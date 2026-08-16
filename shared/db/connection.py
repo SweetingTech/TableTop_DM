@@ -50,15 +50,15 @@ def set_principal_id(conn, principal_id):
         cur.execute("SET LOCAL app.principal_id = %s", (str(principal_id),))
 
 
-def execute_query(query, params=None, fetch=True):
-    with get_cursor() as cur:
+def execute_query(query, params=None, fetch=True, conn=None):
+    with get_cursor(conn=conn) as cur:
         cur.execute(query, params)
         if fetch:
             return cur.fetchall()
         return None
 
 
-def execute_one(query, params=None):
-    with get_cursor() as cur:
+def execute_one(query, params=None, conn=None):
+    with get_cursor(conn=conn) as cur:
         cur.execute(query, params)
         return cur.fetchone()

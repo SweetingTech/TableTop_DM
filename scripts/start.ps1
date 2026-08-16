@@ -1,38 +1,43 @@
-$ErrorActionPreference = "Stop"
-$root = Resolve-Path (Join-Path $PSScriptRoot "..")
+param(
+  [ValidateSet('docker','local')]
+  [string]$Mode = 'docker',
+  [switch]$ResetDb
+)
+$ErrorActionPreference = 'Stop'
+$root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
-if (-not (Test-Path ".env")) {
-  if (Test-Path ".env.example") {
-    Copy-Item ".env.example" ".env"
-    Write-Host "[start] Created .env from .env.example"
+# Prefer Git Bash for Windows paths over WSL bash
+$GitBashPath = "$env:ProgramFiles\Git\bin\bash.exe"
+$bash = if (Test-Path $GitBashPath) {
+    $GitBashPath
+} elseif (Get-Command bash -ErrorAction SilentlyContinue) {
+    (Get-Command bash).Path
+} else {
+    Write-Error "The 'bash' command was not found. Install Git Bash, WSL, or another Bash environment."
+    exit 1
+}
+
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  if ($Mode -eq 'docker') {
+    if ($ResetDb) {
+      & $bash 'scripts/start.sh' '--mode' 'docker' '--reset-db'
+    } else {
+      & $bash 'scripts/start.sh' '--mode' 'docker'
+    }
   } else {
-    throw "[start] .env is missing and .env.example was not found."
+    if ($ResetDb) {
+      throw "-ResetDb is only supported with -Mode docker. Use Docker mode for destructive local dependency resets."
+    }
+    & $bash 'scripts/start.sh' '--mode' 'local'
   }
+  $exitCode = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $previousErrorActionPreference
 }
 
-Write-Host "[start] Starting infrastructure services"
-docker compose -f infra/docker-compose.yml up -d db redis qdrant
-
-Write-Host "[start] Running migrations"
-bash infra/scripts/migrate.sh
-
-Write-Host "[start] Seeding demo campaign"
-bash infra/scripts/seed_demo.sh
-
-Write-Host "[start] Installing Python dependencies"
-python -m pip install -r requirements-dev.txt | Out-Null
-python -c "import tomllib, pathlib, subprocess; data=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8')); deps=data.get('project', {}).get('dependencies', []); subprocess.check_call(['python','-m','pip','install',*deps]) if deps else None"
-
-if ($env:RUN_FOREGROUND -eq "1") {
-  Write-Host "[start] Running app in foreground at http://localhost:5000"
-  python app.py
-  exit $LASTEXITCODE
+if ($exitCode -ne 0) {
+  throw "scripts/start.sh failed with exit code $exitCode"
 }
-
-if (-not (Test-Path ".run")) { New-Item -ItemType Directory -Path ".run" | Out-Null }
-
-$proc = Start-Process -FilePath "python" -ArgumentList "app.py" -PassThru -RedirectStandardOutput ".run/app.log" -RedirectStandardError ".run/app.log"
-$proc.Id | Out-File ".run/app.pid" -Encoding ascii
-Write-Host "[start] Stack is up. Dashboard: http://localhost:5000"
-Write-Host "[start] Use scripts/stop.ps1 to stop all services."

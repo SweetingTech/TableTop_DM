@@ -22,7 +22,7 @@ class LedgerWriter:
                     payload, visible_to, parent_event_id,
                     domain_tags, idempotency_key
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s, %s, %s
                 )
                 ON CONFLICT (session_id, sender_principal_id, idempotency_key)
                 DO NOTHING
@@ -123,7 +123,7 @@ class LedgerWriter:
                     id, campaign_id, session_id, summary_scope,
                     principal_id, from_seq_id, to_seq_id,
                     summary_text, visible_to
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[])
                 RETURNING id
             """,
                 (
