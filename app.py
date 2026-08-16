@@ -5,6 +5,7 @@ import traceback
 import socket
 import hashlib
 import logging
+import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from urllib import request as urllib_request, error as urllib_error
@@ -26,6 +27,9 @@ RAG_CHUNK_SIZE = 1000
 RAG_CHUNK_OVERLAP = 150
 RAG_WORKERS = int(os.environ.get("RAG_WORKERS", "2"))
 RAG_EXECUTOR = ThreadPoolExecutor(max_workers=max(1, RAG_WORKERS))
+
+_MODELS_CACHE = {}
+_MODELS_CACHE_TTL = 300  # 5 minutes
 
 
 def get_db():
@@ -1668,10 +1672,20 @@ def api_ai_models():
     base_url = request.args.get("base_url") or None  # Convert empty string to None
     if provider == "mock":
         return jsonify({"data": [{"id": "mock-model"}]})
+
+    cache_key = (provider, base_url)
+    now = time.time()
+    if cache_key in _MODELS_CACHE:
+        expiry, cached_data = _MODELS_CACHE[cache_key]
+        if now < expiry:
+            return jsonify({"data": cached_data})
+
     try:
         client = _openai_client_for(provider, base_url)
         models = client.models.list()
-        return jsonify({"data": [{"id": m.id} for m in models.data]})
+        data = [{"id": m.id} for m in models.data]
+        _MODELS_CACHE[cache_key] = (now + _MODELS_CACHE_TTL, data)
+        return jsonify({"data": data})
     except Exception as e:
         error_msg = str(e)
         if "Connection refused" in error_msg or "connect" in error_msg.lower():
@@ -1931,7 +1945,7 @@ def api_get_story_state(session_id):
 @app.route("/api/sessions/<session_id>/story_state", methods=["PUT"])
 def api_update_story_state(session_id):
     """Update the story state for a session"""
-    from shared.db.connection import execute_one, transaction
+    from shared.db.connection import transaction
 
     data = request.get_json(silent=True) or {}
 
@@ -2209,7 +2223,7 @@ def api_session_resume_data(session_id):
 @app.route("/api/sessions/<session_id>/archive", methods=["POST"])
 def api_archive_session(session_id):
     """Manually archive a session (without deleting it)"""
-    from shared.db.connection import execute_one, execute_query, transaction
+    from shared.db.connection import transaction
 
     data = request.get_json(silent=True) or {}
 
