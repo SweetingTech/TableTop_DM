@@ -485,7 +485,7 @@ docs/                               Architecture specs
 
 ## Architecture Overview
 
-The request boundary keeps identity and visibility decisions ahead of every read or mutation:
+The request boundary keeps identity ahead of protected reads and every resource mutation, with visibility filtering on scoped reads:
 
 ```mermaid
 flowchart LR

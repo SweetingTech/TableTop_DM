@@ -1,12 +1,17 @@
 import pytest
 
-from services.saves.game_save import _insert_row, _referenced_principal_ids
+from services.saves.game_save import (
+    _complete_principal_remap,
+    _insert_row,
+    _referenced_principal_ids,
+)
 
 
 class RecordingCursor:
-    def __init__(self):
+    def __init__(self, rows=None):
         self.sql = None
         self.params = None
+        self.rows = rows or []
 
     def execute(self, sql, params):
         self.sql = sql
@@ -15,10 +20,13 @@ class RecordingCursor:
     def close(self):
         pass
 
+    def fetchall(self):
+        return self.rows
+
 
 class RecordingConnection:
-    def __init__(self):
-        self.cursor_instance = RecordingCursor()
+    def __init__(self, rows=None):
+        self.cursor_instance = RecordingCursor(rows)
 
     def cursor(self):
         return self.cursor_instance
@@ -76,3 +84,22 @@ def test_referenced_principals_rejects_string_visibility_array():
                 ]
             }
         )
+
+
+def test_complete_principal_remap_looks_up_legacy_ids_in_one_query():
+    existing_id = "22222222-2222-2222-2222-222222222222"
+    unknown_id = "33333333-3333-3333-3333-333333333333"
+    conn = RecordingConnection(rows=[(existing_id,)])
+    remap = {}
+    payload = {
+        "ledger_events": [
+            {"sender_principal_id": existing_id, "visible_to": [unknown_id]}
+        ]
+    }
+
+    with pytest.raises(ValueError, match=unknown_id):
+        _complete_principal_remap(conn, payload, remap)
+
+    assert "ANY(%s::uuid[])" in conn.cursor_instance.sql
+    assert conn.cursor_instance.params == ([existing_id, unknown_id],)
+    assert remap == {existing_id: existing_id}

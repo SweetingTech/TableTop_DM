@@ -199,16 +199,63 @@ function controlAuthContext() {
     const params = new URLSearchParams(window.location.search);
     const explicitPrincipalId = params.get('principal_id');
     const explicitJoinToken = params.get('join_token') || params.get('invite_token');
-    if (explicitPrincipalId) {
-        return { principalId: explicitPrincipalId, joinToken: explicitJoinToken };
+    const campaignId = state.selectedCampaign;
+    const memberFor = (principalId) => state.members.find(
+        (member) => member.principal_id === principalId
+    );
+    const isGmMember = (member) => member
+        && (member.role === 'GM' || member.principal_type === 'SYSTEM');
+
+    if (explicitPrincipalId && explicitJoinToken) {
+        localStorage.setItem(`ttdm_join_token:${explicitPrincipalId}`, explicitJoinToken);
+        if (campaignId) {
+            localStorage.setItem(
+                `ttdm_join_token:${campaignId}:${explicitPrincipalId}`,
+                explicitJoinToken
+            );
+            localStorage.setItem(
+                `ttdm_control_principal_id:${campaignId}`,
+                explicitPrincipalId
+            );
+        }
     }
 
-    const gm = state.members.find((member) => member.role === 'GM')
-        || state.members.find((member) => member.role === 'SYSTEM');
-    if (!gm) return { principalId: '', joinToken: '' };
+    const storedControlPrincipalId = campaignId
+        ? localStorage.getItem(`ttdm_control_principal_id:${campaignId}`)
+        : null;
+    const storedGamePrincipalId = campaignId
+        ? localStorage.getItem(`ttdm_principal_id:${campaignId}`)
+        : null;
+    const storedMember = memberFor(storedControlPrincipalId)
+        || memberFor(storedGamePrincipalId);
+    const fallbackMember = (isGmMember(storedMember) ? storedMember : null)
+        || state.members.find((member) => member.role === 'GM')
+        || state.members.find((member) => member.principal_type === 'SYSTEM');
+    const principalId = explicitPrincipalId || fallbackMember?.principal_id;
+    if (!principalId) {
+        return { principalId: '', joinToken: '' };
+    }
+
+    const storedJoinToken = (
+        campaignId
+            ? localStorage.getItem(`ttdm_join_token:${campaignId}:${principalId}`)
+            : null
+    ) || localStorage.getItem(`ttdm_join_token:${principalId}`);
+    if (explicitJoinToken || storedJoinToken) {
+        return {
+            principalId,
+            joinToken: explicitJoinToken || storedJoinToken,
+        };
+    }
+
+    const member = memberFor(principalId);
+    if (!member) {
+        return { principalId, joinToken: '' };
+    }
+    const tokenPrefix = member.role === 'GM' ? 'dm' : 'player';
     return {
-        principalId: gm.principal_id,
-        joinToken: `dm-smoke-join-${gm.principal_id}`,
+        principalId,
+        joinToken: `${tokenPrefix}-smoke-join-${principalId}`,
     };
 }
 

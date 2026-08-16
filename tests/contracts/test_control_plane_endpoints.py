@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from app import app
 
@@ -46,3 +47,12 @@ def test_ai_test_provider_mock():
         )
     assert r.status_code == 200
     assert r.get_json()["ok"] is True
+
+
+def test_control_plane_reuses_real_tokens_and_matches_smoke_token_roles():
+    control_js = Path("static/js/control/legacy-control.js").read_text(encoding="utf-8")
+
+    assert "ttdm_control_principal_id:${campaignId}" in control_js
+    assert "ttdm_join_token:${campaignId}:${principalId}" in control_js
+    assert "explicitJoinToken || storedJoinToken" in control_js
+    assert "member.role === 'GM' ? 'dm' : 'player'" in control_js

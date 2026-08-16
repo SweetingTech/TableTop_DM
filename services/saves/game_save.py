@@ -256,22 +256,27 @@ def _principal_specs(payload: dict) -> dict[str, dict]:
     return specs
 
 
-def _principal_exists(conn, principal_id: str) -> bool:
+def _existing_principal_ids(conn, principal_ids: list[str]) -> set[str]:
+    if not principal_ids:
+        return set()
     cur = conn.cursor()
-    cur.execute("SELECT 1 FROM state.principals WHERE id = %s", (principal_id,))
-    exists = cur.fetchone() is not None
+    cur.execute(
+        "SELECT id FROM state.principals WHERE id = ANY(%s::uuid[])",
+        (principal_ids,),
+    )
+    existing = {str(row[0]) for row in cur.fetchall()}
     cur.close()
-    return exists
+    return existing
 
 
 def _complete_principal_remap(
     conn, payload: dict, principal_remap: dict[str, str]
 ) -> None:
     """Require a destination identity for each UUID in the save graph."""
-    for source_id in sorted(_referenced_principal_ids(payload)):
-        if source_id in principal_remap:
-            continue
-        if _principal_exists(conn, source_id):
+    missing_ids = sorted(_referenced_principal_ids(payload) - set(principal_remap))
+    existing_ids = _existing_principal_ids(conn, missing_ids)
+    for source_id in missing_ids:
+        if source_id in existing_ids:
             # Legacy saves omitted non-member metadata. They remain importable
             # on the source machine while cross-machine imports fail closed.
             principal_remap[source_id] = source_id
