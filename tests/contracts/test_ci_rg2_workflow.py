@@ -27,6 +27,12 @@ def test_compose_smoke_uses_qdrant_http_readiness() -> None:
     assert "State.Health.Status}}' tabletop_qdrant" not in smoke
 
 
+def test_integration_reset_waits_for_container_health() -> None:
+    reset_script = Path("scripts/db_reset.py").read_text(encoding="utf-8")
+
+    assert 'docker_compose("up", "-d", "--wait")' in reset_script
+
+
 def test_ci_workflow_does_not_require_openai_secrets() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
