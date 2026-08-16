@@ -9,6 +9,12 @@
 - Re-running `make migrate` is safe:
   - already-applied migrations are skipped
   - checksum drift fails fast to prevent silent schema skew
+- For disposable Docker development databases, recover from checksum drift by
+  rebuilding dependency volumes:
+  `.\scripts\start.ps1 -Mode docker -ResetDb` on Windows or
+  `./scripts/start.sh --mode docker --reset-db` in Bash. This deletes local
+  Postgres, Redis, and Qdrant Docker volume data, then reruns migrations and
+  seeds the demo campaign.
 
 ## Phase 4 demo seed
 - Seed SQL lives at `infra/sql/seed/001_demo_campaign.sql`.

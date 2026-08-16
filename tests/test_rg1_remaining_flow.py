@@ -8,7 +8,14 @@ pytestmark = pytest.mark.unit
 
 
 class DummyPrincipal:
-    principal_id = uuid.UUID("22222222-2222-2222-2222-222222222222")
+    principal_id = uuid.UUID("22222222-2222-2222-2222-222222222221")
+    role = "GM"
+
+    def is_gm(self):
+        return True
+
+    def is_system(self):
+        return False
 
 
 class DummyProposal:
@@ -61,6 +68,9 @@ def test_player_talk_to_npc_creates_dialogue_event(monkeypatch):
             return {"type": "DIALOGUE", "payload": {"dialogue": "Halt, intruder!"}}
 
     class ConversationManager:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
         def handle_proximity_chat(self, **_kwargs):
             return [FakeEvent()]
 
@@ -102,6 +112,10 @@ def test_gm_switches_mode_to_combat(monkeypatch):
     with app.test_client() as client:
         response = client.post(
             "/api/campaigns/11111111-1111-1111-1111-111111111111/mode",
+            query_string={
+                "principal_id": "22222222-2222-2222-2222-222222222221",
+                "join_token": "dm-smoke-join-22222222-2222-2222-2222-222222222221",
+            },
             json={"mode": "COMBAT"},
         )
 
@@ -154,7 +168,11 @@ def test_combat_round_intent_and_advance(monkeypatch):
             },
         )
         advance = client.post(
-            "/api/encounters/55555555-5555-5555-5555-555555555551/advance"
+            "/api/encounters/55555555-5555-5555-5555-555555555551/advance",
+            query_string={
+                "principal_id": "22222222-2222-2222-2222-222222222221",
+                "join_token": "dm-smoke-join-22222222-2222-2222-2222-222222222221",
+            },
         )
 
     assert propose.status_code == 200

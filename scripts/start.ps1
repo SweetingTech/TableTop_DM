@@ -1,6 +1,7 @@
 param(
   [ValidateSet('docker','local')]
-  [string]$Mode = 'docker'
+  [string]$Mode = 'docker',
+  [switch]$ResetDb
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -17,8 +18,26 @@ $bash = if (Test-Path $GitBashPath) {
     exit 1
 }
 
-if ($Mode -eq 'docker') {
-  & $bash 'scripts/start.sh' '--mode' 'docker'
-} else {
-  & $bash 'scripts/start.sh' '--mode' 'local'
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  if ($Mode -eq 'docker') {
+    if ($ResetDb) {
+      & $bash 'scripts/start.sh' '--mode' 'docker' '--reset-db'
+    } else {
+      & $bash 'scripts/start.sh' '--mode' 'docker'
+    }
+  } else {
+    if ($ResetDb) {
+      throw "-ResetDb is only supported with -Mode docker. Use Docker mode for destructive local dependency resets."
+    }
+    & $bash 'scripts/start.sh' '--mode' 'local'
+  }
+  $exitCode = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $previousErrorActionPreference
+}
+
+if ($exitCode -ne 0) {
+  throw "scripts/start.sh failed with exit code $exitCode"
 }

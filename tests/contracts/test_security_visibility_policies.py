@@ -22,5 +22,8 @@ def test_visibility_policy_requires_matching_principal() -> None:
         encoding="utf-8"
     )
 
-    assert "current_setting('app.principal_id', true) <> ''" in sql
-    assert "current_setting('app.principal_id', true)::uuid = ANY(visible_to)" in sql
+    assert "NULLIF(current_setting('app.principal_id', true), '') IS NOT NULL" in sql
+    assert (
+        "NULLIF(current_setting('app.principal_id', true), '')::uuid = ANY(visible_to)"
+        in sql
+    )

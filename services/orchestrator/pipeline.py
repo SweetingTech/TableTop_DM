@@ -11,6 +11,7 @@ from shared.db.connection import get_connection
 from services.ledger.writer import LedgerWriter
 from services.visibility.filter import VisibilityResolver
 from services.orchestrator.state_machine import StateMachine
+from services.orchestrator.delta_dispatcher import StateDeltaDispatcher
 from services.mechanics.engine import MechanicsEngine
 from services.spatial.engine import SpatialEngine
 
@@ -27,6 +28,7 @@ class OrchestratorPipeline:
         self.ledger = LedgerWriter()
         self.visibility = VisibilityResolver()
         self.state_machine = StateMachine()
+        self.delta_dispatcher = StateDeltaDispatcher()
         self.mechanics = MechanicsEngine()
         self.spatial = SpatialEngine()
 
@@ -225,13 +227,16 @@ class OrchestratorPipeline:
             return ToolCallPayload(
                 tool_name="move_entity",
                 arguments=params,
-                result={"success": False, "reason": "destination_x and destination_y required"},
+                result={
+                    "success": False,
+                    "reason": "destination_x and destination_y required",
+                },
             )
 
         # Get map for pathfinding validation
         map_row = execute_one(
             "SELECT id FROM state.maps WHERE campaign_id = %s LIMIT 1",
-            (str(campaign_id),)
+            (str(campaign_id),),
         )
 
         if map_row:
@@ -325,10 +330,10 @@ class OrchestratorPipeline:
                 domain_tags=proposal.domain_tags,
                 idempotency_key=proposal.idempotency_key,
             )
-            self.ledger.append_event(tool_event, conn)
+            tool_append = self.ledger.append_event(tool_event, conn)
 
             for delta in tool_result.deltas:
-                self._apply_delta(delta, conn)
+                self.delta_dispatcher.apply(delta, conn)
 
             if tool_result.deltas:
                 delta_event = EventEnvelope(
@@ -338,7 +343,9 @@ class OrchestratorPipeline:
                     encounter_id=proposal.encounter_id,
                     sender_principal_id=principal.principal_id,
                     payload={
-                        "deltas": [d.model_dump(mode="json") for d in tool_result.deltas],
+                        "deltas": [
+                            d.model_dump(mode="json") for d in tool_result.deltas
+                        ],
                     },
                     visible_to=visible_to,
                     domain_tags=[t for d in tool_result.deltas for t in d.domain_tags],
@@ -366,6 +373,10 @@ class OrchestratorPipeline:
             return {
                 "success": True,
                 "event_id": str(tool_event.event_id),
+                "seq_id": tool_append.get("seq_id") if tool_append else None,
+                "campaign_id": str(proposal.campaign_id),
+                "session_id": str(session_id),
+                "visible_to": [str(v) for v in visible_to],
                 "tool_result": tool_result.result,
                 "rolls": [r.model_dump(mode="json") for r in tool_result.rolls],
                 "deltas_applied": len(tool_result.deltas),
@@ -388,8 +399,12 @@ class OrchestratorPipeline:
         """Generate automatic narration for significant events."""
         # Only narrate significant combat/story events
         significant_actions = {
-            "ATTACK", "OPPORTUNITY_ATTACK", "CAST_SPELL",
-            "DIVINE_BLESS", "DIVINE_CURSE", "DIVINE_SMITE",
+            "ATTACK",
+            "OPPORTUNITY_ATTACK",
+            "CAST_SPELL",
+            "DIVINE_BLESS",
+            "DIVINE_CURSE",
+            "DIVINE_SMITE",
         }
 
         if proposal.action_type not in significant_actions:
@@ -401,7 +416,7 @@ class OrchestratorPipeline:
 
             settings = execute_one(
                 "SELECT settings FROM state.campaign_settings WHERE campaign_id = %s",
-                (str(proposal.campaign_id),)
+                (str(proposal.campaign_id),),
             )
             if settings and settings.get("settings"):
                 if not settings["settings"].get("auto_narrate", True):
@@ -460,78 +475,6 @@ class OrchestratorPipeline:
         except Exception:
             # Don't fail the action if narration fails
             pass
-
-    def _apply_delta(self, delta, conn):
-        cur = conn.cursor()
-        if delta.table == "state.entities" and delta.operation == "UPDATE":
-            changes = delta.changes
-            # Handle HP changes
-            if "hp_current" in changes and delta.entity_id:
-                cur.execute(
-                    "UPDATE state.entities SET hp_current = %s, updated_at = now() WHERE id = %s",
-                    (changes["hp_current"], str(delta.entity_id)),
-                )
-            # Handle position changes in public_sheet JSONB
-            if ("public_sheet_x" in changes or "public_sheet_y" in changes) and delta.entity_id:
-                # Update x and/or y coordinates inside the public_sheet JSONB
-                new_x = changes.get("public_sheet_x")
-                new_y = changes.get("public_sheet_y")
-                if new_x is not None and new_y is not None:
-                    cur.execute(
-                        """
-                        UPDATE state.entities
-                        SET public_sheet = jsonb_set(
-                            jsonb_set(COALESCE(public_sheet, '{}'::jsonb), '{x}', %s::jsonb),
-                            '{y}', %s::jsonb
-                        ),
-                        updated_at = now()
-                        WHERE id = %s
-                        """,
-                        (str(new_x), str(new_y), str(delta.entity_id)),
-                    )
-                elif new_x is not None:
-                    cur.execute(
-                        """
-                        UPDATE state.entities
-                        SET public_sheet = jsonb_set(COALESCE(public_sheet, '{}'::jsonb), '{x}', %s::jsonb),
-                        updated_at = now()
-                        WHERE id = %s
-                        """,
-                        (str(new_x), str(delta.entity_id)),
-                    )
-                elif new_y is not None:
-                    cur.execute(
-                        """
-                        UPDATE state.entities
-                        SET public_sheet = jsonb_set(COALESCE(public_sheet, '{}'::jsonb), '{y}', %s::jsonb),
-                        updated_at = now()
-                        WHERE id = %s
-                        """,
-                        (str(new_y), str(delta.entity_id)),
-                    )
-        elif delta.table == "state.conditions" and delta.operation == "INSERT":
-            changes = delta.changes
-            cur.execute(
-                """
-                INSERT INTO state.conditions (entity_id, encounter_id, condition_type, duration_rounds, source)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-            """,
-                (
-                    str(delta.entity_id),
-                    changes.get("encounter_id"),
-                    changes.get("condition_type"),
-                    changes.get("duration_rounds", -1),
-                    changes.get("source", "unknown"),
-                ),
-            )
-        elif delta.table == "state.conditions" and delta.operation == "DELETE":
-            changes = delta.changes
-            cur.execute(
-                "DELETE FROM state.conditions WHERE entity_id = %s AND condition_type = %s",
-                (str(delta.entity_id), changes.get("condition_type")),
-            )
-        cur.close()
 
     def _deduct_ap(self, proposal, ap_cost, conn):
         entity_id = proposal.params.get("entity_id") or proposal.params.get(

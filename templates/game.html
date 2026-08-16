@@ -4,8 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tabletop DM - Game Console</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/static/img/tabletop-dm-logo-192.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    <meta property="og:image" content="/static/img/tabletop-dm-logo.png">
     <link rel="stylesheet" href="/static/css/app.css">
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+      }
+    }
+    </script>
+    <script type="module" src="/static/js/map_renderer.js"></script>
 </head>
 <body>
     <div class="app-layout">
@@ -16,6 +29,8 @@
             <span id="campaignName" class="campaign-name">Loading...</span>
             <span id="modeBadge" class="mode-badge">---</span>
             <div class="principal-info">
+                <select id="principalSelect" class="principal-select" title="Current player or DM"
+                        onchange="App.selectPrincipal(this.value)" style="display:none"></select>
                 <span id="principalName" class="principal-name">--</span>
                 <span id="sessionIndicator" class="session-indicator" title="Session status"></span>
             </div>
@@ -59,8 +74,20 @@
             <div id="tab-map" class="tab-content">
                 <div class="map-container">
                     <canvas id="mapCanvas" class="map-canvas"></canvas>
-                    <div class="map-hint" id="mapHint">Select an entity, then click to move</div>
+                    <div class="map-breadcrumbs" id="mapBreadcrumbs"></div>
+                    <div class="map-legend" id="mapLegend">
+                        <div class="legend-row"><span class="lc lc-stone"></span>Stone</div>
+                        <div class="legend-row"><span class="lc lc-grass"></span>Grass</div>
+                        <div class="legend-row"><span class="lc lc-dirt"></span>Dirt</div>
+                        <div class="legend-row"><span class="lc lc-water"></span>Water</div>
+                        <div class="legend-row"><span class="lc lc-sand"></span>Sand</div>
+                        <div class="legend-row"><span class="lc lc-wood"></span>Wood</div>
+                        <div class="legend-row"><span class="lc lc-wall"></span>Wall</div>
+                        <div class="legend-row"><span class="lc lc-difficult"></span>Difficult</div>
+                    </div>
+                    <div class="map-hint" id="mapHint">WASD or click to move &mdash; right-drag pans, wheel zooms</div>
                     <div class="map-controls">
+                        <button id="btnZoomOut" onclick="App.zoomOutMap()" title="Zoom out (parent map)">&#8593;</button>
                         <button onclick="App.renderMap()" title="Refresh map">&#8635;</button>
                     </div>
                 </div>
@@ -89,6 +116,7 @@
                         onchange="App.selectEncounter(this.value)">
                     <option value="">No Encounter</option>
                 </select>
+                <button class="action-btn dm-only-control" onclick="App.startEncounter()" style="margin-top:8px">Start Encounter</button>
             </div>
 
             <div class="sidebar-section">
@@ -101,12 +129,28 @@
                 <button class="action-btn" onclick="App.rollDice()">Roll d20</button>
                 <button class="action-btn combat-btn" onclick="App.quickAttack()" title="Attack selected target">Attack Target</button>
                 <button class="action-btn combat-btn" onclick="App.quickEndTurn()" title="End your turn">End Turn</button>
-                <button class="action-btn" onclick="App.advanceTurn()">Advance Initiative</button>
-                <button class="action-btn" onclick="App.requestNarration()">AI Narration</button>
+                <button class="action-btn dm-only-control" onclick="App.advanceTurn()">Advance Initiative</button>
+                <button class="action-btn dm-only-control" onclick="App.requestNarration()">AI Narration</button>
+            </div>
+
+            <div class="combat-hud" id="combatHUD" style="display:none;">
+                <div class="combat-hud-head">
+                    <span class="combat-hud-title">COMBAT</span>
+                    <span class="combat-hud-actor" id="combatActor">--</span>
+                </div>
+                <div class="combat-hud-grid">
+                    <button class="hud-btn" data-cmd="fight"   onclick="App.combatChoose('fight')">Fight</button>
+                    <button class="hud-btn" data-cmd="item"    onclick="App.combatChoose('item')">Item</button>
+                    <button class="hud-btn" data-cmd="spell"   onclick="App.combatChoose('spell')">Spell</button>
+                    <button class="hud-btn" data-cmd="move"    onclick="App.combatChoose('move')">Move</button>
+                    <button class="hud-btn" data-cmd="endturn" onclick="App.combatChoose('endturn')">End Turn</button>
+                    <button class="hud-btn hud-btn-danger" data-cmd="flee" onclick="App.combatChoose('flee')">Flee</button>
+                </div>
+                <div class="combat-hud-prompt" id="combatPrompt"></div>
             </div>
         </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <script type="module" src="/static/js/game/main.js"></script>
 </body>
 </html>

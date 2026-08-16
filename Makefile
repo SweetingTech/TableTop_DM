@@ -1,6 +1,6 @@
 .PHONY: setup up down up-local down-local migrate seed test ci ci-fast ci-integration \
 	rg1 rg1-local verify-docker verify-local verify install lint format typecheck \
-	unit contracts integration
+	unit contracts integration e2e e2e-install
 
 setup:
 	bash scripts/setup.sh
@@ -44,6 +44,13 @@ contracts:
 
 integration:
 	pytest -m "integration"
+
+e2e-install:
+	python -m playwright install --with-deps chromium
+
+e2e:
+	@echo "[e2e] Requires Tabletop DM server reachable at $${TTDM_BASE_URL:-http://localhost:8000}"
+	pytest -m "e2e" tests/e2e -v
 
 rg1:
 	bash scripts/rg1.sh --mode docker

@@ -19,10 +19,26 @@ def test_control_plane_crud_and_rag(integration_stack):
     with app.test_client() as client:
         campaign = client.post(
             "/api/campaigns",
-            json={"name": "CP IT", "slug": "cp-it", "status": "ACTIVE", "mode": "EXPLORATION"},
+            json={
+                "name": "CP IT",
+                "slug": "cp-it",
+                "status": "ACTIVE",
+                "mode": "EXPLORATION",
+            },
         )
         assert campaign.status_code == 201
         campaign_id = campaign.get_json()["id"]
+        gm = client.post(
+            f"/api/campaigns/{campaign_id}/members",
+            json={
+                "display_name": "CP IT GM",
+                "auth_subject": f"test:cp-it-gm:{campaign_id}",
+                "role": "GM",
+            },
+        )
+        assert gm.status_code == 200
+        gm_id = gm.get_json()["membership"]["principal_id"]
+        gm_query = {"principal_id": gm_id, "join_token": f"dm-smoke-join-{gm_id}"}
 
         updated = client.put(f"/api/campaigns/{campaign_id}", json={"mode": "SOCIAL"})
         assert updated.status_code == 200
@@ -37,11 +53,19 @@ def test_control_plane_crud_and_rag(integration_stack):
 
         ent = client.post(
             f"/api/campaigns/{campaign_id}/entities",
-            json={"name": "Import Hero", "entity_type": "PC", "public_sheet": {"class": "Rogue"}},
+            json={
+                "name": "Import Hero",
+                "entity_type": "PC",
+                "public_sheet": {"class": "Rogue"},
+            },
         )
         assert ent.status_code == 201
         entity_id = ent.get_json()["id"]
-        control = client.post(f"/api/entities/{entity_id}/control", json={"controlled_by": "AI"})
+        control = client.post(
+            f"/api/entities/{entity_id}/control",
+            query_string=gm_query,
+            json={"controlled_by": "AI"},
+        )
         assert control.status_code == 200
         assert control.get_json()["controlled_by"] == "AI"
 
@@ -65,7 +89,12 @@ def test_control_plane_crud_and_rag(integration_stack):
                 content_type="multipart/form-data",
             )
         assert upload.status_code == 202
-        assert upload.get_json()["status"] in {"QUEUED", "PROCESSING", "READY", "FAILED"}
+        assert upload.get_json()["status"] in {
+            "QUEUED",
+            "PROCESSING",
+            "READY",
+            "FAILED",
+        }
 
         docs = client.get(f"/api/campaigns/{campaign_id}/rag/documents")
         assert docs.status_code == 200
