@@ -22,6 +22,7 @@ def test_v1_golden_path_dm_setup_player_play_save_import_reload(page: Page):
     suffix = uuid.uuid4().hex[:8]
     passphrase = f"v1-golden-{suffix}"
     campaign_id = None
+    gm_query = None
 
     try:
         page.goto(f"{BASE_URL}/")
@@ -43,16 +44,18 @@ def test_v1_golden_path_dm_setup_player_play_save_import_reload(page: Page):
         )
         campaign_id = campaign["id"]
 
-        session = _json(
-            page.request.post(f"{BASE_URL}/api/campaigns/{campaign_id}/sessions")
-        )
-        session_id = session["id"]
-
         members = _json(
             page.request.get(f"{BASE_URL}/api/campaigns/{campaign_id}/members")
         )
         gm = next(member for member in members if member["role"] == "GM")
         gm_query = f"principal_id={gm['principal_id']}&join_token=dm-smoke-join-{gm['principal_id']}"
+
+        session = _json(
+            page.request.post(
+                f"{BASE_URL}/api/campaigns/{campaign_id}/sessions?{gm_query}"
+            )
+        )
+        session_id = session["id"]
 
         player_member = _json(
             page.request.post(
@@ -78,7 +81,7 @@ def test_v1_golden_path_dm_setup_player_play_save_import_reload(page: Page):
 
         pc = _json(
             page.request.post(
-                f"{BASE_URL}/api/campaigns/{campaign_id}/entities",
+                f"{BASE_URL}/api/campaigns/{campaign_id}/entities?{gm_query}",
                 data={
                     "name": f"Rook {suffix}",
                     "entity_type": "PC",
@@ -94,7 +97,7 @@ def test_v1_golden_path_dm_setup_player_play_save_import_reload(page: Page):
         )
         npc = _json(
             page.request.post(
-                f"{BASE_URL}/api/campaigns/{campaign_id}/entities",
+                f"{BASE_URL}/api/campaigns/{campaign_id}/entities?{gm_query}",
                 data={
                     "name": f"Training Dummy {suffix}",
                     "entity_type": "NPC",
@@ -123,7 +126,7 @@ def test_v1_golden_path_dm_setup_player_play_save_import_reload(page: Page):
 
         _json(
             page.request.post(
-                f"{BASE_URL}/api/maps/{room['id']}/pois",
+                f"{BASE_URL}/api/maps/{room['id']}/pois?{gm_query}",
                 data={
                     "x": 5,
                     "y": 6,
@@ -201,6 +204,9 @@ def test_v1_golden_path_dm_setup_player_play_save_import_reload(page: Page):
             arg=encounter["id"],
             timeout=10000,
         )
+        page.wait_for_function(
+            "App?.playerState?.principal?.role === 'PLAYER'", timeout=10000
+        )
 
         save_response = page.request.post(
             f"{BASE_URL}/api/saves/game/export",
@@ -241,5 +247,7 @@ def test_v1_golden_path_dm_setup_player_play_save_import_reload(page: Page):
         assert pc["id"] in resumed["controlled"]
         assert resumed["leak"] is False
     finally:
-        if campaign_id:
-            page.request.post(f"{BASE_URL}/api/campaigns/{campaign_id}/purge")
+        if campaign_id and gm_query:
+            page.request.post(
+                f"{BASE_URL}/api/campaigns/{campaign_id}/purge?{gm_query}"
+            )

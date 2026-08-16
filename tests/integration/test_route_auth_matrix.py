@@ -251,7 +251,36 @@ def test_story_state_requires_principal_redacts_player_reads_and_requires_gm_for
         gm_put = client.put(
             f"/api/sessions/{SESSION_ID}/story_state",
             query_string=GM_QUERY,
-            json={"current_location": "QA Route Matrix", "updated_by": fake_updater},
+            json={
+                "current_location": "QA Route Matrix",
+                "dm_private_notes": "qa hidden history",
+                "updated_by": fake_updater,
+            },
+        )
+        anonymous_history = client.get(
+            f"/api/sessions/{SESSION_ID}/story_state/history"
+        )
+        player_history = client.get(
+            f"/api/sessions/{SESSION_ID}/story_state/history",
+            query_string=PLAYER_QUERY,
+        )
+        gm_history = client.get(
+            f"/api/sessions/{SESSION_ID}/story_state/history",
+            query_string=GM_QUERY,
+        )
+        anonymous_add = client.post(
+            f"/api/sessions/{SESSION_ID}/story_state/add_event",
+            json={"description": "anonymous event"},
+        )
+        player_add = client.post(
+            f"/api/sessions/{SESSION_ID}/story_state/add_event",
+            query_string=PLAYER_QUERY,
+            json={"description": "player event"},
+        )
+        gm_add = client.post(
+            f"/api/sessions/{SESSION_ID}/story_state/add_event",
+            query_string=GM_QUERY,
+            json={"description": "QA GM-authored event"},
         )
 
     assert anonymous_get.status_code == 401
@@ -263,12 +292,32 @@ def test_story_state_requires_principal_redacts_player_reads_and_requires_gm_for
     assert player_put.status_code == 403
     assert gm_put.status_code == 200
     assert gm_put.get_json()["updated_by"] == DM_ID
+    assert anonymous_history.status_code == 401
+    assert player_history.status_code == 200
+    assert "qa hidden history" not in str(player_history.get_json())
+    assert gm_history.status_code == 200
+    assert "qa hidden history" in str(gm_history.get_json())
+    assert anonymous_add.status_code == 401
+    assert player_add.status_code == 403
+    assert gm_add.status_code == 200
+    assert gm_add.get_json()["updated_by"] == DM_ID
 
 
 def test_campaign_mode_and_entity_mutations_require_validated_gm_identity(
-    integration_stack,
+    integration_stack, monkeypatch
 ):
     del integration_stack
+    monkeypatch.setattr(
+        "services.domain.maps.image_gen.generate_poi_image",
+        lambda **_kwargs: "https://example.invalid/generated-poi.png",
+    )
+    map_record = execute_one(
+        "SELECT id FROM state.maps WHERE campaign_id = %s ORDER BY created_at LIMIT 1",
+        (CAMPAIGN_ID,),
+    )
+    assert map_record
+    map_id = str(map_record["id"])
+
     with app.test_client() as client:
         anonymous_mode = client.post(
             f"/api/campaigns/{CAMPAIGN_ID}/mode", json={"mode": "SOCIAL"}
@@ -296,6 +345,120 @@ def test_campaign_mode_and_entity_mutations_require_validated_gm_identity(
             f"/api/entities/{PC_ID}", query_string=PLAYER_QUERY
         )
 
+        anonymous_campaign_mutations = [
+            client.put(f"/api/campaigns/{CAMPAIGN_ID}", json={"mode": "SOCIAL"}),
+            client.delete(f"/api/campaigns/{CAMPAIGN_ID}"),
+            client.post(f"/api/campaigns/{CAMPAIGN_ID}/purge"),
+            client.post(f"/api/campaigns/{CAMPAIGN_ID}/resume"),
+            client.post(f"/api/campaigns/{CAMPAIGN_ID}/sessions"),
+            client.post(
+                f"/api/campaigns/{CAMPAIGN_ID}/entities",
+                json={"name": "Anonymous NPC", "entity_type": "NPC"},
+            ),
+            client.post(f"/api/sessions/{SESSION_ID}/pause"),
+            client.post(f"/api/sessions/{SESSION_ID}/resume"),
+            client.post(f"/api/sessions/{SESSION_ID}/end"),
+        ]
+        player_campaign_mutations = [
+            client.put(
+                f"/api/campaigns/{CAMPAIGN_ID}",
+                query_string=PLAYER_QUERY,
+                json={"mode": "SOCIAL"},
+            ),
+            client.delete(f"/api/campaigns/{CAMPAIGN_ID}", query_string=PLAYER_QUERY),
+            client.post(
+                f"/api/campaigns/{CAMPAIGN_ID}/purge", query_string=PLAYER_QUERY
+            ),
+            client.post(
+                f"/api/campaigns/{CAMPAIGN_ID}/resume", query_string=PLAYER_QUERY
+            ),
+            client.post(
+                f"/api/campaigns/{CAMPAIGN_ID}/sessions",
+                query_string=PLAYER_QUERY,
+            ),
+            client.post(
+                f"/api/campaigns/{CAMPAIGN_ID}/entities",
+                query_string=PLAYER_QUERY,
+                json={"name": "Player NPC", "entity_type": "NPC"},
+            ),
+            client.post(f"/api/sessions/{SESSION_ID}/pause", query_string=PLAYER_QUERY),
+            client.post(
+                f"/api/sessions/{SESSION_ID}/resume", query_string=PLAYER_QUERY
+            ),
+            client.post(f"/api/sessions/{SESSION_ID}/end", query_string=PLAYER_QUERY),
+        ]
+        gm_campaign_update = client.put(
+            f"/api/campaigns/{CAMPAIGN_ID}",
+            query_string=GM_QUERY,
+            json={"mode": "COMBAT"},
+        )
+        gm_campaign_resume = client.post(
+            f"/api/campaigns/{CAMPAIGN_ID}/resume", query_string=GM_QUERY
+        )
+
+        anonymous_poi_create = client.post(
+            f"/api/maps/{map_id}/pois",
+            json={"x": 1, "y": 1, "kind": "SIGN", "name": "Anonymous POI"},
+        )
+        player_poi_create = client.post(
+            f"/api/maps/{map_id}/pois",
+            query_string=PLAYER_QUERY,
+            json={"x": 1, "y": 1, "kind": "SIGN", "name": "Player POI"},
+        )
+        gm_poi = client.post(
+            f"/api/maps/{map_id}/pois",
+            query_string=GM_QUERY,
+            json={"x": 1, "y": 1, "kind": "SIGN", "name": "QA Auth POI"},
+        )
+        assert gm_poi.status_code == 201
+        poi_id = gm_poi.get_json()["id"]
+        gm_poi_generate = client.post(
+            f"/api/pois/{poi_id}/generate_image",
+            query_string=GM_QUERY,
+            json={"style_hint": "QA deterministic style"},
+        )
+        anonymous_poi_mutations = [
+            client.put(f"/api/pois/{poi_id}", json={"name": "anonymous"}),
+            client.delete(f"/api/pois/{poi_id}"),
+            client.post(
+                f"/api/pois/{poi_id}/image",
+                json={"image_url": "https://example.invalid/anonymous.png"},
+            ),
+            client.post(f"/api/pois/{poi_id}/generate_image"),
+            client.delete(f"/api/pois/{poi_id}/image"),
+        ]
+        player_poi_mutations = [
+            client.put(
+                f"/api/pois/{poi_id}",
+                query_string=PLAYER_QUERY,
+                json={"name": "player"},
+            ),
+            client.delete(f"/api/pois/{poi_id}", query_string=PLAYER_QUERY),
+            client.post(
+                f"/api/pois/{poi_id}/image",
+                query_string=PLAYER_QUERY,
+                json={"image_url": "https://example.invalid/player.png"},
+            ),
+            client.post(
+                f"/api/pois/{poi_id}/generate_image", query_string=PLAYER_QUERY
+            ),
+            client.delete(f"/api/pois/{poi_id}/image", query_string=PLAYER_QUERY),
+        ]
+        gm_poi_image = client.post(
+            f"/api/pois/{poi_id}/image",
+            query_string=GM_QUERY,
+            json={"image_url": "https://example.invalid/gm.png"},
+        )
+        gm_poi_update = client.put(
+            f"/api/pois/{poi_id}",
+            query_string=GM_QUERY,
+            json={"name": "QA Auth POI Updated"},
+        )
+        gm_poi_image_delete = client.delete(
+            f"/api/pois/{poi_id}/image", query_string=GM_QUERY
+        )
+        gm_poi_delete = client.delete(f"/api/pois/{poi_id}", query_string=GM_QUERY)
+
     assert anonymous_mode.status_code == 401
     assert player_mode.status_code == 403
     assert gm_mode.status_code == 200
@@ -305,6 +468,98 @@ def test_campaign_mode_and_entity_mutations_require_validated_gm_identity(
     assert gm_entity.get_json()["hp_current"] == 7
     assert anonymous_delete.status_code == 401
     assert player_delete.status_code == 403
+    assert all(response.status_code == 401 for response in anonymous_campaign_mutations)
+    assert all(response.status_code == 403 for response in player_campaign_mutations)
+    assert gm_campaign_update.status_code == 200
+    assert gm_campaign_resume.status_code == 200
+    assert anonymous_poi_create.status_code == 401
+    assert player_poi_create.status_code == 403
+    assert gm_poi_generate.status_code == 200
+    assert gm_poi_generate.get_json()["image_url"].endswith("generated-poi.png")
+    assert all(response.status_code == 401 for response in anonymous_poi_mutations)
+    assert all(response.status_code == 403 for response in player_poi_mutations)
+    assert gm_poi_image.status_code == 200
+    assert gm_poi_update.status_code == 200
+    assert gm_poi_image_delete.status_code == 200
+    assert gm_poi_delete.status_code == 200
+
+
+def test_session_archives_require_validated_gm_identity(integration_stack):
+    del integration_stack
+    archive_id = None
+    try:
+        with app.test_client() as client:
+            anonymous_archive = client.post(
+                f"/api/sessions/{SESSION_ID}/archive",
+                json={"summary": "anonymous archive"},
+            )
+            player_archive = client.post(
+                f"/api/sessions/{SESSION_ID}/archive",
+                query_string=PLAYER_QUERY,
+                json={"summary": "player archive"},
+            )
+            gm_archive = client.post(
+                f"/api/sessions/{SESSION_ID}/archive",
+                query_string=GM_QUERY,
+                json={
+                    "summary": "QA protected archive",
+                    "archived_by": PLAYER_ID,
+                },
+            )
+            assert gm_archive.status_code == 200
+            archive_id = gm_archive.get_json()["id"]
+
+            anonymous_list = client.get(
+                f"/api/campaigns/{CAMPAIGN_ID}/session_archives"
+            )
+            player_list = client.get(
+                f"/api/campaigns/{CAMPAIGN_ID}/session_archives",
+                query_string=PLAYER_QUERY,
+            )
+            gm_list = client.get(
+                f"/api/campaigns/{CAMPAIGN_ID}/session_archives",
+                query_string=GM_QUERY,
+            )
+            anonymous_detail = client.get(f"/api/session_archives/{archive_id}")
+            player_detail = client.get(
+                f"/api/session_archives/{archive_id}", query_string=PLAYER_QUERY
+            )
+            gm_detail = client.get(
+                f"/api/session_archives/{archive_id}", query_string=GM_QUERY
+            )
+            anonymous_delete = client.delete(f"/api/session_archives/{archive_id}")
+            player_delete = client.delete(
+                f"/api/session_archives/{archive_id}", query_string=PLAYER_QUERY
+            )
+            gm_delete = client.delete(
+                f"/api/session_archives/{archive_id}", query_string=GM_QUERY
+            )
+
+        assert anonymous_archive.status_code == 401
+        assert player_archive.status_code == 403
+        assert gm_archive.get_json()["archived_by"] == DM_ID
+        assert anonymous_list.status_code == 401
+        assert player_list.status_code == 403
+        assert gm_list.status_code == 200
+        assert any(row["id"] == archive_id for row in gm_list.get_json())
+        assert anonymous_detail.status_code == 401
+        assert player_detail.status_code == 403
+        assert gm_detail.status_code == 200
+        assert "chat_history" in gm_detail.get_json()
+        assert "final_story_state" in gm_detail.get_json()
+        assert anonymous_delete.status_code == 401
+        assert player_delete.status_code == 403
+        assert gm_delete.status_code == 200
+    finally:
+        if archive_id:
+            execute_one(
+                "DELETE FROM state.session_archives WHERE id = %s RETURNING id",
+                (archive_id,),
+            )
+        execute_one(
+            "UPDATE state.sessions SET is_archived = FALSE WHERE id = %s RETURNING id",
+            (SESSION_ID,),
+        )
 
 
 def test_propose_validation_errors_do_not_expose_tracebacks_when_debug_is_off(

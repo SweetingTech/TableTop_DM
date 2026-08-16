@@ -195,8 +195,43 @@ function populateFormFromCharacter(char) {
     identityHeader.classList.add('expanded');
 }
 
+function controlAuthContext() {
+    const params = new URLSearchParams(window.location.search);
+    const explicitPrincipalId = params.get('principal_id');
+    const explicitJoinToken = params.get('join_token') || params.get('invite_token');
+    if (explicitPrincipalId) {
+        return { principalId: explicitPrincipalId, joinToken: explicitJoinToken };
+    }
+
+    const gm = state.members.find((member) => member.role === 'GM')
+        || state.members.find((member) => member.role === 'SYSTEM');
+    if (!gm) return { principalId: '', joinToken: '' };
+    return {
+        principalId: gm.principal_id,
+        joinToken: `dm-smoke-join-${gm.principal_id}`,
+    };
+}
+
+function withControlAuth(url) {
+    const parsed = new URL(url, window.location.origin);
+    if (!parsed.pathname.startsWith('/api/')) return url;
+
+    const { principalId, joinToken } = controlAuthContext();
+    if (principalId && !parsed.searchParams.has('principal_id')) {
+        parsed.searchParams.set('principal_id', principalId);
+    }
+    if (
+        joinToken
+        && !parsed.searchParams.has('join_token')
+        && !parsed.searchParams.has('invite_token')
+    ) {
+        parsed.searchParams.set('join_token', joinToken);
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
 async function api(url, opts = {}) {
-    const r = await fetch(url, opts);
+    const r = await fetch(withControlAuth(url), opts);
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(body.error || JSON.stringify(body));
     return body;
@@ -919,7 +954,7 @@ window.control = {
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
         try {
-            const result = await fetch(`/api/entities/${entityId}/image`, {
+            const result = await fetch(withControlAuth(`/api/entities/${entityId}/image`), {
                 method: 'POST',
                 body: formData
             }).then(r => r.json());

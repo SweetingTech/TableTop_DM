@@ -158,6 +158,61 @@ def require_entity_gm(entity_id, *, require_join_token: bool = True):
     return principal, entity, None
 
 
+def require_map_gm(map_id, *, require_join_token: bool = True):
+    from shared.db.connection import execute_one
+
+    map_record = execute_one(
+        "SELECT id, campaign_id FROM state.maps WHERE id = %s", (map_id,)
+    )
+    if not map_record:
+        return None, None, (jsonify({"error": "Map not found"}), 404)
+    principal, error = require_campaign_gm(
+        str(map_record["campaign_id"]), require_join_token=require_join_token
+    )
+    if error:
+        return None, map_record, error
+    return principal, map_record, None
+
+
+def require_poi_gm(poi_id, *, require_join_token: bool = True):
+    from shared.db.connection import execute_one
+
+    poi = execute_one(
+        """
+        SELECT poi.id, poi.map_id, m.campaign_id
+        FROM state.map_pois poi
+        JOIN state.maps m ON m.id = poi.map_id
+        WHERE poi.id = %s
+        """,
+        (poi_id,),
+    )
+    if not poi:
+        return None, None, (jsonify({"error": "POI not found"}), 404)
+    principal, error = require_campaign_gm(
+        str(poi["campaign_id"]), require_join_token=require_join_token
+    )
+    if error:
+        return None, poi, error
+    return principal, poi, None
+
+
+def require_archive_gm(archive_id, *, require_join_token: bool = True):
+    from shared.db.connection import execute_one
+
+    archive = execute_one(
+        "SELECT id, campaign_id FROM state.session_archives WHERE id = %s",
+        (archive_id,),
+    )
+    if not archive:
+        return None, None, (jsonify({"error": "Archive not found"}), 404)
+    principal, error = require_campaign_gm(
+        str(archive["campaign_id"]), require_join_token=require_join_token
+    )
+    if error:
+        return None, archive, error
+    return principal, archive, None
+
+
 def continuity_visibility_scope(principal, requested: str | None) -> str:
     requested = (requested or "").lower()
     if principal.is_gm() or principal.is_system():
@@ -190,4 +245,14 @@ def redact_story_state(row):
             else npc
             for npc in data["active_npcs"]
         ]
+    return data
+
+
+def redact_story_state_history(row):
+    from services.api.responses import serialize
+
+    data = serialize(dict(row))
+    snapshot = data.get("state_snapshot")
+    if isinstance(snapshot, dict):
+        data["state_snapshot"] = redact_story_state(snapshot)
     return data

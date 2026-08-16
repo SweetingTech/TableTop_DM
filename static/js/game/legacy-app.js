@@ -288,12 +288,15 @@ const App = {
 
         this.populatePrincipalSelector();
 
-        // Load or create active session
+        // Load the active session. Session creation is a GM-only Control Plane action.
         try {
-            const resp = await fetch(`/api/campaigns/${this.campaign.id}/resume`, {method: 'POST'});
-            const data = await resp.json();
-            if (data.session) {
-                this.sessionId = data.session.id;
+            const resp = await fetch(`/api/campaigns/${this.campaign.id}/sessions`);
+            const sessions = await resp.json();
+            const activeSession = Array.isArray(sessions)
+                ? sessions.find((session) => session.status === 'ACTIVE')
+                : null;
+            if (activeSession) {
+                this.sessionId = activeSession.id;
                 console.log('Session context set:', this.sessionId);
                 // Update UI
                 const sessionEl = document.getElementById('sessionIndicator');
