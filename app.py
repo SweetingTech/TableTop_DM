@@ -16,7 +16,12 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+
+# Security: Restrict CORS origins. Default to same-origin (None) if not specified.
+_cors_origins: str | list[str] | None = os.environ.get("CORS_ALLOWED_ORIGINS")
+if _cors_origins:
+    _cors_origins = [o.strip() for o in str(_cors_origins).split(",")]
+socketio = SocketIO(app, cors_allowed_origins=_cors_origins, async_mode="eventlet")
 
 REDIS_DEFAULT_HOST = "localhost"
 REDIS_DEFAULT_PORT = 6379
