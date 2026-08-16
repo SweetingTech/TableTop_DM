@@ -113,8 +113,9 @@ def test_generate_map_bulk_inserts_composed_tiles(monkeypatch):
     monkeypatch.setattr(
         MapSystem,
         "bulk_set_map_nodes",
-        lambda _self, nodes, conn: bulk_calls.append((nodes, conn))
-        or {"success": True, "count": len(nodes)},
+        lambda _self, nodes, conn: (
+            bulk_calls.append((nodes, conn)) or {"success": True, "count": len(nodes)}
+        ),
     )
     monkeypatch.setattr(
         MapSystem,
