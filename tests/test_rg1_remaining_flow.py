@@ -41,6 +41,9 @@ def test_player_move_token_proposal_returns_state_delta(monkeypatch):
             }
 
     monkeypatch.setattr("services.orchestrator.pipeline.OrchestratorPipeline", Pipeline)
+    monkeypatch.setattr(
+        "services.api.application.broadcast_game_event", lambda *_args, **_kwargs: None
+    )
 
     with app.test_client() as client:
         response = client.post(
@@ -58,7 +61,7 @@ def test_player_move_token_proposal_returns_state_delta(monkeypatch):
             },
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.get_json()
     assert response.get_json()["event_type"] == "STATE_DELTA"
 
 
@@ -108,6 +111,10 @@ def test_gm_switches_mode_to_combat(monkeypatch):
     monkeypatch.setattr(
         "services.orchestrator.state_machine.StateMachine", StateMachine
     )
+    monkeypatch.setattr(
+        "services.api.application._require_campaign_gm",
+        lambda *_args, **_kwargs: (DummyPrincipal(), None),
+    )
 
     with app.test_client() as client:
         response = client.post(
@@ -119,7 +126,7 @@ def test_gm_switches_mode_to_combat(monkeypatch):
             json={"mode": "COMBAT"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.get_json()
     assert response.get_json()["mode"] == "COMBAT"
 
 
@@ -150,6 +157,20 @@ def test_combat_round_intent_and_advance(monkeypatch):
     monkeypatch.setattr(
         "services.orchestrator.state_machine.StateMachine", StateMachine
     )
+    monkeypatch.setattr(
+        "shared.db.connection.execute_one",
+        lambda *_args, **_kwargs: {
+            "campaign_id": "11111111-1111-1111-1111-111111111111",
+            "session_id": "66666666-6666-6666-6666-666666666661",
+        },
+    )
+    monkeypatch.setattr(
+        "services.api.application._require_campaign_gm",
+        lambda *_args, **_kwargs: (DummyPrincipal(), None),
+    )
+    monkeypatch.setattr(
+        "services.api.application.broadcast_game_event", lambda *_args, **_kwargs: None
+    )
 
     with app.test_client() as client:
         propose = client.post(
@@ -175,12 +196,12 @@ def test_combat_round_intent_and_advance(monkeypatch):
             },
         )
 
-    assert propose.status_code == 200
+    assert propose.status_code == 200, propose.get_json()
     payload = propose.get_json()["payload"]
     assert payload["llm_calls"] == 0
     assert payload["reaction_triggered"] is True
     assert payload["tool_call"] == "resolve_attack"
-    assert advance.status_code == 200
+    assert advance.status_code == 200, advance.get_json()
     assert advance.get_json()["current_turn_order"] == 2
 
 
@@ -207,6 +228,7 @@ def test_export_session_log_markdown(monkeypatch):
 
 def test_replay_engine_verify_state_success(monkeypatch):
     engine = ReplayEngine()
+    query_calls = []
 
     monkeypatch.setattr(
         ReplayEngine,
@@ -230,10 +252,19 @@ def test_replay_engine_verify_state_success(monkeypatch):
             ]
         },
     )
-    monkeypatch.setattr(
-        "services.export.exporter.execute_one",
-        lambda *_args, **_kwargs: {"hp_current": 20, "hp_max": 28, "ac": 16},
-    )
+
+    def fake_execute_query(query, params):
+        query_calls.append((query, params))
+        return [
+            {
+                "id": uuid.UUID("33333333-3333-3333-3333-333333333331"),
+                "hp_current": 20,
+                "hp_max": 28,
+                "ac": 16,
+            }
+        ]
+
+    monkeypatch.setattr("services.export.exporter.execute_query", fake_execute_query)
 
     result = engine.verify_state(
         uuid.UUID("66666666-6666-6666-6666-666666666661"),
@@ -248,3 +279,6 @@ def test_replay_engine_verify_state_success(monkeypatch):
 
     assert result["verified"] is True
     assert result["mismatches"] == []
+    assert len(query_calls) == 1
+    assert "ANY(%s::uuid[])" in query_calls[0][0]
+    assert query_calls[0][1] == (["33333333-3333-3333-3333-333333333331"],)
