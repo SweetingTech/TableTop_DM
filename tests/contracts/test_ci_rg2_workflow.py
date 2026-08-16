@@ -34,6 +34,26 @@ def test_integration_reset_waits_for_container_health() -> None:
     assert 'docker_compose("up", "-d", "--wait")' in reset_script
 
 
+def test_postgres_readiness_ignores_entrypoint_temporary_server() -> None:
+    compose = Path("infra/docker-compose.yml").read_text(encoding="utf-8")
+    shell_scripts = [
+        Path("scripts/start.sh"),
+        Path("infra/scripts/migrate.sh"),
+        Path("infra/scripts/seed_demo.sh"),
+    ]
+    integration_helpers = Path("scripts/integration_common.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pg_isready -h 127.0.0.1" in compose
+    for script in shell_scripts:
+        assert "pg_isready -h 127.0.0.1" in script.read_text(encoding="utf-8")
+    assert (
+        '"pg_isready",\n            "-h",\n            "127.0.0.1"'
+        in integration_helpers
+    )
+
+
 def test_readiness_audit_uses_current_release_checklist() -> None:
     audit_module = runpy.run_path("scripts/audit_todo.py", run_name="audit_todo_test")
     checklist = Path(audit_module["DEFAULT_CHECKLIST_PATH"])

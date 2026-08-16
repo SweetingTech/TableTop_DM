@@ -36,6 +36,26 @@ def _rewrite_header(blob: bytes, **updates) -> bytes:
     return magic + b"\n" + json.dumps(header).encode("utf-8") + b"\n" + token
 
 
+def _rewrite_principal_id(payload: dict, source_id: str, portable_id: str) -> None:
+    for principal in payload.get("principals", []):
+        if principal.get("id") == source_id:
+            principal["id"] = portable_id
+    for member in payload.get("members", []):
+        principal = member.get("principal") or {}
+        if principal.get("id") == source_id:
+            principal["id"] = portable_id
+    for entity in payload.get("entities", []):
+        if entity.get("controller_principal_id") == source_id:
+            entity["controller_principal_id"] = portable_id
+    for event in payload.get("ledger_events", []):
+        if event.get("sender_principal_id") == source_id:
+            event["sender_principal_id"] = portable_id
+        event["visible_to"] = [
+            portable_id if str(principal_id) == source_id else principal_id
+            for principal_id in event.get("visible_to") or []
+        ]
+
+
 def test_game_save_export_import_conflict_replace_and_player_state(
     integration_stack, postgres_dsn
 ):
@@ -77,9 +97,17 @@ def test_game_save_export_import_conflict_replace_and_player_state(
         assert blob.startswith(b"ttdm-save:v1\n")
         assert peek_header(blob)["kind"] == "game"
 
+        payload = decrypt_save(blob, passphrase=PASSPHRASE, expected_kind="game")
+        portable_player_id = str(uuid.uuid4())
+        _rewrite_principal_id(payload, PLAYER_ID, portable_player_id)
+        assert any(
+            principal["id"] == portable_player_id for principal in payload["principals"]
+        )
+        portable_blob = encrypt_save(payload, kind="game", passphrase=PASSPHRASE)
+
         wrong = client.post(
             "/api/saves/game/import",
-            data=_upload(blob, passphrase="wrong-passphrase"),
+            data=_upload(portable_blob, passphrase="wrong-passphrase"),
             content_type="multipart/form-data",
         )
         assert wrong.status_code == 400
@@ -87,7 +115,7 @@ def test_game_save_export_import_conflict_replace_and_player_state(
 
         conflict = client.post(
             "/api/saves/game/import",
-            data=_upload(blob, replace=False),
+            data=_upload(portable_blob, replace=False),
             content_type="multipart/form-data",
         )
         assert conflict.status_code == 409
@@ -107,7 +135,7 @@ def test_game_save_export_import_conflict_replace_and_player_state(
     with app.test_client() as client:
         restored = client.post(
             "/api/saves/game/import",
-            data=_upload(blob, replace=True),
+            data=_upload(portable_blob, replace=True),
             content_type="multipart/form-data",
         )
         assert restored.status_code == 200
@@ -122,9 +150,30 @@ def test_game_save_export_import_conflict_replace_and_player_state(
         assert any(entity["entity_id"] == PC_ID for entity in controlled)
         assert all(entity["name"] != "Broken Roundtrip Name" for entity in controlled)
 
-    payload = decrypt_save(blob, passphrase=PASSPHRASE, expected_kind="game")
     assert payload["ledger_events"]
     assert all("visible_to" in event for event in payload["ledger_events"])
+
+    conn = psycopg2.connect(postgres_dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.principal_id', %s, true)", (PLAYER_ID,))
+            cur.execute(
+                """
+                SELECT sender_principal_id,
+                       %s::uuid = ANY(visible_to) AS contains_local_player,
+                       %s::uuid = ANY(visible_to) AS contains_portable_player
+                FROM ledger.session_ledger
+                WHERE idempotency_key = 'save-roundtrip-event'
+                """,
+                (PLAYER_ID, portable_player_id),
+            )
+            sender_principal_id, contains_local, contains_portable = cur.fetchone()
+    finally:
+        conn.close()
+
+    assert str(sender_principal_id) == PLAYER_ID
+    assert contains_local is True
+    assert contains_portable is False
 
 
 def test_program_save_exports_clear_keys_and_import_reencrypts(

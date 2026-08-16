@@ -99,6 +99,8 @@ def wait_for_postgres(timeout_seconds: int = 60) -> None:
             "-T",
             "postgres",
             "pg_isready",
+            "-h",
+            "127.0.0.1",
             "-U",
             env.get("POSTGRES_USER", "postgres"),
             "-d",

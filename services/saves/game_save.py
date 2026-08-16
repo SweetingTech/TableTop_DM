@@ -33,6 +33,16 @@ def _rows(table: str, where: str, params: tuple) -> list[dict]:
     return out
 
 
+def _json_rows(table: str, where: str, params: tuple) -> list[dict]:
+    """Serialize rows in Postgres so UUID arrays retain their list shape."""
+    rows = execute_query(
+        f"SELECT to_jsonb(export_row) AS export_row "
+        f"FROM {table} AS export_row WHERE {where}",
+        params,
+    )
+    return [row["export_row"] for row in rows]
+
+
 def _jsonify(v):
     """Coerce DB values into JSON-safe shapes."""
     if v is None:
@@ -41,9 +51,38 @@ def _jsonify(v):
         return str(v)
     if hasattr(v, "isoformat"):  # datetime, date
         return v.isoformat()
-    if isinstance(v, (dict, list, str, int, float, bool)):
+    if isinstance(v, dict):
+        return {k: _jsonify(value) for k, value in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_jsonify(value) for value in v]
+    if isinstance(v, (str, int, float, bool)):
         return v
     return str(v)
+
+
+def _referenced_principal_ids(payload: dict) -> set[str]:
+    """Collect every principal UUID stored as a relational reference."""
+    referenced = set()
+    for member in payload.get("members", []):
+        principal_id = member.get("principal", {}).get("id")
+        if principal_id:
+            referenced.add(str(principal_id))
+    for entity in payload.get("entities", []):
+        principal_id = entity.get("controller_principal_id")
+        if principal_id:
+            referenced.add(str(principal_id))
+    for event in payload.get("ledger_events", []):
+        sender_id = event.get("sender_principal_id")
+        if sender_id:
+            referenced.add(str(sender_id))
+        visible_to = event.get("visible_to") or []
+        if not isinstance(visible_to, (list, tuple)):
+            raise ValueError(
+                "ledger event visible_to must be an array of principal IDs"
+            )
+        for principal_id in visible_to:
+            referenced.add(str(principal_id))
+    return referenced
 
 
 def export_campaign(campaign_id: uuid.UUID) -> dict:
@@ -112,7 +151,7 @@ def export_campaign(campaign_id: uuid.UUID) -> dict:
         else []
     )
 
-    ledger_events = _rows(
+    ledger_events = _json_rows(
         "ledger.session_ledger", "campaign_id = %s ORDER BY seq_id", cid
     )
     rag_embedding_profiles = _rows(
@@ -121,7 +160,7 @@ def export_campaign(campaign_id: uuid.UUID) -> dict:
     rag_documents = _rows("state.rag_documents", "campaign_id = %s", cid)
     rag_chunks = _rows("state.rag_chunks", "campaign_id = %s", cid)
 
-    return {
+    payload = {
         "campaign": {k: _jsonify(v) for k, v in campaign.items()},
         "members": members_out,
         "ai_config": ai_config,
@@ -138,6 +177,26 @@ def export_campaign(campaign_id: uuid.UUID) -> dict:
         "rag_documents": rag_documents,
         "rag_chunks": rag_chunks,
     }
+
+    principal_ids = sorted(_referenced_principal_ids(payload))
+    principals = (
+        execute_query(
+            """
+            SELECT id, auth_subject, display_name, principal_type
+            FROM state.principals
+            WHERE id = ANY(%s::uuid[])
+            ORDER BY auth_subject, id
+            """,
+            (principal_ids,),
+        )
+        if principal_ids
+        else []
+    )
+    payload["principals"] = [
+        {key: _jsonify(value) for key, value in principal.items()}
+        for principal in principals
+    ]
+    return payload
 
 
 # ------------------------------------------------------------------------
@@ -183,6 +242,58 @@ def _purge_campaign(conn, campaign_id: str):
     hard_delete_campaign(campaign_id, conn=conn)
 
 
+def _principal_specs(payload: dict) -> dict[str, dict]:
+    """Index portable principal metadata from current and legacy saves."""
+    specs = {
+        str(spec["id"]): spec
+        for spec in payload.get("principals", [])
+        if spec.get("id")
+    }
+    for member in payload.get("members", []):
+        spec = member.get("principal") or {}
+        if spec.get("id"):
+            specs[str(spec["id"])] = spec
+    return specs
+
+
+def _existing_principal_ids(conn, principal_ids: list[str]) -> set[str]:
+    if not principal_ids:
+        return set()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id FROM state.principals WHERE id = ANY(%s::uuid[])",
+        (principal_ids,),
+    )
+    existing = {str(row[0]) for row in cur.fetchall()}
+    cur.close()
+    return existing
+
+
+def _complete_principal_remap(
+    conn, payload: dict, principal_remap: dict[str, str]
+) -> None:
+    """Require a destination identity for each UUID in the save graph."""
+    missing_ids = sorted(_referenced_principal_ids(payload) - set(principal_remap))
+    existing_ids = _existing_principal_ids(conn, missing_ids)
+    for source_id in missing_ids:
+        if source_id in existing_ids:
+            # Legacy saves omitted non-member metadata. They remain importable
+            # on the source machine while cross-machine imports fail closed.
+            principal_remap[source_id] = source_id
+            continue
+        raise ValueError(
+            "Save file is missing portable principal metadata for referenced "
+            f"principal {source_id}"
+        )
+
+
+def _remap_principal_value(value, principal_remap: dict[str, str], column: str) -> str:
+    source_id = str(value)
+    if source_id not in principal_remap:
+        raise ValueError(f"No destination principal mapping for {column}={source_id}")
+    return principal_remap[source_id]
+
+
 def _insert_row(
     conn,
     table: str,
@@ -197,10 +308,6 @@ def _insert_row(
     vals = []
     for c in cols:
         v = row[c]
-        if v is not None and c in ("controller_principal_id",) and principal_remap:
-            v = principal_remap.get(str(v), v)
-        if c in jsonb_cols and not isinstance(v, str):
-            v = json.dumps(v) if v is not None else None
         # Array columns: psycopg2 adapts Python lists to PG arrays natively.
         # If we got a JSON-string back from a previous round-trip, parse it.
         if c in array_cols and isinstance(v, str):
@@ -208,8 +315,23 @@ def _insert_row(
                 v = json.loads(v)
             except json.JSONDecodeError:
                 pass
+        if (
+            v is not None
+            and c in ("controller_principal_id", "sender_principal_id")
+            and principal_remap
+        ):
+            v = _remap_principal_value(v, principal_remap, c)
+        if v is not None and c == "visible_to" and principal_remap:
+            if not isinstance(v, (list, tuple)):
+                raise ValueError("visible_to must be an array of principal IDs")
+            v = [_remap_principal_value(item, principal_remap, c) for item in v]
+        if c in jsonb_cols and not isinstance(v, str):
+            v = json.dumps(v) if v is not None else None
         vals.append(v)
-    placeholders = ", ".join("%s::jsonb" if c in jsonb_cols else "%s" for c in cols)
+    placeholders = ", ".join(
+        "%s::jsonb" if c in jsonb_cols else "%s::uuid[]" if c == "visible_to" else "%s"
+        for c in cols
+    )
     cur = conn.cursor()
     cur.execute(
         f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders})",
@@ -240,11 +362,11 @@ def import_campaign(payload: dict, *, replace: bool = False) -> str:
         if existing:
             _purge_campaign(conn, cid)
 
-        # Resolve all principals referenced by members or entities.
+        # Resolve every principal reference by stable auth_subject.
         principal_remap: dict[str, str] = {}
-        for m in payload.get("members", []):
-            spec = m["principal"]
-            principal_remap[spec["id"]] = _ensure_principal(conn, spec)
+        for source_id, spec in _principal_specs(payload).items():
+            principal_remap[source_id] = _ensure_principal(conn, spec)
+        _complete_principal_remap(conn, payload, principal_remap)
 
         # Re-insert in the right order: parent rows before children.
         _insert_row(conn, "state.campaigns", campaign)
@@ -308,6 +430,7 @@ def import_campaign(payload: dict, *, replace: bool = False) -> str:
                 conn,
                 "ledger.session_ledger",
                 ev,
+                principal_remap=principal_remap,
                 jsonb_cols=("payload",),
                 array_cols=("domain_tags", "visible_to"),
             )

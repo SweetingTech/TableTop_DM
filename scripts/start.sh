@@ -151,12 +151,12 @@ start_deps_docker() {
   local compose=(docker compose --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/infra/docker-compose.yml")
   "${compose[@]}" up -d postgres redis qdrant
   for _ in $(seq 1 40); do
-    if "${compose[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    if "${compose[@]}" exec -T postgres pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
       break
     fi
     sleep 1
   done
-  "${compose[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
+  "${compose[@]}" exec -T postgres pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
   echo docker > "$DEPS_PROVIDER_FILE"
   echo "1" > "$DEPS_STARTED_FILE"
 }

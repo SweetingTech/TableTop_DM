@@ -16,7 +16,7 @@ set +a
 
 wait_for_postgres() {
   for _ in $(seq 1 60); do
-    if "${COMPOSE[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    if "${COMPOSE[@]}" exec -T postgres pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
       return 0
     fi
     sleep 2

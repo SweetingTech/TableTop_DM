@@ -40,19 +40,41 @@ def test_control_plane_crud_and_rag(integration_stack):
         gm_id = gm.get_json()["membership"]["principal_id"]
         gm_query = {"principal_id": gm_id, "join_token": f"dm-smoke-join-{gm_id}"}
 
-        updated = client.put(f"/api/campaigns/{campaign_id}", json={"mode": "SOCIAL"})
+        updated = client.put(
+            f"/api/campaigns/{campaign_id}",
+            query_string=gm_query,
+            json={"mode": "SOCIAL"},
+        )
         assert updated.status_code == 200
         assert updated.get_json()["mode"] == "SOCIAL"
 
-        session = client.post(f"/api/campaigns/{campaign_id}/sessions")
+        session = client.post(
+            f"/api/campaigns/{campaign_id}/sessions", query_string=gm_query
+        )
         assert session.status_code == 201
         session_id = session.get_json()["id"]
-        assert client.post(f"/api/sessions/{session_id}/pause").status_code == 200
-        assert client.post(f"/api/sessions/{session_id}/resume").status_code == 200
-        assert client.post(f"/api/sessions/{session_id}/end").status_code == 200
+        assert (
+            client.post(
+                f"/api/sessions/{session_id}/pause", query_string=gm_query
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/sessions/{session_id}/resume", query_string=gm_query
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/sessions/{session_id}/end", query_string=gm_query
+            ).status_code
+            == 200
+        )
 
         ent = client.post(
             f"/api/campaigns/{campaign_id}/entities",
+            query_string=gm_query,
             json={
                 "name": "Import Hero",
                 "entity_type": "PC",
@@ -107,4 +129,15 @@ def test_control_plane_crud_and_rag(integration_stack):
         assert query.status_code == 200
         assert "results" in query.get_json()
 
-        assert client.delete(f"/api/campaigns/{campaign_id}").status_code == 200
+        assert (
+            client.delete(
+                f"/api/campaigns/{campaign_id}", query_string=gm_query
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/campaigns/{campaign_id}/purge", query_string=gm_query
+            ).status_code
+            == 200
+        )

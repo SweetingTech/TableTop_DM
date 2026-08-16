@@ -82,20 +82,21 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 54 | **Performance Smoke Baseline** - local player_state, WebSocket fanout, RAG, save export, and boot budget docs/tests | Done |
 | 55 | **Packaging Gate** - release README, package script, checksum generation, `.env.example` audit coverage | Done |
 | 56 | **RC Burn-Down and Tag Prep** - checklist status pass, known limitations, final gate prep | Done |
+| 57 | **Authorization, Portability, and Runtime Review Closure** - GM mutation guards, player-safe history, portable principal remapping, startup/readiness hardening, and live browser verification | Done |
 
 ### Current 1.0 RC Posture
 
-As of **2026-05-19**, the actionable runtime blockers and follow-up engineering recommendations from `gemini_code_review.md` are closed on the active RC track:
+As of **2026-08-16**, a fresh review rebased on current `main` closed the remaining defects found in the route, save/load, readiness, and browser-runtime paths:
 
-- `app.py` is now a small entrypoint; the Flask application implementation is registered through `services/api/application.py` and shared auth/error helpers live under `services/api/`.
-- State deltas commit through a registry-backed dispatcher instead of hardcoded orchestration branches.
-- Campaign delete/import replacement uses a shared lifecycle service and database-owned cascade behavior from migration `015_campaign_cascade_cleanup.sql`.
-- Local LM Studio/Ollama RAG no longer silently falls back to OpenAI embeddings; local embedding readiness is explicit and missing local embedding models fail cleanly.
-- Session Intel extraction has stricter structured-output enums, safe alias canonicalization, one correction retry, and diagnostic skip reasons.
-- Game Console and Control Plane JavaScript now load through ES module entrypoints while preserving compatibility facades for existing templates.
-- Release gates passing after this closure include compile, Ruff, mypy, Node syntax checks, services/contracts/integration tests, Docker boot verification, and live E2E browser smoke.
+- Campaign, session, entity, POI, Story State event, and archive mutations now resolve the target resource and require a validated campaign GM identity before changing state.
+- Story State history is principal-scoped: players receive redacted nested snapshots while GMs retain the complete history.
+- Game saves carry metadata for every referenced principal and remap member, controller, ledger sender, and `visible_to` references by stable `auth_subject` during cross-machine import. Unknown mappings fail closed.
+- Readiness derives the expected schema from the repository migration set and requires an exact applied version. PostgreSQL startup probes target the final TCP listener so the temporary initialization server cannot be mistaken for readiness, and save encryption is declared as an explicit runtime dependency.
+- Flask-SocketIO runs with server-managed session compatibility disabled, while scoped room authorization and event visibility remain unchanged.
+- Control Plane mutations reuse persisted GM identity and real campaign-scoped join tokens, falling back to local-demo smoke tokens only when no real token is stored. The Game Console discovers active sessions through the read-only session list instead of invoking a GM-only resume mutation.
+- Compile, Ruff, formatting, mypy, JavaScript syntax, service/contract, integration, Docker readiness, live E2E, and in-browser console checks pass for the covered paths.
 
-The remaining 1.0 work is not a new architecture feature wave; it is RC hardening: product-grade identity UI, more reconnect edge-case proof, documentation reality pass, packaging, and performance smoke.
+No release-blocking defect remains from this review. Live external image-provider calls and non-Chromium/mobile browser coverage remain outside this verification pass.
 
 `gemini_code_review.md` is a historical review-and-closure record: Gemini CLI authored the original architecture review, and Codex appended the closure pass that tracks what was fixed for the RC. Treat `README.md`, `CHANGELOG.md`, and `docs/release/` as the current user-facing release truth.
 
@@ -483,6 +484,21 @@ docs/                               Architecture specs
 
 
 ## Architecture Overview
+
+The request boundary keeps identity ahead of protected reads and every resource mutation, with visibility filtering on scoped reads:
+
+```mermaid
+flowchart LR
+    A["Browser/API caller<br/>principal + join token"] --> B["Route authentication"]
+    B --> C["Campaign/session membership<br/>and role validation"]
+    C --> D["Visibility-scoped read"]
+    C --> E["Validated deterministic mutation"]
+    E --> F["State + append-only ledger/history"]
+    D --> G["Caller-filtered REST/WebSocket projection"]
+    F --> G
+```
+
+The invariant is authorization before resource mutation and visibility filtering before data leaves the server.
 
 ### Data Pillars
 - **State DB (Postgres):** canonical world truth — entities, stats, inventory, coordinates, factions, economy metrics, divine standings, interventions, triggers
@@ -901,7 +917,8 @@ ttdm-save:v1
 Wrong passphrase produces a clean "Decryption failed" error. Format magic mismatch produces "Not a TableTop DM save file."
 
 **Cross-machine portability:**
-- Principal references migrate by `auth_subject` (e.g. `local:player`), not UUID — so a game save plays on any machine that has a principal with the same auth_subject. Importing a program save first populates auth_subjects on the destination.
+- Game saves include identity metadata for every principal referenced by campaign membership, entity control, ledger senders, or ledger `visible_to` audiences. Import remaps those references by stable `auth_subject` (for example, `local:player`) instead of copying installation-local UUIDs.
+- A destination must contain each matching `auth_subject`; importing a program save first can populate those identities. Missing or ambiguous mappings fail closed instead of silently widening visibility or assigning control to the wrong principal. Legacy saves may reuse an existing UUID only for same-machine restores.
 - API keys are **decrypted before export** (since each install has its own vault key) and **re-encrypted on import** with the destination machine's vault. The cleartext only exists inside the passphrase-protected `.ttdm` file.
 
 **UI:** Control Plane → Save / Load tab. Buttons for Export Program Save, Import Program Save, Export Game Save (uses currently-selected campaign), Import Game Save. Imports prompt for passphrase. The "Replace if same id exists" checkbox on game-save import surfaces the conflict-resolution path (cascade-purge then re-insert).

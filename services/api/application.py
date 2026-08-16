@@ -29,14 +29,18 @@ from services.realtime.rooms import (
     session_room,
 )
 from services.api.auth import (
+    require_archive_gm as _require_archive_gm,
     principal_id_from_request as _principal_id_from_request,
     require_campaign_gm as _require_campaign_gm,
     require_campaign_principal as _require_campaign_principal,
     require_entity_gm as _require_entity_gm,
+    require_map_gm as _require_map_gm,
+    require_poi_gm as _require_poi_gm,
     require_session_gm as _require_session_gm,
     require_session_principal as _require_session_principal,
     continuity_visibility_scope as _continuity_visibility_scope,
     redact_story_state as _redact_story_state,
+    redact_story_state_history as _redact_story_state_history,
 )
 from services.api.responses import (
     json_error as _json_error,
@@ -75,6 +79,7 @@ socketio = SocketIO(
         os.environ.get("CORS_ALLOWED_ORIGINS")
     ),
     async_mode="eventlet",
+    manage_session=False,
 )
 configure_socketio(socketio)
 
@@ -250,10 +255,12 @@ def health():
     return jsonify({"status": "alive"})
 
 
-def _expected_migration_version() -> str | None:
-    migration_dir = Path(__file__).resolve().parent / "infra" / "sql" / "migrations"
+def _expected_migration_version() -> str:
+    migration_dir = PROJECT_ROOT / "infra" / "sql" / "migrations"
     migrations = sorted(migration_dir.glob("*.sql"))
-    return migrations[-1].name if migrations else None
+    if not migrations:
+        raise RuntimeError(f"migration directory has no SQL files: {migration_dir}")
+    return migrations[-1].name
 
 
 def _readiness_check(name, fn):
@@ -302,7 +309,7 @@ def _migrations_ready():
         conn.close()
 
     current = row[0] if row else None
-    if expected and current != expected:
+    if current != expected:
         raise RuntimeError(
             f"current migration {current!r} does not match expected {expected!r}"
         )
@@ -1244,6 +1251,10 @@ def api_map_poi_create(map_id):
     """Create a POI on a map. Body: { x, y, kind, name, description?, image_url?, target_map_id?, is_hidden?, metadata? }"""
     from shared.db.connection import execute_one
 
+    _principal, _map_record, error = _require_map_gm(map_id, require_join_token=True)
+    if error:
+        return error
+
     data = request.get_json(silent=True) or {}
     required = ("x", "y", "kind", "name")
     missing = [k for k in required if data.get(k) is None]
@@ -1279,6 +1290,10 @@ def api_map_poi_create(map_id):
 def api_poi_update(poi_id):
     """Patch a POI. Accepts any subset of name/description/x/y/kind/target_map_id/is_hidden/metadata."""
     from shared.db.connection import execute_one
+
+    _principal, _poi, error = _require_poi_gm(poi_id, require_join_token=True)
+    if error:
+        return error
 
     data = request.get_json(silent=True) or {}
     allowed = (
@@ -1316,6 +1331,10 @@ def api_poi_update(poi_id):
 def api_poi_delete(poi_id):
     from shared.db.connection import execute_one
 
+    _principal, _poi, error = _require_poi_gm(poi_id, require_join_token=True)
+    if error:
+        return error
+
     row = execute_one(
         "DELETE FROM state.map_pois WHERE id = %s RETURNING id", (poi_id,)
     )
@@ -1332,6 +1351,10 @@ def api_poi_image_upload(poi_id):
       OpenRouter image-gen call later in Phase 6e)."""
     from shared.db.connection import execute_one
     import base64
+
+    _principal, _poi, error = _require_poi_gm(poi_id, require_join_token=True)
+    if error:
+        return error
 
     poi = execute_one("SELECT id FROM state.map_pois WHERE id = %s", (poi_id,))
     if not poi:
@@ -2093,6 +2116,10 @@ def api_poi_generate_image(poi_id):
     from shared.db.connection import execute_one
     from services.domain.maps.image_gen import generate_poi_image, ImageGenError
 
+    _principal, _poi, error = _require_poi_gm(poi_id, require_join_token=True)
+    if error:
+        return error
+
     poi = execute_one(
         "SELECT p.*, m.campaign_id FROM state.map_pois p "
         "JOIN state.maps m ON p.map_id = m.id WHERE p.id = %s",
@@ -2126,6 +2153,10 @@ def api_poi_generate_image(poi_id):
 @api_bp.route("/api/pois/<poi_id>/image", methods=["DELETE"])
 def api_poi_image_delete(poi_id):
     from shared.db.connection import execute_one
+
+    _principal, _poi, error = _require_poi_gm(poi_id, require_join_token=True)
+    if error:
+        return error
 
     row = execute_one(
         "UPDATE state.map_pois SET image_url = NULL, updated_at = now() WHERE id = %s RETURNING *",
@@ -2530,6 +2561,10 @@ def api_campaigns_create():
 def api_campaign_update(campaign_id):
     from shared.db.connection import execute_one
 
+    _principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
+
     data = request.get_json(silent=True) or {}
     err = _validate_campaign_payload(data, partial=True)
     if err:
@@ -2557,6 +2592,10 @@ def api_campaign_update(campaign_id):
 def api_campaign_tombstone(campaign_id):
     from shared.db.connection import execute_one
 
+    _principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
+
     row = execute_one(
         "UPDATE state.campaigns SET status='TOMBSTONED', updated_at=now() WHERE id=%s RETURNING *",
         (campaign_id,),
@@ -2578,6 +2617,10 @@ def api_campaign_purge(campaign_id):
 
     Irreversible. Use Archive (DELETE /api/campaigns/<id>) for soft delete.
     """
+    _principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
+
     try:
         ok = _cascade_delete_campaign(campaign_id)
     except Exception as e:  # defensive boundary
@@ -2591,6 +2634,10 @@ def api_campaign_purge(campaign_id):
 @api_bp.route("/api/campaigns/<campaign_id>/resume", methods=["POST"])
 def api_campaign_resume(campaign_id):
     from shared.db.connection import execute_one
+
+    _principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
 
     active = execute_one(
         "SELECT * FROM state.sessions WHERE campaign_id=%s AND status='ACTIVE' ORDER BY created_at DESC LIMIT 1",
@@ -2643,6 +2690,10 @@ def _ensure_starter_map(campaign_id: str) -> None:
 def api_campaign_sessions_create(campaign_id):
     from shared.db.connection import transaction
 
+    _principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
+
     with transaction() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -2682,21 +2733,40 @@ def _set_session_status(session_id, status):
 
 @api_bp.route("/api/sessions/<session_id>/pause", methods=["POST"])
 def api_session_pause(session_id):
+    _principal, _session, error = _require_session_gm(
+        session_id, require_join_token=True
+    )
+    if error:
+        return error
     return _set_session_status(session_id, "PAUSED")
 
 
 @api_bp.route("/api/sessions/<session_id>/resume", methods=["POST"])
 def api_session_resume(session_id):
+    _principal, _session, error = _require_session_gm(
+        session_id, require_join_token=True
+    )
+    if error:
+        return error
     return _set_session_status(session_id, "ACTIVE")
 
 
 @api_bp.route("/api/sessions/<session_id>/end", methods=["POST"])
 def api_session_end(session_id):
+    _principal, _session, error = _require_session_gm(
+        session_id, require_join_token=True
+    )
+    if error:
+        return error
     return _set_session_status(session_id, "ENDED")
 
 
 @api_bp.route("/api/campaigns/<campaign_id>/entities", methods=["POST"])
 def api_entity_create(campaign_id):
+    _principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
+
     data = request.get_json(silent=True) or {}
     if not data.get("name") or not data.get("entity_type"):
         return jsonify({"error": "name and entity_type are required"}), 400
@@ -4004,6 +4074,10 @@ def api_story_state_history(session_id):
     """Get history of story state changes for a session"""
     from shared.db.connection import execute_query
 
+    principal, _session, error = _require_session_principal(session_id)
+    if error:
+        return error
+
     limit = request.args.get("limit", 50, type=int)
     offset = request.args.get("offset", 0, type=int)
 
@@ -4018,7 +4092,9 @@ def api_story_state_history(session_id):
         """,
         (session_id, limit, offset),
     )
-    return jsonify([_serialize(r) for r in rows])
+    if principal.is_gm() or principal.is_system():
+        return jsonify([_serialize(r) for r in rows])
+    return jsonify([_redact_story_state_history(r) for r in rows])
 
 
 @api_bp.route("/api/sessions/<session_id>/story_state/add_event", methods=["POST"])
@@ -4026,6 +4102,12 @@ def api_add_story_event(session_id):
     """Add a new event to the story state recent_events"""
     from shared.db.connection import execute_one
     from datetime import datetime
+
+    principal, _session, error = _require_session_gm(
+        session_id, require_join_token=True
+    )
+    if error:
+        return error
 
     data = request.get_json(silent=True) or {}
     description = data.get("description", "").strip()
@@ -4056,11 +4138,11 @@ def api_add_story_event(session_id):
     updated = execute_one(
         """
         UPDATE state.story_state
-        SET recent_events = %s, updated_at = now()
+        SET recent_events = %s, updated_at = now(), updated_by = %s
         WHERE session_id = %s
         RETURNING *
         """,
-        (json.dumps(recent_events), session_id),
+        (json.dumps(recent_events), str(principal.principal_id), session_id),
     )
     return jsonify(_serialize(updated))
 
@@ -4074,6 +4156,10 @@ def api_add_story_event(session_id):
 def api_session_archives(campaign_id):
     """Get archived sessions for a campaign"""
     from shared.db.connection import execute_query
+
+    _principal, error = _require_campaign_gm(campaign_id, require_join_token=True)
+    if error:
+        return error
 
     rows = execute_query(
         """
@@ -4094,6 +4180,12 @@ def api_session_archive_detail(archive_id):
     """Get full details of an archived session including chat history"""
     from shared.db.connection import execute_one
 
+    _principal, _archive, error = _require_archive_gm(
+        archive_id, require_join_token=True
+    )
+    if error:
+        return error
+
     row = execute_one(
         "SELECT * FROM state.session_archives WHERE id = %s",
         (archive_id,),
@@ -4107,6 +4199,12 @@ def api_session_archive_detail(archive_id):
 def api_delete_session_archive(archive_id):
     """Permanently delete an archived session"""
     from shared.db.connection import execute_one
+
+    _principal, _archive, error = _require_archive_gm(
+        archive_id, require_join_token=True
+    )
+    if error:
+        return error
 
     row = execute_one(
         "DELETE FROM state.session_archives WHERE id = %s RETURNING id",
@@ -4244,6 +4342,12 @@ def api_archive_session(session_id):
     """Manually archive a session (without deleting it)"""
     from shared.db.connection import transaction
 
+    principal, _session, error = _require_session_gm(
+        session_id, require_join_token=True
+    )
+    if error:
+        return error
+
     data = request.get_json(silent=True) or {}
 
     with transaction() as conn:
@@ -4297,7 +4401,7 @@ def api_archive_session(session_id):
                 json.dumps(story_snapshot),
                 data.get("summary", ""),
                 data.get("reason", "COMPLETED"),
-                data.get("archived_by"),
+                str(principal.principal_id),
             ),
         )
         archive = cur.fetchone()
