@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts import audit_todo
+
 pytestmark = pytest.mark.contracts
 
 
@@ -31,6 +33,13 @@ def test_integration_reset_waits_for_container_health() -> None:
     reset_script = Path("scripts/db_reset.py").read_text(encoding="utf-8")
 
     assert 'docker_compose("up", "-d", "--wait")' in reset_script
+
+
+def test_readiness_audit_uses_current_release_checklist() -> None:
+    checklist = Path(audit_todo.DEFAULT_CHECKLIST_PATH)
+
+    assert checklist.is_file()
+    assert audit_todo.release_checklist_missing_headings(checklist) == set()
 
 
 def test_ci_workflow_does_not_require_openai_secrets() -> None:
