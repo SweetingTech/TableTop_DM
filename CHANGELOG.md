@@ -12,9 +12,9 @@ A fresh review against current `main` closed authorization, visibility, portable
 
 - **Fixed** route authorization - campaign, session, entity, POI, Story State event, and archive mutations resolve resource ownership and require validated GM identity; archive attribution now comes from that identity rather than request data.
 - **Fixed** Story State history visibility - player responses redact private fields inside historical snapshots while GM responses retain the full record.
-- **Fixed** cross-machine game saves - exports include every referenced principal, and imports remap members, entity controllers, ledger senders, and `visible_to` audiences by `auth_subject`, rejecting incomplete mappings.
+- **Fixed** cross-machine game saves - exports include every referenced principal, and imports remap members, entity controllers, ledger senders, and `visible_to` audiences by `auth_subject`, rejecting incomplete mappings. Legacy principal existence checks are batched into one UUID-array query.
 - **Fixed** startup, readiness, and runtime declarations - PostgreSQL probes target the final TCP listener instead of the temporary initialization socket, the expected migration is derived from the repository migration set, readiness requires an exact version match, and `cryptography` is an explicit application dependency.
-- **Fixed** realtime and browser compatibility - Flask-SocketIO uses the Flask 3-compatible session mode, Control Plane mutations attach GM context, and Game Console startup uses the read-only session list.
+- **Fixed** realtime and browser compatibility - Flask-SocketIO uses the Flask 3-compatible session mode, Control Plane mutations reuse persisted real GM tokens with the local-demo smoke-token fallback, and Game Console startup uses the read-only session list.
 - **Tests** - expanded route/auth, save/load, readiness, runtime dependency, Control Plane, and golden-path coverage; compile, lint, type, JavaScript syntax, service/contract, integration, live E2E, and in-browser checks pass.
 
 ---

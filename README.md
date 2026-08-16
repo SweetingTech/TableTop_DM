@@ -93,7 +93,7 @@ As of **2026-08-16**, a fresh review rebased on current `main` closed the remain
 - Game saves carry metadata for every referenced principal and remap member, controller, ledger sender, and `visible_to` references by stable `auth_subject` during cross-machine import. Unknown mappings fail closed.
 - Readiness derives the expected schema from the repository migration set and requires an exact applied version. PostgreSQL startup probes target the final TCP listener so the temporary initialization server cannot be mistaken for readiness, and save encryption is declared as an explicit runtime dependency.
 - Flask-SocketIO runs with server-managed session compatibility disabled, while scoped room authorization and event visibility remain unchanged.
-- Control Plane mutations attach GM context, and the Game Console discovers active sessions through the read-only session list instead of invoking a GM-only resume mutation.
+- Control Plane mutations reuse persisted GM identity and real campaign-scoped join tokens, falling back to local-demo smoke tokens only when no real token is stored. The Game Console discovers active sessions through the read-only session list instead of invoking a GM-only resume mutation.
 - Compile, Ruff, formatting, mypy, JavaScript syntax, service/contract, integration, Docker readiness, live E2E, and in-browser console checks pass for the covered paths.
 
 No release-blocking defect remains from this review. Live external image-provider calls and non-Chromium/mobile browser coverage remain outside this verification pass.
