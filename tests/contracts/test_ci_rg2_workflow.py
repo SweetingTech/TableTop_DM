@@ -1,8 +1,7 @@
+import runpy
 from pathlib import Path
 
 import pytest
-
-from scripts import audit_todo
 
 pytestmark = pytest.mark.contracts
 
@@ -36,10 +35,11 @@ def test_integration_reset_waits_for_container_health() -> None:
 
 
 def test_readiness_audit_uses_current_release_checklist() -> None:
-    checklist = Path(audit_todo.DEFAULT_CHECKLIST_PATH)
+    audit_module = runpy.run_path("scripts/audit_todo.py", run_name="audit_todo_test")
+    checklist = Path(audit_module["DEFAULT_CHECKLIST_PATH"])
 
     assert checklist.is_file()
-    assert audit_todo.release_checklist_missing_headings(checklist) == set()
+    assert audit_module["release_checklist_missing_headings"](checklist) == set()
 
 
 def test_ci_workflow_does_not_require_openai_secrets() -> None:
