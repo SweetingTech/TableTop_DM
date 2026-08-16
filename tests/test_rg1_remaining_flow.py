@@ -231,6 +231,7 @@ def test_replay_engine_verify_state_success(monkeypatch):
             ]
         },
     )
+
     def fake_execute_query(query, params):
         query_calls.append((query, params))
         return [
@@ -259,6 +260,4 @@ def test_replay_engine_verify_state_success(monkeypatch):
     assert result["mismatches"] == []
     assert len(query_calls) == 1
     assert "ANY(%s::uuid[])" in query_calls[0][0]
-    assert query_calls[0][1] == (
-        ["33333333-3333-3333-3333-333333333331"],
-    )
+    assert query_calls[0][1] == (["33333333-3333-3333-3333-333333333331"],)
