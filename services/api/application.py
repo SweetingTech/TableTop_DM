@@ -45,6 +45,23 @@ from services.api.responses import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+
+def _parse_socketio_cors_allowed_origins(
+    raw_origins: str | None,
+) -> str | list[str] | None:
+    """Return Flask-SocketIO's CORS setting from a comma-separated value.
+
+    ``None`` keeps Flask-SocketIO's same-origin enforcement. A wildcard must
+    be explicitly configured; it is never the default.
+    """
+    if raw_origins is None or not raw_origins.strip():
+        return None
+    if raw_origins.strip() == "*":
+        return "*"
+    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    return origins or None
+
+
 app = Flask(
     "app",
     template_folder=str(PROJECT_ROOT / "templates"),
@@ -52,7 +69,13 @@ app = Flask(
 )
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(32).hex())
 api_bp = Blueprint("api", __name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins=_parse_socketio_cors_allowed_origins(
+        os.environ.get("CORS_ALLOWED_ORIGINS")
+    ),
+    async_mode="eventlet",
+)
 configure_socketio(socketio)
 
 REDIS_DEFAULT_HOST = "localhost"
