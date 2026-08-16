@@ -82,7 +82,7 @@ See [Using the Web Interface](#using-the-web-interface-gui) for GUI quickstart o
 | 54 | **Performance Smoke Baseline** - local player_state, WebSocket fanout, RAG, save export, and boot budget docs/tests | Done |
 | 55 | **Packaging Gate** - release README, package script, checksum generation, `.env.example` audit coverage | Done |
 | 56 | **RC Burn-Down and Tag Prep** - checklist status pass, known limitations, final gate prep | Done |
-| 57 | **Authorization, Portability, and Runtime Review Closure** - GM mutation guards, player-safe history, portable principal remapping, exact readiness, and live browser verification | Done |
+| 57 | **Authorization, Portability, and Runtime Review Closure** - GM mutation guards, player-safe history, portable principal remapping, startup/readiness hardening, and live browser verification | Done |
 
 ### Current 1.0 RC Posture
 
@@ -91,7 +91,7 @@ As of **2026-08-16**, a fresh review rebased on current `main` closed the remain
 - Campaign, session, entity, POI, Story State event, and archive mutations now resolve the target resource and require a validated campaign GM identity before changing state.
 - Story State history is principal-scoped: players receive redacted nested snapshots while GMs retain the complete history.
 - Game saves carry metadata for every referenced principal and remap member, controller, ledger sender, and `visible_to` references by stable `auth_subject` during cross-machine import. Unknown mappings fail closed.
-- Readiness derives the expected schema from the repository migration set and requires an exact applied version. Save encryption is also declared as an explicit runtime dependency.
+- Readiness derives the expected schema from the repository migration set and requires an exact applied version. PostgreSQL startup probes target the final TCP listener so the temporary initialization server cannot be mistaken for readiness, and save encryption is declared as an explicit runtime dependency.
 - Flask-SocketIO runs with server-managed session compatibility disabled, while scoped room authorization and event visibility remain unchanged.
 - Control Plane mutations attach GM context, and the Game Console discovers active sessions through the read-only session list instead of invoking a GM-only resume mutation.
 - Compile, Ruff, formatting, mypy, JavaScript syntax, service/contract, integration, Docker readiness, live E2E, and in-browser console checks pass for the covered paths.
