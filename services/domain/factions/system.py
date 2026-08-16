@@ -172,7 +172,7 @@ class FactionSystem:
 
             for tenet in tenets:
                 if isinstance(tenet, dict):
-                    forbidden_tags = tenet.get("forbidden_tags", [])
+                    forbidden_tags = set(tenet.get("forbidden_tags", []))
                     for tag in action_tags:
                         if tag in forbidden_tags:
                             violations.append(

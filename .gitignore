@@ -221,3 +221,14 @@ burn-bag/
 .vscode/
 .idea/
 .DS_Store
+
+# Playwright e2e artifacts (videos, screenshots, traces)
+test-results-e2e/
+.playwright/
+
+# Claude Code agent worktrees and per-machine launch config
+.claude/worktrees/
+.claude/launch.json
+
+# Per-installation API-key encryption vault — must never be committed
+.local-run/vault.key

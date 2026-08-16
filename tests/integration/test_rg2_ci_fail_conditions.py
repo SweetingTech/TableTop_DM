@@ -13,6 +13,7 @@ pytestmark = pytest.mark.integration
 
 CAMPAIGN_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 SESSION_ID = uuid.UUID("66666666-6666-6666-6666-666666666661")
+DM_ID = uuid.UUID("22222222-2222-2222-2222-222222222221")
 PLAYER_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 PLAYER_ENTITY_ID = uuid.UUID("33333333-3333-3333-3333-333333333331")
 
@@ -42,6 +43,7 @@ def test_unknown_action_type_rejected_and_warning_logged(
     conn = psycopg2.connect(postgres_dsn)
     try:
         with conn.cursor() as cur:
+            cur.execute("SET app.principal_id = %s", (str(DM_ID),))
             cur.execute(
                 """
                 SELECT type, payload->'proposal'->>'action_type'
