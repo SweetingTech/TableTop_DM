@@ -5,7 +5,6 @@ When an AI_NPC entity's turn comes up in combat, this module decides
 and executes their action without human intervention.
 """
 import uuid
-from typing import Optional
 from services.orchestrator.state_machine import StateMachine
 from services.orchestrator.pipeline import OrchestratorPipeline
 from shared.schemas.contracts import InterventionProposal
