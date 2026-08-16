@@ -168,12 +168,19 @@ class ReplayEngine:
         checkpoint = self.load_checkpoint(session_id, up_to_seq=999999999)
         replayed = self.replay_deltas(checkpoint["events"])
 
+        entity_ids = list(expected_state.keys())
+        actual_entities = {}
+        if entity_ids:
+            results = execute_query(
+                "SELECT id, hp_current, hp_max, ac FROM state.entities WHERE id = ANY(%s)",
+                (entity_ids,),
+            )
+            for row in results:
+                actual_entities[str(row["id"])] = row
+
         mismatches = []
         for entity_id, expected in expected_state.items():
-            actual = execute_one(
-                "SELECT hp_current, hp_max, ac FROM state.entities WHERE id = %s",
-                (entity_id,),
-            )
+            actual = actual_entities.get(str(entity_id))
             if actual:
                 for field, exp_val in expected.items():
                     act_val = actual.get(field)
