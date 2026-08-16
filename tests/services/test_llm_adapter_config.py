@@ -1,12 +1,16 @@
 import uuid
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from services.llm.adapter import get_campaign_ai_config
+
 
 @pytest.mark.unit
 def test_get_campaign_ai_config_none_id():
     """Verify {} is returned when campaign_id is None."""
     assert get_campaign_ai_config(None) == {}
+
 
 @pytest.mark.unit
 def test_get_campaign_ai_config_success():
@@ -20,8 +24,10 @@ def test_get_campaign_ai_config_success():
 
         assert result == mock_row
         mock_execute.assert_called_once_with(
-            "SELECT * FROM state.campaign_settings WHERE campaign_id=%s", (str(campaign_id),)
+            "SELECT * FROM state.campaign_settings WHERE campaign_id=%s",
+            (str(campaign_id),),
         )
+
 
 @pytest.mark.unit
 def test_get_campaign_ai_config_not_found():
@@ -33,6 +39,7 @@ def test_get_campaign_ai_config_not_found():
         result = get_campaign_ai_config(campaign_id)
 
         assert result == {}
+
 
 @pytest.mark.unit
 def test_get_campaign_ai_config_exception(caplog):
