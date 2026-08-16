@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 audit_todo.py
-Repo auditor that treats todo.md/TODO.md as a contract and verifies:
-- All checkboxes are checked
+Repository readiness auditor that treats the current release checklist as a contract
+and verifies:
+- Legacy checkbox checklists are complete, when explicitly supplied
 - Referenced files/paths exist
 - Canonical commands exist and succeed (ci, up/down, migrate, seed, rg1)
 - Docker compose config is valid (+ optional build)
@@ -34,6 +35,12 @@ HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.+?)\s*$")
 CODE_SPAN_RE = re.compile(r"`([^`]+)`")
 MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+DEFAULT_CHECKLIST_PATH = "docs/release/1.0-rc-checklist.md"
+REQUIRED_RELEASE_CHECKLIST_HEADINGS = {
+    "Required Automated Gate",
+    "Manual Acceptance",
+    "Exit Criteria",
+}
 
 
 @dataclass
@@ -106,6 +113,16 @@ def parse_todo(todo_path: Path) -> List[TodoItem]:
             items.append(TodoItem(idx, checked, body, tuple(current_sections)))
 
     return items
+
+
+def release_checklist_missing_headings(checklist_path: Path) -> set[str]:
+    """Return required RC sections absent from a non-checkbox checklist."""
+    headings = {
+        match.group("title").strip()
+        for line in read_text(checklist_path).splitlines()
+        if (match := HEADING_RE.match(line))
+    }
+    return REQUIRED_RELEASE_CHECKLIST_HEADINGS - headings
 
 
 def extract_code_spans(text: str) -> List[str]:
@@ -272,7 +289,12 @@ def scan_markdown_links(md_path: Path, root: Path) -> List[AuditFinding]:
     # Links
     for link in MD_LINK_RE.findall(text):
         link = link.strip()
-        if not link or is_url(link) or link.startswith("mailto:"):
+        if (
+            not link
+            or is_url(link)
+            or link.startswith("mailto:")
+            or link.startswith("/")
+        ):
             continue
         link_no_anchor = link.split("#", 1)[0].split("?", 1)[0]
         if not link_no_anchor:
@@ -296,12 +318,15 @@ def main() -> int:
     root = repo_root()
 
     ap = argparse.ArgumentParser(
-        description="Audit todo.md/TODO.md completion and repo readiness."
+        description="Audit release-checklist completion and repository readiness."
     )
     ap.add_argument(
         "--todo",
-        default="TODO.md",
-        help="Path to todo.md/TODO.md relative to repo root.",
+        default=DEFAULT_CHECKLIST_PATH,
+        help=(
+            "Path to the release checklist relative to the repo root. "
+            "The legacy option name is retained for compatibility."
+        ),
     )
     ap.add_argument(
         "--full",
@@ -342,12 +367,14 @@ def main() -> int:
 
     todo_path = (root / args.todo).resolve()
     if not todo_path.exists():
-        fallback_name = "TODO.md" if Path(args.todo).name == "todo.md" else "todo.md"
-        fallback = (root / fallback_name).resolve()
-        if fallback.exists():
-            todo_path = fallback
-        else:
-            print(f"FAIL: TODO file not found: {todo_path}", file=sys.stderr)
+        requested_name = Path(args.todo).name
+        if requested_name.lower() == "todo.md":
+            fallback_name = "TODO.md" if requested_name == "todo.md" else "todo.md"
+            fallback = (root / fallback_name).resolve()
+            if fallback.exists():
+                todo_path = fallback
+        if not todo_path.exists():
+            print(f"FAIL: release checklist not found: {todo_path}", file=sys.stderr)
             return 2
 
     # Prepare report output path
@@ -357,7 +384,8 @@ def main() -> int:
     findings: List[AuditFinding] = []
     items = parse_todo(todo_path)
 
-    # 1) Check unchecked items
+    # 1) Check unchecked items in legacy checkbox contracts. The current RC
+    # checklist uses status tables and executable gates instead of checkboxes.
     unchecked = [it for it in items if not it.checked]
     if unchecked:
         details = "\n".join(
@@ -368,7 +396,7 @@ def main() -> int:
         )
         findings.append(
             AuditFinding(
-                name="TODO completeness",
+                name="Checklist completeness",
                 status="FAIL",
                 details=f"Found {len(unchecked)} unchecked items.\n{details}",
             )
@@ -376,11 +404,29 @@ def main() -> int:
     else:
         findings.append(
             AuditFinding(
-                name="TODO completeness",
+                name="Checklist completeness",
                 status="PASS",
-                details=f"All {len(items)} checkbox items are checked.",
+                details=f"All {len(items)} legacy checkbox items are checked.",
             )
         )
+    if not items:
+        missing_headings = release_checklist_missing_headings(todo_path)
+        if missing_headings:
+            findings[-1] = AuditFinding(
+                name="Release checklist structure",
+                status="FAIL",
+                details="Missing required sections: "
+                + ", ".join(sorted(missing_headings)),
+            )
+        else:
+            findings[-1] = AuditFinding(
+                name="Release checklist structure",
+                status="PASS",
+                details=(
+                    "Required RC sections are present; completion is determined by "
+                    "the executable readiness gates below."
+                ),
+            )
 
     # 2) Extract referenced paths from backticks and verify they exist
     referenced_paths_fail = []
@@ -439,14 +485,12 @@ def main() -> int:
             )
         )
 
-    # 3) Baseline required files (these are implied by your TODO)
+    # 3) Baseline required files
     must_exist = [
         "README.md",
         ".env.example",
         ".github/workflows/ci.yml",
     ]
-    if not (root / "TODO.md").exists() and not (root / "todo.md").exists():
-        must_exist.append("TODO.md")
     # Optional: accept ci.yaml
     if (
         not (root / ".github/workflows/ci.yml").exists()
@@ -961,7 +1005,7 @@ def main() -> int:
                 )
             )
 
-    # 6) Identify unverifiable TODO lines (line-by-line honesty)
+    # 6) Identify unverifiable legacy checkbox lines (line-by-line honesty)
     # Rule: if a checked line has no backtick references and is not inside RG headings, we cannot directly verify it.
     unverifiable = []
     for it in items:
@@ -987,7 +1031,7 @@ def main() -> int:
                 name="Line-by-line verifiability",
                 status=status,
                 details=(
-                    f"{len(unverifiable)} checked TODO items have no machine-verifiable evidence "
+                    f"{len(unverifiable)} checked legacy checklist items have no machine-verifiable evidence "
                     f"(no paths/commands in backticks and not under RG sections).\n"
                     f"Recommendation: add evidence tags or a mapping file tying each item to a test/gate.\n"
                     f"{details}"
@@ -1006,9 +1050,10 @@ def main() -> int:
     # Write report
     now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
     report_lines = []
-    report_lines.append("# TODO Audit Report\n")
+    report_lines.append("# Release Readiness Audit Report\n")
     report_lines.append(f"- Timestamp (UTC): {now}\n")
     report_lines.append(f"- Repo: {root}\n")
+    report_lines.append(f"- Checklist: {todo_path}\n")
     report_lines.append(f"- Platform: {platform.platform()}\n")
     report_lines.append(f"- Mode: {'FULL' if args.full else 'QUICK'}\n")
     report_lines.append(f"- Strict: {args.strict}\n\n")

@@ -6,31 +6,27 @@ Welcome to TableTop DM, a headless multi-agent AI-driven Virtual Tabletop (VTT) 
 
 ### Getting Started
 - [Quick Start Guide](quickstart.md) - Get up and running in 5 minutes
-- [System Requirements](requirements.md) - What you need to run TableTop DM
+- [1.0 Scope](../release/1.0-scope.md) - Supported release scope and requirements
 
 ### User Interfaces
 - [Game Console](game-console.md) - The main gameplay interface
 - [Control Plane](control-plane.md) - Campaign and character management
-- [Dashboard](dashboard.md) - Database viewer and stats
 
 ### Core Features
-- [Campaigns](campaigns.md) - Creating and managing campaigns
+- [Campaigns](control-plane.md#campaigns-tab) - Creating and managing campaigns
 - [Sessions](sessions.md) - Session lifecycle and management
 - [Characters](characters.md) - Character creation and management
-- [Combat](combat.md) - Combat system and initiative
-- [Maps](maps.md) - Map viewing and movement
+- [Combat and Maps](game-console.md) - Combat, initiative, map viewing, and movement
 
 ### DM Tools
 - [Story State Board](story-state.md) - Tracking who/what/when/where/why/how
-- [AI Narration](ai-narration.md) - Automated DM narration
-- [NPC Autonomy](npc-autonomy.md) - AI-controlled NPCs
-- [Session Archives](session-archives.md) - Viewing past sessions
+- [AI and NPC Behavior](../SPEC_MASTER.md) - Narration and agent behavior contracts
+- [Session Archives](sessions.md) - Session lifecycle and history
 
 ### Technical Reference
-- [API Reference](api-reference.md) - REST API endpoints
-- [WebSocket Events](websocket.md) - Real-time communication
+- [API and WebSocket Reference](../../README.md#api-reference) - REST endpoints and real-time events
 - [Commands](commands.md) - Console commands reference
-- [Configuration](configuration.md) - Environment variables and settings
+- [Configuration](../../README.md#configuration) - Environment variables and settings
 
 ---
 

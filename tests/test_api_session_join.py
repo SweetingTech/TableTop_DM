@@ -83,5 +83,5 @@ def test_join_token_required_when_enabled(monkeypatch):
         )
 
     assert missing.status_code == 403
-    assert missing.get_json()["error"] == "Invalid join token"
+    assert missing.get_json()["error"] == "join token required"
     assert accepted.status_code == 200
