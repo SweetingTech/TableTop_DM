@@ -1,7 +1,7 @@
 import uuid
 import json
 from datetime import datetime
-from shared.db.connection import execute_query, execute_one, get_connection
+from shared.db.connection import execute_query, get_connection
 
 
 class SessionExporter:
@@ -168,11 +168,12 @@ class ReplayEngine:
         checkpoint = self.load_checkpoint(session_id, up_to_seq=999999999)
         replayed = self.replay_deltas(checkpoint["events"])
 
-        entity_ids = list(expected_state.keys())
+        entity_ids = [str(entity_id) for entity_id in expected_state]
         actual_entities = {}
         if entity_ids:
             results = execute_query(
-                "SELECT id, hp_current, hp_max, ac FROM state.entities WHERE id = ANY(%s)",
+                "SELECT id, hp_current, hp_max, ac "
+                "FROM state.entities WHERE id = ANY(%s::uuid[])",
                 (entity_ids,),
             )
             for row in results:

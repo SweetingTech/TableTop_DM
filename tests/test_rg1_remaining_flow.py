@@ -207,6 +207,7 @@ def test_export_session_log_markdown(monkeypatch):
 
 def test_replay_engine_verify_state_success(monkeypatch):
     engine = ReplayEngine()
+    query_calls = []
 
     monkeypatch.setattr(
         ReplayEngine,
@@ -230,10 +231,18 @@ def test_replay_engine_verify_state_success(monkeypatch):
             ]
         },
     )
-    monkeypatch.setattr(
-        "services.export.exporter.execute_one",
-        lambda *_args, **_kwargs: {"hp_current": 20, "hp_max": 28, "ac": 16},
-    )
+    def fake_execute_query(query, params):
+        query_calls.append((query, params))
+        return [
+            {
+                "id": uuid.UUID("33333333-3333-3333-3333-333333333331"),
+                "hp_current": 20,
+                "hp_max": 28,
+                "ac": 16,
+            }
+        ]
+
+    monkeypatch.setattr("services.export.exporter.execute_query", fake_execute_query)
 
     result = engine.verify_state(
         uuid.UUID("66666666-6666-6666-6666-666666666661"),
@@ -248,3 +257,8 @@ def test_replay_engine_verify_state_success(monkeypatch):
 
     assert result["verified"] is True
     assert result["mismatches"] == []
+    assert len(query_calls) == 1
+    assert "ANY(%s::uuid[])" in query_calls[0][0]
+    assert query_calls[0][1] == (
+        ["33333333-3333-3333-3333-333333333331"],
+    )
