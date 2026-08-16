@@ -942,6 +942,7 @@ def api_campaigns_create():
 @app.route("/api/campaigns/<campaign_id>", methods=["PUT"])
 def api_campaign_update(campaign_id):
     from shared.db.connection import execute_one
+    from psycopg2 import sql
 
     data = request.get_json(silent=True) or {}
     err = _validate_campaign_payload(data, partial=True)
@@ -951,16 +952,16 @@ def api_campaign_update(campaign_id):
     fields, params = [], []
     for key in ("name", "slug", "status", "mode"):
         if key in data:
-            fields.append(f"{key} = %s")
+            fields.append(sql.SQL("{} = %s").format(sql.Identifier(key)))
             params.append(data[key])
     if not fields:
         return jsonify({"error": "no updatable fields provided"}), 400
     params.append(campaign_id)
 
-    row = execute_one(
-        f"UPDATE state.campaigns SET {', '.join(fields)}, updated_at=now() WHERE id=%s RETURNING *",
-        tuple(params),
+    query = sql.SQL("UPDATE state.campaigns SET {fields}, updated_at=now() WHERE id=%s RETURNING *").format(
+        fields=sql.SQL(", ").join(fields)
     )
+    row = execute_one(query, tuple(params))
     if not row:
         return jsonify({"error": "Not found"}), 404
     return jsonify(_serialize(row))
@@ -1040,12 +1041,13 @@ def api_campaign_sessions_create(campaign_id):
 
 def _set_session_status(session_id, status):
     from shared.db.connection import execute_one
+    from psycopg2 import sql
 
-    ended = ", ended_at=now()" if status == "ENDED" else ""
-    row = execute_one(
-        f"UPDATE state.sessions SET status=%s{ended}, updated_at=now() WHERE id=%s RETURNING *",
-        (status, session_id),
+    ended = sql.SQL(", ended_at=now()") if status == "ENDED" else sql.SQL("")
+    query = sql.SQL("UPDATE state.sessions SET status=%s{ended}, updated_at=now() WHERE id=%s RETURNING *").format(
+        ended=ended
     )
+    row = execute_one(query, (status, session_id))
     if not row:
         return jsonify({"error": "Session not found"}), 404
     return jsonify(_serialize(row))
@@ -1078,21 +1080,22 @@ def api_entity_create(campaign_id):
 @app.route("/api/entities/<entity_id>", methods=["PUT"])
 def api_entity_update(entity_id):
     from shared.db.connection import execute_one
+    from psycopg2 import sql
 
     data = request.get_json(silent=True) or {}
     fields, params = [], []
     for key in ("name", "tags", "public_sheet", "secret_sheet", "hp_current", "hp_max", "ac", "speed"):
         if key in data:
-            fields.append(f"{key}=%s")
+            fields.append(sql.SQL("{}=%s").format(sql.Identifier(key)))
             val = json.dumps(data[key]) if key in {"public_sheet", "secret_sheet"} else data[key]
             params.append(val)
     if not fields:
         return jsonify({"error": "no fields provided"}), 400
     params.append(entity_id)
-    row = execute_one(
-        f"UPDATE state.entities SET {', '.join(fields)}, updated_at=now() WHERE id=%s RETURNING *",
-        tuple(params),
+    query = sql.SQL("UPDATE state.entities SET {fields}, updated_at=now() WHERE id=%s RETURNING *").format(
+        fields=sql.SQL(", ").join(fields)
     )
+    row = execute_one(query, tuple(params))
     if not row:
         return jsonify({"error": "Not found"}), 404
     return jsonify(_serialize(row))
@@ -1932,6 +1935,7 @@ def api_get_story_state(session_id):
 def api_update_story_state(session_id):
     """Update the story state for a session"""
     from shared.db.connection import execute_one, transaction
+    from psycopg2 import sql
 
     data = request.get_json(silent=True) or {}
 
@@ -1955,7 +1959,7 @@ def api_update_story_state(session_id):
         values = []
         for field in allowed_fields:
             if field in data:
-                updates.append(f"{field} = %s")
+                updates.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
                 val = data[field]
                 if isinstance(val, (dict, list)):
                     values.append(json.dumps(val))
@@ -1965,16 +1969,16 @@ def api_update_story_state(session_id):
         if not updates:
             return jsonify({"error": "No valid fields to update"}), 400
 
-        updates.append("updated_at = now()")
+        updates.append(sql.SQL("updated_at = now()"))
         if data.get("updated_by"):
-            updates.append("updated_by = %s")
+            updates.append(sql.SQL("updated_by = %s"))
             values.append(data["updated_by"])
 
         values.append(session_id)
-        cur.execute(
-            f"UPDATE state.story_state SET {', '.join(updates)} WHERE session_id = %s RETURNING *",
-            values,
+        query = sql.SQL("UPDATE state.story_state SET {updates} WHERE session_id = %s RETURNING *").format(
+            updates=sql.SQL(", ").join(updates)
         )
+        cur.execute(query, values)
         updated = cur.fetchone()
 
         # Log change to history
