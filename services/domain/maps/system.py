@@ -102,6 +102,64 @@ class MapSystem:
             if own_conn:
                 conn.close()
 
+    def bulk_set_map_nodes(
+        self,
+        nodes: list[dict],
+        conn=None,
+    ) -> dict:
+        if not nodes:
+            return {"success": True, "count": 0}
+
+        own_conn = conn is None
+        if own_conn:
+            conn = get_connection()
+
+        try:
+            from psycopg2.extras import execute_values
+
+            cur = conn.cursor()
+
+            # Prepare data for execute_values
+            # (id, map_id, tier, x, y, collision_mask, terrain)
+            data = [
+                (
+                    str(uuid.uuid4()),
+                    str(node["map_id"]),
+                    node["tier"],
+                    node["x"],
+                    node["y"],
+                    node["collision_mask"],
+                    json.dumps(node.get("terrain") or {}),
+                )
+                for node in nodes
+            ]
+
+            execute_values(
+                cur,
+                """
+                INSERT INTO state.map_nodes (id, map_id, tier, x, y, collision_mask, terrain)
+                VALUES %s
+                ON CONFLICT (map_id, tier, x, y) DO UPDATE SET
+                    collision_mask = EXCLUDED.collision_mask,
+                    terrain = EXCLUDED.terrain
+                """,
+                data,
+                template="(%s, %s, %s, %s, %s, %s::bit(16), %s::jsonb)",
+                page_size=len(data),
+            )
+
+            if own_conn:
+                conn.commit()
+            cur.close()
+            return {"success": True, "count": len(nodes)}
+        except Exception:
+            if own_conn:
+                conn.rollback()
+            raise
+        finally:
+            if own_conn:
+                conn.close()
+
     def get_map_data(self, map_id: uuid.UUID) -> dict:
         map_row = execute_one("SELECT * FROM state.maps WHERE id = %s", (str(map_id),))
         if not map_row:
@@ -216,19 +274,26 @@ class ProceduralMapGenerator:
         conn = get_connection()
         try:
             cur = conn.cursor()
+            nodes_to_create = []
             for t in tiles:
                 walkable = not t["is_wall"]
                 collision = "0" * 16 if walkable else "1" + "0" * 15
                 terrain_type = "wall" if t["is_wall"] else t["terrain"]
-                map_system.set_map_node(
-                    map_id,
-                    0,
-                    t["x"],
-                    t["y"],
-                    collision,
-                    {"type": terrain_type, "difficult": t["difficult"]},
-                    conn,
+                nodes_to_create.append(
+                    {
+                        "map_id": map_id,
+                        "tier": 0,
+                        "x": t["x"],
+                        "y": t["y"],
+                        "collision_mask": collision,
+                        "terrain": {
+                            "type": terrain_type,
+                            "difficult": t["difficult"],
+                        },
+                    }
                 )
+            map_system.bulk_set_map_nodes(nodes_to_create, conn)
+
             for d in decorations:
                 cur.execute(
                     """
