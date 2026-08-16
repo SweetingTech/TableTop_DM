@@ -90,6 +90,60 @@ class MapSystem:
             if own_conn:
                 conn.close()
 
+    def bulk_set_map_nodes(
+        self,
+        nodes: list[dict],
+        conn=None,
+    ) -> dict:
+        own_conn = conn is None
+        if own_conn:
+            conn = get_connection()
+
+        try:
+            from psycopg2.extras import execute_values
+
+            cur = conn.cursor()
+
+            # Prepare data for execute_values
+            # (id, map_id, tier, x, y, collision_mask, terrain)
+            data = [
+                (
+                    str(uuid.uuid4()),
+                    str(node["map_id"]),
+                    node["tier"],
+                    node["x"],
+                    node["y"],
+                    node["collision_mask"],
+                    json.dumps(node.get("terrain", {})),
+                )
+                for node in nodes
+            ]
+
+            execute_values(
+                cur,
+                """
+                INSERT INTO state.map_nodes (id, map_id, tier, x, y, collision_mask, terrain)
+                VALUES %s
+                ON CONFLICT (map_id, tier, x, y) DO UPDATE SET
+                    collision_mask = EXCLUDED.collision_mask,
+                    terrain = EXCLUDED.terrain
+                """,
+                data,
+                template="(%s, %s, %s, %s, %s, %s::bit(16), %s)",
+            )
+
+            if own_conn:
+                conn.commit()
+            cur.close()
+            return {"success": True, "count": len(nodes)}
+        except Exception:
+            if own_conn:
+                conn.rollback()
+            raise
+        finally:
+            if own_conn:
+                conn.close()
+
     def get_map_data(self, map_id: uuid.UUID) -> dict:
         map_row = execute_one("SELECT * FROM state.maps WHERE id = %s", (str(map_id),))
         if not map_row:
@@ -165,6 +219,7 @@ class ProceduralMapGenerator:
 
         conn = get_connection()
         try:
+            nodes_to_create = []
             for y in range(height):
                 for x in range(width):
                     is_wall = x == 0 or y == 0 or x == width - 1 or y == height - 1
@@ -178,16 +233,18 @@ class ProceduralMapGenerator:
                     )
                     difficult = rng.random() < 0.1
 
-                    map_system.set_map_node(
-                        map_id,
-                        0,
-                        x,
-                        y,
-                        collision,
-                        {"type": terrain_type, "difficult": difficult},
-                        conn,
+                    nodes_to_create.append(
+                        {
+                            "map_id": map_id,
+                            "tier": 0,
+                            "x": x,
+                            "y": y,
+                            "collision_mask": collision,
+                            "terrain": {"type": terrain_type, "difficult": difficult},
+                        }
                     )
 
+            map_system.bulk_set_map_nodes(nodes_to_create, conn)
             conn.commit()
         except Exception:
             conn.rollback()
