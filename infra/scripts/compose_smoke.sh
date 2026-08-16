@@ -11,6 +11,10 @@ fi
 
 COMPOSE_FILE="infra/docker-compose.yml"
 
+qdrant_ready() {
+  curl -fsS "http://localhost:${QDRANT_HTTP_PORT:-6333}/healthz" >/dev/null
+}
+
 echo "Starting dependency stack..."
 docker compose -f "$COMPOSE_FILE" up -d
 
@@ -18,7 +22,7 @@ echo "Waiting for healthy containers..."
 for i in {1..60}; do
   if docker inspect -f '{{.State.Health.Status}}' tabletop_postgres 2>/dev/null | grep -q healthy \
     && docker inspect -f '{{.State.Health.Status}}' tabletop_redis 2>/dev/null | grep -q healthy \
-    && docker inspect -f '{{.State.Health.Status}}' tabletop_qdrant 2>/dev/null | grep -q healthy; then
+    && qdrant_ready; then
     break
   fi
   sleep 2
@@ -26,8 +30,8 @@ done
 
 if ! docker inspect -f '{{.State.Health.Status}}' tabletop_postgres 2>/dev/null | grep -q healthy \
   || ! docker inspect -f '{{.State.Health.Status}}' tabletop_redis 2>/dev/null | grep -q healthy \
-  || ! docker inspect -f '{{.State.Health.Status}}' tabletop_qdrant 2>/dev/null | grep -q healthy; then
-  echo "Error: One or more containers did not become healthy within the expected time." >&2
+  || ! qdrant_ready; then
+  echo "Error: One or more dependencies did not become ready within the expected time." >&2
   exit 1
 fi
 

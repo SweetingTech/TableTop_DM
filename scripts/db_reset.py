@@ -7,7 +7,7 @@ from integration_common import docker_compose, wait_for_postgres
 
 def main() -> None:
     docker_compose("down", "--volumes", "--remove-orphans")
-    docker_compose("up", "-d")
+    docker_compose("up", "-d", "--wait")
     wait_for_postgres()
 
 
