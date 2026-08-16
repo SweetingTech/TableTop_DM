@@ -107,6 +107,9 @@ class MapSystem:
         nodes: list[dict],
         conn=None,
     ) -> dict:
+        if not nodes:
+            return {"success": True, "count": 0}
+
         own_conn = conn is None
         if own_conn:
             conn = get_connection()
@@ -142,6 +145,7 @@ class MapSystem:
                 """,
                 data,
                 template="(%s, %s, %s, %s, %s, %s::bit(16), %s::jsonb)",
+                page_size=len(data),
             )
 
             if own_conn:

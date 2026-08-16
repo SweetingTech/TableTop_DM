@@ -47,8 +47,8 @@ def test_bulk_set_map_nodes_uses_one_values_statement(monkeypatch):
 
     monkeypatch.setattr(
         "psycopg2.extras.execute_values",
-        lambda cursor, query, data, template: execute_values_calls.append(
-            (cursor, query, data, template)
+        lambda cursor, query, data, template, page_size: execute_values_calls.append(
+            (cursor, query, data, template, page_size)
         ),
     )
 
@@ -76,11 +76,12 @@ def test_bulk_set_map_nodes_uses_one_values_statement(monkeypatch):
 
     assert result == {"success": True, "count": 2}
     assert len(execute_values_calls) == 1
-    cursor, query, data, template = execute_values_calls[0]
+    cursor, query, data, template, page_size = execute_values_calls[0]
     assert cursor is connection.cursor_instance
     assert "ON CONFLICT (map_id, tier, x, y)" in query
     assert template.endswith("%s::jsonb)")
     assert len(data) == 2
+    assert page_size == len(data)
     assert data[0][1:] == (
         str(map_id),
         0,
@@ -92,6 +93,16 @@ def test_bulk_set_map_nodes_uses_one_values_statement(monkeypatch):
     assert data[1][-1] == "{}"
     assert connection.commits == 0
     assert connection.cursor_instance.closed is True
+
+
+def test_bulk_set_map_nodes_skips_connection_for_empty_input(monkeypatch):
+    monkeypatch.setattr(
+        maps_module,
+        "get_connection",
+        lambda: pytest.fail("empty input should not open a database connection"),
+    )
+
+    assert MapSystem().bulk_set_map_nodes([]) == {"success": True, "count": 0}
 
 
 def test_generate_map_bulk_inserts_composed_tiles(monkeypatch):
