@@ -1,0 +1,13 @@
+pack:
+  pack_id: accessibility
+  version: 1.0.0
+  description: Interface, sensory, motor, and cognitive access preferences.
+dimensions:
+  - {name: text_size_need, kind: enum, values: [DEFAULT, LARGE, EXTRA_LARGE], default: DEFAULT}
+  - {name: contrast_need, kind: enum, values: [DEFAULT, HIGH], default: DEFAULT}
+  - {name: color_reliance_limit, kind: boolean, default: false}
+  - {name: motor_precision_need, kind: enum, values: [DEFAULT, REDUCED, MINIMAL], default: DEFAULT}
+  - {name: motion_sensitivity, kind: enum, values: [LOW, MEDIUM, HIGH], default: LOW}
+  - {name: cognitive_load_need, kind: enum, values: [DEFAULT, REDUCED, STEPWISE], default: DEFAULT}
+  - {name: audio_support_need, kind: enum, values: [NONE, OPTIONAL, REQUIRED], default: NONE}
+  - {name: input_preference, kind: enum, values: [POINTER, KEYBOARD, TOUCH, VOICE, SWITCH], default: POINTER}

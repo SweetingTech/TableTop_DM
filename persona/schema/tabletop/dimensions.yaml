@@ -1,0 +1,25 @@
+pack:
+  pack_id: tabletop
+  version: 1.0.0
+  description: Player style, rules knowledge, and campaign interaction preferences.
+dimensions:
+  - {name: player_style, kind: enum, values: [ACTOR, EXPLORER, INSTIGATOR, OPTIMIZER, PROBLEM_SOLVER, STORYTELLER, BALANCED], default: BALANCED}
+  - {name: rules_familiarity, kind: enum, values: [NONE, LOW, MEDIUM, HIGH], default: LOW}
+  - {name: interface_familiarity, kind: enum, values: [NONE, LOW, MEDIUM, HIGH], default: LOW}
+  - {name: combat_preference, kind: enum, values: [AVOID, LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: exploration_preference, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: roleplay_preference, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: puzzle_preference, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: optimization_tendency, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: metagaming_tendency, kind: enum, values: [LOW, MEDIUM, HIGH], default: LOW}
+  - {name: completionism, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: dm_trust, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: failure_tolerance, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: character_attachment, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: social_initiative, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: hint_preference, kind: enum, values: [NEVER, WHEN_STUCK, PROACTIVE], default: WHEN_STUCK}
+  - {name: pacing_preference, kind: enum, values: [SLOW, MODERATE, FAST], default: MODERATE}
+  - {name: reading_tolerance, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: session_length_preference, kind: enum, values: [SHORT, MEDIUM, LONG], default: MEDIUM}
+  - {name: choice_density_preference, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: safety_tool_familiarity, kind: enum, values: [NONE, LOW, MEDIUM, HIGH], default: LOW}

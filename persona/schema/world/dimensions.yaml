@@ -1,0 +1,38 @@
+pack:
+  pack_id: world
+  version: 1.0.0
+  description: World-specific culture, status, education, and occupation.
+dimensions:
+  - {name: species, kind: enum, values: [HUMAN, ELF, DWARF, HALFLING, ORC, OTHER], default: HUMAN}
+  - {name: lifespan_band, kind: enum, values: [SHORT, HUMANLIKE, LONG, VERY_LONG], depends_on: {species: [HUMAN, ELF, DWARF, HALFLING, ORC, OTHER]}, default: HUMANLIKE}
+  - {name: region_type, kind: enum, values: [URBAN, RURAL, FRONTIER, NOMADIC, MARITIME], default: URBAN}
+  - {name: native_language, kind: enum, values: [COMMON, ELVISH, DWARVISH, ORCISH, REGIONAL], default: COMMON}
+  - {name: multilingualism, kind: enum, values: [NONE, BASIC, FLUENT], default: NONE}
+  - {name: cultural_collectivism, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: religious_exposure, kind: enum, values: [NONE, LIMITED, COMMON, DEVOUT], default: COMMON}
+  - {name: religious_commitment, kind: enum, values: [NONE, LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: social_class, kind: enum, values: [DESTITUTE, POOR, WORKING, COMFORTABLE, WEALTHY, ELITE], default: WORKING}
+  - {name: property_access, kind: enum, values: [NONE, SHARED, RENTED, OWNED], default: RENTED}
+  - {name: education_access, kind: enum, values: [NONE, INFORMAL, BASIC, ADVANCED, ELITE], default: BASIC}
+  - {name: literacy, kind: enum, values: [NONE, BASIC, FLUENT, SCHOLARLY], depends_on: {education_access: [INFORMAL, BASIC, ADVANCED, ELITE]}, default: BASIC}
+  - {name: occupation_sector, kind: enum, values: [AGRICULTURE, CRAFT, TRADE, SERVICE, MILITARY, SCHOLARLY, GOVERNANCE, RELIGIOUS, UNEMPLOYED], default: SERVICE}
+  - {name: career_experience, kind: enum, values: [NOVICE, JOURNEYED, VETERAN, MASTER], default: JOURNEYED}
+  - {name: income_security, kind: enum, values: [PRECARIOUS, VARIABLE, STABLE, SECURE], default: VARIABLE}
+  - {name: faction_alignment, kind: enum, values: [NONE, WEAK, MODERATE, STRONG], default: WEAK}
+  - {name: political_exposure, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: mobility_history, kind: enum, values: [STAYED, LOCAL_MOVES, MIGRANT, TRAVELLED], default: LOCAL_MOVES}
+  - {name: scarcity_exposure, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: conflict_exposure, kind: enum, values: [NONE, INDIRECT, DIRECT, CHRONIC], default: INDIRECT}
+constraints:
+  - rule_id: elven_lifespan
+    when: {species: [ELF]}
+    require: {lifespan_band: [LONG, VERY_LONG]}
+    message: Elven personas require a long or very long lifespan band.
+  - rule_id: elite_property_access
+    when: {social_class: [ELITE]}
+    forbid: {property_access: [NONE, SHARED]}
+    message: Elite status is incompatible with no or shared property access.
+  - rule_id: scholarly_education_access
+    when: {education_access: [NONE]}
+    forbid: {occupation_sector: [SCHOLARLY]}
+    message: A scholarly occupation requires some education access.

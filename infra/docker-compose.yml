@@ -1,53 +1,129 @@
-name: tabletop-dm
+name: tabletop-dm-v2
+
+x-runtime-environment: &runtime-environment
+  DATABASE_URL: postgresql://${APP_DATABASE_USER:-tabletop_runtime}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-tabletop_dm}
+  DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  QDRANT_URL: http://qdrant:6333
+  QDRANT_HOST: qdrant
+  QDRANT_HTTP_PORT: 6333
+  TTDM_ARTIFACT_ROOT: /app/artifacts
+  TTDM_LLM_MODE: ${TTDM_LLM_MODE:-mock}
+  TTDM_RNG_SEED: ${TTDM_RNG_SEED:-1337}
+  TTDM_OPERATOR_TOKEN: ${TTDM_OPERATOR_TOKEN:-}
+  TTDM_TELEMETRY_ENABLED: ${TTDM_TELEMETRY_ENABLED:-0}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+
+x-app-image: &app-image tabletop-dm-v2:${TTDM_IMAGE_TAG:-local}
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: tabletop_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-tabletop_dm}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
 
   redis:
     image: redis:7-alpine
-    container_name: tabletop_redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 5s
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
 
   qdrant:
     image: qdrant/qdrant:v1.9.0
-    container_name: tabletop_qdrant
     restart: unless-stopped
     ports:
-      - "${QDRANT_HTTP_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
+      - "${QDRANT_BIND_ADDRESS:-127.0.0.1}:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_BIND_ADDRESS:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+
+  migrate:
+    image: *app-image
+    restart: "no"
+    environment:
+      DATABASE_ADMIN_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-tabletop_dm}
+      APP_DATABASE_USER: ${APP_DATABASE_USER:-tabletop_runtime}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "infra/migrate.py", "--wait", "60"]
+
+  app:
+    image: *app-image
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      <<: *runtime-environment
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${PORT:-8000}:8000"
+    volumes:
+      - artifacts_data:/app/artifacts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    command: ["python", "main.py", "serve", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    image: *app-image
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      <<: *runtime-environment
+    volumes:
+      - artifacts_data:/app/artifacts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    command: ["python", "main.py", "worker"]
 
 volumes:
   postgres_data:
   redis_data:
   qdrant_data:
+  artifacts_data:
