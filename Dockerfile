@@ -1,19 +1,34 @@
-FROM python:3.11-slim
+FROM node:22-alpine AS frontend-build
+WORKDIR /src/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:${PATH}"
 
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && addgroup --system tabletop \
+    && adduser --system --ingroup tabletop --home /app tabletop
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc \
-    && rm -rf /var/lib/apt/lists/*
+COPY pyproject.toml uv.lock ./
+RUN pip install --no-cache-dir uv \
+    && uv sync --frozen --no-dev --no-install-project
 
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir uv && uv pip install --system --no-cache -r pyproject.toml
+COPY --chown=tabletop:tabletop . .
+COPY --from=frontend-build --chown=tabletop:tabletop /src/static/v2/ /app/static/v2/
+RUN mkdir -p /app/artifacts && chown -R tabletop:tabletop /app/artifacts
 
-COPY . .
-
+USER tabletop
 EXPOSE 8000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)" || exit 1
 
-ENV PYTHONUNBUFFERED=1
-
-ENTRYPOINT ["bash", "docker-entrypoint.sh"]
-CMD ["python", "app.py"]
+CMD ["python", "main.py", "serve", "--host", "0.0.0.0", "--port", "8000"]

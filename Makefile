@@ -1,89 +1,54 @@
-.PHONY: setup up down up-local down-local migrate seed test ci ci-fast ci-integration \
-	rg1 rg1-local verify-docker verify-local verify install lint format typecheck \
-	unit contracts integration e2e e2e-install
-
-setup:
-	bash scripts/setup.sh
+.PHONY: install up reset down purge status migrate lint format typecheck unit contracts \
+	frontend integration e2e test ci
 
 install:
-	python -m pip install -r requirements-dev.txt
-	python -c "import tomllib, pathlib, subprocess; data=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8')); deps=data.get('project', {}).get('dependencies', []); subprocess.check_call(['python','-m','pip','install',*deps]) if deps else None"
+	uv sync --frozen
+	npm --prefix frontend ci
 
 up:
-	bash scripts/start.sh --mode docker
+	uv run python scripts/manage.py start
+
+reset:
+	uv run python scripts/manage.py start --reset
 
 down:
-	bash scripts/stop.sh --mode docker
+	uv run python scripts/manage.py stop
 
-up-local:
-	bash scripts/start.sh --mode local
+purge:
+	uv run python scripts/manage.py stop --volumes
 
-down-local:
-	bash scripts/stop.sh --mode local
+status:
+	uv run python scripts/manage.py status
 
 migrate:
-	bash infra/scripts/migrate.sh
-
-seed:
-	bash infra/scripts/seed_demo.sh
+	uv run python infra/migrate.py
 
 lint:
-	ruff check .
+	uv run ruff check kernel persona cognition population experiments domains infra scripts tests main.py
+	npm --prefix frontend run lint
 
 format:
-	ruff format --check .
+	uv run ruff format --check kernel persona cognition population experiments domains infra scripts tests main.py
 
 typecheck:
-	mypy .
+	uv run mypy kernel persona cognition population experiments domains main.py
 
 unit:
-	pytest -m "unit" --cov=services/mechanics --cov=services/spatial --cov=services/domain/content_rating --cov=services/domain/social --cov=services/domain/divine --cov=services/domain/karma --cov-report=term-missing --cov-report=xml --cov-fail-under=50
+	uv run pytest -m unit
 
 contracts:
-	pytest -m "contracts"
+	uv run pytest -m contracts
+
+frontend:
+	npm --prefix frontend run test
+	npm --prefix frontend run build
 
 integration:
-	pytest -m "integration"
-
-e2e-install:
-	python -m playwright install --with-deps chromium
+	TTDM_INTEGRATION=1 uv run pytest -m integration
 
 e2e:
-	@echo "[e2e] Requires Tabletop DM server reachable at $${TTDM_BASE_URL:-http://localhost:8000}"
-	pytest -m "e2e" tests/e2e -v
+	uv run pytest -m e2e tests/e2e -v
 
-rg1:
-	bash scripts/rg1.sh --mode docker
+test: unit contracts
 
-rg1-local:
-	bash scripts/rg1.sh --mode local
-
-ci-fast: install lint format typecheck unit contracts
-
-ci-integration:
-	@mkdir -p burn-bag
-	@if bash scripts/docker_runtime_available.sh; then \
-		rm -f burn-bag/ci-integration-skipped.txt; \
-		echo "[ci-integration] Docker runtime available; running integration tests"; \
-		set -e; \
-		$(MAKE) up; \
-		trap 'make down' EXIT; \
-		pytest -m "integration"; \
-		trap - EXIT; \
-		$(MAKE) down; \
-	else \
-		echo "[ci-integration] SKIP: Docker runtime unavailable; integration tests skipped"; \
-		echo "SKIPPED: docker runtime unavailable" > burn-bag/ci-integration-skipped.txt; \
-	fi
-
-ci: ci-fast ci-integration
-
-test: ci
-
-verify-docker:
-	python3 scripts/audit_todo.py --full --strict --mode docker
-
-verify-local:
-	python3 scripts/audit_todo.py --full --strict --mode local
-
-verify: verify-docker verify-local
+ci: lint format typecheck unit contracts frontend

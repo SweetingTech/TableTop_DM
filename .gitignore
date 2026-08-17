@@ -232,3 +232,9 @@ test-results-e2e/
 
 # Per-installation API-key encryption vault — must never be committed
 .local-run/vault.key
+
+# V2 frontend local dependencies and TypeScript build metadata
+frontend/node_modules/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts

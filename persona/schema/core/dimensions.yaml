@@ -1,0 +1,37 @@
+pack:
+  pack_id: core
+  version: 1.0.0
+  description: Stable identity, cognition, values, and social behavior.
+dimensions:
+  - {name: age_band, kind: enum, values: [YOUNG_ADULT, ADULT, MIDDLE_AGED, ELDER], default: ADULT}
+  - {name: identity_stability, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: decision_style, kind: enum, values: [INTUITIVE, DELIBERATIVE, SOCIAL, HABITUAL], default: DELIBERATIVE}
+  - {name: planning_horizon, kind: enum, values: [IMMEDIATE, SHORT, MEDIUM, LONG], default: MEDIUM}
+  - {name: ambiguity_tolerance, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: cognitive_flexibility, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: attention_control, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: working_memory, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: curiosity, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: patience, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: conscientiousness, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: openness, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: extraversion, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: agreeableness, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: emotional_reactivity, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: risk_tolerance, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: loss_aversion, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: novelty_seeking, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: authority_trust, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: institutional_trust, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: family_loyalty, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: community_loyalty, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: fairness_priority, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: autonomy_priority, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: achievement_priority, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: security_priority, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: forgiveness, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: betrayal_sensitivity, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: conflict_style, kind: enum, values: [AVOID, ACCOMMODATE, COMPROMISE, COMPETE, COLLABORATE], default: COMPROMISE}
+  - {name: communication_directness, kind: enum, values: [INDIRECT, BALANCED, DIRECT], default: BALANCED}
+  - {name: help_seeking, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}
+  - {name: habit_strength, kind: enum, values: [LOW, MEDIUM, HIGH], default: MEDIUM}

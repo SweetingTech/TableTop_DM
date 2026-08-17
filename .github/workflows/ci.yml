@@ -5,67 +5,89 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: read
+
+env:
+  TTDM_LLM_MODE: mock
+  TTDM_RNG_SEED: "1337"
+  CI: "true"
+
 jobs:
-  ci-and-verify:
+  quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
-    env:
-      TTDM_LLM_MODE: mock
-      TTDM_RNG_SEED: "1337"
-      CI: "true"
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: requirements-dev.txt
-
-      - name: Write .env
+          enable-cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Python and frontend dependencies
         run: |
-          cat > .env <<EOF_ENV
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=postgres
-          POSTGRES_DB=tabletop_dm
-          POSTGRES_PORT=5432
-          REDIS_PASSWORD=redispass
-          REDIS_PORT=6379
-          QDRANT_HTTP_PORT=6333
-          QDRANT_GRPC_PORT=6334
-          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tabletop_dm
-          EOF_ENV
-
-      - name: Export .env to workflow env
+          uv sync --frozen
+          npm --prefix frontend ci
+      - name: Python lint and format
         run: |
-          grep -E '^[A-Za-z_][A-Za-z0-9_]*=' .env >> "$GITHUB_ENV"
-
-      - name: Install dependencies
-        run: make install
-
-      - name: Optional compose smoke (runtime-gated)
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Python types
+        run: uv run mypy kernel persona cognition population experiments domains main.py
+      - name: Unit and contract tests
+        run: uv run pytest -m "unit or contracts"
+      - name: Build and smoke-test the installable wheel
         run: |
-          if bash scripts/docker_runtime_available.sh; then
-            docker compose -f infra/docker-compose.yml up -d
-            bash infra/scripts/compose_smoke.sh
-          else
-            echo "[workflow] Docker runtime unavailable; skipping pre-ci compose smoke"
-          fi
+          uv build --wheel --out-dir dist
+          uv run python scripts/verify_wheel.py dist/*.whl
+      - name: Frontend lint, unit tests, and production build
+        run: |
+          npm --prefix frontend run lint
+          npm --prefix frontend run test
+          npm --prefix frontend run build
 
-      - name: Integration gate
-        run: make ci-integration
-
-      - name: CI pipeline
-        run: make ci
-
-      - name: Verify docker mode
-        run: make verify-docker
-
-      - name: Verify local mode
-        run: make verify-local
-
-      - name: Tear down
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install Python dependencies
+        run: uv sync --frozen
+      - name: Start isolated dependencies
+        run: docker compose --env-file .env.example -f infra/docker-compose.yml up -d postgres redis qdrant
+      - name: Run PostgreSQL, RLS, migration, and worker integration tests
+        env:
+          TTDM_INTEGRATION: "1"
+          TTDM_TEST_DATABASE_ADMIN_URL: postgresql://postgres:postgres_dev_only@127.0.0.1:5432/postgres
+          TTDM_TEST_REDIS_URL: redis://:redis_dev_only@127.0.0.1:6379/15
+          TTDM_TEST_QDRANT_URL: http://127.0.0.1:6333
+        run: uv run pytest -m integration -v
+      - name: Capture dependency logs
+        if: failure()
+        run: docker compose --env-file .env.example -f infra/docker-compose.yml logs --no-color > dependency-logs.txt
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: integration-logs
+          path: dependency-logs.txt
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Tear down dependencies
         if: always()
-        run: |
-          if command -v docker >/dev/null 2>&1; then
-            docker compose -f infra/docker-compose.yml down --remove-orphans || true
-          fi
+        run: docker compose --env-file .env.example -f infra/docker-compose.yml down --volumes --remove-orphans
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build production image
+        run: docker build --tag tabletop-dm-v2:ci .
