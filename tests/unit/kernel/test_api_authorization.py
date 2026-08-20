@@ -274,3 +274,40 @@ def test_world_role_grant_provisions_kernel_authority(table):
 
     assert "GM" in by_actor[dm["actor_id"]]["roles"]
     assert "entity.read.secret" in by_actor[dm["actor_id"]]["capabilities"]
+
+
+def test_revoking_every_world_role_clears_kernel_authority(table):
+    """Entity control outlives a revocation; the capabilities that came with it must not."""
+    simulation = table["app"].extensions["simulation"]
+    world_id = uuid.UUID(table["world_id"])
+    hero_id = uuid.UUID(table["ids"]["hero_id"])
+
+    admin = table["admin"]
+    guest_id = next(
+        row["user_id"]
+        for row in admin.get("/api/v2/admin/users").get_json()["items"]
+        if row["username"] == "tableguest"
+    )
+    roles_path = f"/api/v2/admin/users/{guest_id}/worlds/{world_id}/roles"
+    assert admin.put(roles_path, json={"roles": ["DM"]}).status_code == 200
+
+    actor_id = uuid.UUID(table["guest"].get("/api/v2/auth/session").get_json()["user"]["actor_id"])
+    granted = simulation.world_authorities[(world_id, actor_id)]
+    assert "entity.read.secret" in granted.capabilities
+
+    # A DM assignment gives the actor explicit control of one entity.
+    simulation.grant_authority(
+        world_id,
+        actor_id,
+        roles=granted.roles,
+        capabilities=granted.capabilities,
+        controlled_entity_ids={hero_id},
+    )
+
+    assert admin.put(roles_path, json={"roles": []}).status_code == 200
+
+    revoked = simulation.world_authorities[(world_id, actor_id)]
+    assert revoked.capabilities == frozenset()
+    assert revoked.roles == frozenset()
+    # The control metadata is retained, so re-granting a role does not lose the assignment.
+    assert revoked.controlled_entity_ids == frozenset({hero_id})

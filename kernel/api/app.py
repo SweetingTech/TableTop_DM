@@ -716,7 +716,8 @@ def create_app(
 
         World grants are the only path from a product role to a simulation capability, so this
         runs whenever an account's roles or the world set changes. Explicit entity control is
-        granted separately and is preserved here.
+        granted separately, so it survives a revocation — but the revoked roles and capabilities
+        never do.
         """
         if account.actor_id not in simulation.actors:
             simulation.actors[account.actor_id] = Actor(
@@ -732,9 +733,14 @@ def create_app(
             key = (world_id, account.actor_id)
             existing = simulation.world_authorities.get(key)
             if not capabilities:
-                if existing is not None and not existing.controlled_entity_ids:
+                if existing is None:
+                    continue
+                if not existing.controlled_entity_ids:
                     del simulation.world_authorities[key]
-                continue
+                    continue
+                # Keeping the entity-control metadata must not keep the authority that came
+                # with it, or revoking every role would leave the account fully capable.
+                roles, capabilities = frozenset(), frozenset()
             simulation.grant_authority(
                 world_id,
                 account.actor_id,
@@ -1585,6 +1591,7 @@ def create_app(
         entity = simulation.entities.get((scope.branch_id, entity_id))
         if entity is None or entity.world_id != scope.world_id:
             raise ValueError("runtime entity is not embodied in the world branch")
+        require_world_access(scope.world_id)
         actor_id = current_actor_id()
         actor = simulation.authority(scope.world_id, actor_id)
         if (
@@ -1704,6 +1711,7 @@ def create_app(
             entity.branch_id,
         ):
             raise ValueError("relationship source event must share the entity world branch")
+        require_world_access(entity.world_id)
         actor_id = current_actor_id()
         actor = simulation.authority(entity.world_id, actor_id)
         if (
