@@ -87,6 +87,10 @@ disabled, or be deleted by anyone. Disabled administrators do not count toward t
 a disabled administrator cannot administer anything. Password resets revoke the user's active
 sessions and require another password change.
 
+Five failed logins lock an account for fifteen minutes. Attempts made during a lock are not
+recorded, so they neither extend nor renew it, and the failure count restarts once the window
+lapses — an account cannot be held locked by guessing at its username.
+
 ## Player workflow
 
 1. An administrator grants the account `PLAYER` for a world.

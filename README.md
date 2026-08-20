@@ -117,7 +117,8 @@ Vite serves [http://127.0.0.1:5173/v2](http://127.0.0.1:5173/v2) and proxies `/a
 ## Authentication and roles
 
 Human browsers authenticate with a secure, HTTP-only `ttdm_session` cookie. Sessions last 12
-hours. Five failed logins lock an account for 15 minutes. Administrators can reset another
+hours. Five failed logins lock an account for 15 minutes; attempts during a lock neither extend
+nor renew it, and the count restarts once the window lapses. Administrators can reset another
 account to a temporary password, which forces that user to choose a new private password.
 
 Roles are deliberately split:

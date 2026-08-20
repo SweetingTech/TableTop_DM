@@ -41,16 +41,22 @@ class IdentityService:
         valid = verify_password(password, encoded)
         now = datetime.now(UTC)
         if record is None or not valid:
-            if record is not None:
-                failed = record.failed_login_count + 1
+            if record is not None and not self._locked(record.locked_until, now):
+                # A lapsed lock starts the count over. Counting through it would let an
+                # attacker hold an account locked forever by attempting one password per
+                # window, and recording a failure during a live lock would extend it.
+                lapsed = record.locked_until is not None
+                failed = 1 if lapsed else record.failed_login_count + 1
                 locked_until = now + LOCKOUT_DURATION if failed >= LOCKOUT_THRESHOLD else None
                 self.repository.record_login_failure(
-                    record.account.user_id, locked_until=locked_until
+                    record.account.user_id,
+                    failed_login_count=failed,
+                    locked_until=locked_until,
                 )
             raise AuthenticationError("invalid username or password")
         if not record.account.is_active:
             raise AuthenticationError("account is disabled")
-        if record.locked_until and record.locked_until > now:
+        if self._locked(record.locked_until, now):
             raise AuthenticationError("account is temporarily locked")
         self.repository.record_login_success(record.account.user_id)
         return self._new_session(
@@ -283,6 +289,10 @@ class IdentityService:
             raise ValueError(
                 "username must be 3-64 characters using letters, numbers, dot, dash, or underscore"
             )
+
+    @staticmethod
+    def _locked(locked_until: datetime | None, now: datetime) -> bool:
+        return locked_until is not None and locked_until > now
 
     @staticmethod
     def _token_hash(token: str) -> str:

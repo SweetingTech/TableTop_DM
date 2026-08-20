@@ -25,6 +25,19 @@ This file records the current TableTop DM product line.
 - Excluded disabled administrators from the final-administrator guard, which could otherwise be
   satisfied by an account that cannot sign in and leave an installation with no usable
   administrator. The last administrator who can still sign in can no longer be disabled either.
+- Stopped failed logins during an active lockout from extending it, and reset the failure count
+  once a lockout lapses. Previously an attacker could hold any account locked indefinitely by
+  guessing at the username, first by extending the window and then by re-locking it with a single
+  attempt per window.
+
+### Testing
+
+- Added `tests/integration/test_durable_authorization.py`, asserting that session-bound actor
+  binding, world scoping, event visibility, and actor minting reach the same outcomes against
+  PostgreSQL and row-level security as they do in reference mode.
+- Marked `tests/unit/identity/` and `tests/unit/domains/` with `pytest.mark.unit`. Neither carried
+  a marker, so `pytest -m "unit or contracts"` — the fast gate and the CI lane — silently skipped
+  all eight tests in them.
 
 ## 2.0.0 - 2026-08-20
 

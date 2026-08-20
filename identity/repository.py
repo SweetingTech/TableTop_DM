@@ -127,7 +127,7 @@ class IdentityRepository(Protocol):
     def revoke_user_sessions(self, user_id: uuid.UUID) -> None: ...
     def record_login_success(self, user_id: uuid.UUID) -> None: ...
     def record_login_failure(
-        self, user_id: uuid.UUID, *, locked_until: datetime | None
+        self, user_id: uuid.UUID, *, failed_login_count: int, locked_until: datetime | None
     ) -> None: ...
     def delete_user(self, user_id: uuid.UUID, *, actor_user_id: uuid.UUID) -> None: ...
     def sync_admin_world(self, world_id: uuid.UUID) -> None: ...
@@ -327,10 +327,12 @@ class InMemoryIdentityRepository:
         account = record.account.model_copy(update={"last_login_at": datetime.now(UTC)})
         self._credentials[user_id] = CredentialRecord(account, record.password_hash)
 
-    def record_login_failure(self, user_id: uuid.UUID, *, locked_until: datetime | None) -> None:
+    def record_login_failure(
+        self, user_id: uuid.UUID, *, failed_login_count: int, locked_until: datetime | None
+    ) -> None:
         record = self._required(user_id)
         self._credentials[user_id] = CredentialRecord(
-            record.account, record.password_hash, record.failed_login_count + 1, locked_until
+            record.account, record.password_hash, failed_login_count, locked_until
         )
 
     def delete_user(self, user_id: uuid.UUID, *, actor_user_id: uuid.UUID) -> None:
@@ -719,12 +721,14 @@ class PostgresIdentityRepository:
                     (str(user_id),),
                 )
 
-    def record_login_failure(self, user_id: uuid.UUID, *, locked_until: datetime | None) -> None:
+    def record_login_failure(
+        self, user_id: uuid.UUID, *, failed_login_count: int, locked_until: datetime | None
+    ) -> None:
         with transaction(dsn=self._dsn) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "UPDATE identity.users SET failed_login_count=failed_login_count+1, locked_until=%s, updated_at=now() WHERE id=%s",
-                    (locked_until, str(user_id)),
+                    "UPDATE identity.users SET failed_login_count=%s, locked_until=%s, updated_at=now() WHERE id=%s",
+                    (failed_login_count, locked_until, str(user_id)),
                 )
 
     def delete_user(self, user_id: uuid.UUID, *, actor_user_id: uuid.UUID) -> None:

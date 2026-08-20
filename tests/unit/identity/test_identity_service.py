@@ -1,10 +1,13 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from identity.models import UserProfile
 from identity.repository import InMemoryIdentityRepository
-from identity.service import AuthenticationError, IdentityService
+from identity.service import LOCKOUT_THRESHOLD, AuthenticationError, IdentityService
+
+pytestmark = pytest.mark.unit
 
 
 def test_bootstrap_login_requires_password_change_and_rotates_session() -> None:
@@ -103,3 +106,44 @@ def test_the_last_active_administrator_cannot_be_disabled() -> None:
     service.update_user(deputy_session, administrator.user_id, is_active=False)
     with pytest.raises(ValueError, match="own account"):
         service.update_user(deputy_session, deputy_session.user_id, is_active=False)
+
+
+def test_attempts_during_a_lock_neither_extend_nor_renew_it() -> None:
+    """An attacker must not be able to hold an account locked by guessing at it."""
+    service = IdentityService(InMemoryIdentityRepository())
+    administrator, _ = service.login("admin", "admin123")
+    victim = service.create_user(
+        administrator,
+        username="victim",
+        temporary_password="Temporary-Victim-2026!",
+        profile=UserProfile(display_name="Victim"),
+    )
+
+    for _ in range(LOCKOUT_THRESHOLD):
+        with pytest.raises(AuthenticationError):
+            service.login("victim", "wrong-password")
+    locked_at = service.repository.get_credentials("victim").locked_until
+    assert locked_at is not None
+
+    for _ in range(20):
+        with pytest.raises(AuthenticationError):
+            service.login("victim", "wrong-password")
+    still = service.repository.get_credentials("victim")
+    assert still.locked_until == locked_at, "attempts during a lock must not extend it"
+    assert still.failed_login_count == LOCKOUT_THRESHOLD
+
+    # Once the window lapses the count starts over, so a single guess cannot re-lock.
+    service.repository.record_login_failure(
+        victim.user_id,
+        failed_login_count=LOCKOUT_THRESHOLD,
+        locked_until=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    with pytest.raises(AuthenticationError):
+        service.login("victim", "wrong-password")
+    reopened = service.repository.get_credentials("victim")
+    assert reopened.failed_login_count == 1
+    assert reopened.locked_until is None
+
+    signed_in, _ = service.login("victim", "Temporary-Victim-2026!")
+    assert signed_in.username == "victim"
+    assert service.repository.get_credentials("victim").failed_login_count == 0

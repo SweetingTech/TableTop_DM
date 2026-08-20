@@ -44,12 +44,11 @@ The findings are kept in their original form because the reproductions are the e
 
 Lanes **not** run, and why:
 
-- **Integration / RLS / migration lane** (`TTDM_INTEGRATION=1 uv run pytest -m integration`) —
-  requires Docker Compose with PostgreSQL, Redis, and Qdrant, which are unavailable in this
-  environment. Every finding below was therefore validated in reference mode. The affected code
-  paths in `kernel/api/app.py` are shared by both modes, so findings §3.1–§3.6 apply to the durable
-  stack as well; §3.5 is *worse* there because the client-supplied `actor_id` is what gets bound to
-  `app.actor_id` for row-level security.
+- **Integration / RLS / migration lane** (`TTDM_INTEGRATION=1 uv run pytest -m integration`) — not
+  run at review time; every finding below was validated in reference mode. The affected code paths
+  in `kernel/api/app.py` are shared by both modes, so findings §3.1–§3.6 apply to the durable stack
+  as well; §3.5 is *worse* there because the client-supplied `actor_id` is what gets bound to
+  `app.actor_id` for row-level security. **This lane has since been run** — see §5.
 - **Packaged wheel verification** (`scripts/verify_wheel.py`) — no packaging change under review.
 
 ---
@@ -432,7 +431,11 @@ Findings §3.1–§3.7 are fixed on this branch. What is still open:
    promising it.
 3. **§3.10** — the eight low-severity items, of which the lockout-extension issue (item 6) is the
    only one with a security flavour.
-4. **Integration coverage.** The new authorization tests exercise the reference path. Equivalent
-   coverage under `tests/integration/` is needed to prove local and RLS authorization still agree in
-   the durable stack, per [`AGENTS.md`](../../AGENTS.md); that lane could not run in the review
-   environment.
+4. **Integration coverage — now closed.** The durable lane was subsequently run against
+   PostgreSQL 16 and Redis 7, and
+   [`tests/integration/test_durable_authorization.py`](../../tests/integration/test_durable_authorization.py)
+   was added to prove local and RLS authorization reach matching outcomes, per
+   [`AGENTS.md`](../../AGENTS.md). All 33 integration tests pass.
+
+Item 6 of §3.10 (lockout extension) was also fixed, since it carried security weight and the patch
+was contained to `IdentityService.login` and one repository method.
