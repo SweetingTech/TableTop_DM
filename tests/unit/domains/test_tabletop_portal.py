@@ -1,9 +1,13 @@
 import uuid
 
+import pytest
+
 from domains.tabletop.portal import InMemoryPortalRepository, TabletopPortalService
 from identity.models import UserProfile
 from identity.repository import InMemoryIdentityRepository
 from identity.service import IdentityService
+
+pytestmark = pytest.mark.unit
 
 
 def test_player_builds_generates_and_tracks_character_status() -> None:

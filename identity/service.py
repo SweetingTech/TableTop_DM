@@ -41,16 +41,22 @@ class IdentityService:
         valid = verify_password(password, encoded)
         now = datetime.now(UTC)
         if record is None or not valid:
-            if record is not None:
-                failed = record.failed_login_count + 1
+            if record is not None and not self._locked(record.locked_until, now):
+                # A lapsed lock starts the count over. Counting through it would let an
+                # attacker hold an account locked forever by attempting one password per
+                # window, and recording a failure during a live lock would extend it.
+                lapsed = record.locked_until is not None
+                failed = 1 if lapsed else record.failed_login_count + 1
                 locked_until = now + LOCKOUT_DURATION if failed >= LOCKOUT_THRESHOLD else None
                 self.repository.record_login_failure(
-                    record.account.user_id, locked_until=locked_until
+                    record.account.user_id,
+                    failed_login_count=failed,
+                    locked_until=locked_until,
                 )
             raise AuthenticationError("invalid username or password")
         if not record.account.is_active:
             raise AuthenticationError("account is disabled")
-        if record.locked_until and record.locked_until > now:
+        if self._locked(record.locked_until, now):
             raise AuthenticationError("account is temporarily locked")
         self.repository.record_login_success(record.account.user_id)
         return self._new_session(
@@ -146,6 +152,12 @@ class IdentityService:
             self._validate_username(username)
         if user_id == actor.user_id and is_active is False:
             raise ValueError("you cannot disable your own account")
+        if is_active is False:
+            target = self.repository.get_account(user_id)
+            if target is None:
+                raise KeyError(user_id)
+            if target.is_admin and self._admin_count(excluding=user_id) == 0:
+                raise ValueError("the final administrator account cannot be disabled")
         return self.repository.update_account(
             user_id,
             username=username.strip() if username else None,
@@ -181,7 +193,7 @@ class IdentityService:
         existing = self.repository.get_account(user_id)
         if existing is None:
             raise KeyError(user_id)
-        if existing.is_admin and "ADMIN" not in roles and self._admin_count() <= 1:
+        if existing.is_admin and "ADMIN" not in roles and self._admin_count(excluding=user_id) == 0:
             raise ValueError("the final administrator role cannot be removed")
         return self.repository.set_global_roles(
             user_id,
@@ -213,7 +225,7 @@ class IdentityService:
         target = self.repository.get_account(user_id)
         if target is None:
             raise KeyError(user_id)
-        if target.is_admin and self._admin_count() <= 1:
+        if target.is_admin and self._admin_count(excluding=user_id) == 0:
             raise ValueError("the final administrator account cannot be deleted")
         self.repository.delete_user(user_id, actor_user_id=actor.user_id)
 
@@ -260,8 +272,16 @@ class IdentityService:
             token,
         )
 
-    def _admin_count(self) -> int:
-        return sum(account.is_admin for account in self.repository.list_accounts())
+    def _admin_count(self, *, excluding: uuid.UUID | None = None) -> int:
+        """Count administrators who can still sign in.
+
+        A disabled administrator cannot administer anything, so counting one would let the
+        last usable administrator role be removed and lock the installation out.
+        """
+        return sum(
+            account.is_admin and account.is_active and account.user_id != excluding
+            for account in self.repository.list_accounts()
+        )
 
     @staticmethod
     def _validate_username(username: str) -> None:
@@ -269,6 +289,10 @@ class IdentityService:
             raise ValueError(
                 "username must be 3-64 characters using letters, numbers, dot, dash, or underscore"
             )
+
+    @staticmethod
+    def _locked(locked_until: datetime | None, now: datetime) -> bool:
+        return locked_until is not None and locked_until > now
 
     @staticmethod
     def _token_hash(token: str) -> str:

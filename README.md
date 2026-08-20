@@ -117,7 +117,8 @@ Vite serves [http://127.0.0.1:5173/v2](http://127.0.0.1:5173/v2) and proxies `/a
 ## Authentication and roles
 
 Human browsers authenticate with a secure, HTTP-only `ttdm_session` cookie. Sessions last 12
-hours. Five failed logins lock an account for 15 minutes. Administrators can reset another
+hours. Five failed logins lock an account for 15 minutes; attempts during a lock neither extend
+nor renew it, and the count restarts once the window lapses. Administrators can reset another
 account to a temporary password, which forces that user to choose a new private password.
 
 Roles are deliberately split:
@@ -126,6 +127,11 @@ Roles are deliberately split:
 - `DM` is granted per world and enables Dungeon Master tools for that world.
 - `PLAYER` is granted per world and enables Player tools for that world.
 - A user may hold both `DM` and `PLAYER` in the same or different worlds.
+
+Roles are never unioned across worlds: a grant in one world confers nothing in another, and a
+world you hold no role in is not listed to you. Each account acts in the simulation only as its own
+actor, so a proposal can never borrow another actor's capabilities or another actor's view of the
+event ledger.
 
 `TTDM_OPERATOR_TOKEN` remains available for local automation through the
 `X-TTDM-Operator-Token` header. It is not the browser login flow and should not be distributed to
