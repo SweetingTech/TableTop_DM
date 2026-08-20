@@ -59,12 +59,16 @@ from experiments.telemetry import (
     TelemetryRecorder,
     TelemetrySettingsStore,
 )
-from identity.models import AuthenticatedUser, UserProfile
-from identity.repository import InMemoryIdentityRepository, PostgresIdentityRepository
+from identity.models import AuthenticatedUser, UserAccount, UserProfile
+from identity.repository import (
+    InMemoryIdentityRepository,
+    PostgresIdentityRepository,
+    kernel_authority,
+)
 from identity.service import AuthenticationError, IdentityService
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
-from kernel.contracts import ActorKind, BranchKind, CommandProposal, RunKind
+from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
 from kernel.database import execute_one
 from kernel.errors import KernelError
 from kernel.postgres_control_plane import PostgresControlPlane
@@ -246,7 +250,8 @@ class RuntimeAssignmentRequest(RuntimeScopeRequest):
 
 
 class ObservationRequest(BaseModel):
-    observer_actor_id: uuid.UUID
+    # Honoured for the operator/automation boundary only; a session observes as its own actor.
+    observer_actor_id: uuid.UUID | None = None
     observer_entity_id: uuid.UUID
     acuity: float = Field(default=1, ge=0, le=1)
     confidence_bias: float = Field(default=0, ge=-1, le=1)
@@ -687,6 +692,93 @@ def create_app(
                 return uuid.UUID(requested)
         return current_user().actor_id
 
+    def automation_boundary() -> bool:
+        """True when the caller is the operator/automation token, not a browser session.
+
+        Only automation may name an actor other than its own. A human session is always bound
+        to the actor its account owns.
+        """
+        return bool(getattr(g, "operator_compatibility", False))
+
+    def requested_actor_id(supplied: uuid.UUID | None) -> uuid.UUID:
+        """Resolve the actor a request will act or read as.
+
+        Automation may name any actor; a browser session may not, because the kernel resolves
+        capability and entity control from the actor, so an unbound actor is an unbound
+        authority.
+        """
+        if supplied is not None and automation_boundary():
+            return supplied
+        return current_actor_id()
+
+    def sync_world_authority(account: UserAccount) -> None:
+        """Mirror an account's product roles onto in-process world authority.
+
+        World grants are the only path from a product role to a simulation capability, so this
+        runs whenever an account's roles or the world set changes. Explicit entity control is
+        granted separately and is preserved here.
+        """
+        if account.actor_id not in simulation.actors:
+            simulation.actors[account.actor_id] = Actor(
+                actor_id=account.actor_id,
+                display_name=account.profile.display_name,
+                kind=ActorKind.HUMAN,
+            )
+        for world_id in tuple(simulation.worlds):
+            roles, capabilities = kernel_authority(
+                is_admin=account.is_admin,
+                world_roles=account.roles_for(world_id),
+            )
+            key = (world_id, account.actor_id)
+            existing = simulation.world_authorities.get(key)
+            if not capabilities:
+                if existing is not None and not existing.controlled_entity_ids:
+                    del simulation.world_authorities[key]
+                continue
+            simulation.grant_authority(
+                world_id,
+                account.actor_id,
+                roles=roles,
+                capabilities=capabilities,
+                controlled_entity_ids=(
+                    existing.controlled_entity_ids if existing is not None else frozenset()
+                ),
+            )
+
+    def sync_every_world_authority() -> None:
+        for account in identity_repository.list_accounts():
+            sync_world_authority(account)
+
+    def require_world_access(world_id: uuid.UUID) -> None:
+        """Authorize a world-scoped read.
+
+        Authority is never unioned across worlds: holding a role in one world grants nothing
+        in another. Automation keeps its global reach.
+        """
+        if world_id not in simulation.worlds:
+            raise KeyError(world_id)
+        if automation_boundary():
+            return
+        user = current_user()
+        if user.is_admin or user.roles_for(world_id):
+            return
+        raise PermissionError("a Dungeon Master or Player role in this world is required")
+
+    def readable_world_ids() -> frozenset[uuid.UUID] | None:
+        """World ids the caller may read, or None when every world is readable."""
+        if automation_boundary():
+            return None
+        user = current_user()
+        if user.is_admin:
+            return None
+        return frozenset(
+            world_id for world_id in simulation.worlds if user.roles_for(world_id)
+        )
+
+    def world_readable(world_id: uuid.UUID) -> bool:
+        readable = readable_world_ids()
+        return readable is None or world_id in readable
+
     def session_cookie(response, token: str, *, expires_at: datetime):
         response.set_cookie(
             "ttdm_session",
@@ -776,7 +868,7 @@ def create_app(
             "/api/v2/personas",
             "/api/v2/populations",
             "/api/v2/scenarios",
-            "/api/v2/experiments",
+            "/api/v2/trials",
             "/api/v2/jobs",
             "/api/v2/reports",
             "/api/v2/calibration",
@@ -845,6 +937,7 @@ def create_app(
             user_agent=request.user_agent.string,
             remote_address=request.remote_addr,
         )
+        sync_world_authority(user)
         response = make_response(jsonify({"user": user_payload(user)}))
         return session_cookie(response, token, expires_at=user.session_expires_at)
 
@@ -924,6 +1017,7 @@ def create_app(
     def admin_user_global_roles(user_id: uuid.UUID):
         body = GlobalRolesRequest.model_validate(request.get_json(force=True))
         account = identity.set_global_roles(current_user(), user_id, frozenset(body.roles))
+        sync_world_authority(account)
         return jsonify({"user": user_payload(account)})
 
     @app.put("/api/v2/admin/users/<uuid:user_id>/worlds/<uuid:world_id>/roles")
@@ -935,6 +1029,7 @@ def create_app(
             world_id,
             frozenset(body.roles),
         )
+        sync_world_authority(account)
         return jsonify({"user": user_payload(account)})
 
     @app.get("/api/v2/admin/audit")
@@ -1143,6 +1238,7 @@ def create_app(
                 [
                     world_payload(world)
                     for world in sorted(simulation.worlds.values(), key=lambda item: item.name)
+                    if world_readable(world.world_id)
                 ]
             )
         IdentityService.require_admin(current_user())
@@ -1157,6 +1253,9 @@ def create_app(
             capabilities=creator.capabilities,
             controlled_entity_ids=set(),
         )
+        # Every administrator administers every world, so the new world needs their authority
+        # before the next request, not after the next restart.
+        sync_every_world_authority()
         if durable_control:
             durable_control.sync(simulation)
             identity.sync_admin_world(world.world_id)
@@ -1164,6 +1263,7 @@ def create_app(
 
     @app.get("/api/v2/worlds/<uuid:world_id>")
     def world_detail(world_id: uuid.UUID):
+        require_world_access(world_id)
         world = simulation.worlds[world_id]
         state = simulation.states.get(world.canonical_branch_id)
         return jsonify(
@@ -1177,6 +1277,9 @@ def create_app(
 
     @app.route("/api/v2/actors", methods=["GET", "POST"])
     def actors():
+        # Actors carry world capabilities, so both listing them and minting them are
+        # administrator operations: a mintable capability set is a mintable authority.
+        IdentityService.require_admin(current_user())
         if request.method == "GET":
             return jsonify([item.model_dump(mode="json") for item in simulation.actors.values()])
         body = ActorCreateRequest.model_validate(request.get_json(silent=True) or {})
@@ -1194,14 +1297,14 @@ def create_app(
 
     @app.get("/api/v2/worlds/<uuid:world_id>/actors")
     def world_actors(world_id: uuid.UUID):
-        if world_id not in simulation.worlds:
-            raise KeyError(world_id)
+        require_world_access(world_id)
         return jsonify(
             [item.model_dump(mode="json") for item in simulation.authorities_for_world(world_id)]
         )
 
     @app.route("/api/v2/worlds/<uuid:world_id>/entities", methods=["GET", "POST"])
     def entities(world_id: uuid.UUID):
+        require_world_access(world_id)
         world = simulation.worlds[world_id]
         if request.method == "GET":
             projected = simulation.states.get(world.canonical_branch_id).projections.get(
@@ -1280,12 +1383,14 @@ def create_app(
             [
                 run_payload(item)
                 for item in simulation.runs.values()
-                if world_id is None or str(item.world_id) == world_id
+                if (world_id is None or str(item.world_id) == world_id)
+                and world_readable(item.world_id)
             ]
         )
 
     @app.get("/api/v2/worlds/<uuid:world_id>/runs")
     def world_runs(world_id: uuid.UUID):
+        require_world_access(world_id)
         return jsonify(
             [run_payload(item) for item in simulation.runs.values() if item.world_id == world_id]
         )
@@ -1297,7 +1402,8 @@ def create_app(
             [
                 branch_payload(item)
                 for item in simulation.states.all()
-                if world_id is None or str(item.world_id) == world_id
+                if (world_id is None or str(item.world_id) == world_id)
+                and world_readable(item.world_id)
             ]
         )
 
@@ -1308,7 +1414,8 @@ def create_app(
             [
                 snapshot_payload(item)
                 for item in simulation.snapshots.values()
-                if world_id is None or str(item.world_id) == world_id
+                if (world_id is None or str(item.world_id) == world_id)
+                and world_readable(item.world_id)
             ]
         )
 
@@ -1322,9 +1429,18 @@ def create_app(
         payload.setdefault("world_id", str(demo["world_id"]))
         payload.setdefault("branch_id", str(demo["branch_id"]))
         payload.setdefault("run_id", str(demo["run_id"]))
-        payload.setdefault("actor_id", str(demo["actor_id"]))
         payload.setdefault("idempotency_key", str(uuid.uuid4()))
+        # The actor is the authority the kernel checks capabilities and entity control
+        # against, so a session may only ever propose as the actor its account owns. Letting
+        # the body name one would make every capability check self-issued, and would attribute
+        # the resulting ledger entry to the impersonated actor.
+        raw_actor = payload.get("actor_id")
+        supplied = uuid.UUID(str(raw_actor)) if raw_actor is not None else None
+        if supplied is not None and not automation_boundary() and supplied != current_actor_id():
+            raise PermissionError("a session may only submit commands as its own actor")
+        payload["actor_id"] = str(requested_actor_id(supplied))
         proposal = CommandProposal.model_validate(payload)
+        require_world_access(proposal.world_id)
         receipt = simulation.submit(proposal)
         return jsonify(
             {
@@ -1336,7 +1452,10 @@ def create_app(
 
     @app.get("/api/v2/events")
     def events():
-        actor_id = uuid.UUID(request.args.get("actor_id", str(demo["actor_id"])))
+        # Visibility is resolved from the reading actor, so the reader may not choose one:
+        # naming an actor with `world.read.all` would hand any account the whole ledger.
+        requested = request.args.get("actor_id")
+        actor_id = requested_actor_id(uuid.UUID(requested) if requested else None)
         world_id = request.args.get("world_id")
         branch_id = request.args.get("branch_id")
         return jsonify(
@@ -1345,6 +1464,7 @@ def create_app(
                 for event in simulation.visible_events(actor_id)
                 if (world_id is None or str(event.world_id) == world_id)
                 and (branch_id is None or str(event.branch_id) == branch_id)
+                and world_readable(event.world_id)
             ]
         )
 
@@ -1356,7 +1476,8 @@ def create_app(
         run_id = body.run_id or next(
             item.run_id for item in simulation.runs.values() if item.branch_id == branch_id
         )
-        actor_id = body.actor_id or demo["actor_id"]
+        actor_id = requested_actor_id(body.actor_id)
+        require_world_access(world_id)
         actor = simulation.authority(world_id, actor_id)
         run = simulation.runs.get(run_id)
         if run is None or (run.world_id, run.branch_id) != (world_id, branch_id):
@@ -1505,7 +1626,9 @@ def create_app(
     def cognition_observe(event_id: uuid.UUID):
         body = ObservationRequest.model_validate(request.get_json(silent=True) or {})
         event = simulation.events[event_id]
-        observer_actor = simulation.authority(event.world_id, body.observer_actor_id)
+        require_world_access(event.world_id)
+        observer_actor_id = requested_actor_id(body.observer_actor_id)
+        observer_actor = simulation.authority(event.world_id, observer_actor_id)
         observer_entity = simulation.entities.get((event.branch_id, body.observer_entity_id))
         if observer_entity is None or observer_entity.world_id != event.world_id:
             raise ValueError("observer entity is not embodied in the event branch")
@@ -1516,18 +1639,18 @@ def create_app(
             raise PermissionError("observer actor cannot update this mind")
         perception_event = event
         if (
-            body.observer_actor_id not in event.visible_to
+            observer_actor_id not in event.visible_to
             and "world.read.all" in observer_actor.capabilities
         ):
             perception_event = event.model_copy(
-                update={"visible_to": (*event.visible_to, body.observer_actor_id)}
+                update={"visible_to": (*event.visible_to, observer_actor_id)}
             )
         existing = minds.get(body.observer_entity_id, branch_id=event.branch_id)
         update = subjective_pipeline.process(
             perception_event,
             PerceptionProfile(
                 observer_entity_id=body.observer_entity_id,
-                observer_actor_id=body.observer_actor_id,
+                observer_actor_id=observer_actor_id,
                 acuity=body.acuity,
                 confidence_bias=body.confidence_bias,
                 allowed_payload_fields=body.allowed_payload_fields,
@@ -1547,7 +1670,7 @@ def create_app(
             mind_repository.save_subjective_update(
                 world_id=event.world_id,
                 branch_id=event.branch_id,
-                actor_id=body.observer_actor_id,
+                actor_id=observer_actor_id,
                 state=projected,
                 update=update,
             )
@@ -1643,7 +1766,12 @@ def create_app(
     def cognition_inspect(entity_id: uuid.UUID):
         if mind_repository is not None:
             entity = canonical_entity(entity_id)
-            actor_id = uuid.UUID(request.args.get("actor_id", str(demo["actor_id"])))
+            require_world_access(entity.world_id)
+            requested = request.args.get("actor_id")
+            # In durable mode this actor becomes the transaction-local `app.actor_id`, so a
+            # caller-chosen value would select which row-level-security identity the read runs
+            # under.
+            actor_id = requested_actor_id(uuid.UUID(requested) if requested else None)
             return jsonify(
                 mind_repository.inspect(
                     world_id=entity.world_id,
@@ -1657,6 +1785,7 @@ def create_app(
 
     @app.route("/api/v2/worlds/<uuid:world_id>/snapshots", methods=["GET", "POST"])
     def snapshots(world_id: uuid.UUID):
+        require_world_access(world_id)
         if request.method == "GET":
             return jsonify(
                 [
@@ -1699,6 +1828,7 @@ def create_app(
 
     @app.get("/api/v2/branches/<uuid:branch_id>/replay")
     def replay(branch_id: uuid.UUID):
+        require_world_access(simulation.states.get(branch_id).world_id)
         state = simulation.replay(branch_id)
         return jsonify(
             {

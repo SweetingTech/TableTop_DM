@@ -82,7 +82,10 @@ GET    /api/v2/admin/audit
 ```
 
 The final administrator cannot remove their own last admin role, disable themself, or delete
-themself. Password resets revoke the user's active sessions and require another password change.
+themself, and the last administrator who can still sign in cannot have their role removed, be
+disabled, or be deleted by anyone. Disabled administrators do not count toward that guard, because
+a disabled administrator cannot administer anything. Password resets revoke the user's active
+sessions and require another password change.
 
 ## Player workflow
 
@@ -161,7 +164,6 @@ Content-Type: application/json
   "world_id": "...",
   "branch_id": "...",
   "run_id": "...",
-  "actor_id": "...",
   "embodied_entity_id": "...",
   "command_type": "tabletop.spatial.move",
   "parameters": {"dx": -1, "dy": 0},
@@ -174,10 +176,46 @@ The kernel validates that the run belongs to the world and branch, resolves the 
 checks world-scoped capability and entity control, commits one transaction, and returns a receipt
 with state/event provenance. Reuse an idempotency key only to retry the exact same logical command.
 
+The acting actor is never taken from the request. A browser session always acts as the actor its
+account owns, so `actor_id` may be omitted; sending a different one is rejected with
+`permission_denied`. Only the operator token may name another actor, through the request body or
+`X-TTDM-Actor-ID`, because automation has no account of its own. The same rule governs every route
+that resolves authority or visibility from an actor: `GET /api/v2/events`,
+`GET /api/v2/entities/{entity_id}/mind`, `POST /api/v2/cognition/decide`, and
+`POST /api/v2/events/{event_id}/observe`.
+
 Read visible events with `GET /api/v2/events?world_id=...&branch_id=...`. Create a snapshot-based
 trial with `POST /api/v2/snapshots/{snapshot_id}/branches`, inspect replay with
 `GET /api/v2/branches/{branch_id}/replay`, and submit an approved consequence package through
 `POST /api/v2/branches/{branch_id}/promotions`.
+
+### World-scoped reads
+
+Every world-scoped route requires `ADMIN`, or a `DM` or `PLAYER` grant **for that world**. Roles
+are never unioned across worlds, so a Player in one world reads nothing of another. Collection
+routes (`/api/v2/worlds`, `/api/v2/runs`, `/api/v2/branches`, `/api/v2/snapshots`,
+`/api/v2/events`) return only the caller's worlds rather than failing, so a world the caller
+cannot read is invisible instead of merely unreadable.
+
+`GET` and `POST /api/v2/actors` require `ADMIN`: an actor carries world capabilities, so minting
+one is minting authority.
+
+### Product roles and simulation capabilities
+
+Product roles never *are* kernel capabilities; they are translated into explicit world grants by
+`identity.repository.kernel_authority`, which is the single source of truth for both the durable
+`sim.actor_capabilities` rows and the in-process authority table.
+
+| Product role | Actor role | Capabilities |
+| --- | --- | --- |
+| `ADMIN` (global, every world) | `ADMIN` | world read, propose, commit, entity create/control, read secret, faction, divine, branch, evaluate, promote, mind read/write |
+| `DM` (per world) | `GM` | the administrator set without `metric.evaluate` and `canonical.promote` |
+| `PLAYER` (per world) | `PLAYER` | `world.read`, `action.propose`, `action.commit` |
+
+A Player may therefore speak and act at the table, but holds no `entity.control`, so they can only
+act through entities explicitly granted to their actor, and they can never read hidden state,
+branch a run, or promote a trial. Granting or revoking a role re-provisions that actor's authority
+for the caller's next sign-in.
 
 ## Persona and cognition workflow
 

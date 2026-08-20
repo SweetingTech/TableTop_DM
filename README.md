@@ -127,6 +127,11 @@ Roles are deliberately split:
 - `PLAYER` is granted per world and enables Player tools for that world.
 - A user may hold both `DM` and `PLAYER` in the same or different worlds.
 
+Roles are never unioned across worlds: a grant in one world confers nothing in another, and a
+world you hold no role in is not listed to you. Each account acts in the simulation only as its own
+actor, so a proposal can never borrow another actor's capabilities or another actor's view of the
+event ledger.
+
 `TTDM_OPERATOR_TOKEN` remains available for local automation through the
 `X-TTDM-Operator-Token` header. It is not the browser login flow and should not be distributed to
 players.

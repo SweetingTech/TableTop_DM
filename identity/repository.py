@@ -13,11 +13,15 @@ from kernel.database import transaction
 
 ADMIN_CAPABILITIES = frozenset(
     {
+        "world.read",
         "world.read.all",
         "action.propose",
         "action.commit",
+        "entity.create",
         "entity.control",
         "entity.read.secret",
+        "faction.manage",
+        "divine.invoke",
         "run.branch",
         "metric.evaluate",
         "canonical.promote",
@@ -27,18 +31,48 @@ ADMIN_CAPABILITIES = frozenset(
 )
 DM_CAPABILITIES = frozenset(
     {
+        "world.read",
         "world.read.all",
         "action.propose",
         "action.commit",
+        "entity.create",
         "entity.control",
         "entity.read.secret",
+        "faction.manage",
+        "divine.invoke",
         "run.branch",
         "mind.read.all",
         "mind.write.all",
     }
 )
-PLAYER_CAPABILITIES = frozenset({"action.propose"})
+# A Player may speak and act at the table, but never controls an entity they were not
+# explicitly granted, and never reads hidden state or branches a run.
+PLAYER_CAPABILITIES = frozenset({"world.read", "action.propose", "action.commit"})
 MANAGED_CAPABILITIES = ADMIN_CAPABILITIES | DM_CAPABILITIES | PLAYER_CAPABILITIES
+
+
+def kernel_authority(
+    *, is_admin: bool, world_roles: frozenset[str]
+) -> tuple[frozenset[str], frozenset[str]]:
+    """Map product roles onto simulation actor roles and capabilities for one world.
+
+    This is the single source of truth for the product-role -> capability translation that
+    `AGENTS.md` requires to flow through explicit world grants. Both the durable
+    (`sim.actor_capabilities`) and the in-process (`SimulationApplication.world_authorities`)
+    authority stores are populated from it, so local and RLS authorization agree.
+    """
+    roles: set[str] = set()
+    capabilities: set[str] = set()
+    if is_admin:
+        roles.add("ADMIN")
+        capabilities |= ADMIN_CAPABILITIES
+    if "DM" in world_roles:
+        roles.add("GM")
+        capabilities |= DM_CAPABILITIES
+    if "PLAYER" in world_roles:
+        roles.add("PLAYER")
+        capabilities |= PLAYER_CAPABILITIES
+    return frozenset(roles), frozenset(capabilities)
 
 
 class IdentityRepository(Protocol):
@@ -842,16 +876,9 @@ class PostgresIdentityRepository:
                 (str(user_id), str(current_world)),
             )
             identity_roles = frozenset(str(value(row, "role")) for row in cursor.fetchall())
-            actor_roles = ({"GM"} if "DM" in identity_roles else set()) | (
-                {"PLAYER"} if "PLAYER" in identity_roles else set()
+            actor_roles, capabilities = kernel_authority(
+                is_admin=is_admin, world_roles=identity_roles
             )
-            if is_admin:
-                actor_roles.add("ADMIN")
-            capabilities = set(ADMIN_CAPABILITIES if is_admin else ())
-            if "DM" in identity_roles:
-                capabilities.update(DM_CAPABILITIES)
-            if "PLAYER" in identity_roles:
-                capabilities.update(PLAYER_CAPABILITIES)
             cursor.execute(
                 "DELETE FROM sim.actor_roles WHERE world_id=%s AND actor_id=%s AND role IN ('ADMIN','GM','PLAYER')",
                 (str(current_world), str(actor_id)),

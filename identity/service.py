@@ -146,6 +146,12 @@ class IdentityService:
             self._validate_username(username)
         if user_id == actor.user_id and is_active is False:
             raise ValueError("you cannot disable your own account")
+        if is_active is False:
+            target = self.repository.get_account(user_id)
+            if target is None:
+                raise KeyError(user_id)
+            if target.is_admin and self._admin_count(excluding=user_id) == 0:
+                raise ValueError("the final administrator account cannot be disabled")
         return self.repository.update_account(
             user_id,
             username=username.strip() if username else None,
@@ -181,7 +187,11 @@ class IdentityService:
         existing = self.repository.get_account(user_id)
         if existing is None:
             raise KeyError(user_id)
-        if existing.is_admin and "ADMIN" not in roles and self._admin_count() <= 1:
+        if (
+            existing.is_admin
+            and "ADMIN" not in roles
+            and self._admin_count(excluding=user_id) == 0
+        ):
             raise ValueError("the final administrator role cannot be removed")
         return self.repository.set_global_roles(
             user_id,
@@ -213,7 +223,7 @@ class IdentityService:
         target = self.repository.get_account(user_id)
         if target is None:
             raise KeyError(user_id)
-        if target.is_admin and self._admin_count() <= 1:
+        if target.is_admin and self._admin_count(excluding=user_id) == 0:
             raise ValueError("the final administrator account cannot be deleted")
         self.repository.delete_user(user_id, actor_user_id=actor.user_id)
 
@@ -260,8 +270,16 @@ class IdentityService:
             token,
         )
 
-    def _admin_count(self) -> int:
-        return sum(account.is_admin for account in self.repository.list_accounts())
+    def _admin_count(self, *, excluding: uuid.UUID | None = None) -> int:
+        """Count administrators who can still sign in.
+
+        A disabled administrator cannot administer anything, so counting one would let the
+        last usable administrator role be removed and lock the installation out.
+        """
+        return sum(
+            account.is_admin and account.is_active and account.user_id != excluding
+            for account in self.repository.list_accounts()
+        )
 
     @staticmethod
     def _validate_username(username: str) -> None:

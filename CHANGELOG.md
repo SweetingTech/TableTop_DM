@@ -2,6 +2,30 @@
 
 This file records the current TableTop DM product line.
 
+## Unreleased
+
+### Security
+
+- Bound every command, event read, cognition decision, observation, and mind inspection to the
+  actor of the signed-in account. Previously the actor came from the request, so any authenticated
+  account could act and read as any actor, including the administrator's, and the ledger recorded
+  the impersonated actor rather than the caller. Only the operator/automation token may still name
+  another actor.
+- Required the Administrator role to list or create simulation actors. An actor carries world
+  capabilities, so an unguarded `POST /api/v2/actors` was a capability mint.
+- Added world-scoped authorization to every control-plane read, including
+  `GET /api/v2/branches/{branch_id}/replay`. Worlds, runs, branches, snapshots, and events now list
+  only the caller's worlds; roles are never unioned across worlds.
+- Provisioned simulation authority from product roles through
+  `identity.repository.kernel_authority`, so a `DM` or `PLAYER` grant reaches the kernel on the
+  account's next sign-in in both reference and durable modes rather than only after a restart. A
+  Player receives `world.read`, `action.propose`, and `action.commit`, and no entity control.
+- Moved `/api/v2/trials` behind the Administrator boundary, replacing a routeless
+  `/api/v2/experiments` prefix that guarded nothing.
+- Excluded disabled administrators from the final-administrator guard, which could otherwise be
+  satisfied by an account that cannot sign in and leave an installation with no usable
+  administrator. The last administrator who can still sign in can no longer be disabled either.
+
 ## 2.0.0 - 2026-08-20
 
 ### Platform and identity
