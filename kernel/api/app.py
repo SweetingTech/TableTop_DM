@@ -771,9 +771,7 @@ def create_app(
         user = current_user()
         if user.is_admin:
             return None
-        return frozenset(
-            world_id for world_id in simulation.worlds if user.roles_for(world_id)
-        )
+        return frozenset(world_id for world_id in simulation.worlds if user.roles_for(world_id))
 
     def world_readable(world_id: uuid.UUID) -> bool:
         readable = readable_world_ids()

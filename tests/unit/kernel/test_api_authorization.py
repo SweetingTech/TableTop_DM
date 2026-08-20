@@ -25,9 +25,12 @@ GUEST_PASSWORD = "Guest-Account-Pw-1"
 def _sign_in(app, username: str, password: str):
     """Return a client authenticated as `username` with the password change completed."""
     client = app.test_client()
-    assert client.post(
-        "/api/v2/auth/login", json={"username": username, "password": password}
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v2/auth/login", json={"username": username, "password": password}
+        ).status_code
+        == 200
+    )
     return client
 
 
@@ -43,10 +46,13 @@ def _provision(admin, username: str, temporary: str, final: str, app):
     assert created.status_code == 201, created.get_json()
     user_id = created.get_json()["user"]["user_id"]
     client = _sign_in(app, username, temporary)
-    assert client.post(
-        "/api/v2/auth/change-password",
-        json={"current_password": temporary, "new_password": final},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v2/auth/change-password",
+            json={"current_password": temporary, "new_password": final},
+        ).status_code
+        == 200
+    )
     return user_id, client
 
 
@@ -67,10 +73,13 @@ def table(tmp_path_factory):
 def _table(tmp_path_factory):
     app = create_app(artifact_root=tmp_path_factory.mktemp("authorization"))
     admin = _sign_in(app, "admin", "admin123")
-    assert admin.post(
-        "/api/v2/auth/change-password",
-        json={"current_password": "admin123", "new_password": ADMIN_PASSWORD},
-    ).status_code == 200
+    assert (
+        admin.post(
+            "/api/v2/auth/change-password",
+            json={"current_password": "admin123", "new_password": ADMIN_PASSWORD},
+        ).status_code
+        == 200
+    )
 
     ids = admin.get("/api/v2/bootstrap").get_json()["ids"]
     world_id = ids["world_id"]
@@ -82,9 +91,12 @@ def _table(tmp_path_factory):
     _, guest = _provision(admin, "tableguest", "Temporary-Guest-Pw-1", GUEST_PASSWORD, app)
 
     for user_id, roles in ((dm_id, ["DM"]), (player_id, ["PLAYER"])):
-        assert admin.put(
-            f"/api/v2/admin/users/{user_id}/worlds/{world_id}/roles", json={"roles": roles}
-        ).status_code == 200
+        assert (
+            admin.put(
+                f"/api/v2/admin/users/{user_id}/worlds/{world_id}/roles", json={"roles": roles}
+            ).status_code
+            == 200
+        )
 
     # Role grants only reach an existing session on its next sign-in, so re-authenticate.
     dm = _sign_in(app, "tabledm", DM_PASSWORD)

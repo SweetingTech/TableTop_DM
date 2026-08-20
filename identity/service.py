@@ -187,11 +187,7 @@ class IdentityService:
         existing = self.repository.get_account(user_id)
         if existing is None:
             raise KeyError(user_id)
-        if (
-            existing.is_admin
-            and "ADMIN" not in roles
-            and self._admin_count(excluding=user_id) == 0
-        ):
+        if existing.is_admin and "ADMIN" not in roles and self._admin_count(excluding=user_id) == 0:
             raise ValueError("the final administrator role cannot be removed")
         return self.repository.set_global_roles(
             user_id,
