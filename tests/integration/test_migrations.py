@@ -35,7 +35,10 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
         connection.cursor() as cursor,
     ):
         cursor.execute("SELECT version FROM infra_meta.schema_migrations")
-        assert cursor.fetchall() == [("001_simulation_kernel.sql",)]
+        assert cursor.fetchall() == [
+            ("001_simulation_kernel.sql",),
+            ("002_identity_and_tabletop_workspaces.sql",),
+        ]
         cursor.execute(
             """
             SELECT schema_name FROM information_schema.schemata

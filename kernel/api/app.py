@@ -5,14 +5,14 @@ import ipaddress
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal
 from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, g, jsonify, make_response, request, send_from_directory
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from cognition.engine import (
@@ -32,6 +32,11 @@ from cognition.relationships import (
     RelationshipModifiers,
 )
 from cognition.store import MindStore
+from domains.tabletop.portal import (
+    InMemoryPortalRepository,
+    PostgresPortalRepository,
+    TabletopPortalService,
+)
 from experiments.aggregation import compare_reports
 from experiments.calibration import CalibrationEngine, CalibrationStore
 from experiments.executor import ApplicationBranchExecutor
@@ -54,6 +59,9 @@ from experiments.telemetry import (
     TelemetryRecorder,
     TelemetrySettingsStore,
 )
+from identity.models import AuthenticatedUser, UserProfile
+from identity.repository import InMemoryIdentityRepository, PostgresIdentityRepository
+from identity.service import AuthenticationError, IdentityService
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
 from kernel.contracts import ActorKind, BranchKind, CommandProposal, RunKind
@@ -261,6 +269,105 @@ class RelationshipRequest(BaseModel):
     modifiers: RelationshipModifiers = Field(default_factory=RelationshipModifiers)
 
 
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
+
+
+class ProfileRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=160)
+    legal_name: str | None = Field(default=None, max_length=200)
+    email: str | None = Field(default=None, max_length=320)
+    date_of_birth: date | None = None
+    pronouns: str | None = Field(default=None, max_length=80)
+    timezone: str = Field(default="UTC", min_length=1, max_length=100)
+    locale: str = Field(default="en-US", min_length=2, max_length=40)
+    bio: str | None = Field(default=None, max_length=4000)
+    avatar_uri: str | None = Field(default=None, max_length=2000)
+
+    def profile(self) -> UserProfile:
+        def optional(value: str | None) -> str | None:
+            return value.strip() or None if value is not None else None
+
+        return UserProfile(
+            display_name=self.display_name.strip(),
+            legal_name=optional(self.legal_name),
+            email=optional(self.email),
+            date_of_birth=self.date_of_birth,
+            pronouns=optional(self.pronouns),
+            timezone=self.timezone,
+            locale=self.locale,
+            bio=optional(self.bio),
+            avatar_uri=optional(self.avatar_uri),
+        )
+
+
+class AdminUserCreateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    temporary_password: str = Field(min_length=12, max_length=256)
+    profile: ProfileRequest
+
+
+class AdminUserUpdateRequest(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=64)
+    is_active: bool | None = None
+    profile: ProfileRequest | None = None
+
+
+class PasswordResetRequest(BaseModel):
+    temporary_password: str = Field(min_length=12, max_length=256)
+
+
+class GlobalRolesRequest(BaseModel):
+    roles: set[Literal["ADMIN"]] = Field(default_factory=set)
+
+
+class WorldRolesRequest(BaseModel):
+    roles: set[Literal["DM", "PLAYER"]] = Field(default_factory=set)
+
+
+class CharacterCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    creation_method: Literal["BUILT", "GENERATED", "IMPORTED"] = "BUILT"
+    name: str | None = Field(default=None, max_length=160)
+    source_filename: str | None = Field(default=None, max_length=255)
+    seed: int | None = None
+
+
+class CharacterUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class GameCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    world_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=160)
+
+
+class GameUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class GameMemberRequest(BaseModel):
+    user_id: uuid.UUID
+    character_id: uuid.UUID | None = None
+    membership_role: Literal["PLAYER", "CO_DM"] = "PLAYER"
+    status: Literal["INVITED", "JOINED", "READY", "LEFT", "REMOVED"] = "INVITED"
+
+
+class GameSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    title: str | None = Field(default=None, max_length=160)
+
+
 def _json(model: Any, status: int = 200):
     if hasattr(model, "model_dump"):
         payload = model.model_dump(mode="json")
@@ -280,10 +387,22 @@ def create_app(
     simulation = simulation or SimulationApplication(root / "snapshots")
     demo = simulation.bootstrap_demo()
     database_dsn = os.environ.get("DATABASE_URL")
+    identity_repository = (
+        PostgresIdentityRepository(database_dsn, bootstrap_actor_id=demo["actor_id"])
+        if database_dsn
+        else InMemoryIdentityRepository(bootstrap_actor_id=demo["actor_id"])
+    )
+    identity = IdentityService(identity_repository)
+    portal = TabletopPortalService(
+        PostgresPortalRepository(database_dsn) if database_dsn else InMemoryPortalRepository(),
+        identity_repository,
+    )
     durable_control: PostgresControlPlane | None = None
     if database_dsn:
         durable_control = PostgresControlPlane(database_dsn)
         durable_control.sync(simulation)
+        for world_id in simulation.worlds:
+            identity.sync_admin_world(world_id)
         durable_control.hydrate(simulation)
         simulation.configure_durable(
             PostgresCommandRepository(database_dsn),
@@ -343,9 +462,11 @@ def create_app(
     population_repository = PostgresPopulationRepository(database_dsn) if database_dsn else None
     if population_repository is not None:
         for stored_population in population_repository.list_pools():
-            identity = uuid.UUID(stored_population["population_id"])
-            populations[identity] = stored_population
-            population_lifecycles[identity] = population_repository.load_lifecycle(identity)
+            population_id = uuid.UUID(stored_population["population_id"])
+            populations[population_id] = stored_population
+            population_lifecycles[population_id] = population_repository.load_lifecycle(
+                population_id
+            )
     reports: dict[uuid.UUID, Any] = dict(experiment_history.reports())
     trials: dict[uuid.UUID, TrialOutput] = {
         output.trial_id: output for output in experiment_history.trials()
@@ -546,70 +667,151 @@ def create_app(
         )
         return payload
 
+    def user_payload(user: Any) -> dict[str, Any]:
+        payload = user.model_dump(mode="json")
+        payload.update(
+            {
+                "is_admin": user.is_admin,
+                "has_dm_role": user.has_dm_role,
+                "has_player_role": user.has_player_role,
+            }
+        )
+        return payload
+
+    def current_user() -> AuthenticatedUser:
+        user = getattr(g, "current_user", None)
+        if user is None:
+            raise AuthenticationError("authentication required")
+        return user
+
+    def current_actor_id() -> uuid.UUID:
+        if getattr(g, "operator_compatibility", False):
+            requested = request.headers.get("X-TTDM-Actor-ID")
+            if requested:
+                return uuid.UUID(requested)
+        return current_user().actor_id
+
+    def session_cookie(response, token: str, *, expires_at: datetime):
+        response.set_cookie(
+            "ttdm_session",
+            token,
+            expires=expires_at,
+            httponly=True,
+            secure=request.is_secure,
+            samesite="Lax",
+            path="/",
+        )
+        return response
+
+    def clear_session_cookie(response):
+        response.delete_cookie("ttdm_session", path="/", samesite="Lax")
+        return response
+
     @app.before_request
-    def operator_boundary():
+    def authentication_boundary():
         if not request.path.startswith("/api/v2"):
             return None
-        if request.path in {"/api/v2/health/live", "/api/v2/health/ready"}:
+        public_paths = {
+            "/api/v2/health/live",
+            "/api/v2/health/ready",
+            "/api/v2/auth/login",
+        }
+        if request.path in public_paths:
             return None
         configured = os.environ.get("TTDM_OPERATOR_TOKEN", "")
-        if configured:
-            supplied = request.headers.get("X-TTDM-Operator-Token", "")
-            if not hmac.compare_digest(configured, supplied):
-                return jsonify({"error": "operator_authorization_required"}), 401
-            return None
-
-        try:
-            remote_is_loopback = bool(
-                request.remote_addr and ipaddress.ip_address(request.remote_addr).is_loopback
+        supplied = request.headers.get("X-TTDM-Operator-Token", "")
+        if configured and supplied and hmac.compare_digest(configured, supplied):
+            g.current_user = identity.bootstrap_admin.model_copy(
+                update={"password_change_required": False}
             )
-        except ValueError:
-            remote_is_loopback = False
-        if not remote_is_loopback:
-            return jsonify({"error": "localhost_or_operator_token_required"}), 403
-
-        try:
-            request_hostname = urlsplit(f"//{request.host}").hostname
-        except ValueError:
-            request_hostname = None
-        trusted_host = False
-        if request_hostname is not None:
-            normalized_host = request_hostname.rstrip(".").casefold()
-            trusted_host = normalized_host == "localhost"
-            if not trusted_host:
-                try:
-                    trusted_host = ipaddress.ip_address(normalized_host).is_loopback
-                except ValueError:
-                    trusted_host = False
-        if not trusted_host:
-            return jsonify({"error": "untrusted_loopback_host"}), 403
-
-        fetch_site = request.headers.get("Sec-Fetch-Site", "").casefold()
-        if fetch_site == "cross-site":
-            return jsonify({"error": "cross_site_request_rejected"}), 403
-        origin = request.headers.get("Origin")
-        if origin:
+            g.operator_compatibility = True
+            return None
+        if not database_dsn and not configured:
+            g.current_user = identity.bootstrap_admin.model_copy(
+                update={"password_change_required": False}
+            )
+            g.operator_compatibility = True
             try:
-                origin_parts = urlsplit(origin)
-                origin_port = origin_parts.port or (
-                    443 if origin_parts.scheme.casefold() == "https" else 80
-                )
-                request_parts = urlsplit(request.host_url)
-                request_port = request_parts.port or (
-                    443 if request_parts.scheme.casefold() == "https" else 80
-                )
-                same_origin = (
-                    origin_parts.scheme.casefold() == request_parts.scheme.casefold()
-                    and origin_parts.hostname is not None
-                    and request_parts.hostname is not None
-                    and origin_parts.hostname.rstrip(".").casefold()
-                    == request_parts.hostname.rstrip(".").casefold()
-                    and origin_port == request_port
-                )
+                peer_is_local = ipaddress.ip_address(request.remote_addr or "").is_loopback
             except ValueError:
-                same_origin = False
-            if not same_origin:
+                peer_is_local = False
+            host_name = urlsplit(f"//{request.host}").hostname or ""
+            if host_name.casefold() == "localhost":
+                host_is_local = True
+            else:
+                try:
+                    host_is_local = ipaddress.ip_address(host_name).is_loopback
+                except ValueError:
+                    host_is_local = False
+            fetch_site = request.headers.get("Sec-Fetch-Site", "").casefold()
+            origin = request.headers.get("Origin")
+            origin_is_local = True
+            if origin:
+                try:
+                    origin_parts = urlsplit(origin)
+                    request_parts = urlsplit(request.host_url)
+                    origin_is_local = (
+                        origin_parts.scheme.casefold() == request_parts.scheme.casefold()
+                        and origin_parts.hostname is not None
+                        and request_parts.hostname is not None
+                        and origin_parts.hostname.rstrip(".").casefold()
+                        == request_parts.hostname.rstrip(".").casefold()
+                        and (origin_parts.port or (443 if origin_parts.scheme == "https" else 80))
+                        == (request_parts.port or (443 if request_parts.scheme == "https" else 80))
+                    )
+                except ValueError:
+                    origin_is_local = False
+            if not host_is_local:
+                return jsonify({"error": "untrusted_loopback_host"}), 403
+            if not peer_is_local or fetch_site == "cross-site" or not origin_is_local:
                 return jsonify({"error": "cross_site_request_rejected"}), 403
+        else:
+            user = identity.authenticate(request.cookies.get("ttdm_session"))
+            if user is None:
+                return jsonify({"error": "authentication_required"}), 401
+            g.current_user = user
+            if user.password_change_required and request.path not in {
+                "/api/v2/auth/session",
+                "/api/v2/auth/change-password",
+                "/api/v2/auth/logout",
+            }:
+                return jsonify({"error": "password_change_required"}), 403
+        admin_workspaces = (
+            "/api/v2/personas",
+            "/api/v2/populations",
+            "/api/v2/scenarios",
+            "/api/v2/experiments",
+            "/api/v2/jobs",
+            "/api/v2/reports",
+            "/api/v2/calibration",
+            "/api/v2/telemetry",
+        )
+        if request.path.startswith(admin_workspaces) and not current_user().is_admin:
+            return jsonify(
+                {"error": "permission_denied", "details": "administrator role required"}
+            ), 403
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            fetch_site = request.headers.get("Sec-Fetch-Site", "").casefold()
+            if fetch_site == "cross-site":
+                return jsonify({"error": "cross_site_request_rejected"}), 403
+            origin = request.headers.get("Origin")
+            if origin:
+                try:
+                    origin_parts = urlsplit(origin)
+                    request_parts = urlsplit(request.host_url)
+                    same_origin = (
+                        origin_parts.scheme.casefold() == request_parts.scheme.casefold()
+                        and origin_parts.hostname is not None
+                        and request_parts.hostname is not None
+                        and origin_parts.hostname.rstrip(".").casefold()
+                        == request_parts.hostname.rstrip(".").casefold()
+                        and (origin_parts.port or (443 if origin_parts.scheme == "https" else 80))
+                        == (request_parts.port or (443 if request_parts.scheme == "https" else 80))
+                    )
+                except ValueError:
+                    same_origin = False
+                if not same_origin:
+                    return jsonify({"error": "cross_site_request_rejected"}), 403
         return None
 
     @app.errorhandler(ValidationError)
@@ -634,6 +836,217 @@ def create_app(
     def permission_error(exc: PermissionError):
         return jsonify({"error": "permission_denied", "details": str(exc)}), 403
 
+    @app.errorhandler(AuthenticationError)
+    def authentication_error(exc: AuthenticationError):
+        return jsonify({"error": "authentication_failed", "details": str(exc)}), 401
+
+    @app.post("/api/v2/auth/login")
+    def login():
+        body = LoginRequest.model_validate(request.get_json(force=True))
+        user, token = identity.login(
+            body.username,
+            body.password,
+            user_agent=request.user_agent.string,
+            remote_address=request.remote_addr,
+        )
+        response = make_response(jsonify({"user": user_payload(user)}))
+        return session_cookie(response, token, expires_at=user.session_expires_at)
+
+    @app.get("/api/v2/auth/session")
+    def auth_session():
+        return jsonify({"user": user_payload(current_user())})
+
+    @app.post("/api/v2/auth/logout")
+    def logout():
+        identity.logout(request.cookies.get("ttdm_session"))
+        return clear_session_cookie(make_response("", 204))
+
+    @app.post("/api/v2/auth/change-password")
+    def change_password():
+        body = ChangePasswordRequest.model_validate(request.get_json(force=True))
+        user, token = identity.change_password(
+            current_user(),
+            body.current_password,
+            body.new_password,
+            user_agent=request.user_agent.string,
+            remote_address=request.remote_addr,
+        )
+        response = make_response(jsonify({"user": user_payload(user)}))
+        return session_cookie(response, token, expires_at=user.session_expires_at)
+
+    @app.get("/api/v2/profile")
+    def profile_detail():
+        return jsonify({"user": user_payload(current_user())})
+
+    @app.put("/api/v2/profile")
+    def profile_update():
+        body = ProfileRequest.model_validate(request.get_json(force=True))
+        account = identity.update_profile(current_user(), body.profile())
+        return jsonify({"user": user_payload(account)})
+
+    @app.get("/api/v2/admin/users")
+    def admin_users():
+        return jsonify(
+            {"items": [user_payload(user) for user in identity.list_users(current_user())]}
+        )
+
+    @app.post("/api/v2/admin/users")
+    def admin_user_create():
+        body = AdminUserCreateRequest.model_validate(request.get_json(force=True))
+        account = identity.create_user(
+            current_user(),
+            username=body.username,
+            temporary_password=body.temporary_password,
+            profile=body.profile.profile(),
+        )
+        return jsonify({"user": user_payload(account)}), 201
+
+    @app.patch("/api/v2/admin/users/<uuid:user_id>")
+    def admin_user_update(user_id: uuid.UUID):
+        body = AdminUserUpdateRequest.model_validate(request.get_json(force=True))
+        account = identity.update_user(
+            current_user(),
+            user_id,
+            username=body.username,
+            is_active=body.is_active,
+            profile=body.profile.profile() if body.profile else None,
+        )
+        return jsonify({"user": user_payload(account)})
+
+    @app.delete("/api/v2/admin/users/<uuid:user_id>")
+    def admin_user_delete(user_id: uuid.UUID):
+        identity.delete_user(current_user(), user_id)
+        return "", 204
+
+    @app.put("/api/v2/admin/users/<uuid:user_id>/password")
+    def admin_user_password(user_id: uuid.UUID):
+        body = PasswordResetRequest.model_validate(request.get_json(force=True))
+        identity.reset_password(current_user(), user_id, body.temporary_password)
+        return "", 204
+
+    @app.put("/api/v2/admin/users/<uuid:user_id>/roles")
+    def admin_user_global_roles(user_id: uuid.UUID):
+        body = GlobalRolesRequest.model_validate(request.get_json(force=True))
+        account = identity.set_global_roles(current_user(), user_id, frozenset(body.roles))
+        return jsonify({"user": user_payload(account)})
+
+    @app.put("/api/v2/admin/users/<uuid:user_id>/worlds/<uuid:world_id>/roles")
+    def admin_user_world_roles(user_id: uuid.UUID, world_id: uuid.UUID):
+        body = WorldRolesRequest.model_validate(request.get_json(force=True))
+        account = identity.set_world_roles(
+            current_user(),
+            user_id,
+            world_id,
+            frozenset(body.roles),
+        )
+        return jsonify({"user": user_payload(account)})
+
+    @app.get("/api/v2/admin/audit")
+    def admin_audit():
+        IdentityService.require_admin(current_user())
+        return jsonify({"items": identity_repository.audit_entries(200)})
+
+    @app.get("/api/v2/player/characters")
+    def player_characters():
+        return jsonify(
+            {
+                "items": [
+                    row.model_dump(mode="json") for row in portal.list_characters(current_user())
+                ]
+            }
+        )
+
+    @app.post("/api/v2/player/characters")
+    def player_character_create():
+        body = CharacterCreateRequest.model_validate(request.get_json(force=True))
+        row = portal.create_character(current_user(), body.model_dump(exclude_none=True))
+        return _json(row, 201)
+
+    @app.patch("/api/v2/player/characters/<uuid:character_id>")
+    def player_character_update(character_id: uuid.UUID):
+        body = CharacterUpdateRequest.model_validate(request.get_json(force=True))
+        return _json(
+            portal.update_character(
+                current_user(), character_id, body.model_dump(exclude_none=True)
+            )
+        )
+
+    @app.delete("/api/v2/player/characters/<uuid:character_id>")
+    def player_character_delete(character_id: uuid.UUID):
+        portal.delete_character(current_user(), character_id)
+        return "", 204
+
+    @app.get("/api/v2/games")
+    def games_list():
+        return jsonify(
+            {"items": [row.model_dump(mode="json") for row in portal.list_games(current_user())]}
+        )
+
+    @app.get("/api/v2/dm/worlds/<uuid:world_id>/eligible-users")
+    def dm_eligible_users(world_id: uuid.UUID):
+        actor = current_user()
+        IdentityService.require_world_role(actor, world_id, "DM")
+        rows = [
+            user_payload(account)
+            for account in identity_repository.list_accounts()
+            if account.is_active and account.roles_for(world_id).intersection({"DM", "PLAYER"})
+        ]
+        return jsonify({"items": rows})
+
+    @app.post("/api/v2/dm/games")
+    def dm_game_create():
+        body = GameCreateRequest.model_validate(request.get_json(force=True))
+        return _json(portal.create_game(current_user(), body.model_dump(exclude_none=True)), 201)
+
+    @app.patch("/api/v2/dm/games/<uuid:game_id>")
+    def dm_game_update(game_id: uuid.UUID):
+        body = GameUpdateRequest.model_validate(request.get_json(force=True))
+        return _json(
+            portal.update_game(current_user(), game_id, body.model_dump(exclude_none=True))
+        )
+
+    @app.delete("/api/v2/dm/games/<uuid:game_id>")
+    def dm_game_delete(game_id: uuid.UUID):
+        portal.delete_game(current_user(), game_id)
+        return "", 204
+
+    @app.put("/api/v2/dm/games/<uuid:game_id>/members")
+    def dm_game_member(game_id: uuid.UUID):
+        body = GameMemberRequest.model_validate(request.get_json(force=True))
+        return _json(portal.set_member(current_user(), game_id, body.model_dump(mode="json")))
+
+    @app.delete("/api/v2/dm/games/<uuid:game_id>/members/<uuid:user_id>")
+    def dm_game_member_delete(game_id: uuid.UUID, user_id: uuid.UUID):
+        portal.remove_member(current_user(), game_id, user_id)
+        return "", 204
+
+    @app.get("/api/v2/games/<uuid:game_id>/sessions")
+    def game_sessions(game_id: uuid.UUID):
+        return jsonify(
+            {
+                "items": [
+                    row.model_dump(mode="json")
+                    for row in portal.list_sessions(current_user(), game_id)
+                ]
+            }
+        )
+
+    @app.post("/api/v2/dm/games/<uuid:game_id>/sessions")
+    def dm_game_session_create(game_id: uuid.UUID):
+        body = GameSessionRequest.model_validate(request.get_json(force=True))
+        return _json(
+            portal.save_session(current_user(), game_id, body.model_dump(exclude_none=True)), 201
+        )
+
+    @app.patch("/api/v2/dm/games/<uuid:game_id>/sessions/<uuid:session_id>")
+    def dm_game_session_update(game_id: uuid.UUID, session_id: uuid.UUID):
+        body = GameSessionRequest.model_validate(request.get_json(force=True))
+        return _json(
+            portal.save_session(
+                current_user(), game_id, body.model_dump(exclude_none=True), session_id
+            )
+        )
+
     @app.get("/healthz")
     @app.get("/api/v2/health/live")
     def live():
@@ -654,7 +1067,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "001_simulation_kernel.sql",
+                    "ok": version == "002_identity_and_tabletop_workspaces.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -736,8 +1149,9 @@ def create_app(
                     for world in sorted(simulation.worlds.values(), key=lambda item: item.name)
                 ]
             )
+        IdentityService.require_admin(current_user())
         body = WorldCreateRequest.model_validate(request.get_json(silent=True) or {})
-        creator_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+        creator_id = current_actor_id()
         creator = simulation.authority(demo["world_id"], creator_id)
         world = simulation.create_world(body.name, body.slug)
         simulation.grant_authority(
@@ -749,6 +1163,7 @@ def create_app(
         )
         if durable_control:
             durable_control.sync(simulation)
+            identity.sync_admin_world(world.world_id)
         return jsonify(world_payload(world)), 201
 
     @app.get("/api/v2/worlds/<uuid:world_id>")
@@ -819,7 +1234,7 @@ def create_app(
         ):
             raise ValueError("controller actor has no authority in this world")
         entity_id = uuid.uuid4()
-        actor_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+        actor_id = current_actor_id()
         live_run = next(
             item
             for item in simulation.runs.values()
@@ -855,7 +1270,7 @@ def create_app(
     def runs():
         if request.method == "POST":
             body = RunCreateRequest.model_validate(request.get_json(silent=True) or {})
-            actor_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+            actor_id = current_actor_id()
             actor = simulation.authority(body.world_id, actor_id)
             if "run.branch" not in actor.capabilities:
                 raise PermissionError("actor cannot create runs in this world")
@@ -1055,7 +1470,7 @@ def create_app(
         entity = simulation.entities.get((scope.branch_id, entity_id))
         if entity is None or entity.world_id != scope.world_id:
             raise ValueError("runtime entity is not embodied in the world branch")
-        actor_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+        actor_id = current_actor_id()
         actor = simulation.authority(scope.world_id, actor_id)
         if (
             entity_id not in actor.controlled_entity_ids
@@ -1172,7 +1587,7 @@ def create_app(
             entity.branch_id,
         ):
             raise ValueError("relationship source event must share the entity world branch")
-        actor_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+        actor_id = current_actor_id()
         actor = simulation.authority(entity.world_id, actor_id)
         if (
             entity_id not in actor.controlled_entity_ids
@@ -1254,7 +1669,7 @@ def create_app(
                     if item.world_id == world_id
                 ]
             )
-        actor_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+        actor_id = current_actor_id()
         actor = simulation.authority(world_id, actor_id)
         if "run.branch" not in actor.capabilities:
             raise PermissionError("actor cannot snapshot this world")
@@ -1269,7 +1684,7 @@ def create_app(
         body = request.get_json(silent=True) or {}
         manifest = simulation.snapshots[snapshot_id]
         world_id = uuid.UUID(str(body.get("world_id", manifest.world_id)))
-        actor_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+        actor_id = current_actor_id()
         actor = simulation.authority(world_id, actor_id)
         if "run.branch" not in actor.capabilities:
             raise PermissionError("actor cannot create trial branches in this world")
@@ -1315,7 +1730,7 @@ def create_app(
             for item in simulation.runs.values()
             if item.branch_id == branch_id and item.kind.value == "LIVE"
         )
-        actor_id = uuid.UUID(request.headers.get("X-TTDM-Actor-ID", str(demo["actor_id"])))
+        actor_id = current_actor_id()
         key = uuid.uuid5(uuid.NAMESPACE_URL, package.model_dump_json())
         receipt = simulation.submit(
             CommandProposal(

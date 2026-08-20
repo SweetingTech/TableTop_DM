@@ -37,9 +37,9 @@ uv run python scripts/manage.py start
 ```
 
 Use `scripts/start.ps1` or `scripts/start.sh` as thin platform wrappers. `--no-build` reuses the
-existing image. `uv run python scripts/manage.py status` shows the Compose services. The first
-start prints the generated operator token; `uv run python scripts/manage.py token` prints it
-again for entry in the Settings workspace.
+existing image. `uv run python scripts/manage.py status` shows the Compose services. On first
+start, open `/v2`, sign in with `admin` / `admin123`, and replace the bootstrap password when
+prompted.
 
 Stop containers while preserving volumes:
 
@@ -59,7 +59,7 @@ artifact volumes. They do not delete arbitrary host paths.
 ## Configuration
 
 Let the lifecycle manager create `.env`. It generates random PostgreSQL owner/runtime passwords,
-a random Redis password, and a random operator token, then restricts the file permissions where
+a random Redis password, and a compatibility automation token, then restricts the file permissions where
 the platform permits. `.env.example` contains deterministic loopback-only values for CI and
 disposable tests; the manager does not copy those credentials into a managed stack.
 
@@ -86,14 +86,14 @@ in command proposals, model prompts, event payloads, or committed `.env` files.
 - `/healthz` proves that the HTTP process can answer.
 - `/readyz` proves that every configured dependency is usable.
 - PostgreSQL readiness requires the latest recorded migration to be exactly
-  `001_simulation_kernel.sql`.
+  `002_identity_and_tabletop_workspaces.sql`.
 - Redis readiness requires `PING`.
 - Qdrant readiness requires its `/readyz` endpoint.
 
 Readiness fails closed with HTTP 503 and per-dependency diagnostics. The Docker health check uses
 liveness; the lifecycle manager waits on readiness.
 
-## Baseline migration
+## Migrations
 
 V2 starts from `infra/sql/migrations/001_simulation_kernel.sql`. It creates independent schemas:
 
@@ -107,6 +107,9 @@ V2 starts from `infra/sql/migrations/001_simulation_kernel.sql`. It creates inde
 - `experiments` for scenarios, trials, facts, metrics, jobs, comparisons, calibration, and
   telemetry;
 - `infra_meta` for migration versions and checksums.
+
+`002_identity_and_tabletop_workspaces.sql` adds durable users, profiles, sessions, role grants,
+characters, hosted games, rosters, and game sessions without rewriting kernel history.
 
 Run migrations explicitly with owner credentials:
 

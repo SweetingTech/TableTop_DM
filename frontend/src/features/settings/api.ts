@@ -5,10 +5,11 @@ import { demoMeta, demoTelemetry } from "../../core/demo/fixtures";
 
 export type SettingsData = { meta: KernelMeta; telemetry: TelemetrySettings };
 
-export async function loadSettings(): Promise<Sourced<SettingsData>> {
+export async function loadSettings(includeTelemetry = true): Promise<Sourced<SettingsData>> {
   return withDemoFallback(
     async () => {
-      const [meta, telemetry] = await Promise.all([apiRequest<KernelMeta>("/meta"), apiRequest<TelemetrySettings>("/telemetry")]);
+      const meta = await apiRequest<KernelMeta>("/meta");
+      const telemetry = includeTelemetry ? await apiRequest<TelemetrySettings>("/telemetry") : demoTelemetry;
       return { meta, telemetry };
     },
     () => ({ meta: demoMeta, telemetry: demoTelemetry }),
@@ -22,8 +23,4 @@ export async function updateTelemetry(enabled: boolean): Promise<Sourced<Telemet
     () => ({ human_telemetry_enabled: enabled, local_only: true }),
     "Telemetry settings",
   );
-}
-
-export async function verifyAccess(): Promise<KernelMeta> {
-  return apiRequest<KernelMeta>("/meta");
 }

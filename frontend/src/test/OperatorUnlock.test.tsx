@@ -1,62 +1,48 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 
-const OPERATOR_TOKEN = "fresh-session-token";
-
 function json(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
 }
 
-describe("operator unlock", () => {
-  it("keeps token entry reachable after bootstrap 401 and reloads live settings", async () => {
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
-      const token = new Headers(init?.headers).get("X-TTDM-Operator-Token");
-      if (token !== OPERATOR_TOKEN) return json({ error: "operator_authorization_required" }, 401);
+const baseUser = {
+  user_id: "10000000-0000-4000-8000-000000000001",
+  actor_id: "20000000-0000-4000-8000-000000000001",
+  username: "admin",
+  profile: { display_name: "Administrator", timezone: "UTC", locale: "en-US" },
+  global_roles: ["ADMIN"], world_roles: [], is_active: true, is_admin: true,
+  has_dm_role: true, has_player_role: true, last_login_at: null,
+  created_at: "2026-08-20T00:00:00Z",
+};
 
+describe("account bootstrap", () => {
+  it("signs in with the first-start account and requires a private password", async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
       const path = String(input);
-      if (path.endsWith("/meta")) {
-        return json({
-          contract_version: "2.0.0",
-          kernel: "tabletop-simulation-kernel",
-          persona_schema_version: "2.0.0",
-          persona_dimensions: 80,
-          telemetry_enabled: false,
-          migrations_from_v1_supported: false,
-        });
+      if (path.endsWith("/auth/session")) return json({ error: "authentication_required" }, 401);
+      if (path.endsWith("/auth/login")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ username: "admin", password: "admin123" });
+        return json({ user: { ...baseUser, password_change_required: true } });
       }
-      if (path.endsWith("/worlds")) {
-        return json([{
-          world_id: "11111111-1111-4111-8111-111111111111",
-          name: "Unlocked world",
-          status: "ACTIVE",
-        }]);
-      }
-      if (path.endsWith("/telemetry")) {
-        return json({ human_telemetry_enabled: false, local_only: true });
-      }
-      return json({ error: "not_found" }, 404);
+      if (path.endsWith("/auth/change-password")) return json({ user: { ...baseUser, password_change_required: false } });
+      return json({ error: "endpoint_unavailable" }, 404);
     });
 
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/settings"]}><App /></MemoryRouter>);
 
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeVisible();
+    await user.type(screen.getByLabelText("Password"), "admin123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("heading", { name: "Protect the administrator account" })).toBeVisible();
+    await user.type(screen.getByLabelText("Current password"), "admin123");
+    await user.type(screen.getByLabelText("New password"), "Private-Admin-2026!");
+    await user.type(screen.getByLabelText("Confirm new password"), "Private-Admin-2026!");
+    await user.click(screen.getByRole("button", { name: "Change password and continue" }));
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeVisible();
-    expect(await screen.findByText("operator_authorization_required")).toBeVisible();
-    const tokenInput = screen.getByLabelText("Operator token");
-    await user.type(tokenInput, OPERATOR_TOKEN);
-    await user.click(screen.getByRole("button", { name: "Save and verify" }));
-
-    expect(await screen.findByText("Operator access verified for this browser session.")).toBeVisible();
-    expect(sessionStorage.getItem("ttdm.v2.operator-token")).toBe(OPERATOR_TOKEN);
-    await waitFor(() => expect(screen.getByText("tabletop-simulation-kernel")).toBeVisible());
-    expect(screen.getByRole("combobox", { name: "Active world" })).toHaveDisplayValue(
-      "Unlocked world",
-    );
+    expect(screen.queryByText(/operator token/i)).not.toBeInTheDocument();
   });
 });

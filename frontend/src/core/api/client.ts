@@ -11,6 +11,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isOperatorAuthorizationError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 401;
+}
+
 export function getOperatorToken(): string {
   return typeof sessionStorage === "undefined" ? "" : sessionStorage.getItem(TOKEN_KEY) ?? "";
 }

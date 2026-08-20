@@ -22,7 +22,10 @@ def _manage_module():
 
 def test_clean_break_has_one_numbered_baseline() -> None:
     migrations = discover(ROOT / "infra" / "sql" / "migrations")
-    assert [migration.version for migration in migrations] == ["001_simulation_kernel.sql"]
+    assert [migration.version for migration in migrations] == [
+        "001_simulation_kernel.sql",
+        "002_identity_and_tabletop_workspaces.sql",
+    ]
     assert not (ROOT / "infra" / "sql" / "init").exists()
     assert not (ROOT / "infra" / "sql" / "seed").exists()
 

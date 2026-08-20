@@ -113,8 +113,6 @@ def ensure_env() -> None:
             )
         )
         print("updated v2 local credentials in .env")
-        if generated_token:
-            print(f"local operator token: {replacements['TTDM_OPERATOR_TOKEN']}")
         return
 
     template = ENV_EXAMPLE.read_text(encoding="utf-8")
@@ -145,7 +143,6 @@ def ensure_env() -> None:
     }
     _write_private_env(_render_env(template, replacements))
     print(f"created {ENV_FILE.name} with generated local credentials")
-    print(f"local operator token: {operator_token}")
 
 
 def show_operator_token(_: argparse.Namespace) -> None:

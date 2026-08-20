@@ -18,6 +18,7 @@ REQUIRED_MEMBERS = (
     "persona/schema/tabletop/dimensions.yaml",
     "persona/schema/accessibility/dimensions.yaml",
     "infra/sql/migrations/001_simulation_kernel.sql",
+    "infra/sql/migrations/002_identity_and_tabletop_workspaces.sql",
     "static/v2/index.html",
 )
 
@@ -57,7 +58,8 @@ from persona.registry import PersonaSchemaRegistry
 
 assert len(PersonaSchemaRegistry.load_default().dimensions) == 80
 assert [item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
-    "001_simulation_kernel.sql"
+    "001_simulation_kernel.sql",
+    "002_identity_and_tabletop_workspaces.sql",
 ]
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

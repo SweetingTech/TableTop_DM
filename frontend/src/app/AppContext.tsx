@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { isOperatorAuthorizationError } from "../core/api/client";
 import { loadShellBootstrap } from "../core/api/shell";
 import type { DataSource, KernelMeta, WorldSummary } from "../core/api/types";
+import { useAuth } from "../features/auth/AuthContext";
 
 const ACTIVE_WORLD_KEY = "ttdm.v2.active-world";
 
@@ -13,12 +15,14 @@ type AppContextValue = {
   sourceReason: string;
   loading: boolean;
   error: string;
+  authorizationRequired: boolean;
   refresh: () => void;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { signOut } = useAuth();
   const [meta, setMeta] = useState<KernelMeta | null>(null);
   const [worlds, setWorlds] = useState<WorldSummary[]>([]);
   const [activeWorldId, setActiveWorldState] = useState(() => sessionStorage.getItem(ACTIVE_WORLD_KEY) ?? "");
@@ -26,6 +30,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sourceReason, setSourceReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [authorizationRequired, setAuthorizationRequired] = useState(false);
   const [nonce, setNonce] = useState(0);
 
   const refresh = useCallback(() => {
@@ -47,6 +52,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setWorlds(result.data.worlds);
         setSource(result.source);
         setSourceReason(result.reason ?? "");
+        setAuthorizationRequired(false);
+        setError("");
         const stored = sessionStorage.getItem(ACTIVE_WORLD_KEY);
         const next = result.data.worlds.some((world) => world.world_id === stored)
           ? stored!
@@ -57,18 +64,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       (reason: unknown) => {
         if (!active) return;
+        setMeta(null);
+        setWorlds([]);
+        setActiveWorldState("");
+        setSourceReason("");
+        const authenticationExpired = isOperatorAuthorizationError(reason);
+        setAuthorizationRequired(authenticationExpired);
         setError(reason instanceof Error ? reason.message : "Unable to load the simulation kernel");
         setLoading(false);
+        if (authenticationExpired) void signOut();
       },
     );
     return () => {
       active = false;
     };
-  }, [nonce]);
+  }, [nonce, signOut]);
 
   const value = useMemo<AppContextValue>(
-    () => ({ meta, worlds, activeWorldId, setActiveWorldId, source, sourceReason, loading, error, refresh }),
-    [meta, worlds, activeWorldId, setActiveWorldId, source, sourceReason, loading, error, refresh],
+    () => ({ meta, worlds, activeWorldId, setActiveWorldId, source, sourceReason, loading, error, authorizationRequired, refresh }),
+    [meta, worlds, activeWorldId, setActiveWorldId, source, sourceReason, loading, error, authorizationRequired, refresh],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

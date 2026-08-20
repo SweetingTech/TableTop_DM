@@ -75,13 +75,11 @@ uv run python scripts/manage.py start
 uv run python scripts/manage.py status
 ```
 
-The manager creates `.env` with random PostgreSQL, Redis, and operator secrets if it is missing;
-it never copies the checked-in CI credentials. It also binds every published port to loopback and
-waits for dependency-aware readiness. Retrieve the browser/API token at any time with:
-
-```powershell
-uv run python scripts/manage.py token
-```
+The manager creates `.env` with random PostgreSQL and Redis secrets if it is missing; it never
+copies the checked-in CI credentials. It also binds every published port to loopback and waits
+for dependency-aware readiness. Open the application and sign in with `admin` / `admin123` on
+first start. The application requires an immediate private password change before any workspace
+can be used.
 
 Durable boot rehydrates control-plane state, persona records, cognition evidence, population
 catalogs and activation state, scenario definitions, calibration artifacts, and consented
@@ -127,6 +125,12 @@ uv run tabletop-dm population --size 10000 --seed 17 --output artifacts/people.p
 
 - **Game Console** shows canonical entities at their public grid coordinates, displays visible
   events, and submits dialogue or typed `/move`, `/attack`, and `/cast` proposals.
+- **Player Dashboard** lists saved characters and their stats and alive/dead status; players can
+  build, deterministically generate, or import a JSON character template.
+- **Dungeon Master** hosts campaign tables, tracks game status and rosters, schedules sessions,
+  keeps private DM notes, and links players to their characters.
+- **Admin Dashboard** creates, edits, disables, or deletes accounts; resets passwords; and grants
+  Administrator, Dungeon Master, Player, or combined DM + Player access per world.
 - **Control Plane** creates worlds, world-scoped actors and embodied entities, runs, canonical
   snapshots, and isolated trial branches.
 - **Persona Studio** fixes selected dimensions, generates and validates identities, and previews
@@ -139,7 +143,8 @@ uv run tabletop-dm population --size 10000 --seed 17 --output artifacts/people.p
 - **Calibration** compares synthetic metrics with versioned human evidence, records an explicit
   review, and can promote an approved immutable version into the deployable registry. Runtime
   assignment remains a separate operator action.
-- **Settings** configures a session-scoped operator token and explicit local telemetry consent.
+- **Settings** lets every account manage display/legal name, email, date of birth, pronouns,
+  timezone, locale, biography, password, and sign-out. Administrators also control telemetry.
 
 The UI displays whether it is connected to the live kernel or showing demo fallback fixtures.
 Fallback data is for interface inspection; mutations require the live API.
@@ -157,8 +162,9 @@ curl.exe -X POST http://127.0.0.1:8000/api/v2/commands `
 
 The demo world, branch, run, and actor IDs are defaulted when omitted. Real callers should send
 all IDs and reuse an idempotency key only when retrying the same command. When
-`TTDM_OPERATOR_TOKEN` is configured, add `X-TTDM-Operator-Token` to every non-health v2 API
-request. The browser stores that token in session storage, never local storage.
+Browser clients authenticate with a secure HTTP-only session cookie. `TTDM_OPERATOR_TOKEN` and
+`X-TTDM-Operator-Token` remain a compatibility boundary for automation, not the human sign-in
+workflow.
 
 See [API and user workflows](docs/API_AND_WORKFLOWS.md) for resource groups and end-to-end flows.
 
@@ -196,8 +202,9 @@ changing this checkout:
 git worktree add ..\TableTop_DM-v1 v1-behavioral-reference-2026-08-17
 ```
 
-There is one fresh-install migration, `001_simulation_kernel.sql`. Do not point v2 at a v1
-database and expect an in-place upgrade.
+Fresh installs apply `001_simulation_kernel.sql` followed by
+`002_identity_and_tabletop_workspaces.sql`. Do not point v2 at a v1 database and expect an
+in-place upgrade.
 
 ## License
 

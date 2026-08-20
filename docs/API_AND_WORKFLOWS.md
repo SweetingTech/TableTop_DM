@@ -5,22 +5,21 @@ Pydantic request validation returns HTTP 400, missing resources return 404, and 
 branch-isolation errors return 403. Health endpoints are intentionally outside the operator
 boundary.
 
-## Operator boundary
+## Accounts and sessions
 
-With no `TTDM_OPERATOR_TOKEN`, v2 APIs accept only trusted loopback hosts and reject cross-site
-browser requests. This preserves a useful direct local-reference workflow without trusting a
-browser request merely because it reached `127.0.0.1`. The managed durable stack generates a
-token on first start; retrieve it with `uv run python scripts/manage.py token` and send:
+The durable application creates a bootstrap `admin` account with the password `admin123` and
+requires that password to be changed before any protected workspace is available. Successful
+sign-in issues a 12-hour HTTP-only, SameSite session cookie. Password changes, administrator
+resets, role changes, account disabling, and deletion revoke existing sessions.
 
-```text
-X-TTDM-Operator-Token: <configured token>
-```
+Administrators assign global `ADMIN` access and world-scoped `DM` and `PLAYER` roles. The same
+account may hold both tabletop roles. Player routes require Player authority, DM hosting routes
+require DM authority for the target world, and persona/population/scenario/calibration studios
+require Administrator authority.
 
-The Settings workspace keeps this value in browser session storage. It disappears when that
-browser session ends. This is an operator boundary, not a public multi-tenant identity provider;
-put a production authentication proxy in front of the service if it is exposed to untrusted
-users. The lifecycle manager generates PostgreSQL, Redis, and operator secrets instead of
-copying the checked-in CI values, and the provided stack publishes every port on loopback only.
+The legacy `X-TTDM-Operator-Token` remains available for local automation. It is not shown in the
+web interface and is not needed by human users. Cross-site browser writes are rejected, and the
+provided stack publishes every port on loopback only.
 
 Some canonical actions, such as consequence promotion, also accept `X-TTDM-Actor-ID` to select
 the capability-bearing actor. Database transactions set the corresponding `app.actor_id` for
@@ -38,7 +37,7 @@ RLS enforcement.
 | `GET /api/v2/contracts/persona-schema` | Persona schema contract |
 
 Readiness returns HTTP 503 if a configured dependency is unhealthy or PostgreSQL is not at
-`001_simulation_kernel.sql`. With no external URLs configured, it explicitly reports
+`002_identity_and_tabletop_workspaces.sql`. With no external URLs configured, it explicitly reports
 `local_reference` mode.
 
 ## Web and static routes

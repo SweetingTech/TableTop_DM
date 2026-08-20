@@ -19,6 +19,9 @@ def test_v2_shell_redirects_and_exposes_every_studio(page: Page) -> None:
     expect(page.get_by_test_id("app-shell")).to_be_visible()
     for label in (
         "Game Console",
+        "Player Dashboard",
+        "Dungeon Master",
+        "Admin Dashboard",
         "Control Plane",
         "Persona Studio",
         "Population Studio",
@@ -30,30 +33,18 @@ def test_v2_shell_redirects_and_exposes_every_studio(page: Page) -> None:
         expect(page.get_by_role("link", name=label, exact=True)).to_be_visible()
 
 
-def test_fresh_browser_session_can_enter_the_managed_operator_token(browser: Browser) -> None:
-    token = os.environ.get("TTDM_OPERATOR_TOKEN", "")
-    if not token:
-        pytest.skip("managed operator-token journey requires TTDM_OPERATOR_TOKEN")
-
-    # This context deliberately bypasses the suite's authenticated-page fixture,
+def test_fresh_browser_session_opens_the_account_login(browser: Browser) -> None:
+    # This context deliberately bypasses the suite's compatibility fixture,
     # matching a human opening the managed stack for the first time.
     context = browser.new_context()
     fresh_page = context.new_page()
     try:
-        fresh_page.goto(f"{BASE_URL}/v2/settings")
-
-        expect(fresh_page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
-        expect(
-            fresh_page.get_by_text("operator_authorization_required", exact=True)
-        ).to_be_visible()
-        fresh_page.get_by_label("Operator token").fill(token)
-        fresh_page.get_by_role("button", name="Save and verify", exact=True).click()
-
-        expect(
-            fresh_page.get_by_text("Operator access verified for this browser session.")
-        ).to_be_visible()
-        expect(fresh_page.get_by_text("tabletop-simulation-kernel", exact=True)).to_be_visible()
-        expect(fresh_page.get_by_test_id("demo-mode-banner")).to_have_count(0)
+        fresh_page.goto(f"{BASE_URL}/v2")
+        expect(fresh_page.get_by_role("heading", name="Sign in", exact=True)).to_be_visible()
+        expect(fresh_page.get_by_label("Username")).to_have_value("admin")
+        expect(fresh_page.get_by_text(re.compile(r"admin123"))).to_be_visible()
+        expect(fresh_page.get_by_text("Local engine ready", exact=True)).to_have_count(0)
+        expect(fresh_page.get_by_text(re.compile(r"operator token", re.I))).to_have_count(0)
     finally:
         context.close()
 
@@ -62,6 +53,9 @@ def test_fresh_browser_session_can_enter_the_managed_operator_token(browser: Bro
     ("test_id", "path", "heading"),
     (
         ("nav-game", "game", "Game Console"),
+        ("nav-player", "player", "Player Dashboard"),
+        ("nav-dm", "dm", "Dungeon Master"),
+        ("nav-admin", "admin", "Admin Dashboard"),
         ("nav-control", "control", "Control Plane"),
         ("nav-personas", "personas", "Persona Studio"),
         ("nav-populations", "populations", "Population Studio"),
@@ -278,6 +272,9 @@ def test_capture_live_backend_desktop_and_mobile_release_views(page: Page) -> No
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     routes = (
         ("game", "Game Console"),
+        ("player", "Player Dashboard"),
+        ("dm", "Dungeon Master"),
+        ("admin", "Admin Dashboard"),
         ("control", "Control Plane"),
         ("personas", "Persona Studio"),
         ("populations", "Population Studio"),
