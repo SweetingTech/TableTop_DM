@@ -52,7 +52,7 @@ def _event(
         actor_id=actor_id,
         event_type="integration.telemetry",
         payload={"label": label},
-        consent_version="integration-v1",
+        consent_version="integration-consent-2026-01",
         captured_at=captured_at,
     )
 

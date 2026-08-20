@@ -59,7 +59,7 @@ def test_calibration_requires_human_review_before_policy_approval(tmp_path):
         {"completion": 0.7},
         "policy-1",
         "playtest-1",
-        {"participants": 8, "consent": "v1"},
+        {"participants": 8, "consent": "consent-2026-01"},
     )
     store = CalibrationStore(tmp_path)
     store.add(report)
@@ -76,9 +76,9 @@ def test_telemetry_is_opt_in_redacted_and_deletable(tmp_path):
     settings.set_enabled(False)
     recorder = TelemetryRecorder(settings)
     with pytest.raises(PermissionError):
-        recorder.capture("action", {"name": "move"}, "v1")
+        recorder.capture("action", {"name": "move"}, "consent-2026-01")
     settings.set_enabled(True)
-    event = recorder.capture("action", {"token": "secret", "name": "move"}, "v1")
+    event = recorder.capture("action", {"token": "secret", "name": "move"}, "consent-2026-01")
     assert event.payload["token"] == "[REDACTED]"
     destination = recorder.export(tmp_path / "telemetry.jsonl")
     assert destination.exists()

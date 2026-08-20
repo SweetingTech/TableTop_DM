@@ -226,12 +226,9 @@ burn-bag/
 test-results-e2e/
 .playwright/
 
-# Claude Code agent worktrees and per-machine launch config
-.claude/worktrees/
-.claude/launch.json
-
-# Per-installation API-key encryption vault — must never be committed
-.local-run/vault.key
+# Per-machine agent configuration and runtime state
+.claude/
+.local-run/
 
 # V2 frontend local dependencies and TypeScript build metadata
 frontend/node_modules/

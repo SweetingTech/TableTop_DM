@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(*command: str, env: dict[str, str] | None = None) -> None:
-    subprocess.run(command, cwd=ROOT, check=True, env=env)
+    executable = shutil.which(command[0])
+    if executable is None:
+        raise FileNotFoundError(f"required executable is not on PATH: {command[0]}")
+    subprocess.run((executable, *command[1:]), cwd=ROOT, check=True, env=env)
 
 
 def python_tests(marker: str, path: str = "tests") -> None:

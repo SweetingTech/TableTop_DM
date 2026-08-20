@@ -1,0 +1,5 @@
+Repository agent instructions are maintained in AGENTS.md.
+
+Read AGENTS.md before modifying this project. It documents architecture, security invariants,
+source-of-truth locations, generated files, test gates, documentation expectations, and Git
+safety practices.

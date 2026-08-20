@@ -24,14 +24,14 @@ migrate:
 	uv run python infra/migrate.py
 
 lint:
-	uv run ruff check kernel persona cognition population experiments domains infra scripts tests main.py
+	uv run ruff check kernel persona cognition population experiments domains identity infra scripts tests main.py
 	npm --prefix frontend run lint
 
 format:
-	uv run ruff format --check kernel persona cognition population experiments domains infra scripts tests main.py
+	uv run ruff format --check kernel persona cognition population experiments domains identity infra scripts tests main.py
 
 typecheck:
-	uv run mypy kernel persona cognition population experiments domains main.py
+	uv run mypy kernel persona cognition population experiments domains identity infra main.py
 
 unit:
 	uv run pytest -m unit

@@ -1,97 +1,78 @@
 # Changelog
 
-All notable changes to TableTop DM are documented here. V2 is a clean-break release; the v1
-history remains available from the tag `v1-behavioral-reference-2026-08-17`.
+This file records the current TableTop DM product line.
 
-## 2.0.0 - 2026-08-17
+## 2.0.0 - 2026-08-20
 
-### Breaking changes
+### Platform and identity
 
-- Replaced the RPG-specific core with a domain-neutral simulation kernel using world, run,
-  interaction, actor, branch, command, event, and projection contracts.
-- Replaced principal enums with human/agent/system actors plus roles, capabilities, and explicit
-  embodied-entity control.
-- Replaced the v1 schema chain with one fresh-install baseline,
-  `001_simulation_kernel.sql`. V1 database and save-file migration is intentionally unsupported.
-- Removed the v1 Flask monolith, server-rendered templates, legacy static client, release bundle,
-  seed/init SQL, and RPG-specific core contracts from the active tree.
-- Moved tabletop rules behind the `domains.tabletop` command registry.
+- Added secure account login with HTTP-only sessions, forced first-login password replacement,
+  password policy enforcement, failed-login lockout, and append-only identity audit records.
+- Added global Administrator access and world-scoped Dungeon Master and Player roles, including
+  combined DM + Player access.
+- Added Administrator account management for creation, editing, enable/disable, deletion,
+  password reset, global roles, and per-world roles.
+- Added profile settings for display/legal name, email, date of birth, pronouns, timezone,
+  locale, biography, avatar URI, password changes, and sign-out.
 
-### Added
+### Tabletop workspaces
 
-- Atomic typed command handling with deny-by-default authorization, idempotent receipts,
-  correlation/causation IDs, state hashes, and versioned event provenance.
-- Canonical and trial branches, immutable compressed snapshots, replay verification, and an
-  explicit reviewed consequence-promotion command.
-- Tabletop command packs for dialogue, movement, combat, magic, economy, factions, divine
-  effects, quests, and simulated-player onboarding.
-- A modular 80-dimension persona schema across core, world, tabletop, and accessibility packs,
-  with dependency-aware seeded generation, validation, provenance, immutable versions,
-  compilation, and prompt budgets.
-- Subjective cognition with perception filters, observations, beliefs, memories, relationship
-  vectors, reflexes, utility scoring, bounded GOAP planning, and typed deliberation proposals.
-- Statistical, materialized, and active population levels backed by Parquet and DuckDB cohort
-  operations.
-- Scenario definitions, isolated trial execution, resumable job state, normalized verifier
-  facts, metrics, cohort reports, comparisons, calibration review gates, and opt-in telemetry.
-- A React application with URL-addressable Game Console, Control Plane, Persona Studio,
-  Population Studio, Scenario Lab, Run Inspector, Calibration, and Settings workspaces.
-- Full Control Plane creation workflows for world-scoped actors, embodied entities, live or
-  experimental runs, canonical snapshots, and snapshot-based trial branches.
-- Typed Game Console slash commands and map tokens derived from canonical public `x`/`y` state.
-- Separate calibration review and promotion actions; promotion registers an immutable deployable
-  policy version without silently changing runtime assignments.
-- PostgreSQL, Redis, Qdrant, API, worker, migration, and artifact services in a managed Docker
-  Compose stack.
+- Added a Player Dashboard for saved characters, character statistics, alive/dead status,
+  deterministic generation, manual building, and JSON template import.
+- Added a Dungeon Master workspace for hosted games, game status, rosters, player-character
+  assignments, session scheduling, safety notes, house rules, and private DM notes.
+- Added a typed Game Console for dialogue, movement, combat, and spell proposals against
+  canonical public state.
+- Added the Control Plane, Persona Studio, Population Studio, Scenario Lab, Run Inspector, and
+  Calibration workspaces with role-aware navigation.
 
-### Storage and security
+### Simulation kernel
 
-- Added separate PostgreSQL schemas for simulation, artifacts, personas, cognition, populations,
-  and experiments.
-- Added durable boot hydration for worlds, branches, actors, entities, runs, snapshots, events,
-  persona versions/profiles, cognition evidence, population catalogs/activation state, and
-  scenario definitions.
-- Added durable command replay history and snapshot-basis reconstruction, world-scoped population
-  lifecycle continuation, and artifact/PostgreSQL rehydration for experiment jobs, trials,
-  normalized reports, and registered scenario versions.
-- Added immutable, source-event-linked relationship change history and world-scoped
-  `entity.read.secret` enforcement alongside public-only entity projections.
-- Added immutable calibration artifact reload plus PostgreSQL-backed telemetry settings and
-  captures with consent-gated export, import, selective deletion, and retention purging.
-- Added composite world/branch/run foreign keys and branch-scoped entity identity so trial
-  branches can retain logical entity IDs without crossing worlds.
-- Added append-only database enforcement for command/event ledgers and immutable evidence
-  records.
-- Added forced row-level security for canonical projections, entities, ledgers, subjective
-  cognition, and telemetry captures; missing or malformed actor context fails closed.
-- Separated owner-only migration credentials from the least-privilege runtime login.
-- Added localhost-or-operator-token HTTP protection. Managed deployments generate secrets rather
-  than copying CI credentials, bind published ports to loopback, and keep browser tokens
-  session-scoped.
-- Kept human telemetry local, disabled by default, redact-sensitive, consent-gated, immutable
-  after capture, and explicitly deletable for consent withdrawal or retention expiry.
+- Added a domain-neutral world/run/interaction kernel with world-scoped actors, capabilities,
+  controlled entities, typed commands, deterministic handlers, atomic projections, append-only
+  ledgers, visibility, snapshots, isolated branches, replay, and reviewed promotion.
+- Added tabletop domain commands for entity creation, dialogue, movement, combat, magic,
+  economy, factions, divine effects, quests, content rating, and onboarding.
+- Added a modular 80-dimension persona fabric with dependencies, constraints, seeded generation,
+  validation, provenance, immutable versions, compilation, and bounded prompts.
+- Added subjective cognition with observations, beliefs, memories, relationships, reflexes,
+  utility scoring, bounded GOAP planning, runtime assignment, and typed deliberation.
+- Added statistical, materialized, and active population layers using Parquet, DuckDB, and
+  PostgreSQL lifecycle projections.
+- Added immutable scenarios, trial execution, resumable jobs, normalized verifier facts,
+  metrics, cohort reports, comparison, calibration review/promotion, and opt-in telemetry.
 
-### Verification and delivery
+### Durability and security
 
-- Added deterministic unit and contract suites for the kernel, domain rules, personas,
-  cognition, populations, experiments, migrations, and API.
-- Added an explicit Phase-0 behavioral-reference manifest pinning the retrievable v1 tests,
-  fixtures, release evidence, and bundle to commit
-  `93e02846e4d73097afc65f2dfd684a8a7e49966b`.
-- Added clean-database, migration checksum, RLS, append-only ledger, durable command/replay,
-  relationship causality, population lifecycle, experiment restart, and worker integration tests.
-- Added React component journeys and Playwright user journeys across all eight workspaces.
-- Added lint, formatting, static type, frontend build, integration, production-image, and browser
-  CI lanes.
-- Added a multi-stage, read-only, unprivileged production image and tagged-image publication to
-  GHCR.
+- Added PostgreSQL schemas for simulation, identity, tabletop portals, artifacts, personas,
+  cognition, populations, and experiments.
+- Added Redis/RQ experiment queues, Qdrant readiness and semantic-lore integration, and a shared
+  content-addressed artifact volume.
+- Added forced row-level security, least-privilege runtime credentials, append-only evidence
+  triggers, composite world/branch/run keys, actor transaction context, and secret entity-state
+  controls.
+- Added durable replay bases, idempotent command receipts, transactional outbox records,
+  restart hydration, population transition history, scenario/job/trial/report restoration, and
+  consent-aware telemetry deletion and retention.
+- Added generated local secrets, loopback-only published ports, browser session authentication,
+  and a separate automation operator token.
+
+### Delivery and verification
+
+- Added a multi-stage, read-only, unprivileged production image and Docker Compose topology for
+  PostgreSQL, Redis, Qdrant, migration, API, and worker services.
+- Added deterministic unit and contract tests, real PostgreSQL/Redis integration tests, React
+  component tests, production bundle checks, wheel-runtime verification, and Playwright journeys.
+- Added CI quality, integration, frontend, image, browser, and tagged GHCR publication lanes.
+- Added complete architecture, API, operations, testing, network, and agent-maintenance guides.
 
 ### Constitutional guarantees
 
 - Models never own world truth.
 - Persona identity is independent of the runtime executing it.
 - Canonical truth, observation, belief, memory, and narration are distinct records.
-- Stochastic and model-assisted decisions carry seeds and version provenance.
+- Every stochastic or model-assisted decision records reproducibility provenance.
+- All canonical mutations pass through typed validation and authorization.
 - Experiment branches cannot mutate canonical state.
-- Verifiers produce normalized facts with evidence, not persuasive prose.
-- Synthetic output is labeled as hypothesis, never human ground truth.
+- Verifiers emit normalized facts with evidence, not persuasive prose.
+- Synthetic outputs are hypotheses, not human ground truth.

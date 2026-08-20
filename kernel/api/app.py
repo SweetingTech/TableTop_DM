@@ -173,7 +173,7 @@ class PopulationBulkRequest(BaseModel):
     branch_id: uuid.UUID | None = None
 
 
-class OnboardingRunRequest(BaseModel):
+class OnboardingJobRequest(BaseModel):
     cohort_size: int = Field(default=12, ge=1, le=1_000)
     seeds: tuple[int, ...] = Field(default=(101, 202, 303), min_length=1, max_length=20)
     include_trials: int = Field(default=12, ge=0, le=100)
@@ -192,10 +192,6 @@ class CalibrationRequest(BaseModel):
     policy_version: str = Field(min_length=1)
     evidence_version: str = Field(min_length=1)
     evidence_metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class ApprovalRequest(BaseModel):
-    reviewer: str = Field(default="Local operator", min_length=1, max_length=160)
 
 
 class CalibrationReviewRequest(BaseModel):
@@ -2162,7 +2158,7 @@ def create_app(
         persist_job(checkpoint)
 
     def execute_onboarding(context: JobContext) -> dict[str, Any]:
-        body = OnboardingRunRequest.model_validate(context.request)
+        body = OnboardingJobRequest.model_validate(context.request)
         report = onboarding.run_cohort(
             body.cohort_size,
             body.seeds,
@@ -2299,18 +2295,6 @@ def create_app(
         definition = select_scenario("player-onboarding", body.version)
         return jsonify(launch_scenario(definition, body)), 201
 
-    @app.post("/api/v2/experiments/onboarding/run")
-    def run_onboarding_compatibility():
-        legacy = OnboardingRunRequest.model_validate(request.get_json(silent=True) or {})
-        definition = select_scenario("player-onboarding", "1.0.0")
-        body = ScenarioRunRequest(
-            version=definition.version,
-            cohort_size=legacy.cohort_size,
-            seeds=legacy.seeds,
-            include_trials=legacy.include_trials,
-        )
-        return jsonify(launch_scenario(definition, body)["report"])
-
     @app.post("/api/v2/scenarios/<path:scenario_id>/run")
     def run_scenario(scenario_id: str):
         body = ScenarioRunRequest.model_validate(request.get_json(silent=True) or {})
@@ -2423,12 +2407,6 @@ def create_app(
             }
         ), 201
 
-    @app.post("/api/v2/calibration/<uuid:report_id>/approve")
-    def calibration_approve(report_id: uuid.UUID):
-        body = ApprovalRequest.model_validate(request.get_json(silent=True) or {})
-        # Compatibility alias: approval is a review decision, never promotion.
-        return _json(calibrations.approve(report_id, body.reviewer))
-
     @app.route("/api/v2/telemetry", methods=["GET", "PUT"])
     def telemetry_settings_endpoint():
         if request.method == "GET":
@@ -2445,7 +2423,7 @@ def create_app(
             telemetry.capture(
                 str(payload.get("event_type", "unknown")),
                 dict(payload.get("payload", {})),
-                str(payload.get("consent_version", "local-v1")),
+                str(payload.get("consent_version", "local-consent-2026-01")),
                 world_id=uuid.UUID(str(payload.get("world_id", demo["world_id"]))),
                 actor_id=uuid.UUID(str(payload.get("actor_id", demo["actor_id"]))),
             ),
@@ -2466,7 +2444,7 @@ def create_app(
                 telemetry.capture(
                     str(item.get("event_type", "imported")),
                     dict(item.get("payload", {})),
-                    str(item.get("consent_version", "local-import-v1")),
+                    str(item.get("consent_version", "local-import-2026-01")),
                     world_id=uuid.UUID(str(item.get("world_id", demo["world_id"]))),
                     actor_id=uuid.UUID(str(item.get("actor_id", demo["actor_id"]))),
                 )
@@ -2493,10 +2471,6 @@ def create_app(
     @app.post("/api/v2/telemetry/purge-expired")
     def telemetry_purge_expired():
         return jsonify({"deleted": telemetry.purge_expired()})
-
-    @app.get("/assets/<path:asset>")
-    def assets(asset: str):
-        return send_from_directory(static_root / "assets", asset)
 
     @app.get("/static/v2/<path:asset>")
     def built_frontend_asset(asset: str):

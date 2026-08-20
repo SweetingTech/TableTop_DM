@@ -1,34 +1,54 @@
-# TableTop DM v2
+# TableTop DM
 
-TableTop DM is a deterministic simulation kernel with tabletop as its first domain. It keeps
-canonical reality, subjective cognition, population-scale sampling, and counterfactual trials
-behind explicit contracts instead of letting a model write world state directly.
+TableTop DM is a local-first tabletop platform built on a deterministic simulation kernel. It
+supports authenticated Administrator, Dungeon Master, and Player workspaces alongside persistent
+world state, synthetic personas, population simulation, and isolated scenario evaluation.
 
-This is an independent clean-break rebuild. It borrows useful methodology from persona and
-evaluation systems, including constrained generation, seeded cohorts, normalized verification,
-and cross-trial aggregation, but it does **not** merge, import, or depend on the MatrAIx
-repository or runtime.
+Language models may propose dialogue or actions, but they never write canonical state. Typed
+commands, world-scoped authorization, deterministic handlers, atomic transactions, and an
+append-only ledger decide what actually happened.
 
-## What is implemented
+## Product workspaces
 
-| Layer | Responsibility |
+| Workspace | Audience | Purpose |
+| --- | --- | --- |
+| Game Console | signed-in users | View a world, inspect visible events, and submit dialogue or typed tabletop actions |
+| Player Dashboard | Player | Create, generate, import, inspect, and manage saved characters |
+| Dungeon Master | DM | Create and host games, manage rosters, schedule sessions, and maintain public/private notes |
+| Admin Dashboard | Administrator | Create, edit, disable, or delete accounts; reset passwords; assign global and world roles; inspect audit history |
+| Control Plane | Administrator | Create worlds, actors, entities, runs, snapshots, and isolated branches |
+| Persona Studio | Administrator | Generate, validate, version, compile, and inspect persona blueprints |
+| Population Studio | Administrator | Generate population pools, define cohorts, sample strata, and manage activation lifecycles |
+| Scenario Lab | Administrator | Run reproducible experiments against immutable world snapshots |
+| Run Inspector | Administrator | Inspect jobs, trials, ledgers, metrics, decision traces, and replay state |
+| Calibration | Administrator | Compare synthetic metrics with evidence, review proposals, and promote approved versions |
+| Settings | every account | Manage profile, password, locale, timezone, pronouns, and session state |
+
+The initial account is `admin` with password `admin123`. The first sign-in is restricted to the
+password-change screen, and the replacement password must be at least 12 characters and not a
+common default.
+
+## System layers
+
+| Package | Responsibility |
 | --- | --- |
-| `kernel/` | Actors, capabilities, typed commands, atomic state changes, events, visibility, snapshots, trial branches, replay, scheduling, and PostgreSQL adapters |
-| `domains/tabletop/` | Dialogue, movement, combat, magic, economy, factions, divine effects, quests, and onboarding commands |
-| `persona/` | 80 versioned dimensions in four packs, dependency ordering, constraints, seeded generation, validation, provenance, compilation, and bounded prompts |
-| `cognition/` | Perception, observations, beliefs, memory, relationship vectors, reflexes, utility policy, GOAP planning, and typed LLM deliberation |
-| `population/` | Parquet persona pools, DuckDB cohort filtering, weighted/stratified sampling, feasibility checks, and statistical/materialized/active lifecycles |
-| `experiments/` | Immutable scenarios, isolated trials, resumable jobs, deterministic verifier facts, metrics, aggregation, reports, calibration, and opt-in telemetry |
-| `frontend/` | React workspaces for play, world control, personas, populations, scenarios, run inspection, calibration, and settings |
+| `identity/` | Accounts, secure password hashing, sessions, profile data, audit records, and global/world role grants |
+| `kernel/` | Actors, capabilities, typed commands, state transactions, events, visibility, snapshots, branches, replay, and API composition |
+| `domains/tabletop/` | Characters, games, sessions, dialogue, movement, combat, magic, economy, factions, divine effects, quests, and content rules |
+| `persona/` | 80 versioned dimensions, dependency-aware generation, constraints, validation, provenance, compilation, and prompt budgets |
+| `cognition/` | Perception, observations, beliefs, memory, relationship vectors, reflexes, utility policy, planning, and typed deliberation |
+| `population/` | Parquet persona pools, DuckDB filtering/sampling, cohort feasibility, materialization, activation, and compression |
+| `experiments/` | Immutable scenarios, trials, jobs, verifier facts, metrics, reports, comparisons, calibration, and consented telemetry |
+| `frontend/` | React single-page application and role-aware workspaces |
+| `infra/` | PostgreSQL migrations and the Docker Compose deployment |
 
-Every mutation follows the same order:
+The canonical mutation path is:
 
 ```text
-proposal -> schema validation -> capability/entity control -> deterministic handler
-         -> atomic state delta -> append-only event/command ledger -> optional narration
+proposal -> typed validation -> actor/capability/entity-control checks
+         -> deterministic domain handler -> atomic projection update
+         -> command/event/outbox append -> optional derived cognition or narration
 ```
-
-The model may propose. The kernel decides whether anything happened.
 
 ## Quick start
 
@@ -36,56 +56,26 @@ Requirements:
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/)
-- Node.js 22+ and npm
-- Docker with Compose v2 for the durable stack
+- Node.js 22+ with npm
+- Docker with Compose v2 for durable operation
 
-### Local reference mode
-
-This mode needs no database or model key. Canonical worlds, authority, cognition, and population
-lifecycle projections are process-local. Snapshot and population files, calibration history, and
-the experiment history catalog (scenario versions, jobs, trials, and reports) are written beneath
-`artifacts/`; the experiment and calibration views rehydrate from those files after restart.
+Install dependencies:
 
 ```powershell
 uv sync --frozen
 npm --prefix frontend ci
-npm --prefix frontend run build
-uv run tabletop-dm doctor
-uv run tabletop-dm serve
 ```
 
-Open <http://127.0.0.1:8000/v2/game>. The service starts with a small Eclipse Keep demo world.
-`GET /readyz` reports `local_reference` storage when external stores are not configured.
-
-For frontend development, run the API as above and start Vite in another terminal:
-
-```powershell
-npm --prefix frontend run dev
-```
-
-Vite is available at <http://127.0.0.1:5173/v2/game> and proxies `/api` to port 8000.
-
-### Durable Docker stack
-
-The managed stack builds the frontend and Python image, applies the clean v2 baseline, then
-starts PostgreSQL, Redis, Qdrant, the API, and the experiment worker:
+### Recommended: durable stack
 
 ```powershell
 uv run python scripts/manage.py start
 uv run python scripts/manage.py status
 ```
 
-The manager creates `.env` with random PostgreSQL and Redis secrets if it is missing; it never
-copies the checked-in CI credentials. It also binds every published port to loopback and waits
-for dependency-aware readiness. Open the application and sign in with `admin` / `admin123` on
-first start. The application requires an immediate private password change before any workspace
-can be used.
-
-Durable boot rehydrates control-plane state, persona records, cognition evidence, population
-catalogs and activation state, scenario definitions, calibration artifacts, and consented
-telemetry. It also restores command replay records and snapshot bases plus experiment jobs,
-normalized trial outputs, and cohort reports from artifacts and PostgreSQL. A job interrupted
-while `RUNNING` is restored as failed rather than silently repeated and can be retried explicitly.
+The manager creates a private `.env` with random database, Redis, and automation secrets; builds
+the application; applies every migration; and waits for PostgreSQL, Redis, Qdrant, the API, and
+worker. Open [http://127.0.0.1:8000/v2](http://127.0.0.1:8000/v2) and sign in.
 
 Stop without deleting data:
 
@@ -93,14 +83,53 @@ Stop without deleting data:
 uv run python scripts/manage.py stop
 ```
 
-Reset only this Compose project's volumes:
+Reset this Compose project's volumes and rebuild a fresh installation:
 
 ```powershell
 uv run python scripts/manage.py start --reset
 ```
 
-`--reset` is destructive. The equivalent Make targets are `make up`, `make status`, `make down`,
-and `make purge`.
+`--reset` permanently deletes this project's database, queues, vector collections, and artifact
+volume. It does not target unrelated Docker volumes.
+
+### Reference mode
+
+Reference mode is useful for deterministic development without external services:
+
+```powershell
+npm --prefix frontend run build
+uv run tabletop-dm doctor
+uv run tabletop-dm serve
+```
+
+Open [http://127.0.0.1:8000/v2](http://127.0.0.1:8000/v2). Canonical state is process-local in
+this mode, while file-backed experiment artifacts are stored beneath `artifacts/`. Use the durable
+stack for restart guarantees, multi-process work, row-level security, and real queue execution.
+
+For frontend development, keep the API running and start Vite in a second terminal:
+
+```powershell
+npm --prefix frontend run dev
+```
+
+Vite serves [http://127.0.0.1:5173/v2](http://127.0.0.1:5173/v2) and proxies `/api` to port 8000.
+
+## Authentication and roles
+
+Human browsers authenticate with a secure, HTTP-only `ttdm_session` cookie. Sessions last 12
+hours. Five failed logins lock an account for 15 minutes. Administrators can reset another
+account to a temporary password, which forces that user to choose a new private password.
+
+Roles are deliberately split:
+
+- `ADMIN` is global and grants platform administration.
+- `DM` is granted per world and enables Dungeon Master tools for that world.
+- `PLAYER` is granted per world and enables Player tools for that world.
+- A user may hold both `DM` and `PLAYER` in the same or different worlds.
+
+`TTDM_OPERATOR_TOKEN` remains available for local automation through the
+`X-TTDM-Operator-Token` header. It is not the browser login flow and should not be distributed to
+players.
 
 ## CLI
 
@@ -121,90 +150,36 @@ uv run tabletop-dm scenario --cohort-size 24 --seeds 101 202 303
 uv run tabletop-dm population --size 10000 --seed 17 --output artifacts/people.parquet
 ```
 
-## Web workspaces
+## Health and verification
 
-- **Game Console** shows canonical entities at their public grid coordinates, displays visible
-  events, and submits dialogue or typed `/move`, `/attack`, and `/cast` proposals.
-- **Player Dashboard** lists saved characters and their stats and alive/dead status; players can
-  build, deterministically generate, or import a JSON character template.
-- **Dungeon Master** hosts campaign tables, tracks game status and rosters, schedules sessions,
-  keeps private DM notes, and links players to their characters.
-- **Admin Dashboard** creates, edits, disables, or deletes accounts; resets passwords; and grants
-  Administrator, Dungeon Master, Player, or combined DM + Player access per world.
-- **Control Plane** creates worlds, world-scoped actors and embodied entities, runs, canonical
-  snapshots, and isolated trial branches.
-- **Persona Studio** fixes selected dimensions, generates and validates identities, and previews
-  compiled behavior.
-- **Population Studio** creates world-scoped Parquet pools, samples reproducible cohorts, and
-  materializes or activates only pools owned by the selected world.
-- **Scenario Lab** runs registered immutable scenario definitions, including simulated-player
-  onboarding and generic snapshot-based experiments.
-- **Run Inspector** examines jobs, trials, metrics, branches, events, and replay state.
-- **Calibration** compares synthetic metrics with versioned human evidence, records an explicit
-  review, and can promote an approved immutable version into the deployable registry. Runtime
-  assignment remains a separate operator action.
-- **Settings** lets every account manage display/legal name, email, date of birth, pronouns,
-  timezone, locale, biography, password, and sign-out. Administrators also control telemetry.
+- `GET /healthz` proves the HTTP process is alive.
+- `GET /readyz` checks migration state, PostgreSQL, Redis, and Qdrant when configured.
+- `uv run python scripts/test.py fast` runs the function/contract and frontend fast gate.
+- `uv run python scripts/test.py all` additionally runs integration and browser lanes against
+  services that you started explicitly.
 
-The UI displays whether it is connected to the live kernel or showing demo fallback fixtures.
-Fallback data is for interface inspection; mutations require the live API.
+See [Testing](docs/TESTING.md) for the complete matrix.
 
-## API example
+## Documentation
 
-Command contracts are discoverable rather than duplicated in clients:
-
-```powershell
-curl.exe http://127.0.0.1:8000/api/v2/commands/contracts
-curl.exe -X POST http://127.0.0.1:8000/api/v2/commands `
-  -H "Content-Type: application/json" `
-  -d '{"command_type":"tabletop.console.submit","parameters":{"text":"I greet the gatekeeper."},"idempotency_key":"readme-dialogue-1"}'
-```
-
-The demo world, branch, run, and actor IDs are defaulted when omitted. Real callers should send
-all IDs and reuse an idempotency key only when retrying the same command. When
-Browser clients authenticate with a secure HTTP-only session cookie. `TTDM_OPERATOR_TOKEN` and
-`X-TTDM-Operator-Token` remain a compatibility boundary for automation, not the human sign-in
-workflow.
-
-See [API and user workflows](docs/API_AND_WORKFLOWS.md) for resource groups and end-to-end flows.
-
-## Verification
-
-Fast function- and contract-level verification:
-
-```powershell
-uv run python scripts/test.py fast
-```
-
-The repository also has PostgreSQL/Redis integration tests, React tests, production image
-builds, and Playwright journeys over every workspace. See [Testing](docs/TESTING.md) for the
-exact lanes and prerequisites.
-
-## Architecture and operations
-
-- [V2 design contract](docs/V2_SIMULATION_KERNEL.md)
-- [Phase 0 behavioral-reference manifest](docs/V1_BEHAVIORAL_REFERENCE.md)
+- [Simulation-kernel contract](docs/SIMULATION_KERNEL.md)
 - [Architecture and invariants](docs/ARCHITECTURE.md)
+- [Network and deployment diagram](docs/NETWORK_AND_DEPLOYMENT.md)
 - [API and user workflows](docs/API_AND_WORKFLOWS.md)
-- [Operations, storage, migrations, and RLS](docs/OPERATIONS.md)
+- [Operations, storage, migrations, and security](docs/OPERATIONS.md)
 - [Testing](docs/TESTING.md)
+- [Repository guidance for coding agents](AGENTS.md)
+- [Changelog](CHANGELOG.md)
 
-## Clean-break boundary
+## Independence and evidence boundary
 
-V2 intentionally does not migrate v1 schemas or save data. The old application is preserved at
-the Git tag `v1-behavioral-reference-2026-08-17`, pinned to commit
-`93e02846e4d73097afc65f2dfd684a8a7e49966b`. Its tests, fixtures, release evidence, and v1.0.0
-bundle remain retrievable as recorded in the
-[Phase 0 behavioral-reference manifest](docs/V1_BEHAVIORAL_REFERENCE.md). To inspect it without
-changing this checkout:
+TableTop DM is independently implemented. It does not import, embed, or depend on MatrAIx. It
+adopts general methods such as constrained persona generation, reproducible cohort sampling,
+task-specific verification, and population aggregation, then integrates them with its own
+persistent deterministic world model.
 
-```powershell
-git worktree add ..\TableTop_DM-v1 v1-behavioral-reference-2026-08-17
-```
-
-Fresh installs apply `001_simulation_kernel.sql` followed by
-`002_identity_and_tabletop_workspaces.sql`. Do not point v2 at a v1 database and expect an
-in-place upgrade.
+Synthetic people and simulated player cohorts are tools for exploration, stress testing, and
+hypothesis generation. They are not substitutes for evidence from real people.
 
 ## License
 

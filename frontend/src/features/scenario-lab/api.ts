@@ -1,4 +1,4 @@
-import { ApiError, apiRequest, unpackItems } from "../../core/api/client";
+import { apiRequest, unpackItems } from "../../core/api/client";
 import { withDemoFallback } from "../../core/api/fallback";
 import type { CohortReport, JobSummary, ScenarioSummary, Sourced } from "../../core/api/types";
 import { demoCohortReport, demoScenarios } from "../../core/demo/fixtures";
@@ -16,13 +16,12 @@ export async function loadScenarios(): Promise<Sourced<ScenarioSummary[]>> {
 export async function launchScenario(scenario: ScenarioSummary, cohortSize: number, seeds: number[]): Promise<Sourced<ScenarioLaunch>> {
   return withDemoFallback(
     async () => {
-      let payload: CohortReport | JobSummary | { job?: JobSummary; report?: CohortReport };
-      try {
-        payload = await apiRequest(`/scenarios/${encodeURIComponent(scenario.scenario_id)}/run`, { method: "POST", body: JSON.stringify({ cohort_size: cohortSize, seeds }) });
-      } catch (error) {
-        if (!(error instanceof ApiError) || error.status !== 404 || scenario.scenario_id !== "tabletop.player-onboarding") throw error;
-        payload = await apiRequest<CohortReport>("/experiments/onboarding/run", { method: "POST", body: JSON.stringify({ cohort_size: cohortSize, seeds, include_trials: 20 }) });
-      }
+      const payload = await apiRequest<
+        CohortReport | JobSummary | { job?: JobSummary; report?: CohortReport }
+      >(`/scenarios/${encodeURIComponent(scenario.scenario_id)}/run`, {
+        method: "POST",
+        body: JSON.stringify({ cohort_size: cohortSize, seeds }),
+      });
       if ("scenario_id" in payload) return { job: null, report: payload as CohortReport };
       if ("job_id" in payload) return { job: payload as JobSummary, report: (payload as JobSummary).report ?? null };
       return { job: payload.job ?? null, report: payload.report ?? null };

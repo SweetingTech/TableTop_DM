@@ -1,4 +1,4 @@
-"""TableTop DM v2 command line: one runtime for play, populations, and trials."""
+"""TableTop DM command line: one runtime for play, populations, and trials."""
 
 from __future__ import annotations
 

@@ -140,19 +140,19 @@ def test_manager_generates_private_runtime_credentials_instead_of_copying_templa
     assert destination.read_text(encoding="utf-8") == before
 
 
-def test_manager_upgrades_a_legacy_env_for_the_hardened_v2_stack(
+def test_manager_upgrades_an_existing_env_for_the_hardened_stack(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     manage = _manage_module()
     destination = tmp_path / ".env"
     destination.write_text(
         "POSTGRES_USER=postgres\n"
-        "POSTGRES_PASSWORD=legacy-owner-password\n"
+        "POSTGRES_PASSWORD=existing-owner-password\n"
         "POSTGRES_DB=tabletop_dm\n"
         "POSTGRES_PORT=5432\n"
-        "REDIS_PASSWORD=legacy-redis-password\n"
+        "REDIS_PASSWORD=existing-redis-password\n"
         "REDIS_PORT=6379\n"
-        "DATABASE_URL=postgresql://postgres:legacy-owner-password@localhost:5432/tabletop_dm\n",
+        "DATABASE_URL=postgresql://postgres:existing-owner-password@localhost:5432/tabletop_dm\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(manage, "ENV_FILE", destination)
@@ -161,8 +161,8 @@ def test_manager_upgrades_a_legacy_env_for_the_hardened_v2_stack(
     manage.ensure_env()
 
     entries = manage._read_env(destination)
-    assert entries["POSTGRES_PASSWORD"] == "legacy-owner-password"
-    assert entries["REDIS_PASSWORD"] == "legacy-redis-password"
+    assert entries["POSTGRES_PASSWORD"] == "existing-owner-password"
+    assert entries["REDIS_PASSWORD"] == "existing-redis-password"
     assert entries["APP_DATABASE_USER"] == "tabletop_runtime"
     assert len(entries["APP_DATABASE_PASSWORD"]) >= 32
     assert entries["APP_DATABASE_PASSWORD"] in entries["DATABASE_URL"]

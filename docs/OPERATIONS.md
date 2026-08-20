@@ -1,247 +1,260 @@
-# Operations, storage, migrations, and RLS
+# Operations, storage, migrations, and security
 
 ## Runtime profiles
 
-### Local reference
-
-If `DATABASE_URL`, `REDIS_URL`, and `QDRANT_URL` are absent, the API runs with in-process state
-and reports `storage_mode: local_reference`. This is appropriate for deterministic development,
-unit tests, and UI work. Restarting the process resets canonical worlds, actors, persona runtime
-registries, minds, population lifecycle projections, and telemetry settings. Files already
-written to `TTDM_ARTIFACT_ROOT` remain; calibration history and the experiment history catalog
-(registered scenarios, jobs, trials, and reports) are rehydrated from those artifacts. Local
-reference mode does not turn those files into durable canonical world or population state.
-
 ### Durable stack
 
-`infra/docker-compose.yml` defines:
+Durable mode is the supported operational profile. It runs six services:
 
-| Service | Role |
-| --- | --- |
-| `postgres` | Canonical projections, metadata, ledgers, cognition/population/experiment schemas |
-| `redis` | RQ experiment queue and coordination |
-| `qdrant` | Semantic lore/memory adapter |
-| `migrate` | One-shot owner-credential migration and runtime-role provisioning |
-| `app` | Flask API and built React client under the least-privilege login |
-| `worker` | RQ worker listening on the `experiments` queue |
+- `postgres`: canonical and application records;
+- `redis`: authenticated RQ queue transport;
+- `qdrant`: semantic lore/retrieval storage;
+- `migrate`: one-shot owner-credential migration job;
+- `app`: unprivileged Flask API plus compiled React assets;
+- `worker`: unprivileged experiment worker.
 
-The app and worker containers run unprivileged with a read-only root filesystem. Only the
-artifact volume is writable. PostgreSQL, Redis, Qdrant, and artifacts use separate named
-volumes. Every published service port binds to `127.0.0.1` by default; PostgreSQL, Redis,
-Qdrant, and the API are not exposed to the LAN by the provided stack.
-
-Start and wait for full readiness:
+Start and verify:
 
 ```powershell
 uv run python scripts/manage.py start
+uv run python scripts/manage.py status
 ```
 
-Use `scripts/start.ps1` or `scripts/start.sh` as thin platform wrappers. `--no-build` reuses the
-existing image. `uv run python scripts/manage.py status` shows the Compose services. On first
-start, open `/v2`, sign in with `admin` / `admin123`, and replace the bootstrap password when
-prompted.
-
-Stop containers while preserving volumes:
+Stop while retaining named volumes:
 
 ```powershell
 uv run python scripts/manage.py stop
 ```
 
-Delete only volumes belonging to the `tabletop-dm-v2` Compose project:
+Remove this Compose project's named volumes:
 
 ```powershell
 uv run python scripts/manage.py stop --volumes
 ```
 
-Both `start --reset` and `stop --volumes` are destructive for v2 PostgreSQL, Redis, Qdrant, and
-artifact volumes. They do not delete arbitrary host paths.
+Start from an empty installation:
 
-## Configuration
+```powershell
+uv run python scripts/manage.py start --reset
+```
 
-Let the lifecycle manager create `.env`. It generates random PostgreSQL owner/runtime passwords,
-a random Redis password, and a compatibility automation token, then restricts the file permissions where
-the platform permits. `.env.example` contains deterministic loopback-only values for CI and
-disposable tests; the manager does not copy those credentials into a managed stack.
+`--reset` and `stop --volumes` are destructive to TableTop DM data. Back up PostgreSQL and the
+artifact volume first.
 
-| Variable | Meaning |
+### Reference mode
+
+```powershell
+npm --prefix frontend run build
+uv run tabletop-dm serve
+```
+
+Without `DATABASE_URL`, the API uses in-memory repositories for canonical state and identity.
+This mode is for deterministic development and tests. It is not a substitute for durable
+multi-process behavior or database authorization.
+
+## Managed configuration
+
+`scripts/manage.py` creates or upgrades `.env` without overwriting existing secrets. New
+installations receive random values for:
+
+- `POSTGRES_PASSWORD`;
+- `APP_DATABASE_PASSWORD`;
+- `REDIS_PASSWORD`;
+- `TTDM_OPERATOR_TOKEN`.
+
+`.env` is ignored and should remain readable only by the local account. `.env.example` contains
+disposable loopback values for CI and isolated test stacks; do not deploy those values.
+
+Important variables:
+
+| Variable | Purpose |
 | --- | --- |
-| `DATABASE_ADMIN_URL` | Owner connection used only by the migration command |
-| `DATABASE_URL` | Least-privilege runtime connection used by API/adapters |
-| `APP_DATABASE_USER`, `APP_DATABASE_PASSWORD` | Runtime login provisioned by migration |
-| `REDIS_URL` | RQ connection, including password when configured |
-| `QDRANT_URL` | HTTP endpoint checked by readiness and used by the lore adapter |
-| `TTDM_ARTIFACT_ROOT` | Snapshot, population, calibration, and pluggable report/trace artifact root |
-| `TTDM_LLM_MODE` | Declared adapter mode; defaults to `mock` and requires an injected provider for model deliberation |
-| `TTDM_RNG_SEED` | Deployment seed forwarded to runtime adapters; commands and scenarios still carry explicit seeds |
-| `TTDM_OPERATOR_TOKEN` | Operator header secret; generated for the durable stack and required for non-loopback API access |
-| `TTDM_TELEMETRY_ENABLED` | Reserved deployment flag; the settings API remains authoritative and defaults off |
-| `CORS_ALLOWED_ORIGINS` | Reserved same-origin deployment setting; no cross-origin middleware is installed by default |
-| `PORT`, `TTDM_HOST` | HTTP bind configuration used by deployment tooling |
+| `DATABASE_ADMIN_URL` | owner connection used only by migrations |
+| `DATABASE_URL` | least-privilege API/worker connection |
+| `REDIS_URL` | authenticated RQ connection |
+| `QDRANT_URL` | Qdrant HTTP endpoint |
+| `TTDM_ARTIFACT_ROOT` | snapshot/report/population artifact root |
+| `TTDM_LLM_MODE` | `mock` by default; provider selection for optional deliberation |
+| `TTDM_RNG_SEED` | deterministic default seed |
+| `TTDM_OPERATOR_TOKEN` | automation compatibility credential |
+| `TTDM_TELEMETRY_ENABLED` | initial local telemetry switch; off by default |
+| `CORS_ALLOWED_ORIGINS` | optional explicit browser-origin allowlist |
+| `APP_BIND_ADDRESS` | published API address; defaults to `127.0.0.1` |
 
-Hosted-model keys are optional. The deterministic and mock paths need none. Do not put secrets
-in command proposals, model prompts, event payloads, or committed `.env` files.
+The Compose network uses service DNS names (`postgres`, `redis`, `qdrant`) internally. Host-side
+URLs generated by the manager use `127.0.0.1` to match hardened IPv4 loopback publishing.
 
-## Health behavior
+## First sign-in and account recovery
 
-- `/healthz` proves that the HTTP process can answer.
-- `/readyz` proves that every configured dependency is usable.
-- PostgreSQL readiness requires the latest recorded migration to be exactly
-  `002_identity_and_tabletop_workspaces.sql`.
-- Redis readiness requires `PING`.
-- Qdrant readiness requires its `/readyz` endpoint.
+On an empty identity store, the application creates one administrator:
 
-Readiness fails closed with HTTP 503 and per-dependency diagnostics. The Docker health check uses
-liveness; the lifecycle manager waits on readiness.
+```text
+username: admin
+password: admin123
+```
+
+The account cannot enter the application until it replaces that password. After bootstrap:
+
+1. create a second administrator before changing deployment ownership;
+2. create individual DM and Player accounts rather than sharing credentials;
+3. grant world roles only where needed;
+4. use Admin Dashboard password reset to issue a temporary password;
+5. disable an account when access must stop immediately.
+
+Sessions last 12 hours. Five invalid attempts lock an account for 15 minutes. Password changes,
+resets, disabling, and deletion revoke applicable sessions. The final administrator cannot remove
+the last path to platform administration.
+
+The operator token is not an account-recovery password. It is intended for controlled local
+automation and test clients.
+
+## Health and readiness
+
+`GET /healthz` checks only that the HTTP process can respond. `GET /readyz` verifies configured
+dependencies and returns `503` if any required check fails.
+
+Durable readiness includes:
+
+- PostgreSQL runtime connection;
+- migration history through `002_identity_and_tabletop_workspaces.sql`;
+- Redis authentication and ping;
+- Qdrant HTTP readiness;
+- active durable storage mode.
+
+Useful diagnostics:
+
+```powershell
+uv run python scripts/manage.py status
+docker compose --env-file .env -f infra/docker-compose.yml ps
+docker compose --env-file .env -f infra/docker-compose.yml logs --tail 200 app worker migrate
+uv run tabletop-dm doctor
+```
+
+Never paste `.env`, cookie values, password hashes, private DM notes, or entity secret state into
+issues or logs.
 
 ## Migrations
 
-V2 starts from `infra/sql/migrations/001_simulation_kernel.sql`. It creates independent schemas:
+Migration files live in `infra/sql/migrations/` and are applied in numeric order. The migration
+runner records SHA-256 checksums and fails closed if an applied file changes.
 
-- `sim` for worlds, branches, projections, runs, interactions, actors, entities, schedules,
-  command log, events, and outbox;
-- `artifacts` for content-addressed metadata;
-- `persona` for schema versions, blueprint versions, compiled profiles, and assignments;
-- `cognition` for minds, observations, beliefs, memories, relationships, runtimes, and traces;
-- `population` for world-targeted definitions, pools, cohorts, materialized people, and
-  append-only lifecycle transitions;
-- `experiments` for scenarios, trials, facts, metrics, jobs, comparisons, calibration, and
-  telemetry;
-- `infra_meta` for migration versions and checksums.
+Rules:
 
-`002_identity_and_tabletop_workspaces.sql` adds durable users, profiles, sessions, role grants,
-characters, hosted games, rosters, and game sessions without rewriting kernel history.
+1. Never edit an applied migration.
+2. Add the next numbered SQL file.
+3. Make fresh install and upgrade produce the same schema.
+4. Add an integration test for constraints, grants, triggers, and RLS.
+5. Run migrations with the owner URL; never give owner credentials to the API or worker.
+6. Keep `scripts/verify_wheel.py` aware of packaged migration expectations.
 
-Run migrations explicitly with owner credentials:
-
-```powershell
-uv run python infra/migrate.py
-```
-
-Check without applying:
+Run explicitly:
 
 ```powershell
 uv run python infra/migrate.py --check
+uv run python scripts/manage.py migrate
 ```
 
-The runner:
+Compose runs `migrate` before `app` and `worker`. Readiness verifies the latest migration rather
+than assuming the one-shot container succeeded.
 
-- accepts only contiguous `NNN_name.sql` files starting at `001`;
-- serializes runners with a PostgreSQL advisory lock;
-- records a SHA-256 checksum for every applied file;
-- rejects missing-on-disk history or checksum drift;
-- applies one file per transaction;
-- creates or rotates the non-superuser runtime login and grants membership in `tabletop_app`.
+## PostgreSQL authorization
 
-Never edit an applied migration. Add the next numbered file. V1 migrations are deliberately not
-part of this history; use a new v2 database.
+The owner creates schemas, functions, policies, and the runtime role. The API and worker connect
+as the non-owner `tabletop_runtime` login, which inherits the no-login `tabletop_app` role.
+Public schema access is revoked.
 
-## Row-level security and least privilege
+Forced RLS protects canonical projections, entities, command/event ledgers, cognition records,
+runtime assignments, relationship changes, and telemetry captures. Actor-aware transactions set
+the transaction-local `app.actor_id`; missing, unknown, or malformed context yields no protected
+rows.
 
-The owner runs migrations. The API and worker use `tabletop_runtime`, which inherits the
-non-login `tabletop_app` role. Public schema access is revoked and runtime grants are limited by
-schema and operation.
+RLS is defense in depth. Product routes still enforce account roles and ownership, and the
+command bus still validates actor capability, entity control, run lineage, branch kind, and
+typed parameters before a handler runs.
 
-Forced RLS applies to:
+## Immutable and append-only records
 
-- `sim.branch_projections`, `sim.entities`, `sim.command_log`, and `sim.events`;
-- `cognition.mind_states`, observations, beliefs, memories, relationships, runtime assignments,
-  and decision traces;
-- `experiments.telemetry_captures`.
+Database triggers prevent rewriting evidence such as:
 
-Each actor-aware transaction sets `app.actor_id`. Policies resolve that ID safely, require
-explicit world-scoped capabilities for protected state, restrict trial/canonical mutation, and filter
-events by `visible_to`. No actor setting, an unknown actor, or a malformed UUID yields no visible
-rows rather than an authorization bypass.
+- command and event ledgers;
+- identity audit entries;
+- persona blueprint versions and compiled profiles;
+- observations, memories, decision traces, and relationship-change history;
+- verifier facts and normalized metrics.
 
-RLS is defense in depth. The command bus still validates the proposal actor, command
-capabilities, embodied-entity control, world/branch relationship, and branch kind before invoking
-a domain handler. Both the in-memory and PostgreSQL adapters require `action.commit` for a
-canonical branch and permit proposal-only authority only on trial branches.
+Telemetry captures reject updates but allow authorized deletion for consent withdrawal and
+retention expiry. Corrections elsewhere use successor records rather than rewriting history.
 
-## Append-only and immutable records
+The durable command transaction owns:
 
-Database triggers reject updates or deletes to the command log, event ledger, persona blueprint
-versions, compiled persona profiles, observations, memories, decision traces, verifier facts,
-and metrics. Telemetry captures reject updates but deliberately allow RLS-scoped deletion for
-consent withdrawal and retention expiry. Applications add successor versions or review artifacts
-rather than rewriting evidence.
+1. branch row lock and current projection load;
+2. validation and deterministic handler execution;
+3. next projection/version/hash;
+4. command receipt;
+5. event envelope;
+6. outbox record;
+7. idempotent entity materialization when requested by the command.
 
-The command repository locks the branch projection and writes these items in one transaction:
+Any error rolls the transaction back.
 
-1. validated state update and next projection version;
-2. resulting state hash in `sim.command_log`;
-3. versioned event in `sim.events`;
-4. publishable payload in `sim.outbox`.
+## Storage and retention
 
-Any error rolls back all four.
-
-## Data placement and current persistence boundaries
-
-| Data | Primary representation |
+| Data | Store and recovery notes |
 | --- | --- |
-| Worlds, branches/projections, actors, entities, runs, commands, and events | PostgreSQL in durable mode; memory in reference mode |
-| Snapshot payloads | Deterministic gzip files plus PostgreSQL artifact/snapshot metadata |
-| Persona schema, blueprint versions, and compiled profiles | PostgreSQL; deterministically rebuilt in reference mode |
-| Mind projections and cognition evidence | RLS-scoped PostgreSQL records; `MindStore` hot cache in process |
-| Large persona pools | Parquet queried with DuckDB plus PostgreSQL catalog metadata |
-| Materialized population and persistent/active/compressed state | PostgreSQL plus append-only versioned transitions |
-| Scenario definitions | Immutable filesystem history plus PostgreSQL versions in durable mode |
-| Experiment jobs, checkpoints, normalized trial outputs/events, and cohort reports | Immutable filesystem history plus PostgreSQL artifact/job catalogs in durable mode |
-| Semantic lore | In-process lexical index or Qdrant adapter |
-| Calibration proposals, reviews, and promotions | Immutable JSON artifacts reloaded at boot |
-| Human telemetry settings and captures | PostgreSQL in durable mode; memory in reference mode |
-| Queue coordination | Redis/RQ |
-| React assets | Built into `static/v2`, served at `/static/v2/*`, and included in the image |
+| Accounts, roles, sessions, audit | PostgreSQL; back up with canonical state |
+| Worlds, branches, projections, actors, entities, runs, ledgers | PostgreSQL; replay hashes verify restoration |
+| Characters, hosted games, members, sessions, DM notes | PostgreSQL; private fields remain server-side |
+| Persona versions and compiled profiles | PostgreSQL; source schema remains in package YAML |
+| Cognition and runtime assignments | PostgreSQL with actor-scoped RLS |
+| Population catalog/lifecycle | PostgreSQL; large pool bodies are Parquet artifacts |
+| Scenario/job/trial/report catalogs | PostgreSQL plus immutable artifacts |
+| Snapshots and calibration records | artifact volume, referenced by URI and hash |
+| Queue delivery | Redis; immutable job state remains outside queue transport |
+| Semantic retrieval | Qdrant; source lore should remain reproducible |
+| React bundle | immutable image/package asset under `static/v2` |
 
-`PostgresControlPlane.hydrate` reconstructs every stored world, branch/projection, explicit
-world/actor authority set, controlled entity, run, snapshot manifest, command replay record and
-basis, and visible event envelope after the authorized bootstrap sync. Persona versions/profiles,
-cognition evidence, population pool catalogs and full persistent/active/compressed lifecycle
-state plus transition history, and scenario definitions are also reloaded through their domain
-repositories. Experiment history reconstructs scenario versions, jobs/checkpoints, normalized
-trial outputs with event envelopes, and reports from artifacts; PostgreSQL supplies the durable
-catalog when configured. Calibration history is reconstructed from its immutable artifact set.
+Telemetry is disabled until opt-in. Captures record a consent version, redact sensitive keys,
+and support export, selective delete, and retention purge. This repository does not transmit
+telemetry to a third party.
 
-Terminal experiment jobs and their report/trial inspection views remain available after API
-restart. A job last recorded as `RUNNING` is restored as `FAILED` rather than silently repeated,
-because the new process cannot prove whether an external side effect completed. Its registered
-runner is reattached and the operator may use the bounded retry endpoint. Redis/RQ still provides
-queued execution and coordination; queue transport does not replace immutable output history.
+## Backup and restore
 
-Durable replay hydrates `ReplayRecord` values from `sim.command_log`, selects the newest valid
-snapshot boundary for each branch, and verifies subsequent records against their committed state
-hashes. Snapshot uniqueness includes the command boundary, so an unchanged projection can be
-captured before and after a no-delta command without collapsing audit history.
+Back up PostgreSQL and the artifact volume at the same consistency boundary. A database row may
+refer to a snapshot, population pool, report, or calibration artifact by URI and content hash.
+Redis can normally be rebuilt from durable job state; Qdrant can be rebuilt only if source lore
+and embedding configuration are preserved.
 
-Telemetry settings and captures are PostgreSQL-backed in durable mode. Export/import, selective
-delete, and retention purge are explicit API operations; none sends data to an external sink.
+Before a schema or promotion change:
 
-Population definitions store an immutable world/branch target. Every materialize, activate, and
-deactivate call is checked against that target, and the lifecycle repository restores monotonic
-world steps plus append-only transitions. A pool cannot be moved to another active UI world.
+1. stop application writes;
+2. dump PostgreSQL;
+3. archive the artifact volume;
+4. record the image tag and migration checksums;
+5. restore to an isolated project;
+6. verify `/readyz`, authentication, replay hashes, one report, and one character/game workflow.
 
-Secret entity state remains separate from public projections. Controllers and actors with the
-same-world `entity.read.secret` capability may receive authorized secret fields; public entity
-lists and grants from unrelated worlds do not expose them. Relationship projections have a
-separate immutable causal-change history tied by foreign key to the visible source event in the
-same world branch.
+## Network exposure
 
-## Backups and recovery
+Compose publishes API `8000`, PostgreSQL `5432`, Redis `6379`, and Qdrant `6333/6334` on
+`127.0.0.1` by default. Do not change bind addresses to `0.0.0.0` without adding a reverse proxy,
+TLS, firewall policy, Redis/PostgreSQL network controls, protected Qdrant, secure cookie handling,
+and a reviewed origin policy. See [Network and deployment](NETWORK_AND_DEPLOYMENT.md).
 
-For a durable deployment, back up PostgreSQL and the artifact volume together. A database row may
-reference a snapshot or report artifact by URI and content hash, so restoring only one side is
-incomplete. Parquet pools can be regenerated from their schema/generator versions and seed, but
-preserve any pool used as evidence for a report.
+## Production image
 
-Before changing migrations or promotion logic:
+The Dockerfile uses a Node build stage and a Python runtime stage. The final image:
 
-1. stop writes;
-2. capture a PostgreSQL backup;
-3. copy the artifact volume;
-4. record the application image/tag and migration checksums;
-5. restore into an isolated environment and verify `/readyz` plus replay hashes.
+- runs as the unprivileged `tabletop` user;
+- uses a read-only root filesystem in Compose;
+- mounts only the artifact volume for writes;
+- includes the current persona YAML, migrations, and frontend assets;
+- exposes only the application port inside its network;
+- uses `/healthz` for container health.
 
-The v1 code can be inspected or run from `v1-behavioral-reference-2026-08-17`, pinned to
-`93e02846e4d73097afc65f2dfd684a8a7e49966b`; verification commands and the release-bundle
-checksum are in the [Phase 0 behavioral-reference manifest](V1_BEHAVIORAL_REFERENCE.md). There
-is no v1 database restoration path inside v2.
+Build and inspect:
+
+```powershell
+docker compose --env-file .env -f infra/docker-compose.yml build app
+uv build --wheel
+uv run python scripts/verify_wheel.py dist/tabletop_dm-2.0.0-py3-none-any.whl
+```

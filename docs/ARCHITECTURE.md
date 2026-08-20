@@ -2,219 +2,191 @@
 
 ## System shape
 
-The kernel owns identity, authority, state transactions, events, visibility, snapshots,
-branching, and replay. Domain packages register commands; they do not bypass those facilities.
+The system separates human identity, simulation authority, canonical state, subjective minds,
+large populations, and experimental evidence.
 
-```text
-React / CLI / agent runtime
-          |
-          v
-   typed proposal API
-          |
-          v
- capability + control check -----> reject without mutation
-          |
-          v
- deterministic domain handler
-          |
-          v
- atomic branch projection + append-only command/event + outbox
-          |
-          +------> subjective observation/belief/memory
-          +------> verifier facts and metrics
-          +------> optional narration
+```mermaid
+flowchart TD
+    UI[React workspaces] --> AUTH[Identity and session boundary]
+    CLI[CLI / automation] --> API[Flask API]
+    AUTH --> API
+    API --> KERNEL[Simulation application and command bus]
+    KERNEL --> DOMAIN[Tabletop command registry]
+    KERNEL --> STATE[Branch projection]
+    KERNEL --> LEDGER[Command / event / outbox ledger]
+    LEDGER --> MIND[Cognition pipeline]
+    STATE --> SNAP[Snapshots and trial branches]
+    SNAP --> LAB[Scenario and evaluation lab]
+    PERSONA[Persona fabric] --> MIND
+    PERSONA --> POP[Population engine]
+    POP --> LAB
+    LAB --> METRICS[Verifier facts, metrics, reports, calibration]
 ```
 
-`world_id`, `run_id`, and `interaction_id` are the neutral contract. A tabletop campaign,
-session, and encounter are domain aliases rather than kernel primitives.
+`world_id`, `run_id`, and `interaction_id` are kernel terms. Campaigns, sessions, and encounters
+are tabletop interpretations rather than core primitives.
 
-## Actors and authority
+## Identity, roles, actors, and capabilities
 
-An actor identity is `HUMAN`, `AGENT`, or `SYSTEM`. Its roles, capabilities, and controlled
-entities are stored as explicit `(world_id, actor_id)` authority records; grants in one world
-never leak into another. The current domain uses capabilities such as `world.read`,
-`entity.control`, `entity.read.secret`, `action.propose`, `action.commit`, `run.branch`, and
-`canonical.promote`. Entity collection projections are public-only. A controller or actor with
-world-scoped `entity.read.secret` may cross the separate secret-state visibility boundary; a
-grant in another world is irrelevant.
+Human access has two role scopes:
 
-Command definitions declare:
+- `ADMIN` is a global platform role.
+- `DM` and `PLAYER` are grants tied to a specific world.
 
-- a stable command type and version;
-- a typed request and optional typed result;
-- required capabilities;
-- canonical and/or trial branch eligibility;
-- a pure handler returning `CommandResult` and `StateDelta` values.
+Every account has an actor ID. The identity repository translates role changes into explicit
+world/actor authority rows used by the simulation kernel and PostgreSQL RLS. A grant in one
+world never authorizes another world.
 
-Authorization is deny-by-default. Commands requiring `entity.control` also verify that the actor
-controls the proposed embodied entity. PostgreSQL repeats world-scoped actor checks through
-forced RLS on durable state.
+Actors are `HUMAN`, `AGENT`, or `SYSTEM`. Their world-scoped roles, capabilities, and controlled
+entities authorize operations such as:
+
+- `world.read` and `world.read.all`;
+- `entity.control` and `entity.read.secret`;
+- `action.propose` and `action.commit`;
+- `run.branch`;
+- `mind.read.all` and `mind.write.all`;
+- `metric.evaluate`;
+- `canonical.promote`.
+
+The API checks product roles; the command bus checks simulation capabilities and controlled
+entities; PostgreSQL repeats protected-state checks with forced RLS.
 
 ## State, commands, and events
 
 `BranchState` contains named projections, a monotonically increasing version, and a stable
 SHA-256 state hash. Supported delta operations are `SET`, `MERGE`, `DELETE`, and `INCREMENT`.
-The in-memory store executes against a copy and publishes it only after the handler and deltas
-succeed. The PostgreSQL repository locks the projection row and writes the projection, command,
-event, and outbox record in one transaction.
 
-`EventEnvelopeV2` records world, branch, run, interaction, actor, embodied entity, visibility,
-observation scope, parent/correlation/causation IDs, domain tags, idempotency, seed, decision
-trace, persona/policy/prompt/model versions, and creation time. This is enough to explain and
-replay a decision without treating a model response as authoritative state.
+Command definitions declare a stable name/version, typed input, typed output, required
+capabilities, eligible branch kinds, and a deterministic handler. The in-memory adapter applies
+deltas to a copy and publishes only after success. The PostgreSQL adapter locks the branch
+projection and commits the projection, command, event, and outbox in one transaction.
 
-## Canonical state and trial branches
+`EventEnvelopeV2` carries world/branch/run/interaction lineage, actor and embodied entity,
+visibility and observation scope, correlation/causation, idempotency, seed, decision trace,
+persona/policy/prompt/model versions, tags, payload, and creation time.
+
+## Canonical state, snapshots, trials, and replay
 
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
-projection state, sequence, contract version, and content hashes. A trial branch loads that
-snapshot and preserves logical entity IDs under a new branch-scoped primary key.
+projection, command boundary, contract version, and content hashes. Trial branches load an
+immutable snapshot and preserve logical entity IDs beneath a different branch-scoped key.
 
-Trials may execute commands and produce their own ledgers, verifier facts, and metrics. They do
-not write the canonical projection. Promotion is a separate canonical command requiring:
+Trials write only their own projection and ledger. Canonical promotion is a separate reviewed
+command requiring:
 
-- `canonical.promote` and `action.commit` capabilities;
-- a source trial branch;
-- explicit deltas and a human review note;
+- a real source trial in the same world;
+- `canonical.promote` and `action.commit`;
+- explicit consequence deltas and a human review note;
 - the expected current canonical state hash.
 
-The state-hash precondition prevents promotion after the reviewed canonical basis has changed.
+Replay starts at the latest valid branch snapshot and reapplies subsequent durable command
+records. Each resulting hash must equal the committed hash.
 
 ## Persona fabric
 
 The schema registry loads 80 dimensions from four YAML packs:
 
 - `core`: cognition, personality, values, communication, social style, risk, and habits;
-- `world`: species, culture, religion, class, education, occupation, and factions;
-- `tabletop`: player style, rules familiarity, combat/exploration/roleplay preferences, and
-  metagaming tendencies;
-- `accessibility`: reading, visual, motor, cognitive, and interface needs.
+- `world`: species, culture, religion, class, education, occupation, and faction context;
+- `tabletop`: experience, rules familiarity, play preferences, optimization, and metagaming;
+- `accessibility`: reading, visual, motor, cognitive-load, and interface preferences.
 
-Generation is dependency ordered and seed based. Fixed assignments and weighted distributions
-are validated against allowed values and declarative conditional constraints. Each field keeps
-its source, pack, schema version, generator version, seed, distribution, and applicable rules.
-
-The compiler turns a blueprint into policy weights, an identity summary, initial goals, beliefs,
-relationships, routines, capability modifiers, retrieval filters, and deep traits. Prompt
-assembly includes only requested relevant traits and enforces token and character budgets.
+Dependencies and constraints form a graph. Generation uses a declared schema version, generator
+version, ruleset version, seed, fixed dimensions, and optional weighted distributions.
+Provenance records the source of each field. The compiler turns deep traits into policy weights,
+starting beliefs/goals/relationships, routines, capability modifiers, retrieval filters, and a
+bounded prompt summary.
 
 ## Subjective cognition
 
-Canonical truth and cognition are deliberately separate:
+Canonical truth, observation, belief, memory, relationship, and narration are separate records.
+The pure subjective pipeline is:
 
 ```text
-event -> perception filter -> observation -> belief revision -> memory
-                                      \----> relationship change
+visible event -> perceived observation -> belief revision -> memory
+             -> goal/need activation -> candidate actions
+             -> reflex / utility / bounded plan / typed deliberation
+             -> CommandProposal
 ```
 
-Perception accounts for event visibility, actor identity, acuity, payload allow/deny fields, and
-confidence bias. Beliefs retain subject/predicate/value, confidence, evidence, and contradiction
-history. Memories retain summaries, emotional weight, importance, visibility, and recall
-strength. Relationships are vectors rather than one tension score. Every relationship update is
-an immutable causal record containing its source event, actor, world/branch, before/after
-vectors, requested/applied deltas, and policy version. The source event must be visible and in
-the same world branch; causal retries are idempotent and cannot rewrite history.
-
-The layered decision engine evaluates, in order:
-
-1. deterministic reflex rules;
-2. seeded utility scoring;
-3. bounded GOAP planning;
-4. typed deliberation for ambiguous or novel cases when enabled.
-
-Every tier returns a `DecisionTrace` and a typed proposal. Even an LLM-selected action must be in
-the supplied action set and still crosses the command bus. If no provider is configured, the
-deliberation gateway falls back to the deterministic utility result.
+Reflex, utility, and bounded GOAP tiers are deterministic. Model deliberation is optional,
+receives an allowed action set, and must return a typed proposal; provider failure falls back to
+policy. Runtime assignments cap which tier may act. Relationship changes require a visible
+same-branch source event and preserve immutable causal history.
 
 ## Population engine
 
-Population work has three levels:
+Population operates at three levels:
 
-| Level | Representation | Intended use |
+| Level | Representation | Use |
 | --- | --- | --- |
-| Statistical | Parquet profiles queried by DuckDB | large pools, distributions, filters, cohorts |
-| Materialized | persistent person profile and compressed state | households, work, beliefs, finances, scheduled background updates |
-| Active | materialized person plus attention/scene state | detailed perception, decisions, planning, and optional deliberation |
+| Statistical | Parquet distributions queried with DuckDB | millions of potential people and cohort analysis |
+| Materialized | persistent person and compressed state | households, occupation, finances, beliefs, and scheduled background updates |
+| Active | full in-scene cognition state | perception, planning, relationships, and optional model calls |
 
-Generation streams batches rather than retaining the full pool in memory. Cohorts support fixed
-filters, deterministic stratified cells, weighted sampling, explicit feasibility diagnostics,
-and distribution-tolerance reports. Activation and deactivation are versioned transitions that
-preserve persistent state. Pool targets and every lifecycle request carry the same immutable
-`world_id`/`branch_id`; a pool cannot be activated into whichever world happens to be selected
-later. PostgreSQL restores materialized, active, and compressed members plus their monotonic
-transition history.
+Pools are immutably bound to a world and branch. Generation streams bounded batches. Filtering,
+weighted sampling, stratified sampling, and aggregates execute in DuckDB. Lifecycle transitions
+preserve persistent state and monotonic world steps.
 
 ## Scenario and evaluation lab
 
-A scenario definition is immutable by `(scenario_id, version)` and can declare a base snapshot,
-cohort, intervention, allowed actions, horizon, stop conditions, model assignment, seeds,
-verifier versions, and metric contract. Each selected persona/seed combination becomes an
-isolated trial with its own branch and run identity.
+A scenario version specifies a base snapshot, world setup, cohort, intervention, allowed actions,
+horizon, stop conditions, runtime/model assignment, seeds, verifiers, and metric contracts.
 
-Trial runners emit normalized output. Verifiers emit facts with evidence event IDs and explicit
-versions; metric evaluators reduce those facts to numeric results. Aggregation reports cohort
-statistics and comparisons. Jobs expose queue/running/checkpoint/terminal state and bounded
-retry behavior. The reference runner composes any registered definition through the same typed
-trial-branch executor; onboarding is one registered definition rather than a special persistence
-model.
+The lab creates an isolated branch per trial, executes typed proposals, records the trial ledger,
+normalizes verifier facts, reduces metrics, and builds a cohort report. Jobs checkpoint per trial,
+support cancel/retry, and restore completed inspection history after restart. A process interrupted
+while `RUNNING` restores as an explicit retryable failure rather than assuming side effects did or
+did not complete.
 
-Calibration is a review boundary. It compares metrics against separately versioned human
-evidence and proposes policy adjustments. Review and promotion are explicit immutable artifacts;
-the engine never rewrites the supplied evidence. Promotion places the approved immutable version
-in the registry as a deployable candidate; it does not rewrite cognition mappings or
-automatically reassign a live runtime.
+Calibration compares a synthetic report with versioned evidence. Review approves or rejects the
+proposal. Promotion registers an approved immutable version; selecting a runtime version remains
+a separate operator decision.
 
-## Durability and restart boundary
+## Storage map
 
-The durable composition root reconstructs control-plane worlds, branches/projections,
-world-scoped actor grants, entities, runs, snapshot manifests, command replay records, replay
-bases/offsets, and event envelopes from PostgreSQL. Each clean-v2 branch persists a pre-command
-snapshot basis before its first durable command, and later snapshots may preserve the same state
-hash at distinct command boundaries. Domain repositories
-restore persona schema/version/profile records, cognition evidence, population catalogs and
-materialized/active/compressed membership plus immutable transition history, scenario
-definitions, and telemetry settings/captures. The experiment history store and PostgreSQL
-repository restore registered scenario versions, job lifecycle/checkpoints, normalized
-`TrialOutput` records (including event envelopes), and cohort reports. Calibration proposal,
-review, and promotion history reloads from immutable artifacts.
-
-Terminal jobs and their report/trial inspection views survive API restart. A job whose last
-durable status was `RUNNING` is restored as failed because the new process cannot prove whether
-an external side effect completed; the explicit retry endpoint reattaches the registered runner
-and starts a bounded new attempt. Deterministic branch replay, population lifecycle continuation,
-experiment inspection, and their audit histories do not depend on the process that originally
-executed them. Local-reference mode retains filesystem-backed experiment and calibration history
-but intentionally does not make canonical worlds, cognition, or population lifecycle projections
-durable without PostgreSQL.
+| Store | Data |
+| --- | --- |
+| PostgreSQL | identity, roles, worlds, branches, projections, actors, entities, sessions, characters, games, minds, lifecycle state, experiment catalogs, telemetry, and ledgers |
+| Redis/RQ | experiment queues, job delivery, retry coordination |
+| Qdrant | semantic lore and retrieval collections |
+| Parquet + DuckDB | large persona pools, cohort queries, population analysis |
+| Artifact volume | snapshots, trial outputs, reports, calibration records, replay bundles |
+| Static bundle | compiled React application under `static/v2` |
 
 ## Package map
 
 ```text
-kernel/              neutral state and authority
-domains/tabletop/    first domain command pack
-persona/             schemas, generation, validation, compilation, versions
-cognition/           subjective state and layered decisions
-population/          pools, cohorts, and activation lifecycle
-experiments/         scenarios, trials, verification, reports, calibration
-kernel/api/          Flask HTTP composition root
-frontend/            React operator application
-infra/               baseline schema, migration runner, and Compose stack
-scripts/             lifecycle and test entry points
-tests/               unit, contract, integration, and browser journeys
+TableTop_DM/
+├── identity/                 accounts, sessions, roles, audit
+├── kernel/                   contracts, command bus, state, branches, API
+├── domains/tabletop/         tabletop commands and user portal
+├── persona/                  schema, generation, validation, compilation
+├── cognition/                subjective state and layered decisions
+├── population/               cohorts, Parquet/DuckDB, lifecycle
+├── experiments/              scenarios, trials, metrics, reports, calibration
+├── frontend/                 React source
+├── static/v2/                production frontend bundle
+├── infra/                    migrations and Compose
+├── scripts/                  lifecycle, tests, readiness, wheel verification
+└── tests/                    unit, contract, integration, browser suites
 ```
+
+The broader workspace concept used to guide the role-specific surfaces is available as the
+[multi-surface interface concept](../frontend/design/simulation-kernel-multi-surface-concept.png).
 
 ## Non-negotiable invariants
 
 1. Models never own world truth.
-2. Persona identity is independent of the runtime executing it.
-3. Canonical truth, observation, belief, memory, and narration are different objects.
+2. Human identity, simulation actor, persona, body, mind, and runtime remain distinct.
+3. Canonical truth, observation, belief, memory, relationship, and narration remain distinct.
 4. Persona profiles and scenario definitions are versioned and reproducible.
 5. Every stochastic decision records its seed.
-6. Model-assisted decisions record prompt contract, model, policy, persona, and trace versions.
-7. All world mutation passes through typed command validation and authorization.
-8. Trial branches cannot mutate canonical state.
-9. Verifiers emit normalized facts with evidence, not persuasive prose.
+6. Every model decision records model, prompt contract, policy, runtime, and trace provenance.
+7. Canonical mutations pass through typed validation and authorization.
+8. Experiment branches cannot mutate canonical state.
+9. Verifiers emit normalized facts with evidence.
 10. Synthetic results are hypotheses, not human ground truth.
-
-The frozen v1 oracle used to establish the clean-break baseline is independently pinned in the
-[Phase 0 behavioral-reference manifest](V1_BEHAVIORAL_REFERENCE.md); it is not part of this
-runtime architecture.
+11. World-scoped roles and capabilities never leak across worlds.
+12. Secrets, credentials, private notes, and secret entity state never enter public projections or
+    client-visible logs.

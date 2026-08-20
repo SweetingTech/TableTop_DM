@@ -97,11 +97,11 @@ def test_actor_api_rejects_unledgered_control_claims(monkeypatch, tmp_path):
 
 def test_v2_onboarding_endpoint_runs_seeded_cohort():
     response = app.test_client().post(
-        "/api/v2/experiments/onboarding/run",
+        "/api/v2/scenarios/player-onboarding/run",
         json={"cohort_size": 2, "seeds": [101], "include_trials": 2},
     )
-    assert response.status_code == 200
-    body = response.get_json()
+    assert response.status_code == 201
+    body = response.get_json()["report"]
     assert body["trial_count"] == 2
     assert body["canonical_world_unchanged"] is True
 
@@ -358,7 +358,7 @@ def test_v2_telemetry_is_opt_in_redacted_exportable_and_deletable():
             json={
                 "event_type": "ui.action",
                 "payload": {"screen": "scenario", "password": "never-store"},
-                "consent_version": "test-consent-v1",
+                "consent_version": "test-consent-2026-01",
             },
         )
         exported = client.get("/api/v2/telemetry/export").get_json()
