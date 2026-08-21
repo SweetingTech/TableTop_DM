@@ -182,12 +182,20 @@ See [Testing](docs/TESTING.md) for the complete matrix.
 - [Repository guidance for coding agents](AGENTS.md)
 - [Changelog](CHANGELOG.md)
 
-## Independence and evidence boundary
+## Conceptual influence, not a dependency
 
-TableTop DM is independently implemented. It does not import, embed, or depend on MatrAIx. It
-adopts general methods such as constrained persona generation, reproducible cohort sampling,
-task-specific verification, and population aggregation, then integrates them with its own
-persistent deterministic world model.
+Some design ideas in TableTop DM were inspired by the publicly documented evaluation methods in
+[MatrAIx](https://github.com/MatrAIx-ai/MatrAIx-Persona-8B), particularly constrained persona
+definitions, seeded cohort sampling, reproducible trials, task-specific verification, normalized
+outputs, and population-level comparison. This acknowledgment concerns ideas and methodology—not
+software integration.
+
+TableTop DM does **not** contain or require MatrAIx source code, packages, runtime services, models,
+datasets, schemas, Harbor stack, frontend, deployment artifacts, or Git submodules. It has no
+MatrAIx compatibility or update relationship. The implementations in this repository were built
+independently around TableTop DM's own deterministic persistent-world kernel, authorization model,
+event ledger, spatial perception, cognition, tabletop domain, and scenario lab. You do not need to
+download, install, or run MatrAIx to build or use TableTop DM.
 
 Synthetic people and simulated player cohorts are tools for exploration, stress testing, and
 hypothesis generation. They are not substitutes for evidence from real people.

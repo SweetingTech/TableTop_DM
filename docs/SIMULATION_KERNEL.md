@@ -17,12 +17,26 @@ Tabletop is the first domain pack, not the definition of the kernel. Persona, co
 population, and experiment packages do not own canonical tabletop state. Every domain action
 enters the same validated command boundary.
 
-## Independence boundary
+## Conceptual provenance and independence boundary
 
-This repository contains no MatrAIx source, runtime import, submodule, service, or deployment
-dependency. It independently implements broadly useful methods—constrained personas,
-reproducible sampling, task-specific verification, and aggregate comparison—inside a persistent
-world architecture.
+[MatrAIx](https://github.com/MatrAIx-ai/MatrAIx-Persona-8B) is credited as a source of conceptual
+inspiration for several evaluation methods: constrained persona definitions, seeded and stratified
+sampling, reproducible trials, task-specific verifiers, normalized trial output, and cohort-level
+aggregation. TableTop DM reimplements the useful general ideas in its own architecture; it does not
+integrate the MatrAIx application.
+
+The boundary is explicit:
+
+- no MatrAIx source code or runtime imports;
+- no MatrAIx package, Git submodule, service, model, dataset, or schema dependency;
+- no Harbor stack, MatrAIx frontend, or MatrAIx deployment component;
+- no requirement to install or run MatrAIx;
+- no claim that synthetic cohorts replace evidence from real people.
+
+MatrAIx is primarily simulated-user evaluation infrastructure. TableTop DM is a persistent,
+deterministic world kernel with tabletop, cognition, population, spatial-perception, and isolated
+scenario domains. The attribution explains where some evaluation concepts came from without
+implying shared code, shared runtime, or repository coupling.
 
 ## Required object separation
 
