@@ -61,7 +61,13 @@ def domain():
         kind=ActorKind.AGENT,
         display_name="hero",
         capabilities=frozenset(
-            {"action.propose", "entity.control", "faction.manage", "divine.invoke"}
+            {
+                "action.propose",
+                "entity.act",
+                "entity.control",
+                "faction.manage",
+                "divine.invoke",
+            }
         ),
         controlled_entity_ids=frozenset({hero_id}),
     )
@@ -148,8 +154,11 @@ def test_trade_conserves_gold_and_inventory(domain):
 def test_every_tabletop_command_exposes_a_typed_contract(domain):
     contracts = domain["bus"].contracts()
     assert {contract["command_type"] for contract in contracts} == {
+        "tabletop.battlefield.issue_squad_order",
+        "tabletop.battlefield.set_control_mode",
         "tabletop.onboarding.act",
         "tabletop.console.submit",
+        "tabletop.dialogue.speak",
         "tabletop.entity.spawn",
         "tabletop.spatial.move",
         "tabletop.combat.attack",

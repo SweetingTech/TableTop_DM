@@ -58,9 +58,10 @@ def advance(proposal: CommandProposal, state: BranchState) -> CommandResult:
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.quest.advance",
-        required_capabilities=frozenset({"action.propose", "entity.control"}),
+        required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=advance,
         request_model=QuestProgressRequest,
         result_model=QuestProgressResult,
+        requires_controlled_entity=True,
     )

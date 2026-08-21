@@ -19,6 +19,7 @@ ADMIN_CAPABILITIES = frozenset(
         "action.commit",
         "entity.create",
         "entity.control",
+        "entity.act",
         "entity.read.secret",
         "faction.manage",
         "divine.invoke",
@@ -37,6 +38,7 @@ DM_CAPABILITIES = frozenset(
         "action.commit",
         "entity.create",
         "entity.control",
+        "entity.act",
         "entity.read.secret",
         "faction.manage",
         "divine.invoke",
@@ -47,7 +49,7 @@ DM_CAPABILITIES = frozenset(
 )
 # A Player may speak and act at the table, but never controls an entity they were not
 # explicitly granted, and never reads hidden state or branches a run.
-PLAYER_CAPABILITIES = frozenset({"world.read", "action.propose", "action.commit"})
+PLAYER_CAPABILITIES = frozenset({"world.read", "action.propose", "action.commit", "entity.act"})
 MANAGED_CAPABILITIES = ADMIN_CAPABILITIES | DM_CAPABILITIES | PLAYER_CAPABILITIES
 
 

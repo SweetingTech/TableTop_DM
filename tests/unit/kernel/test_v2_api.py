@@ -204,7 +204,7 @@ def test_v2_console_event_can_become_subjective_memory():
         command = client.post(
             "/api/v2/commands",
             json={
-                "command_type": "tabletop.console.submit",
+                "command_type": "tabletop.dialogue.speak",
                 "world_id": bootstrap["world_id"],
                 "branch_id": bootstrap["branch_id"],
                 "run_id": bootstrap["run_id"],
@@ -212,6 +212,8 @@ def test_v2_console_event_can_become_subjective_memory():
                 "embodied_entity_id": bootstrap["hero_id"],
                 "parameters": {
                     "text": "The bell rang twice.",
+                    "volume": "NORMAL",
+                    "language": "common",
                     "claims": [
                         {
                             "subject_type": "location",
@@ -242,16 +244,19 @@ def test_v2_console_event_can_become_subjective_memory():
                 "importance": 0.5,
             },
         )
+        first_mind = client.get(f"/api/v2/entities/{bootstrap['hero_id']}/mind").get_json()
+        second_mind = client.get(f"/api/v2/entities/{observer_entity['entity_id']}/mind").get_json()
     assert command.status_code == 200
-    assert event["observed_by"] == []
-    assert observed.status_code == 201
+    assert bootstrap["actor_id"] in event["observed_by"]
+    assert observed.status_code == 200
+    assert observed.get_json()["already_projected"] is True
     assert observed.get_json()["memory"]["summary"]
-    assert second_observation.status_code == 201
-    first_belief = observed.get_json()["belief_revision"]["active_beliefs"][0]
-    second_belief = second_observation.get_json()["belief_revision"]["active_beliefs"][0]
+    assert second_observation.status_code == 200
+    first_belief = first_mind["mind_state"]["beliefs"][0]
+    second_belief = second_mind["mind_state"]["beliefs"][0]
     assert first_belief["value"] == second_belief["value"] == 2
     assert first_belief["confidence"] == 1
-    assert second_belief["confidence"] == 0.4
+    assert 0 < second_belief["confidence"] < first_belief["confidence"]
 
 
 def test_v2_population_aliases_support_sampling_and_lazy_activation():

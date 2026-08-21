@@ -14,6 +14,7 @@ from kernel.branching import BranchManager, promotion_definition
 from kernel.command_bus import CommandBus, CommandReceipt
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
 from kernel.errors import AuthorizationDenied, BranchIsolationError
+from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayEngine, ReplayRecord
 from kernel.snapshots import SnapshotManifest, SnapshotStore
 from kernel.state import BranchState, InMemoryStateStore
@@ -80,6 +81,7 @@ class SimulationApplication:
         self.world_authorities: dict[tuple[uuid.UUID, uuid.UUID], Actor] = {}
         self.entities: dict[tuple[uuid.UUID, uuid.UUID], EntityRecord] = {}
         self.events: dict[uuid.UUID, Any] = {}
+        self.perceptions: dict[tuple[uuid.UUID, uuid.UUID], PerceptionGrant] = {}
         self.command_history: dict[uuid.UUID, list[ReplayRecord]] = {}
         self.replay_bases: dict[uuid.UUID, BranchState] = {}
         self.replay_offsets: dict[uuid.UUID, int] = {}
@@ -90,6 +92,7 @@ class SimulationApplication:
             Callable[[uuid.UUID, uuid.UUID], tuple[int, dict[str, Any]]] | None
         ) = None
         self.snapshot_persister: Callable[[SnapshotManifest, int], None] | None = None
+        self.subjective_projector: Callable[[CommandReceipt], None] | None = None
 
     def configure_durable(
         self,
@@ -100,6 +103,9 @@ class SimulationApplication:
         self.durable_repository = repository
         self.projection_loader = projection_loader
         self.snapshot_persister = snapshot_persister
+
+    def configure_subjective_projector(self, projector: Callable[[CommandReceipt], None]) -> None:
+        self.subjective_projector = projector
 
     def create_world(
         self,
@@ -122,6 +128,10 @@ class SimulationApplication:
             {
                 "tabletop.entities": {},
                 "tabletop.obstacles": {},
+                "tabletop.spatial.positions": {},
+                "tabletop.spatial.zones": {},
+                "tabletop.spatial.portals": {},
+                "tabletop.spatial.occluders": {},
                 "tabletop.quests": {},
                 "tabletop.reputation": {},
             },
@@ -279,6 +289,26 @@ class SimulationApplication:
                 "entity_type": entity_type,
                 **public_state,
             }
+            branch.projections.setdefault("tabletop.spatial.positions", {})[
+                str(entity.entity_id)
+            ] = {
+                "entity_id": str(entity.entity_id),
+                "zone_id": public_state.get("zone_id", "world"),
+                "x": int(public_state.get("x", 0)),
+                "y": int(public_state.get("y", 0)),
+                "z": int(public_state.get("z", 0)),
+                "facing": public_state.get("facing"),
+            }
+            branch.projections.setdefault("tabletop.sensory_profiles", {})[
+                str(entity.entity_id)
+            ] = {
+                "controller_actor_id": (str(controller_actor_id) if controller_actor_id else None),
+                "hearing_acuity": float(public_state.get("hearing_acuity", 1.0)),
+                "sight_acuity": float(public_state.get("sight_acuity", 1.0)),
+                "deafened": bool(public_state.get("deafened", False)),
+                "blinded": bool(public_state.get("blinded", False)),
+                "invisible": bool(public_state.get("invisible", False)),
+            }
         return entity
 
     def submit(self, proposal: CommandProposal) -> CommandReceipt:
@@ -356,7 +386,35 @@ class SimulationApplication:
                     expected_state_hash=receipt.state_hash,
                 )
             )
+        for grant in receipt.perceptions:
+            self.perceptions[(grant.event_id, grant.observer_entity_id)] = grant
+        if self.subjective_projector is not None:
+            self.subjective_projector(receipt)
         return receipt
+
+    def perception_grant(
+        self, event_id: uuid.UUID, observer_entity_id: uuid.UUID
+    ) -> PerceptionGrant | None:
+        return self.perceptions.get((event_id, observer_entity_id))
+
+    def perceptions_for_entity(
+        self,
+        world_id: uuid.UUID,
+        branch_id: uuid.UUID,
+        observer_entity_id: uuid.UUID,
+    ) -> tuple[PerceptionGrant, ...]:
+        return tuple(
+            sorted(
+                (
+                    grant
+                    for grant in self.perceptions.values()
+                    if grant.world_id == world_id
+                    and grant.branch_id == branch_id
+                    and grant.observer_entity_id == observer_entity_id
+                ),
+                key=lambda item: str(item.event_id),
+            )
+        )
 
     def create_snapshot(self, world_id: uuid.UUID) -> SnapshotManifest:
         world = self.worlds[world_id]
@@ -468,6 +526,7 @@ class SimulationApplication:
                 "world.read",
                 "world.read.all",
                 "entity.control",
+                "entity.act",
                 "entity.create",
                 "entity.read.secret",
                 "action.propose",

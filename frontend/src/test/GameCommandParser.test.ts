@@ -18,8 +18,8 @@ describe("typed game command parser", () => {
 
   it("keeps natural dialogue typed and rejects malformed mechanics", () => {
     expect(parseCommand("We should parley.", demoGameState)).toEqual({
-      commandType: "tabletop.console.submit",
-      parameters: { text: "We should parley." },
+      commandType: "tabletop.dialogue.speak",
+      parameters: { text: "We should parley.", volume: "NORMAL", language: "common" },
     });
     expect(() => parseCommand("/move 9 0", demoGameState)).toThrow(/-1\.\.1/);
     expect(() => parseCommand("/attack Nobody", demoGameState)).toThrow(/Unknown target/);

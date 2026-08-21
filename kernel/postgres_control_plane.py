@@ -23,6 +23,7 @@ from kernel.contracts import (
 )
 from kernel.database import transaction
 from kernel.errors import BranchIsolationError
+from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayRecord
 from kernel.snapshots import SnapshotManifest
 from kernel.state import BranchState
@@ -447,6 +448,21 @@ class PostgresControlPlane:
                     payload["domain_tags"] = tuple(row["domain_tags"] or ())
                     event = EventEnvelopeV2.model_validate(payload)
                     simulation.events[event.event_id] = event
+
+                cursor.execute(
+                    """
+                    SELECT event_id, world_id, branch_id, observer_entity_id,
+                           controller_actor_id, modalities, outcome, confidence,
+                           allowed_payload_fields, hidden_payload_fields,
+                           payload_overrides, reason_codes, resolver_version,
+                           spatial_context_hash
+                    FROM sim.event_perceptions
+                    ORDER BY event_id, observer_entity_id
+                    """
+                )
+                for row in cursor.fetchall():
+                    grant = PerceptionGrant.model_validate(dict(row))
+                    simulation.perceptions[(grant.event_id, grant.observer_entity_id)] = grant
 
                 cursor.execute(
                     """

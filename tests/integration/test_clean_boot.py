@@ -130,7 +130,7 @@ def test_clean_runtime_boots_with_non_owner_database(integration_stack, tmp_path
         readiness = _get_json(f"{base_url}/readyz")
         assert readiness["storage_mode"] == "postgres"
         assert readiness["checks"]["postgres"] == {
-            "migration": "002_identity_and_tabletop_workspaces.sql",
+            "migration": "003_spatial_epistemics.sql",
             "ok": True,
         }
         with urllib.request.urlopen(f"{base_url}/v2", timeout=3) as response:
@@ -803,12 +803,6 @@ def test_restart_restores_belief_revision_and_relationship_accumulation(
         with connection.cursor() as cursor:
             for event_id, status, created_at, causation_id in (
                 (first_event_id, "OPEN", observed_at, None),
-                (
-                    second_event_id,
-                    "CLOSED",
-                    observed_at + timedelta(seconds=1),
-                    first_event_id,
-                ),
             ):
                 cursor.execute(
                     """
@@ -851,6 +845,24 @@ def test_restart_restores_belief_revision_and_relationship_accumulation(
                         created_at,
                     ),
                 )
+                cursor.execute(
+                    """
+                    INSERT INTO sim.event_perceptions (
+                      event_id, world_id, branch_id, observer_entity_id,
+                      controller_actor_id, modalities, outcome, confidence,
+                      resolver_version, spatial_context_hash
+                    ) VALUES (%s, %s, %s, %s, %s, ARRAY['SIGHT'], 'DIRECT', 1,
+                              'integration-fixture-1', %s)
+                    """,
+                    (
+                        str(event_id),
+                        ids["world_id"],
+                        ids["branch_id"],
+                        ids["hero_id"],
+                        ids["actor_id"],
+                        "0" * 64,
+                    ),
+                )
 
     first_port = _free_port()
     first_url = f"http://127.0.0.1:{first_port}"
@@ -866,19 +878,13 @@ def test_restart_restores_belief_revision_and_relationship_accumulation(
         assert isinstance(restored_runtime, dict)
         assert restored_runtime["runtime_kind"] == "UTILITY"
         assert restored_runtime["runtime_config"] == {"restart_fixture": True}
-        observed = _api_json(
+        projected = _api_json(
             first_url,
-            f"/api/v2/events/{first_event_id}/observe",
+            f"/api/v2/entities/{ids['hero_id']}/mind?actor_id={ids['actor_id']}",
             token=token,
-            method="POST",
-            payload={
-                "observer_actor_id": ids["actor_id"],
-                "observer_entity_id": ids["hero_id"],
-                "importance": 0.8,
-            },
         )
-        assert isinstance(observed, dict)
-        assert observed["belief_revision"]["active_beliefs"][0]["value"] == "OPEN"
+        assert isinstance(projected, dict)
+        assert projected["beliefs"][0]["value"] == "OPEN"
         relationship = _api_json(
             first_url,
             f"/api/v2/entities/{ids['hero_id']}/relationships",
@@ -897,6 +903,68 @@ def test_restart_restores_belief_revision_and_relationship_accumulation(
     finally:
         _stop_runtime(first)
 
+    with psycopg2.connect(integration_stack.admin_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO sim.events (
+                  event_id, event_version, contract_version, world_id,
+                  branch_id, run_id, actor_id, event_type, payload,
+                  observed_by, visible_to, correlation_id, causation_id,
+                  domain_tags, idempotency_key, created_at
+                ) VALUES (
+                  %s, 2, '2.0.0', %s, %s, %s, %s, 'test.gate_status',
+                  %s::jsonb, %s::uuid[], %s::uuid[], %s, %s,
+                  ARRAY['test','cognition'], %s, %s
+                )
+                """,
+                (
+                    str(second_event_id),
+                    ids["world_id"],
+                    ids["branch_id"],
+                    ids["run_id"],
+                    ids["actor_id"],
+                    json.dumps(
+                        {
+                            "claims": [
+                                {
+                                    "subject_type": "ENTITY",
+                                    "subject_id": target_entity_id,
+                                    "predicate": "gate_status",
+                                    "value": "CLOSED",
+                                    "confidence": 1.0,
+                                }
+                            ],
+                            "summary": "The gate is closed.",
+                        }
+                    ),
+                    [ids["actor_id"]],
+                    [ids["actor_id"]],
+                    str(correlation_id),
+                    str(first_event_id),
+                    f"cognition-restart-{second_event_id}",
+                    observed_at + timedelta(seconds=1),
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO sim.event_perceptions (
+                  event_id, world_id, branch_id, observer_entity_id,
+                  controller_actor_id, modalities, outcome, confidence,
+                  resolver_version, spatial_context_hash
+                ) VALUES (%s, %s, %s, %s, %s, ARRAY['SIGHT'], 'DIRECT', 1,
+                          'integration-fixture-1', %s)
+                """,
+                (
+                    str(second_event_id),
+                    ids["world_id"],
+                    ids["branch_id"],
+                    ids["hero_id"],
+                    ids["actor_id"],
+                    "1" * 64,
+                ),
+            )
+
     second_port = _free_port()
     second_url = f"http://127.0.0.1:{second_port}"
     second = _start_runtime(second_port, environment)
@@ -908,25 +976,11 @@ def test_restart_restores_belief_revision_and_relationship_accumulation(
             token=token,
         )
         assert isinstance(restored, dict)
-        assert restored["beliefs"][0]["value"] == "OPEN"
+        active_after_restart = [
+            belief for belief in restored["beliefs"] if belief["contradicted_by_event_id"] is None
+        ]
+        assert active_after_restart[0]["value"] == "CLOSED"
         assert float(restored["relationships"][0]["trust"]) == 12
-
-        revised = _api_json(
-            second_url,
-            f"/api/v2/events/{second_event_id}/observe",
-            token=token,
-            method="POST",
-            payload={
-                "observer_actor_id": ids["actor_id"],
-                "observer_entity_id": ids["hero_id"],
-                "importance": 0.9,
-            },
-        )
-        assert isinstance(revised, dict)
-        assert revised["belief_revision"]["active_beliefs"][0]["value"] == "CLOSED"
-        assert revised["belief_revision"]["superseded_beliefs"][0][
-            "contradicted_by_event_id"
-        ] == str(second_event_id)
 
         accumulated = _api_json(
             second_url,

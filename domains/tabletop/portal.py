@@ -567,6 +567,32 @@ class TabletopPortalService:
             raise PermissionError("only the character owner can delete this character")
         self.repository.delete_character(character_id)
 
+    def bind_character_entity(
+        self,
+        actor: UserAccount,
+        character_id: uuid.UUID,
+        *,
+        world_id: uuid.UUID,
+        entity_id: uuid.UUID,
+    ) -> CharacterRecord:
+        """Bind a portal character to its canonical embodied entity as a DM/Admin action."""
+        if not actor.is_admin:
+            IdentityService.require_world_role(actor, world_id, "DM")
+        character = self._character(character_id)
+        if character.world_id not in {None, world_id}:
+            raise ValueError("character is already assigned to another world")
+        if character.entity_id not in {None, entity_id}:
+            raise ValueError("character is already bound to another embodied entity")
+        return self.repository.save_character(
+            character.model_copy(
+                update={
+                    "world_id": world_id,
+                    "entity_id": entity_id,
+                    "updated_at": datetime.now().astimezone(),
+                }
+            )
+        )
+
     def list_games(self, actor: UserAccount) -> tuple[HostedGame, ...]:
         if not actor.is_admin and not actor.has_player_role and not actor.has_dm_role:
             raise PermissionError("a Player or Dungeon Master role is required")

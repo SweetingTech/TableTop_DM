@@ -123,7 +123,7 @@ class OnboardingExperiment:
             kind=ActorKind.AGENT,
             display_name=f"Simulated player {str(persona.persona_id)[:8]}",
             roles=frozenset({"TEST_PERSONA", "PLAYER"}),
-            capabilities=frozenset({"world.read", "action.propose", "entity.control"}),
+            capabilities=frozenset({"world.read", "action.propose", "entity.act"}),
             controlled_entity_ids=frozenset({entity_id}),
         )
 

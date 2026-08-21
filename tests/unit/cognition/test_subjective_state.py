@@ -10,6 +10,7 @@ from cognition.engine import SubjectiveStatePipeline
 from cognition.memory import MemoryEngine
 from cognition.perception import PerceptionEngine, PerceptionProfile
 from kernel.contracts import EventEnvelopeV2
+from kernel.perception_contracts import PerceptionGrant
 
 pytestmark = pytest.mark.unit
 
@@ -46,10 +47,23 @@ def _event(
     )
 
 
+def _grant(event: EventEnvelopeV2, entity_id: uuid.UUID, confidence: float = 1.0):
+    return PerceptionGrant(
+        event_id=event.event_id,
+        world_id=event.world_id,
+        branch_id=event.branch_id,
+        observer_entity_id=entity_id,
+        modalities=("SIGHT",),
+        outcome="DIRECT",
+        confidence=confidence,
+        resolver_version="test-resolver-1.0.0",
+        spatial_context_hash="0" * 64,
+    )
+
+
 def test_perception_is_visibility_scoped_redacted_and_deterministic():
     source_actor = uuid.UUID(int=10)
     observer_actor = uuid.UUID(int=11)
-    hidden_actor = uuid.UUID(int=12)
     observer_entity = uuid.UUID(int=13)
     event = _event(uuid.UUID(int=14), source_actor, (observer_actor,), "LOCKED")
     canonical_payload = copy.deepcopy(event.payload)
@@ -60,8 +74,9 @@ def test_perception_is_visibility_scoped_redacted_and_deterministic():
         hidden_payload_fields=frozenset({"secret_mechanism"}),
     )
 
-    first = PerceptionEngine().observe(event, profile)
-    second = PerceptionEngine().observe(event, profile)
+    grant = _grant(event, observer_entity)
+    first = PerceptionEngine().observe(event, profile, grant=grant)
+    second = PerceptionEngine().observe(event, profile, grant=grant)
 
     assert first == second
     assert first is not None
@@ -71,12 +86,13 @@ def test_perception_is_visibility_scoped_redacted_and_deterministic():
     assert (
         PerceptionEngine().observe(
             event,
-            profile.model_copy(update={"observer_actor_id": hidden_actor}),
+            profile.model_copy(update={"observer_entity_id": uuid.UUID(int=99)}),
+            grant=grant,
         )
         is None
     )
     visible_but_not_observed = event.model_copy(update={"observed_by": (source_actor,)})
-    assert PerceptionEngine().observe(visible_but_not_observed, profile) is None
+    assert PerceptionEngine().observe(visible_but_not_observed, profile, grant=grant) is not None
 
 
 def test_same_event_can_form_different_beliefs_then_correct_one_actor():
@@ -103,6 +119,7 @@ def test_same_event_can_form_different_beliefs_then_correct_one_actor():
                 ]
             },
         ),
+        grant=_grant(event, entity_a, 0.7),
         importance=0.8,
     )
     accurate = pipeline.process(
@@ -111,6 +128,7 @@ def test_same_event_can_form_different_beliefs_then_correct_one_actor():
             observer_entity_id=entity_b,
             observer_actor_id=actor_b,
         ),
+        grant=_grant(event, entity_b),
     )
 
     assert mistaken.belief_revision is not None
@@ -125,6 +143,7 @@ def test_same_event_can_form_different_beliefs_then_correct_one_actor():
             observer_entity_id=entity_a,
             observer_actor_id=actor_a,
         ),
+        grant=_grant(correction_event, entity_a),
         existing_beliefs=mistaken.belief_revision.active_beliefs,
     )
     assert corrected.belief_revision is not None
@@ -145,6 +164,7 @@ def test_memory_recall_and_decay_are_ranked_and_non_mutating():
     first = pipeline.process(
         _event(uuid.UUID(int=32), uuid.UUID(int=33), (actor,), "LOCKED"),
         PerceptionProfile(observer_entity_id=entity, observer_actor_id=actor),
+        grant=_grant(_event(uuid.UUID(int=32), uuid.UUID(int=33), (actor,), "LOCKED"), entity),
         memory_summary="The iron door was locked by an arcane latch",
         importance=0.9,
         emotional_weight=0.4,
@@ -152,6 +172,7 @@ def test_memory_recall_and_decay_are_ranked_and_non_mutating():
     second = pipeline.process(
         _event(uuid.UUID(int=34), uuid.UUID(int=33), (actor,), "OPEN"),
         PerceptionProfile(observer_entity_id=entity, observer_actor_id=actor),
+        grant=_grant(_event(uuid.UUID(int=34), uuid.UUID(int=33), (actor,), "OPEN"), entity),
         memory_summary="A merchant sold a blue scarf",
         importance=0.3,
     ).memory

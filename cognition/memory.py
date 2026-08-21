@@ -63,6 +63,7 @@ class MemoryEngine:
             memory_id=memory_id,
             entity_id=observation.observer_entity_id,
             source_event_id=observation.source_event_id,
+            source_observation_id=observation.observation_id,
             summary=summary,
             emotional_weight=emotional_weight,
             importance=importance,

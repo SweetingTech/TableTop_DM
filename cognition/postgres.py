@@ -164,9 +164,10 @@ class PostgresMindRepository:
                         """
                         INSERT INTO cognition.memories (
                           id, world_id, branch_id, entity_id, source_event_id,
+                          source_observation_id,
                           summary, emotional_weight, importance, recall_strength,
                           visibility, created_at
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (id) DO NOTHING
                         """,
                         (
@@ -175,12 +176,49 @@ class PostgresMindRepository:
                             str(branch_id),
                             str(memory.entity_id),
                             str(memory.source_event_id),
+                            str(memory.source_observation_id)
+                            if memory.source_observation_id
+                            else None,
                             memory.summary,
                             memory.emotional_weight,
                             memory.importance,
                             memory.recall_strength,
                             memory.visibility,
                             memory.created_at,
+                        ),
+                    )
+                for evidence in update.evidence:
+                    cursor.execute(
+                        """
+                        INSERT INTO cognition.belief_evidence (
+                          id, world_id, branch_id, entity_id, belief_id,
+                          source_observation_id, evidence_type,
+                          immediate_source_entity_id, claimed_origin_event_id,
+                          parent_evidence_id, direct_witness, confidence_modifier,
+                          created_at
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (id) DO NOTHING
+                        """,
+                        (
+                            str(evidence.evidence_id),
+                            str(evidence.world_id),
+                            str(evidence.branch_id),
+                            str(evidence.entity_id),
+                            str(evidence.belief_id) if evidence.belief_id else None,
+                            str(evidence.source_observation_id),
+                            evidence.evidence_type,
+                            str(evidence.immediate_source_entity_id)
+                            if evidence.immediate_source_entity_id
+                            else None,
+                            str(evidence.claimed_origin_event_id)
+                            if evidence.claimed_origin_event_id
+                            else None,
+                            str(evidence.parent_evidence_id)
+                            if evidence.parent_evidence_id
+                            else None,
+                            evidence.direct_witness,
+                            evidence.confidence_modifier,
+                            evidence.created_at,
                         ),
                     )
 
@@ -495,6 +533,13 @@ class PostgresMindRepository:
                     )
                     collections[name] = [dict(item) for item in cursor.fetchall()]
                 cursor.execute(
+                    """SELECT * FROM cognition.belief_evidence
+                    WHERE world_id=%s AND branch_id=%s AND entity_id=%s
+                    ORDER BY created_at, id""",
+                    context,
+                )
+                collections["belief_evidence"] = [dict(item) for item in cursor.fetchall()]
+                cursor.execute(
                     """SELECT * FROM cognition.relationships
                     WHERE world_id=%s AND branch_id=%s AND source_entity_id=%s
                     ORDER BY target_entity_id""",
@@ -563,6 +608,7 @@ class PostgresMindRepository:
                 memory_id=row["id"],
                 entity_id=row["entity_id"],
                 source_event_id=row["source_event_id"],
+                source_observation_id=row.get("source_observation_id"),
                 summary=row["summary"],
                 emotional_weight=row["emotional_weight"],
                 importance=row["importance"],

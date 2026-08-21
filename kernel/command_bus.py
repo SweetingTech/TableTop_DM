@@ -15,6 +15,8 @@ from kernel.contracts import (
     EventEnvelopeV2,
 )
 from kernel.errors import AuthorizationDenied, UnknownCommand
+from kernel.event_factory import EmissionBuilder, EventFactory
+from kernel.perception_contracts import PerceptionGrant
 from kernel.state import BranchState, InMemoryStateStore
 
 CommandHandler = Callable[[CommandProposal, BranchState], CommandResult]
@@ -30,6 +32,8 @@ class CommandDefinition:
     request_model: type[BaseModel] | None = None
     result_model: type[BaseModel] | None = None
     sensitive_parameters: frozenset[str] = frozenset()
+    requires_controlled_entity: bool = False
+    emission_builder: EmissionBuilder | None = None
 
 
 @dataclass(frozen=True)
@@ -37,13 +41,19 @@ class CommandReceipt:
     result: CommandResult
     event: EventEnvelopeV2
     state_hash: str
+    perceptions: tuple[PerceptionGrant, ...] = ()
 
 
 class CommandBus:
     """Deny-by-default command authority and deterministic mutation boundary."""
 
-    def __init__(self, states: InMemoryStateStore) -> None:
+    def __init__(
+        self,
+        states: InMemoryStateStore,
+        event_factory: EventFactory | None = None,
+    ) -> None:
         self.states = states
+        self.event_factory = event_factory or EventFactory()
         self._definitions: dict[str, CommandDefinition] = {}
         self._receipts: dict[tuple[uuid.UUID, uuid.UUID, str], CommandReceipt] = {}
 
@@ -69,9 +79,10 @@ class CommandBus:
                 "Missing capabilities: "
                 f"{sorted(definition.required_capabilities - actor.capabilities)}"
             )
+        if definition.requires_controlled_entity and proposal.embodied_entity_id is None:
+            raise AuthorizationDenied("Command requires an embodied entity")
         if (
-            proposal.embodied_entity_id is not None
-            and "entity.control" in definition.required_capabilities
+            definition.requires_controlled_entity
             and proposal.embodied_entity_id not in actor.controlled_entity_ids
         ):
             raise AuthorizationDenied("Actor does not control the embodied entity")
@@ -97,40 +108,25 @@ class CommandBus:
             )
             if branch_capability not in actor.capabilities:
                 raise AuthorizationDenied(f"Missing capabilities: ['{branch_capability}']")
+            before = state.working_copy()
             result = definition.handler(proposal, state)
             if definition.result_model is not None:
                 definition.result_model.model_validate(result.result)
             for delta in result.deltas:
                 state.apply(delta)
-            event = EventEnvelopeV2(
-                event_id=uuid.uuid5(
-                    uuid.NAMESPACE_URL,
-                    f"tabletop-dm:event:{proposal.run_id}:{proposal.actor_id}:{proposal.idempotency_key}",
-                ),
-                world_id=proposal.world_id,
-                branch_id=proposal.branch_id,
-                run_id=proposal.run_id,
-                interaction_id=proposal.interaction_id,
-                actor_id=proposal.actor_id,
-                embodied_entity_id=proposal.embodied_entity_id,
-                event_type=proposal.command_type,
-                payload=result.result,
-                # Empty means perception is not pre-limited to a materialized
-                # audience. Visibility authorization is still enforced first.
-                observed_by=(),
-                visible_to=(proposal.actor_id,),
-                correlation_id=proposal.correlation_id,
-                causation_id=proposal.causation_id,
-                domain_tags=result.domain_tags,
-                idempotency_key=proposal.idempotency_key,
-                seed=proposal.seed,
-                decision_trace_id=proposal.decision_trace_id,
-                persona_version=proposal.persona_version,
-                policy_version=proposal.policy_version,
-                prompt_contract_version=proposal.prompt_contract_version,
-                model_version=proposal.model_version,
+            materialized = self.event_factory.materialize(
+                proposal=proposal,
+                result=result,
+                before=before,
+                after=state,
+                emission_builder=definition.emission_builder,
             )
-            return CommandReceipt(result=result, event=event, state_hash=state.state_hash)
+            return CommandReceipt(
+                result=result,
+                event=materialized.event,
+                state_hash=state.state_hash,
+                perceptions=materialized.perceptions,
+            )
 
         receipt, _duplicate = self.states.execute_atomic(proposal.branch_id, key, run)
         return receipt
@@ -148,6 +144,7 @@ class CommandBus:
                         item.value for item in definition.allowed_branch_kinds
                     ),
                     "sensitive_parameters": sorted(definition.sensitive_parameters),
+                    "requires_controlled_entity": definition.requires_controlled_entity,
                     "request_schema": definition.request_model.model_json_schema()
                     if definition.request_model
                     else {"type": "object"},

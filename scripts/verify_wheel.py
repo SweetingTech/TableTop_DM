@@ -19,6 +19,7 @@ REQUIRED_MEMBERS = (
     "persona/schema/accessibility/dimensions.yaml",
     "infra/sql/migrations/001_simulation_kernel.sql",
     "infra/sql/migrations/002_identity_and_tabletop_workspaces.sql",
+    "infra/sql/migrations/003_spatial_epistemics.sql",
     "static/v2/index.html",
 )
 
@@ -60,6 +61,7 @@ assert len(PersonaSchemaRegistry.load_default().dimensions) == 80
 assert [item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "001_simulation_kernel.sql",
     "002_identity_and_tabletop_workspaces.sql",
+    "003_spatial_epistemics.sql",
 ]
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

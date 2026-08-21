@@ -1,5 +1,17 @@
 # Changelog
 
+## Spatial epistemics
+
+- Added explicit `entity.act` authority and controlled-body requirements for embodied commands.
+- Added a shared deterministic event finalizer and entity-scoped frozen `PerceptionGrant` records.
+- Added migration 003 with append-only perception grants, belief evidence, provenance links, RLS,
+  and retry-safe durable persistence.
+- Added grid zones, portals, occluders, sight, sound, event-time context hashes, and embodied speech.
+- Replaced the Player Game Console's canonical map/event reads with a viewpoint-scoped scene and
+  observation feed; distant entities degrade to anonymous presences rather than leaking details.
+- Added testimony provenance and selective memory consolidation so routine movement does not fill
+  permanent memory.
+
 This file records the current TableTop DM product line.
 
 ## Unreleased
@@ -62,6 +74,9 @@ This file records the current TableTop DM product line.
   canonical public state.
 - Added the Control Plane, Persona Studio, Population Studio, Scenario Lab, Run Inspector, and
   Calibration workspaces with role-aware navigation.
+- Added engine-neutral Tactical, Third Person, and First Person control-mode contracts over one
+  battle state, five persistent squad-AI orders, unified aggregate/direct weapon statistics, and
+  perception-scoped renderer/input ports for a future external engine.
 
 ### Simulation kernel
 

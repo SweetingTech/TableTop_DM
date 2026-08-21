@@ -25,7 +25,7 @@ def test_trial_mutation_cannot_change_canonical_state():
         actor_id=actor_id,
         kind=ActorKind.AGENT,
         display_name="test player",
-        capabilities=frozenset({"action.propose", "entity.control"}),
+        capabilities=frozenset({"action.propose", "entity.act"}),
         controlled_entity_ids=frozenset({entity_id}),
     )
     bus = CommandBus(states)
@@ -78,7 +78,7 @@ def test_proposal_only_actor_cannot_mutate_canonical_branch():
         actor_id=actor_id,
         kind=ActorKind.AGENT,
         display_name="proposal-only agent",
-        capabilities=frozenset({"action.propose", "entity.control"}),
+        capabilities=frozenset({"action.propose", "entity.act"}),
         controlled_entity_ids=frozenset({entity_id}),
     )
     proposal = CommandProposal(
@@ -111,7 +111,7 @@ def test_commit_capability_allows_valid_canonical_command():
         actor_id=actor_id,
         kind=ActorKind.HUMAN,
         display_name="committing operator",
-        capabilities=frozenset({"action.propose", "action.commit", "entity.control"}),
+        capabilities=frozenset({"action.propose", "action.commit", "entity.act"}),
         controlled_entity_ids=frozenset({entity_id}),
     )
     proposal = CommandProposal(

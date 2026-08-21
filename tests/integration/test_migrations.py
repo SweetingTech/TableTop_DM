@@ -38,6 +38,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
         assert cursor.fetchall() == [
             ("001_simulation_kernel.sql",),
             ("002_identity_and_tabletop_workspaces.sql",),
+            ("003_spatial_epistemics.sql",),
         ]
         cursor.execute(
             """

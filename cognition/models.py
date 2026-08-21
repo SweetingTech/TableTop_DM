@@ -16,6 +16,14 @@ RuntimeKind: TypeAlias = Literal[
     "REPLAY",
 ]
 
+EvidenceType: TypeAlias = Literal[
+    "DIRECT_OBSERVATION",
+    "TESTIMONY",
+    "DOCUMENT",
+    "INFERENCE",
+    "MAGIC",
+]
+
 
 class RuntimeAssignment(BaseModel):
     """Versionable controller selection, independent from persona and embodiment."""
@@ -63,12 +71,41 @@ class Memory(BaseModel):
     memory_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     entity_id: uuid.UUID
     source_event_id: uuid.UUID
+    source_observation_id: uuid.UUID | None = None
     summary: str
     emotional_weight: float = Field(ge=-1, le=1)
     importance: float = Field(ge=0, le=1)
     recall_strength: float = Field(ge=0, le=1)
     visibility: str = "PRIVATE"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class BeliefEvidence(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    evidence_id: uuid.UUID
+    world_id: uuid.UUID
+    branch_id: uuid.UUID
+    entity_id: uuid.UUID
+    belief_id: uuid.UUID | None = None
+    source_observation_id: uuid.UUID
+    evidence_type: EvidenceType
+    immediate_source_entity_id: uuid.UUID | None = None
+    claimed_origin_event_id: uuid.UUID | None = None
+    parent_evidence_id: uuid.UUID | None = None
+    direct_witness: bool
+    confidence_modifier: float = Field(default=1.0, ge=0, le=1)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ObservationDisposition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    persist_observation: bool = True
+    revise_beliefs: bool = True
+    create_memory: bool = False
+    importance: float = Field(default=0.0, ge=0, le=1)
+    emotional_weight: float = Field(default=0.0, ge=-1, le=1)
 
 
 class RelationshipVector(BaseModel):

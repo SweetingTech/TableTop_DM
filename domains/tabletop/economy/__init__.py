@@ -81,9 +81,10 @@ def trade(proposal: CommandProposal, state: BranchState) -> CommandResult:
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.economy.trade",
-        required_capabilities=frozenset({"action.propose", "entity.control"}),
+        required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=trade,
         request_model=TradeRequest,
         result_model=TradeResult,
+        requires_controlled_entity=True,
     )

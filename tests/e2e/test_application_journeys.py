@@ -155,7 +155,7 @@ def test_game_console_commits_a_typed_move_and_reloads_the_new_position(page: Pa
     expect(page.get_by_role("heading", name="Game Console", exact=True)).to_be_visible()
     expect(page.get_by_test_id("demo-mode-banner")).to_have_count(0)
 
-    actor = page.get_by_label("Acting entity")
+    actor = page.get_by_label("Embodied viewpoint")
     actor.select_option(label="Aster Vale")
     detail = page.locator(".entity-detail")
     before_match = re.search(r"Location\s*\((-?\d+),\s*(-?\d+)\)", detail.inner_text())
@@ -181,7 +181,7 @@ def test_game_console_commits_a_typed_move_and_reloads_the_new_position(page: Pa
 
     # The canonical projection and typed ledger event both survive a page reload.
     page.reload()
-    actor = page.get_by_label("Acting entity")
+    actor = page.get_by_label("Embodied viewpoint")
     actor.select_option(label="Aster Vale")
     detail = page.locator(".entity-detail")
     expect(detail).to_contain_text(f"({before[0] - 1}, {before[1]})")

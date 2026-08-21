@@ -35,7 +35,7 @@ def test_duplicate_returns_original_receipt_without_second_mutation():
         actor_id=actor_id,
         kind=ActorKind.AGENT,
         display_name="fixture",
-        capabilities=frozenset({"action.propose", "entity.control"}),
+        capabilities=frozenset({"action.propose", "entity.act"}),
         controlled_entity_ids=frozenset({entity_id}),
     )
     bus = CommandBus(store)
@@ -106,7 +106,7 @@ def test_entity_control_is_checked_not_merely_capability_name():
         actor_id=actor_id,
         kind=ActorKind.AGENT,
         display_name="intruder",
-        capabilities=frozenset({"action.propose", "entity.control"}),
+        capabilities=frozenset({"action.propose", "entity.act"}),
     )
     proposal = CommandProposal(
         command_type="tabletop.onboarding.act",

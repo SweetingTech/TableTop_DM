@@ -116,7 +116,7 @@ dependencies and returns `503` if any required check fails.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `002_identity_and_tabletop_workspaces.sql`;
+- migration history through `003_spatial_epistemics.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -154,7 +154,8 @@ uv run python infra/migrate.py --check
 uv run python scripts/manage.py migrate
 ```
 
-Compose runs `migrate` before `app` and `worker`. Readiness verifies the latest migration rather
+Compose runs `migrate` before `app`, the experiment `worker`, and the world-event `projector`.
+Readiness verifies the latest migration rather
 than assuming the one-shot container succeeded.
 
 ## PostgreSQL authorization

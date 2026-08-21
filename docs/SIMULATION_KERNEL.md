@@ -71,12 +71,15 @@ returns the original committed receipt.
   metrics, and reports after restart.
 - Calibration review and deployment promotion are separate actions.
 - Public entity projections never expose secret state.
+- Tactical, third-person, and first-person controls operate on the same commander, squad, weapon,
+  health, enemy, and branch state; renderer frames remain perception-scoped.
 - Synthetic outputs remain labeled hypotheses rather than evidence about real people.
 
 ## Supporting documentation
 
 - [Architecture and invariants](ARCHITECTURE.md)
 - [Network and deployment diagram](NETWORK_AND_DEPLOYMENT.md)
+- [Battlefield control modes and renderer hooks](BATTLEFIELD_CONTROL_AND_RENDERER_HOOKS.md)
 - [API and user workflows](API_AND_WORKFLOWS.md)
 - [Operations](OPERATIONS.md)
 - [Testing](TESTING.md)

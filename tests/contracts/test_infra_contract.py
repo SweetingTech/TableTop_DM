@@ -25,6 +25,7 @@ def test_clean_break_has_one_numbered_baseline() -> None:
     assert [migration.version for migration in migrations] == [
         "001_simulation_kernel.sql",
         "002_identity_and_tabletop_workspaces.sql",
+        "003_spatial_epistemics.sql",
     ]
     assert not (ROOT / "infra" / "sql" / "init").exists()
     assert not (ROOT / "infra" / "sql" / "seed").exists()

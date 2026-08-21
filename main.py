@@ -24,6 +24,7 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8000)
 
     commands.add_parser("worker", help="run the Redis experiment worker")
+    commands.add_parser("projector", help="project world-event outbox records into cognition")
 
     scenario = commands.add_parser("scenario", help="run simulated-player onboarding")
     scenario.add_argument("--cohort-size", type=int, default=12)
@@ -56,6 +57,11 @@ def main(argv: list[str] | None = None) -> int:
 
         connection = Redis.from_url(os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"))
         Worker([Queue("experiments", connection=connection)], connection=connection).work()
+        return 0
+    if args.command == "projector":
+        from cognition.projector import run_world_event_projector
+
+        run_world_event_projector()
         return 0
     if args.command == "scenario":
         from experiments.onboarding import OnboardingExperiment

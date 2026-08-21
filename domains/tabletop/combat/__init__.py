@@ -85,9 +85,10 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.combat.attack",
-        required_capabilities=frozenset({"action.propose", "entity.control"}),
+        required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=attack,
         request_model=AttackRequest,
         result_model=AttackResult,
+        requires_controlled_entity=True,
     )

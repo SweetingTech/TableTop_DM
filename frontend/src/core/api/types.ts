@@ -44,6 +44,44 @@ export type EntitySummary = {
   max_health?: number;
   status?: string;
   public_state?: Record<string, unknown>;
+  knowledge_state?: "VISIBLE" | "LAST_KNOWN" | "RUMORED";
+  detail_level?: "PRESENCE" | "CLASSIFIED" | "IDENTIFIED" | "INSPECTED";
+  position_confidence?: number;
+};
+
+export type ViewpointSummary = Pick<
+  EntitySummary,
+  "entity_id" | "name" | "entity_type" | "controller_actor_id"
+> & { can_act?: boolean };
+
+export type PerceivedScene = {
+  observer_entity_id: string;
+  world_id: string;
+  branch_id: string;
+  projection_version: number;
+  visible_zones: string[];
+  perceived_entities: Array<{
+    entity_id: string;
+    name: string | null;
+    apparent_type: string | null;
+    position: { x: number; y: number; z: number; zone_id: string } | null;
+    position_confidence: number;
+    knowledge_state: "VISIBLE" | "LAST_KNOWN" | "RUMORED";
+    detail_level: "PRESENCE" | "CLASSIFIED" | "IDENTIFIED" | "INSPECTED";
+    health: number | null;
+    max_health: number | null;
+    status: string | null;
+  }>;
+  recent_observations: Array<{
+    observation_id: string;
+    source_event_id: string;
+    event_type: string;
+    summary: string;
+    confidence: number;
+    observed_at: string;
+    immediate_source_entity_id: string | null;
+  }>;
+  available_viewpoints: string[];
 };
 
 export type RunSummary = {
@@ -97,6 +135,9 @@ export type GameState = {
   events: EventRecord[];
   turn: number;
   interaction_status: string;
+  viewpoints?: ViewpointSummary[];
+  observer_entity_id?: string;
+  projection_version?: number;
 };
 
 export type PersonaDimension = {

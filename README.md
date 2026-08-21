@@ -34,7 +34,7 @@ common default.
 | --- | --- |
 | `identity/` | Accounts, secure password hashing, sessions, profile data, audit records, and global/world role grants |
 | `kernel/` | Actors, capabilities, typed commands, state transactions, events, visibility, snapshots, branches, replay, and API composition |
-| `domains/tabletop/` | Characters, games, sessions, dialogue, movement, combat, magic, economy, factions, divine effects, quests, and content rules |
+| `domains/tabletop/` | Characters, games, sessions, battlefield control modes, squads, unified weapons, dialogue, movement, combat, magic, economy, factions, divine effects, quests, and content rules |
 | `persona/` | 80 versioned dimensions, dependency-aware generation, constraints, validation, provenance, compilation, and prompt budgets |
 | `cognition/` | Perception, observations, beliefs, memory, relationship vectors, reflexes, utility policy, planning, and typed deliberation |
 | `population/` | Parquet persona pools, DuckDB filtering/sampling, cohort feasibility, materialization, activation, and compression |
@@ -47,7 +47,8 @@ The canonical mutation path is:
 ```text
 proposal -> typed validation -> actor/capability/entity-control checks
          -> deterministic domain handler -> atomic projection update
-         -> command/event/outbox append -> optional derived cognition or narration
+         -> shared event/emission finalization -> frozen entity perception grants
+         -> command/event/grants/outbox append -> derived cognition or narration
 ```
 
 ## Quick start
@@ -142,6 +143,7 @@ players.
 ```text
 tabletop-dm serve [--host HOST] [--port PORT]
 tabletop-dm worker
+tabletop-dm projector
 tabletop-dm scenario [--cohort-size N] [--seeds ...] [--include-trials N]
 tabletop-dm persona --seed SEED [--fixed JSON]
 tabletop-dm population --size N --seed SEED --output FILE.parquet
@@ -168,7 +170,10 @@ See [Testing](docs/TESTING.md) for the complete matrix.
 
 ## Documentation
 
+- [Administrator, Dungeon Master, and Player setup guide](docs/ROLE_SETUP_GUIDE.md)
 - [Simulation-kernel contract](docs/SIMULATION_KERNEL.md)
+- [Battlefield control modes and renderer hooks](docs/BATTLEFIELD_CONTROL_AND_RENDERER_HOOKS.md)
+- [Spatial epistemics and perceived-scene contract](docs/SPATIAL_EPISTEMICS.md)
 - [Architecture and invariants](docs/ARCHITECTURE.md)
 - [Network and deployment diagram](docs/NETWORK_AND_DEPLOYMENT.md)
 - [API and user workflows](docs/API_AND_WORKFLOWS.md)

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
 import uuid
 
 import psycopg2
 import pytest
 
+from cognition.projector import WorldEventProjector
+from domains.tabletop.dialogue import command_definitions as dialogue_definitions
 from domains.tabletop.entities import command_definition as spawn_definition
-from kernel.command_bus import CommandDefinition
+from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
+from kernel.command_bus import CommandBus, CommandDefinition
 from kernel.contracts import (
     Actor,
     ActorKind,
@@ -15,8 +19,9 @@ from kernel.contracts import (
     CommandResult,
     StateDelta,
 )
+from kernel.event_factory import EventFactory
 from kernel.postgres_repository import PostgresCommandRepository
-from kernel.state import stable_hash
+from kernel.state import BranchState, InMemoryStateStore, stable_hash
 
 pytestmark = pytest.mark.integration
 
@@ -338,3 +343,176 @@ def test_entity_spawn_is_atomic_and_redacts_secret_ledger_fields(
             (str(failed_ids["run"]),),
         )
         assert cursor.fetchone()[0] == 0
+
+
+def test_spatial_perceptions_are_atomic_rls_scoped_idempotent_and_match_reference(
+    integration_stack,
+    monkeypatch,
+) -> None:
+    ids, actor, _definition = _seed_durable_command(integration_stack)
+    speaker, listener, hidden = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    projection = {
+        "tabletop.entities": {
+            str(speaker): {"name": "Speaker", "x": 1, "y": 1, "zone_id": "common"},
+            str(listener): {"name": "Listener", "x": 2, "y": 1, "zone_id": "common"},
+            str(hidden): {"name": "Hidden", "x": 1, "y": 1, "zone_id": "back"},
+        },
+        "tabletop.spatial.zones": {
+            "common": {"name": "Common room"},
+            "back": {"name": "Back room"},
+        },
+        "tabletop.spatial.portals": {
+            str(uuid.uuid4()): {
+                "from_zone_id": "common",
+                "to_zone_id": "back",
+                "kind": "DOOR",
+                "state": "CLOSED",
+                "sight_transmission": 0,
+                "sound_transmission": 1,
+                "movement_allowed": False,
+            }
+        },
+        "tabletop.sensory_profiles": {
+            str(speaker): {"controller_actor_id": str(ids["actor"])},
+            str(listener): {"controller_actor_id": str(ids["outsider"])},
+        },
+    }
+    with psycopg2.connect(integration_stack.admin_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """UPDATE sim.branch_projections
+                SET state=%s::jsonb, state_hash=%s
+                WHERE branch_id=%s""",
+                (json.dumps(projection), stable_hash(projection), str(ids["branch"])),
+            )
+            cursor.execute(
+                """INSERT INTO sim.actor_capabilities(world_id, actor_id, capability)
+                VALUES (%s,%s,'action.propose'),(%s,%s,'entity.act')""",
+                (
+                    str(ids["world"]),
+                    str(ids["actor"]),
+                    str(ids["world"]),
+                    str(ids["actor"]),
+                ),
+            )
+            for entity_id, name, controller in (
+                (speaker, "Speaker", ids["actor"]),
+                (listener, "Listener", ids["outsider"]),
+                (hidden, "Hidden", ids["outsider"]),
+            ):
+                cursor.execute(
+                    """INSERT INTO sim.entities(
+                      id,world_id,branch_id,entity_type,name,public_state,controller_actor_id
+                    ) VALUES (%s,%s,%s,'NPC',%s,'{}',%s)""",
+                    (
+                        str(entity_id),
+                        str(ids["world"]),
+                        str(ids["branch"]),
+                        name,
+                        str(controller),
+                    ),
+                )
+    actor = actor.model_copy(
+        update={
+            "capabilities": actor.capabilities | {"action.propose", "entity.act"},
+            "controlled_entity_ids": frozenset({speaker}),
+        }
+    )
+    proposal = CommandProposal(
+        command_type="tabletop.dialogue.speak",
+        world_id=ids["world"],
+        branch_id=ids["branch"],
+        run_id=ids["run"],
+        actor_id=ids["actor"],
+        embodied_entity_id=speaker,
+        parameters={"text": "The king is dead.", "volume": "NORMAL"},
+        idempotency_key="durable-spatial-speech",
+    )
+    definition = next(
+        item for item in dialogue_definitions() if item.command_type == "tabletop.dialogue.speak"
+    )
+    factory = EventFactory(GridSpatialPerceptionResolver())
+    repository = PostgresCommandRepository(integration_stack.database_url, factory)
+    durable = repository.execute(proposal, actor, definition)
+    duplicate = repository.execute(proposal, actor, definition)
+    assert [item.model_dump(mode="json") for item in duplicate.perceptions] == [
+        item.model_dump(mode="json") for item in durable.perceptions
+    ]
+    assert {item.observer_entity_id for item in durable.perceptions} == {speaker, listener}
+
+    reference_store = InMemoryStateStore()
+    reference_store.add(BranchState(ids["world"], ids["branch"], BranchKind.CANONICAL, projection))
+    reference_bus = CommandBus(reference_store, factory)
+    reference_bus.register(definition)
+    reference = reference_bus.execute(proposal, actor)
+    assert reference.perceptions == durable.perceptions
+    assert reference.event.model_dump(exclude={"created_at"}) == durable.event.model_dump(
+        exclude={"created_at"}
+    )
+
+    with psycopg2.connect(integration_stack.database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('app.actor_id', %s, false)", (str(ids["outsider"]),))
+            cursor.execute(
+                "SELECT count(*) FROM sim.events WHERE event_id=%s",
+                (str(durable.event.event_id),),
+            )
+            assert cursor.fetchone()[0] == 0
+            cursor.execute(
+                "SELECT observer_entity_id FROM sim.event_perceptions WHERE event_id=%s",
+                (str(durable.event.event_id),),
+            )
+            assert cursor.fetchall() == [(str(listener),)]
+
+    assert WorldEventProjector(integration_stack.database_url).run_once() >= 1
+    with psycopg2.connect(integration_stack.admin_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT published_at IS NOT NULL FROM sim.outbox WHERE event_id=%s",
+                (str(durable.event.event_id),),
+            )
+            assert cursor.fetchone() == (True,)
+            cursor.execute(
+                "SELECT observer_entity_id FROM cognition.observations WHERE source_event_id=%s",
+                (str(durable.event.event_id),),
+            )
+            assert {row[0] for row in cursor.fetchall()} == {str(speaker), str(listener)}
+
+    failed_proposal = proposal.model_copy(
+        update={
+            "command_id": uuid.uuid4(),
+            "correlation_id": uuid.uuid4(),
+            "idempotency_key": "durable-spatial-perception-write-failure",
+        }
+    )
+    with psycopg2.connect(integration_stack.admin_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT version FROM sim.branch_projections WHERE branch_id=%s",
+                (str(ids["branch"]),),
+            )
+            version_before = cursor.fetchone()[0]
+
+    def reject_perceptions(_cursor, _perceptions) -> None:
+        raise psycopg2.IntegrityError("forced perception persistence failure")
+
+    monkeypatch.setattr(repository, "_insert_perceptions", reject_perceptions)
+    with pytest.raises(psycopg2.IntegrityError, match="forced perception"):
+        repository.execute(failed_proposal, actor, definition)
+
+    with psycopg2.connect(integration_stack.admin_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT version FROM sim.branch_projections WHERE branch_id=%s",
+                (str(ids["branch"]),),
+            )
+            assert cursor.fetchone()[0] == version_before
+            cursor.execute(
+                """SELECT
+                     (SELECT count(*) FROM sim.command_log WHERE idempotency_key=%s),
+                     (SELECT count(*) FROM sim.events WHERE idempotency_key=%s),
+                     (SELECT count(*) FROM sim.outbox o JOIN sim.events e USING(event_id)
+                       WHERE e.idempotency_key=%s)""",
+                (failed_proposal.idempotency_key,) * 3,
+            )
+            assert cursor.fetchone() == (0, 0, 0)

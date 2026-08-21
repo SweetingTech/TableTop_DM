@@ -42,6 +42,7 @@ entities authorize operations such as:
 
 - `world.read` and `world.read.all`;
 - `entity.control` and `entity.read.secret`;
+- `entity.act` for acting through explicitly assigned embodied entities;
 - `action.propose` and `action.commit`;
 - `run.branch`;
 - `mind.read.all` and `mind.write.all`;
@@ -65,6 +66,11 @@ projection and commits the projection, command, event, and outbox in one transac
 visibility and observation scope, correlation/causation, idempotency, seed, decision trace,
 persona/policy/prompt/model versions, tags, payload, and creation time.
 
+Command handlers may declare a deterministic sensory emission. A shared event factory resolves
+that emission against pre/post-command spatial state and returns the canonical envelope plus
+entity-scoped, event-time-frozen perception grants. Raw event authorization (`visible_to`) is not
+physical witness membership. See [Spatial epistemics](SPATIAL_EPISTEMICS.md).
+
 ## Canonical state, snapshots, trials, and replay
 
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
@@ -81,6 +87,24 @@ command requiring:
 
 Replay starts at the latest valid branch snapshot and reapplies subsequent durable command
 records. Each resulting hash must equal the committed hash.
+
+## Battlefield control and presentation
+
+Tactical, third-person, and first-person play are camera/input modes over the same branch state.
+The commander, followers, enemies, weapons, health, upgrades, objectives, and encounter ledger
+are never duplicated for a perspective change.
+
+`domains.tabletop.battlefield` provides typed mode and squad-order commands, shared weapon
+contracts, an authorized `BattlefieldFrame`, and renderer/input protocols for a future external
+engine. Tactical mode maps to formation authority; third- and first-person map to direct commander
+authority. Squad AI remains active in every mode.
+
+Presentation is downstream of knowledge. The frame builder requires entity IDs already approved
+by perception/visibility policy, so a tactical camera cannot reveal hidden canonical state. A
+future browser or 3D engine consumes frames and submits input envelopes; it never receives a
+mutable world projection.
+
+See [Battlefield control modes and renderer hooks](BATTLEFIELD_CONTROL_AND_RENDERER_HOOKS.md).
 
 ## Persona fabric
 
@@ -99,11 +123,12 @@ bounded prompt summary.
 
 ## Subjective cognition
 
-Canonical truth, observation, belief, memory, relationship, and narration are separate records.
+Canonical truth, raw authorization, physical perception, observation, belief evidence, memory,
+relationship, and narration are separate records.
 The pure subjective pipeline is:
 
 ```text
-visible event -> perceived observation -> belief revision -> memory
+frozen entity grant -> perceived observation -> belief evidence/revision -> selective memory
              -> goal/need activation -> candidate actions
              -> reflex / utility / bounded plan / typed deliberation
              -> CommandProposal

@@ -25,6 +25,7 @@ from kernel.contracts import (
     CommandResult,
     StateDelta,
 )
+from kernel.perception_contracts import PerceptionGrant
 from kernel.postgres_repository import PostgresCommandRepository
 from kernel.state import stable_hash
 from persona.compilation.compiler import PersonaCompiler
@@ -186,6 +187,18 @@ def test_decision_commit_observation_and_mind_reload_are_actor_scoped(
             observer_entity_id=ids["hero"],
             observer_actor_id=ids["actor"],
         ),
+        grant=PerceptionGrant(
+            event_id=receipt.event.event_id,
+            world_id=ids["world"],
+            branch_id=ids["branch"],
+            observer_entity_id=ids["hero"],
+            controller_actor_id=ids["actor"],
+            modalities=("SIGHT",),
+            outcome="DIRECT",
+            confidence=1,
+            resolver_version="integration-fixture-1",
+            spatial_context_hash="0" * 64,
+        ),
         memory_summary="I advanced after weighing the available actions.",
         importance=0.8,
     )
@@ -249,6 +262,7 @@ def test_decision_commit_observation_and_mind_reload_are_actor_scoped(
         "relationships": [],
         "relationship_changes": [],
         "decisions": [],
+        "belief_evidence": [],
     }
 
     with psycopg2.connect(integration_stack.admin_url) as connection:

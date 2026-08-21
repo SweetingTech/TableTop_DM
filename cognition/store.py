@@ -7,6 +7,7 @@ from cognition.beliefs import BeliefRevision
 from cognition.engine import DecisionOutcome, SubjectiveUpdate
 from cognition.models import (
     Belief,
+    BeliefEvidence,
     MindState,
     Observation,
     RelationshipVector,
@@ -21,6 +22,7 @@ class MindStore:
     def __init__(self) -> None:
         self._states: dict[tuple[uuid.UUID | None, uuid.UUID], MindState] = {}
         self._observations: dict[tuple[uuid.UUID | None, uuid.UUID], Observation] = {}
+        self._evidence: dict[tuple[uuid.UUID | None, uuid.UUID], BeliefEvidence] = {}
         self._relationships: dict[
             tuple[uuid.UUID | None, uuid.UUID, uuid.UUID], RelationshipVector
         ] = {}
@@ -68,6 +70,15 @@ class MindStore:
         with self._lock:
             return self._states.get(self._key(entity_id, branch_id), MindState(entity_id=entity_id))
 
+    def has_observation(
+        self,
+        observation_id: uuid.UUID,
+        *,
+        branch_id: uuid.UUID | None = None,
+    ) -> bool:
+        with self._lock:
+            return (branch_id, observation_id) in self._observations
+
     def relationship(
         self,
         source_entity_id: uuid.UUID,
@@ -96,6 +107,8 @@ class MindStore:
                 self._observations.setdefault(
                     (branch_id, update.observation.observation_id), update.observation
                 )
+            for evidence in update.evidence:
+                self._evidence.setdefault((branch_id, evidence.evidence_id), evidence)
             committed = self.preview_subjective_update(entity_id, update, branch_id=branch_id)
             self._states[key] = committed
             return committed
@@ -254,6 +267,12 @@ class MindStore:
                     for (relationship_branch, source, target), vector in self._relationships.items()
                     if source == entity_id
                     and (branch_id is None or relationship_branch == branch_id)
+                ],
+                "belief_evidence": [
+                    item.model_dump(mode="json")
+                    for (evidence_branch, _), item in self._evidence.items()
+                    if item.entity_id == entity_id
+                    and (branch_id is None or evidence_branch == branch_id)
                 ],
                 "relationship_changes": [
                     item.model_dump(mode="json")

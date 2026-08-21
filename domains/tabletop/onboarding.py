@@ -106,9 +106,10 @@ def handle_onboarding_action(proposal: CommandProposal, state: BranchState) -> C
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.onboarding.act",
-        required_capabilities=frozenset({"action.propose", "entity.control"}),
+        required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.TRIAL, BranchKind.CANONICAL}),
         handler=handle_onboarding_action,
         request_model=OnboardingAction,
         result_model=OnboardingResult,
+        requires_controlled_entity=True,
     )

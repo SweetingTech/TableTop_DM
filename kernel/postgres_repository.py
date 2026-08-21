@@ -18,14 +18,17 @@ from kernel.contracts import (
 )
 from kernel.database import transaction
 from kernel.errors import AuthorizationDenied, BranchIsolationError
+from kernel.event_factory import EventFactory
+from kernel.perception_contracts import PerceptionGrant
 from kernel.state import BranchState
 
 
 class PostgresCommandRepository:
     """Persist projection, command, event, and outbox as one transaction."""
 
-    def __init__(self, dsn: str | None = None) -> None:
+    def __init__(self, dsn: str | None = None, event_factory: EventFactory | None = None) -> None:
         self.dsn = dsn
+        self.event_factory = event_factory or EventFactory()
 
     def execute(
         self,
@@ -140,7 +143,9 @@ class PostgresCommandRepository:
                         f"Durable actor lacks capabilities: {sorted(missing)}"
                     )
 
-                if proposal.embodied_entity_id is not None and "entity.control" in required:
+                if definition.requires_controlled_entity and proposal.embodied_entity_id is None:
+                    raise AuthorizationDenied("Command requires an embodied entity")
+                if definition.requires_controlled_entity:
                     cursor.execute(
                         """
                         SELECT 1
@@ -177,7 +182,7 @@ class PostgresCommandRepository:
                     projections=dict(projection["state"]),
                     version=int(projection["version"]),
                 )
-
+                before = state.working_copy()
                 result = definition.handler(proposal, state)
                 if definition.result_model is not None:
                     definition.result_model.model_validate(result.result)
@@ -186,7 +191,14 @@ class PostgresCommandRepository:
                 self._apply_entity_mutations(cursor, proposal, result)
                 next_version = state.version + 1
                 state_hash = state.state_hash
-                event = self._event(proposal, result)
+                materialized = self.event_factory.materialize(
+                    proposal=proposal,
+                    result=result,
+                    before=before,
+                    after=state,
+                    emission_builder=definition.emission_builder,
+                )
+                event = materialized.event
 
                 cursor.execute(
                     """
@@ -244,6 +256,7 @@ class PostgresCommandRepository:
                     ),
                 )
                 self._insert_event(cursor, event)
+                self._insert_perceptions(cursor, materialized.perceptions)
                 cursor.execute(
                     """
                     INSERT INTO sim.outbox (event_id, topic, payload)
@@ -252,10 +265,24 @@ class PostgresCommandRepository:
                     (
                         str(event.event_id),
                         f"world.{event.world_id}.branch.{event.branch_id}",
-                        event.model_dump_json(),
+                        json.dumps(
+                            {
+                                "event": event.model_dump(mode="json"),
+                                "perceptions": [
+                                    grant.model_dump(mode="json")
+                                    for grant in materialized.perceptions
+                                ],
+                            },
+                            default=str,
+                        ),
                     ),
                 )
-                return CommandReceipt(result=result, event=event, state_hash=state_hash)
+                return CommandReceipt(
+                    result=result,
+                    event=event,
+                    state_hash=state_hash,
+                    perceptions=materialized.perceptions,
+                )
 
     @staticmethod
     def _apply_entity_mutations(
@@ -322,38 +349,29 @@ class PostgresCommandRepository:
             result=result,
             event=EventEnvelopeV2.model_validate(event_payload),
             state_hash=str(row["resulting_state_hash"]),
+            perceptions=PostgresCommandRepository._load_perceptions_with_cursor(
+                cursor, uuid.UUID(str(row["event_id"]))
+            ),
         )
 
     @staticmethod
-    def _event(proposal: CommandProposal, result: CommandResult) -> EventEnvelopeV2:
-        return EventEnvelopeV2(
-            event_id=uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"tabletop-dm:event:{proposal.run_id}:{proposal.actor_id}:{proposal.idempotency_key}",
-            ),
-            world_id=proposal.world_id,
-            branch_id=proposal.branch_id,
-            run_id=proposal.run_id,
-            interaction_id=proposal.interaction_id,
-            actor_id=proposal.actor_id,
-            embodied_entity_id=proposal.embodied_entity_id,
-            event_type=proposal.command_type,
-            payload=result.result,
-            # Empty means perception is not pre-limited to a materialized
-            # audience. Visibility authorization is still enforced first.
-            observed_by=(),
-            visible_to=(proposal.actor_id,),
-            correlation_id=proposal.correlation_id,
-            causation_id=proposal.causation_id,
-            domain_tags=result.domain_tags,
-            idempotency_key=proposal.idempotency_key,
-            seed=proposal.seed,
-            decision_trace_id=proposal.decision_trace_id,
-            persona_version=proposal.persona_version,
-            policy_version=proposal.policy_version,
-            prompt_contract_version=proposal.prompt_contract_version,
-            model_version=proposal.model_version,
+    def _load_perceptions_with_cursor(
+        cursor: Any, event_id: uuid.UUID
+    ) -> tuple[PerceptionGrant, ...]:
+        cursor.execute(
+            """
+            SELECT event_id, world_id, branch_id, observer_entity_id,
+                   controller_actor_id, modalities, outcome, confidence,
+                   allowed_payload_fields, hidden_payload_fields,
+                   payload_overrides, reason_codes, resolver_version,
+                   spatial_context_hash
+            FROM sim.event_perceptions
+            WHERE event_id=%s
+            ORDER BY observer_entity_id
+            """,
+            (str(event_id),),
         )
+        return tuple(PerceptionGrant.model_validate(dict(row)) for row in cursor.fetchall())
 
     @staticmethod
     def _insert_event(cursor: Any, event: EventEnvelopeV2) -> None:
@@ -399,3 +417,39 @@ class PostgresCommandRepository:
                 event.created_at,
             ),
         )
+
+    @staticmethod
+    def _insert_perceptions(cursor: Any, perceptions: tuple[PerceptionGrant, ...]) -> None:
+        for grant in perceptions:
+            cursor.execute(
+                """
+                INSERT INTO sim.event_perceptions (
+                  event_id, world_id, branch_id, observer_entity_id,
+                  controller_actor_id, modalities, outcome, confidence,
+                  allowed_payload_fields, hidden_payload_fields,
+                  payload_overrides, reason_codes, resolver_version,
+                  spatial_context_hash
+                ) VALUES (
+                  %s,%s,%s,%s,%s,%s::text[],%s,%s,%s::text[],%s::text[],
+                  %s::jsonb,%s::text[],%s,%s
+                )
+                """,
+                (
+                    str(grant.event_id),
+                    str(grant.world_id),
+                    str(grant.branch_id),
+                    str(grant.observer_entity_id),
+                    str(grant.controller_actor_id) if grant.controller_actor_id else None,
+                    [item.value for item in grant.modalities],
+                    grant.outcome.value,
+                    grant.confidence,
+                    list(grant.allowed_payload_fields)
+                    if grant.allowed_payload_fields is not None
+                    else None,
+                    list(grant.hidden_payload_fields),
+                    json.dumps(grant.payload_overrides, default=str),
+                    list(grant.reason_codes),
+                    grant.resolver_version,
+                    grant.spatial_context_hash,
+                ),
+            )

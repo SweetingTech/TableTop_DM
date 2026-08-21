@@ -37,6 +37,13 @@ from domains.tabletop.portal import (
     PostgresPortalRepository,
     TabletopPortalService,
 )
+from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
+from domains.tabletop.spatial.scene import (
+    ObservationPresentation,
+    PerceivedEntity,
+    PerceivedScene,
+    SceneCoordinate,
+)
 from experiments.aggregation import compare_reports
 from experiments.calibration import CalibrationEngine, CalibrationStore
 from experiments.executor import ApplicationBranchExecutor
@@ -406,7 +413,7 @@ def create_app(
             identity.sync_admin_world(world_id)
         durable_control.hydrate(simulation)
         simulation.configure_durable(
-            PostgresCommandRepository(database_dsn),
+            PostgresCommandRepository(database_dsn, simulation.bus.event_factory),
             durable_control.load_projection,
             durable_control.persist_snapshot,
         )
@@ -449,6 +456,51 @@ def create_app(
     subjective_pipeline = SubjectiveStatePipeline()
     decision_engine = LayeredDecisionEngine()
     relationship_engine = RelationshipEngine()
+
+    def project_subjective_event(event: Any, grants: Any) -> None:
+        for grant in grants:
+            profile_actor_id = grant.controller_actor_id or demo["actor_id"]
+            existing = minds.get(grant.observer_entity_id, branch_id=event.branch_id)
+            update = subjective_pipeline.process(
+                event,
+                PerceptionProfile(
+                    observer_entity_id=grant.observer_entity_id,
+                    observer_actor_id=profile_actor_id,
+                ),
+                grant=grant,
+                existing_beliefs=existing.beliefs,
+            )
+            if update.observation is None or minds.has_observation(
+                update.observation.observation_id, branch_id=event.branch_id
+            ):
+                continue
+            projected = minds.preview_subjective_update(
+                grant.observer_entity_id, update, branch_id=event.branch_id
+            )
+            if mind_repository is not None:
+                mind_repository.save_subjective_update(
+                    world_id=event.world_id,
+                    branch_id=event.branch_id,
+                    actor_id=profile_actor_id,
+                    state=projected,
+                    update=update,
+                )
+            minds.apply_subjective_update(
+                grant.observer_entity_id, update, branch_id=event.branch_id
+            )
+
+    simulation.configure_subjective_projector(
+        lambda receipt: project_subjective_event(receipt.event, receipt.perceptions)
+    )
+    for event in simulation.events.values():
+        project_subjective_event(
+            event,
+            tuple(
+                grant
+                for grant in simulation.perceptions.values()
+                if grant.event_id == event.event_id
+            ),
+        )
     personas: dict[uuid.UUID, Any] = {}
     persona_versions: dict[uuid.UUID, Any] = {}
     persona_repository: PostgresPersonaRepository | None = None
@@ -1108,7 +1160,61 @@ def create_app(
     @app.put("/api/v2/dm/games/<uuid:game_id>/members")
     def dm_game_member(game_id: uuid.UUID):
         body = GameMemberRequest.model_validate(request.get_json(force=True))
-        return _json(portal.set_member(current_user(), game_id, body.model_dump(mode="json")))
+        account_actor = current_user()
+        game = portal.set_member(account_actor, game_id, body.model_dump(mode="json"))
+        if body.character_id is not None and body.membership_role == "PLAYER":
+            character = portal.repository.get_character(body.character_id)
+            if character is None:
+                raise KeyError(body.character_id)
+            member_account = identity_repository.get_account(body.user_id)
+            if member_account is None:
+                raise KeyError(body.user_id)
+            sync_world_authority(member_account)
+            entity_id = character.entity_id or uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"tabletop-dm:character-entity:{game.world_id}:{character.character_id}",
+            )
+            world = simulation.worlds[game.world_id]
+            if (world.canonical_branch_id, entity_id) not in simulation.entities:
+                live_run = next(
+                    run
+                    for run in simulation.runs.values()
+                    if run.world_id == game.world_id
+                    and run.branch_id == world.canonical_branch_id
+                    and run.kind is RunKind.LIVE
+                )
+                simulation.submit(
+                    CommandProposal(
+                        command_type="tabletop.entity.spawn",
+                        world_id=game.world_id,
+                        branch_id=world.canonical_branch_id,
+                        run_id=live_run.run_id,
+                        actor_id=account_actor.actor_id,
+                        parameters={
+                            "entity_id": entity_id,
+                            "name": character.name,
+                            "entity_type": "PLAYER_CHARACTER",
+                            "public_state": {
+                                "x": 0,
+                                "y": 0,
+                                "zone_id": "world",
+                                "hp": character.current_hit_points,
+                                "max_hp": character.maximum_hit_points,
+                                "armor": character.armor_class,
+                                "speed": character.speed,
+                            },
+                            "controller_actor_id": member_account.actor_id,
+                        },
+                        idempotency_key=f"character-bind:{character.character_id}",
+                    )
+                )
+            portal.bind_character_entity(
+                account_actor,
+                character.character_id,
+                world_id=game.world_id,
+                entity_id=entity_id,
+            )
+        return _json(portal.repository.get_game(game_id) or game)
 
     @app.delete("/api/v2/dm/games/<uuid:game_id>/members/<uuid:user_id>")
     def dm_game_member_delete(game_id: uuid.UUID, user_id: uuid.UUID):
@@ -1162,7 +1268,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "002_identity_and_tabletop_workspaces.sql",
+                    "ok": version == "003_spatial_epistemics.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -1270,14 +1376,15 @@ def create_app(
         require_world_access(world_id)
         world = simulation.worlds[world_id]
         state = simulation.states.get(world.canonical_branch_id)
-        return jsonify(
-            {
-                **world.model_dump(mode="json"),
-                "state_hash": state.state_hash,
-                "projection_version": state.version,
-                "projections": state.projections,
-            }
-        )
+        authority = simulation.authority(world_id, current_actor_id())
+        payload = {
+            **world.model_dump(mode="json"),
+            "state_hash": state.state_hash,
+            "projection_version": state.version,
+        }
+        if "world.read.all" in authority.capabilities:
+            payload["projections"] = state.projections
+        return jsonify(payload)
 
     @app.route("/api/v2/actors", methods=["GET", "POST"])
     def actors():
@@ -1311,12 +1418,18 @@ def create_app(
         require_world_access(world_id)
         world = simulation.worlds[world_id]
         if request.method == "GET":
+            reading_actor = simulation.authority(world_id, current_actor_id())
             projected = simulation.states.get(world.canonical_branch_id).projections.get(
                 "tabletop.entities", {}
             )
             values = []
             for (branch_id, entity_id), entity in simulation.entities.items():
                 if branch_id != world.canonical_branch_id:
+                    continue
+                if (
+                    "world.read.all" not in reading_actor.capabilities
+                    and entity_id not in reading_actor.controlled_entity_ids
+                ):
                     continue
                 payload = entity.model_dump(mode="json", exclude={"secret_state"})
                 current = dict(projected.get(str(entity_id), {}))
@@ -1368,6 +1481,163 @@ def create_app(
         payload["creation_event_id"] = str(receipt.event.event_id)
         payload["state_hash"] = receipt.state_hash
         return jsonify(payload), 201
+
+    @app.get("/api/v2/worlds/<uuid:world_id>/viewpoints")
+    def world_viewpoints(world_id: uuid.UUID):
+        require_world_access(world_id)
+        world = simulation.worlds[world_id]
+        actor = simulation.authority(world_id, current_actor_id())
+        candidates = tuple(
+            entity
+            for (branch_id, _), entity in simulation.entities.items()
+            if branch_id == world.canonical_branch_id
+            and (
+                "world.read.all" in actor.capabilities
+                or entity.entity_id in actor.controlled_entity_ids
+            )
+        )
+        return jsonify(
+            {
+                "items": [
+                    {
+                        "entity_id": str(entity.entity_id),
+                        "name": entity.name,
+                        "entity_type": entity.entity_type,
+                        "controller_actor_id": (
+                            str(entity.controller_actor_id)
+                            if entity.controller_actor_id is not None
+                            else None
+                        ),
+                        "can_act": entity.entity_id in actor.controlled_entity_ids,
+                    }
+                    for entity in sorted(
+                        candidates,
+                        key=lambda item: (
+                            item.entity_id not in actor.controlled_entity_ids,
+                            item.name,
+                            str(item.entity_id),
+                        ),
+                    )
+                ]
+            }
+        )
+
+    @app.get(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
+        "/entities/<uuid:observer_entity_id>/scene"
+    )
+    def perceived_scene(world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID):
+        require_world_access(world_id)
+        state = simulation.states.get(branch_id)
+        if state.world_id != world_id:
+            raise ValueError("scene branch does not belong to world")
+        actor = simulation.authority(world_id, current_actor_id())
+        observer = simulation.entities.get((branch_id, observer_entity_id))
+        if observer is None:
+            raise KeyError(observer_entity_id)
+        privileged = "world.read.all" in actor.capabilities or "mind.read.all" in actor.capabilities
+        if observer_entity_id not in actor.controlled_entity_ids and not privileged:
+            raise PermissionError("actor cannot inspect this embodied viewpoint")
+        viewpoints = tuple(
+            sorted(
+                (
+                    entity_id
+                    for (entity_branch, entity_id), _entity in simulation.entities.items()
+                    if entity_branch == branch_id
+                    and (privileged or entity_id in actor.controlled_entity_ids)
+                ),
+                key=str,
+            )
+        )
+        resolver = simulation.bus.event_factory.resolver
+        if not isinstance(resolver, GridSpatialPerceptionResolver):
+            raise RuntimeError("tabletop scene requires the grid spatial resolver")
+        visible = resolver.visible_entities(state, observer_entity_id)
+        projected_entities = state.projections.get("tabletop.entities", {})
+        spatial_positions = state.projections.get("tabletop.spatial.positions", {})
+        entities: list[PerceivedEntity] = []
+        for entity_id, confidence in sorted(visible.items(), key=lambda item: str(item[0])):
+            record = simulation.entities.get((branch_id, entity_id))
+            if record is None:
+                continue
+            current = projected_entities.get(str(entity_id), record.public_state)
+            position = spatial_positions.get(str(entity_id), current)
+            if confidence >= 0.8:
+                detail = "INSPECTED"
+            elif confidence >= 0.5:
+                detail = "IDENTIFIED"
+            elif confidence >= 0.2:
+                detail = "CLASSIFIED"
+            else:
+                detail = "PRESENCE"
+            identified = detail in {"IDENTIFIED", "INSPECTED"} or entity_id == observer_entity_id
+            classified = detail != "PRESENCE" or entity_id == observer_entity_id
+            inspected = detail == "INSPECTED" or entity_id == observer_entity_id
+            entities.append(
+                PerceivedEntity(
+                    entity_id=entity_id,
+                    name=record.name if identified else None,
+                    apparent_type=record.entity_type if classified else None,
+                    position=(
+                        SceneCoordinate(
+                            x=int(position["x"]),
+                            y=int(position["y"]),
+                            z=int(position.get("z", 0)),
+                            zone_id=position.get("zone_id", current.get("zone_id", "world")),
+                        )
+                        if "x" in position and "y" in position
+                        else None
+                    ),
+                    position_confidence=confidence,
+                    knowledge_state="VISIBLE",
+                    detail_level=detail,
+                    health=int(current["hp"]) if inspected and "hp" in current else None,
+                    max_health=(
+                        int(current["max_hp"]) if inspected and "max_hp" in current else None
+                    ),
+                    status=("DEFEATED" if current.get("defeated") else "ACTIVE")
+                    if inspected
+                    else None,
+                )
+            )
+        mind = minds.inspect(observer_entity_id, branch_id=branch_id)
+        observation_presentations: list[ObservationPresentation] = []
+        for observation in mind["observations"][-80:]:
+            source_event = simulation.events.get(uuid.UUID(str(observation["source_event_id"])))
+            if source_event is None:
+                continue
+            payload = observation["perceived_payload"]
+            observation_presentations.append(
+                ObservationPresentation(
+                    observation_id=uuid.UUID(str(observation["observation_id"])),
+                    source_event_id=source_event.event_id,
+                    event_type=source_event.event_type,
+                    summary=str(
+                        payload.get("summary") or payload.get("text") or source_event.event_type
+                    ),
+                    confidence=float(observation["confidence"]),
+                    observed_at=datetime.fromisoformat(str(observation["observed_at"])),
+                    immediate_source_entity_id=(
+                        uuid.UUID(str(payload["speaker_entity_id"]))
+                        if payload.get("speaker_entity_id")
+                        else None
+                    ),
+                )
+            )
+        visible_zones = tuple(
+            sorted({str(item.position.zone_id) for item in entities if item.position is not None})
+        )
+        scene = PerceivedScene(
+            observer_entity_id=observer_entity_id,
+            world_id=world_id,
+            branch_id=branch_id,
+            projection_version=state.version,
+            visible_zones=visible_zones,
+            perceived_entities=tuple(entities),
+            recent_observations=tuple(observation_presentations),
+            available_viewpoints=viewpoints,
+        )
+        return _json(scene)
 
     @app.route("/api/v2/runs", methods=["GET", "POST"])
     def runs():
@@ -1470,6 +1740,32 @@ def create_app(
                 and (branch_id is None or str(event.branch_id) == branch_id)
                 and world_readable(event.world_id)
             ]
+        )
+
+    @app.get("/api/v2/events/<uuid:event_id>/perceptions")
+    def event_perceptions(event_id: uuid.UUID):
+        event = simulation.events[event_id]
+        require_world_access(event.world_id)
+        actor = simulation.authority(event.world_id, current_actor_id())
+        if "world.read.all" not in actor.capabilities and "mind.read.all" not in actor.capabilities:
+            raise PermissionError("canonical perception inspection requires privileged world read")
+        grants = tuple(
+            grant for grant in simulation.perceptions.values() if grant.event_id == event_id
+        )
+        observations: list[dict[str, Any]] = []
+        for grant in grants:
+            inspection = minds.inspect(grant.observer_entity_id, branch_id=event.branch_id)
+            observations.extend(
+                item
+                for item in inspection["observations"]
+                if str(item["source_event_id"]) == str(event_id)
+            )
+        return jsonify(
+            {
+                "event": event.model_dump(mode="json"),
+                "perceptions": [grant.model_dump(mode="json") for grant in grants],
+                "observations": observations,
+            }
         )
 
     @app.post("/api/v2/cognition/decide")
@@ -1642,17 +1938,44 @@ def create_app(
             and "mind.write.all" not in observer_actor.capabilities
         ):
             raise PermissionError("observer actor cannot update this mind")
-        perception_event = event
-        if (
-            observer_actor_id not in event.visible_to
-            and "world.read.all" in observer_actor.capabilities
-        ):
-            perception_event = event.model_copy(
-                update={"visible_to": (*event.visible_to, observer_actor_id)}
+        grant = simulation.perception_grant(event_id, body.observer_entity_id)
+        if grant is None:
+            return jsonify({"perceived": False, "reason": "outside_observation_scope"})
+        inspection = minds.inspect(body.observer_entity_id, branch_id=event.branch_id)
+        prior = next(
+            (
+                item
+                for item in inspection["observations"]
+                if str(item["source_event_id"]) == str(event_id)
+            ),
+            None,
+        )
+        if prior is not None:
+            return jsonify(
+                {
+                    "perceived": True,
+                    "already_projected": True,
+                    "observation": prior,
+                    "mind_state": inspection["mind_state"],
+                    "belief_revision": None,
+                    "memory": next(
+                        (
+                            item
+                            for item in inspection["mind_state"]["memories"]
+                            if str(item["source_event_id"]) == str(event_id)
+                        ),
+                        None,
+                    ),
+                    "belief_evidence": [
+                        item
+                        for item in inspection["belief_evidence"]
+                        if str(item["source_observation_id"]) == str(prior["observation_id"])
+                    ],
+                }
             )
         existing = minds.get(body.observer_entity_id, branch_id=event.branch_id)
         update = subjective_pipeline.process(
-            perception_event,
+            event,
             PerceptionProfile(
                 observer_entity_id=body.observer_entity_id,
                 observer_actor_id=observer_actor_id,
@@ -1661,6 +1984,7 @@ def create_app(
                 allowed_payload_fields=body.allowed_payload_fields,
                 hidden_payload_fields=body.hidden_payload_fields,
             ),
+            grant=grant,
             existing_beliefs=existing.beliefs,
             memory_summary=body.memory_summary,
             emotional_weight=body.emotional_weight,
@@ -1694,6 +2018,8 @@ def create_app(
                 "memory": (
                     update.memory.model_dump(mode="json") if update.memory is not None else None
                 ),
+                "belief_evidence": [item.model_dump(mode="json") for item in update.evidence],
+                "disposition": update.disposition.model_dump(mode="json"),
                 "mind_state": state.model_dump(mode="json"),
             }
         ), 201

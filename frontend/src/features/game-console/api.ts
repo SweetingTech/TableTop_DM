@@ -1,6 +1,6 @@
 import { apiRequest, unpackItems } from "../../core/api/client";
 import { withDemoFallback } from "../../core/api/fallback";
-import type { BranchSummary, EntitySummary, EventRecord, GameState, RunSummary, Sourced } from "../../core/api/types";
+import type { BranchSummary, EntitySummary, EventRecord, GameState, PerceivedScene, RunSummary, Sourced, ViewpointSummary } from "../../core/api/types";
 import { DEMO_BRANCH_ID, DEMO_RUN_ID, demoGameState } from "../../core/demo/fixtures";
 
 function normalizeEvent(raw: Record<string, unknown>): EventRecord {
@@ -18,23 +18,63 @@ function normalizeEvent(raw: Record<string, unknown>): EventRecord {
   };
 }
 
-export async function loadGameState(worldId: string): Promise<Sourced<GameState>> {
+export async function loadGameState(worldId: string, requestedViewpoint = ""): Promise<Sourced<GameState>> {
   if (!worldId) return { data: demoGameState, source: "demo", reason: "No live world is selected; deterministic demo data is shown." };
   return withDemoFallback(
     async () => {
-      const [entitiesPayload, runsPayload, branchesPayload, eventsPayload] = await Promise.all([
-        apiRequest<EntitySummary[] | { items?: EntitySummary[] }>(`/worlds/${worldId}/entities`),
+      const [viewpointsPayload, runsPayload, branchesPayload] = await Promise.all([
+        apiRequest<{ items?: ViewpointSummary[] }>(`/worlds/${worldId}/viewpoints`),
         apiRequest<RunSummary[] | { items?: RunSummary[] }>(`/runs?world_id=${encodeURIComponent(worldId)}`),
         apiRequest<BranchSummary[] | { items?: BranchSummary[] }>(`/branches?world_id=${encodeURIComponent(worldId)}`),
-        apiRequest<Record<string, unknown>[] | { items?: Record<string, unknown>[] }>(`/events?world_id=${encodeURIComponent(worldId)}&limit=80`),
       ]);
       const runs = unpackItems(runsPayload);
       const branches = unpackItems(branchesPayload);
+      const viewpoints = unpackItems(viewpointsPayload);
+      const branch = branches.find((item) => item.kind === "CANONICAL") ?? branches[0] ?? null;
+      const observer = viewpoints.find((item) => item.entity_id === requestedViewpoint) ?? viewpoints[0];
+      if (!branch || !observer) {
+        return {
+          run: runs.find((run) => run.status === "RUNNING" || run.status === "ACTIVE") ?? runs[0] ?? null,
+          branch,
+          entities: [],
+          events: [],
+          viewpoints,
+          turn: 0,
+          interaction_status: "ACTIVE",
+        };
+      }
+      const scene = await apiRequest<PerceivedScene>(
+        `/worlds/${encodeURIComponent(worldId)}/branches/${encodeURIComponent(branch.branch_id)}/entities/${encodeURIComponent(observer.entity_id)}/scene`,
+      );
+      const entities: EntitySummary[] = scene.perceived_entities.map((entity) => ({
+        entity_id: entity.entity_id,
+        world_id: worldId,
+        branch_id: branch.branch_id,
+        name: entity.name ?? (entity.detail_level === "PRESENCE" ? "Distant figure" : "Unknown person"),
+        entity_type: entity.apparent_type ?? "UNKNOWN",
+        location: entity.position ? `(${entity.position.x}, ${entity.position.y}) · ${entity.position.zone_id}` : "Uncertain",
+        health: entity.health ?? undefined,
+        max_health: entity.max_health ?? undefined,
+        status: entity.status ?? undefined,
+        public_state: entity.position ?? undefined,
+        knowledge_state: entity.knowledge_state,
+        detail_level: entity.detail_level,
+        position_confidence: entity.position_confidence,
+      }));
       return {
         run: runs.find((run) => run.status === "RUNNING" || run.status === "ACTIVE") ?? runs[0] ?? null,
-        branch: branches.find((branch) => branch.kind === "CANONICAL") ?? branches[0] ?? null,
-        entities: unpackItems(entitiesPayload),
-        events: unpackItems(eventsPayload).map(normalizeEvent),
+        branch,
+        entities,
+        events: scene.recent_observations.map((observation) => normalizeEvent({
+          event_id: observation.observation_id,
+          event_type: observation.event_type,
+          summary: observation.summary,
+          created_at: observation.observed_at,
+          source_event_id: observation.source_event_id,
+        })),
+        viewpoints,
+        observer_entity_id: observer.entity_id,
+        projection_version: scene.projection_version,
         turn: 0,
         interaction_status: "ACTIVE",
       };
@@ -114,7 +154,7 @@ function stableSeed(text: string): number {
 export function parseCommand(command: string, state: GameState): ParsedCommand {
   const text = command.trim();
   if (!text.startsWith("/")) {
-    return { commandType: "tabletop.console.submit", parameters: { text } };
+    return { commandType: "tabletop.dialogue.speak", parameters: { text, volume: "NORMAL", language: "common" } };
   }
   const [verb = "", ...parts] = text.slice(1).trim().split(/\s+/);
   switch (verb.toLocaleLowerCase()) {

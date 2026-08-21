@@ -117,6 +117,26 @@ GET    /api/v2/games/{game_id}/sessions
 Character writes are owner-scoped unless an administrator is acting through an administrative
 flow. Imported templates are parsed and validated before persistence.
 
+When a DM assigns a character to a game membership, the portal character is linked to a kernel
+embodied entity. The player receives `entity.act` plus control of that specific body; this never
+confers administrative `entity.control` over the world.
+
+## Perception-scoped game workflow
+
+The Player Game Console never reads canonical entity positions or the raw event ledger. It lists
+authorized embodied viewpoints and loads a `PerceivedScene`:
+
+```text
+GET /api/v2/worlds/{world_id}/viewpoints
+GET /api/v2/worlds/{world_id}/branches/{branch_id}/entities/{entity_id}/scene
+GET /api/v2/events/{event_id}/perceptions       # privileged inspection only
+```
+
+Normal prose submits `tabletop.dialogue.speak`, an embodied sound emission. Slash actions submit
+their typed movement/combat/magic contracts; explicit OOC/interface text remains
+`tabletop.console.submit`. The scene contains only current perceived entities and subjective
+observation presentations, with detail levels from anonymous `PRESENCE` through `INSPECTED`.
+
 ## Dungeon Master workflow
 
 1. An administrator grants `DM` for a world.
@@ -179,6 +199,25 @@ Content-Type: application/json
 The kernel validates that the run belongs to the world and branch, resolves the command schema,
 checks world-scoped capability and entity control, commits one transaction, and returns a receipt
 with state/event provenance. Reuse an idempotency key only to retry the exact same logical command.
+
+### Battlefield control modes
+
+The command registry includes engine-neutral hooks for one continuous battle world:
+
+```text
+tabletop.battlefield.set_control_mode
+tabletop.battlefield.issue_squad_order
+```
+
+`set_control_mode` accepts `TACTICAL`, `THIRD_PERSON`, or `FIRST_PERSON`. It changes the
+commander's control-mode projection without replacing the entity, weapon, health, squad, enemies,
+or encounter. `issue_squad_order` accepts `FOLLOW`, `HOLD`, `FOCUS`, `SPREAD`, or `REGROUP` and
+keeps follower AI active while the leader is under direct control.
+
+Future renderers consume `BattlefieldFrame` values built from an explicit authorized visible
+entity set and return `BattlefieldControlInput` values for translation into these and other typed
+commands. Camera mode does not grant event or entity visibility. See
+[Battlefield control modes and renderer hooks](BATTLEFIELD_CONTROL_AND_RENDERER_HOOKS.md).
 
 The acting actor is never taken from the request. A browser session always acts as the actor its
 account owns, so `actor_id` may be omitted; sending a different one is rejected with

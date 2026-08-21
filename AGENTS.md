@@ -23,9 +23,12 @@ a subtree but must not weaken the invariants below.
 | Area | Source of truth |
 | --- | --- |
 | Account/session/role behavior | `identity/` and migration `002_identity_and_tabletop_workspaces.sql` |
+| Spatial epistemics schema | migration `003_spatial_epistemics.sql` |
 | Kernel contracts and mutation rules | `kernel/contracts.py`, `kernel/command_bus.py`, `kernel/application.py`, durable repositories |
 | HTTP composition | `kernel/api/app.py` |
 | Tabletop mechanics | `domains/tabletop/` |
+| Battlefield modes and external renderer hooks | `domains/tabletop/battlefield/` and `docs/BATTLEFIELD_CONTROL_AND_RENDERER_HOOKS.md` |
+| Spatial perception and player scene | `kernel/perception_contracts.py`, `kernel/event_factory.py`, `domains/tabletop/spatial/`, and `docs/SPATIAL_EPISTEMICS.md` |
 | Persona dimensions | `persona/schema/*/dimensions.yaml` |
 | Subjective cognition | `cognition/` |
 | Population lifecycle | `population/` |
@@ -39,6 +42,10 @@ a subtree but must not weaken the invariants below.
 
 - Keep account, actor, persona, embodied entity, mind state, and runtime assignment distinct.
 - Keep canonical truth, observation, belief, memory, relationship, and narration distinct.
+- Keep raw event ACLs, entity-level physical perception grants, subjective observations, and
+  player-facing scenes distinct; witnesses receive masked observations, not canonical payloads.
+- Freeze perception against event-time pre/post-command state; never recompute old audiences from
+  an observer's current location.
 - Route world mutations through a registered typed command.
 - Validate world/run/branch lineage before handler execution.
 - Require world-scoped capability and entity control; never union authority across worlds.
@@ -48,6 +55,9 @@ a subtree but must not weaken the invariants below.
 - Preserve idempotency: a retry returns the original receipt rather than executing twice.
 - Persist projection, command, event, and outbox atomically.
 - Derive observations and relationships from visible same-branch source events.
+- Treat camera modes as presentation/control mappings over one canonical battle state. Never
+  duplicate pawn, squad, health, weapon, or encounter state per view, and never let tactical
+  presentation bypass perception-scoped visibility.
 - Never expose `secret_state`, password/session material, private DM notes, or hidden evidence in
   public projections, telemetry, exceptions, or logs.
 - Treat synthetic results as hypotheses, not human ground truth.

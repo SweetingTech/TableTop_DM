@@ -7,6 +7,7 @@ from cognition.models import MindState, RelationshipVector, RuntimeAssignment
 from cognition.perception import PerceptionProfile
 from cognition.store import MindStore
 from kernel.contracts import EventEnvelopeV2
+from kernel.perception_contracts import PerceptionGrant
 
 pytestmark = pytest.mark.unit
 
@@ -37,6 +38,17 @@ def test_mind_store_persists_subjective_state_without_changing_event_truth():
     update = SubjectiveStatePipeline().process(
         event,
         PerceptionProfile(observer_entity_id=entity_id, observer_actor_id=actor_id),
+        grant=PerceptionGrant(
+            event_id=event.event_id,
+            world_id=event.world_id,
+            branch_id=event.branch_id,
+            observer_entity_id=entity_id,
+            modalities=("SOUND",),
+            outcome="DIRECT",
+            confidence=1,
+            resolver_version="test-resolver-1.0.0",
+            spatial_context_hash="0" * 64,
+        ),
     )
     store = MindStore()
     store.initialize(MindState(entity_id=entity_id))

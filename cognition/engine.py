@@ -14,7 +14,13 @@ from cognition.deliberation import (
     TypedDeliberationGateway,
 )
 from cognition.memory import MemoryEngine
-from cognition.models import Belief, Memory, Observation
+from cognition.models import (
+    Belief,
+    BeliefEvidence,
+    Memory,
+    Observation,
+    ObservationDisposition,
+)
 from cognition.perception import PerceptionEngine, PerceptionProfile
 from cognition.planning import GoapAction, GOAPPlanner, PlanResult
 from cognition.policy import ActionOption, UtilityPolicy
@@ -24,6 +30,7 @@ from kernel.contracts import (
     DecisionTrace,
     EventEnvelopeV2,
 )
+from kernel.perception_contracts import PerceptionGrant
 from kernel.state import stable_hash
 from persona.models import CompiledPersona
 
@@ -34,6 +41,8 @@ class SubjectiveUpdate(BaseModel):
     observation: Observation | None
     belief_revision: BeliefRevision | None
     memory: Memory | None
+    evidence: tuple[BeliefEvidence, ...] = ()
+    disposition: ObservationDisposition = Field(default_factory=ObservationDisposition)
 
 
 class SubjectiveStatePipeline:
@@ -49,31 +58,100 @@ class SubjectiveStatePipeline:
         event: EventEnvelopeV2,
         profile: PerceptionProfile,
         *,
+        grant: PerceptionGrant,
         existing_beliefs: tuple[Belief, ...] = (),
         claims: tuple[BeliefClaim, ...] | None = None,
         memory_summary: str | None = None,
         emotional_weight: float = 0,
         importance: float = 0.5,
         memory_visibility: str = "PRIVATE",
+        disposition: ObservationDisposition | None = None,
     ) -> SubjectiveUpdate:
-        observation = self.perception.observe(event, profile)
+        disposition = disposition or self._disposition(event)
+        observation = self.perception.observe(event, profile, grant=grant)
         if observation is None:
-            return SubjectiveUpdate(observation=None, belief_revision=None, memory=None)
+            return SubjectiveUpdate(
+                observation=None,
+                belief_revision=None,
+                memory=None,
+                disposition=disposition,
+            )
         effective_claims = (
             self.beliefs.claims_from_observation(observation) if claims is None else claims
         )
-        revision = self.beliefs.revise(observation, effective_claims, existing_beliefs)
-        memory = self.memories.record(
-            observation,
-            summary=memory_summary,
-            emotional_weight=emotional_weight,
-            importance=importance,
-            visibility=memory_visibility,
+        revision = (
+            self.beliefs.revise(observation, effective_claims, existing_beliefs)
+            if disposition.revise_beliefs
+            else None
         )
+        memory = None
+        if disposition.create_memory:
+            memory = self.memories.record(
+                observation,
+                summary=memory_summary,
+                emotional_weight=emotional_weight
+                if emotional_weight != 0
+                else disposition.emotional_weight,
+                importance=importance if importance != 0.5 else disposition.importance,
+                visibility=memory_visibility,
+            )
+        evidence = self._evidence(event, observation, revision, grant)
         return SubjectiveUpdate(
             observation=observation,
             belief_revision=revision,
             memory=memory,
+            evidence=evidence,
+            disposition=disposition,
+        )
+
+    @staticmethod
+    def _disposition(event: EventEnvelopeV2) -> ObservationDisposition:
+        tags = set(event.domain_tags)
+        if "movement" in tags:
+            return ObservationDisposition(create_memory=False, importance=0.05)
+        if "speech" in tags or "dialogue" in tags:
+            return ObservationDisposition(create_memory=True, importance=0.45)
+        if tags.intersection({"combat", "betrayal", "injury", "discovery"}):
+            return ObservationDisposition(create_memory=True, importance=0.85)
+        return ObservationDisposition(create_memory=True, importance=0.5)
+
+    @staticmethod
+    def _evidence(
+        event: EventEnvelopeV2,
+        observation: Observation,
+        revision: BeliefRevision | None,
+        grant: PerceptionGrant,
+    ) -> tuple[BeliefEvidence, ...]:
+        if revision is None:
+            return ()
+        is_testimony = "testimony" in event.domain_tags or "speech" in event.domain_tags
+        evidence_type = "TESTIMONY" if is_testimony else "DIRECT_OBSERVATION"
+        immediate_source = None
+        if is_testimony and event.payload.get("speaker_entity_id"):
+            immediate_source = uuid.UUID(str(event.payload["speaker_entity_id"]))
+        active = [
+            belief
+            for belief in revision.active_beliefs
+            if belief.source_observation_id == observation.observation_id
+        ]
+        return tuple(
+            BeliefEvidence(
+                evidence_id=uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"tabletop-dm:evidence:{observation.observation_id}:{belief.belief_id}",
+                ),
+                world_id=event.world_id,
+                branch_id=event.branch_id,
+                entity_id=observation.observer_entity_id,
+                belief_id=belief.belief_id,
+                source_observation_id=observation.observation_id,
+                evidence_type=evidence_type,
+                immediate_source_entity_id=immediate_source,
+                direct_witness=not is_testimony,
+                confidence_modifier=grant.confidence,
+                created_at=observation.observed_at,
+            )
+            for belief in sorted(active, key=lambda item: str(item.belief_id))
         )
 
 
