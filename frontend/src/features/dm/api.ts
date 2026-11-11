@@ -30,7 +30,29 @@ export async function eligibleUsers(worldId: string): Promise<CurrentUser[]> {
   return unpackItems(await apiRequest<CurrentUser[] | { items?: CurrentUser[] }>(`/dm/worlds/${worldId}/eligible-users`));
 }
 
-export async function setMember(gameId: string, input: Record<string, unknown>): Promise<HostedGame> {
+export type MembershipRole = "PLAYER" | "CO_DM";
+export type MemberInput = {
+  user_id: string;
+  membership_role: MembershipRole;
+  character_id?: string | null;
+  status: string;
+};
+
+export type AssignableCharacter = {
+  character_id: string;
+  name: string;
+  class_name: string;
+  level: number;
+  status: string;
+};
+
+export async function assignableCharacters(gameId: string, userId: string): Promise<AssignableCharacter[]> {
+  return unpackItems(await apiRequest<{ items: AssignableCharacter[] }>(
+    `/dm/games/${encodeURIComponent(gameId)}/users/${encodeURIComponent(userId)}/characters`,
+  ));
+}
+
+export async function setMember(gameId: string, input: MemberInput): Promise<HostedGame> {
   return apiRequest<HostedGame>(`/dm/games/${gameId}/members`, { method: "PUT", body: JSON.stringify(input) });
 }
 

@@ -150,6 +150,7 @@ Routes:
 ```text
 GET    /api/v2/games
 GET    /api/v2/dm/worlds/{world_id}/eligible-users
+GET    /api/v2/dm/games/{game_id}/users/{user_id}/characters
 POST   /api/v2/dm/games
 PATCH  /api/v2/dm/games/{game_id}
 DELETE /api/v2/dm/games/{game_id}
@@ -161,6 +162,13 @@ PATCH  /api/v2/dm/games/{game_id}/sessions/{session_id}
 
 DM notes do not appear in player responses. Co-DM membership requires the user's DM world role;
 Player membership requires the Player world role.
+
+The roster editor explicitly selects Player or Co-DM and supports assigning a character on
+invitation or updating an existing member. Its character lookup requires game-host authority
+and a target account with Player authority in that world; it returns only character ID, name,
+class, level, and status for characters belonging to that player and either this world or no
+world yet. It excludes character sheets and backstory. Assignment rejects missing characters,
+wrong owners, and characters bound to another world. Choosing Co-DM clears the character selection.
 
 ## World and command workflow
 

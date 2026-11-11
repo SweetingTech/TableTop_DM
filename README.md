@@ -24,6 +24,10 @@ append-only ledger decide what actually happened.
 | Calibration | Administrator | Compare synthetic metrics with evidence, review proposals, and promote approved versions |
 | Settings | every account | Manage profile, password, locale, timezone, pronouns, and session state |
 
+DM roster controls explicitly choose Player or Co-DM and can assign a player's saved character
+when inviting them or updating an existing membership. Assigned player characters receive an
+embodied viewpoint in the Game Console.
+
 The initial account is `admin` with password `admin123`. The first sign-in is restricted to the
 password-change screen, and the replacement password must be at least 12 characters and not a
 common default.
@@ -181,6 +185,7 @@ See [Testing](docs/TESTING.md) for the complete matrix.
 - [Testing](docs/TESTING.md)
 - [Repository guidance for coding agents](AGENTS.md)
 - [Changelog](CHANGELOG.md)
+- [Autonomous campaign implementation checklist](docs/AUTONOMOUS_CAMPAIGN_CHECKLIST.md)
 
 ## Conceptual influence, not a dependency
 

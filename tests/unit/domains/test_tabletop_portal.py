@@ -89,6 +89,27 @@ def test_dm_hosts_game_manages_roster_and_private_session_notes() -> None:
         {"name": "Brindle", "world_id": str(world_id), "creation_method": "GENERATED", "seed": 7},
     )
     game = portal.create_game(dm, {"world_id": str(world_id), "name": "Keep on the Borderlands"})
+    unbound = portal.create_character(player, {"name": "Unbound"})
+    foreign = portal.repository.save_character(
+        character.model_copy(
+            update={"character_id": uuid.uuid4(), "world_id": uuid.uuid4(), "name": "Other world"}
+        )
+    )
+    assert {
+        row.character_id for row in portal.assignable_characters(dm, game.game_id, player.user_id)
+    } == {character.character_id, unbound.character_id}
+    with pytest.raises(PermissionError):
+        portal.assignable_characters(player, game.game_id, player.user_id)
+    with pytest.raises(PermissionError):
+        portal.assignable_characters(
+            dm.model_copy(update={"world_roles": ()}), game.game_id, player.user_id
+        )
+    for invalid_id in (foreign.character_id, uuid.uuid4()):
+        with pytest.raises((ValueError, KeyError)):
+            portal.set_member(
+                dm, game.game_id, {"user_id": str(player.user_id), "character_id": str(invalid_id)}
+            )
+        assert portal.repository.get_game(game.game_id).members == ()
     game = portal.set_member(
         dm,
         game.game_id,

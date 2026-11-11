@@ -14,6 +14,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAppContext } from "../../app/AppContext";
 import { EmptyState, LoadingState } from "../../components/ui/States";
 import { PageHeader, Status } from "../../components/ui/Primitives";
+import { useAsyncResource } from "../../core/hooks/useAsyncResource";
 import type { CurrentUser } from "../auth/types";
 import type { HostedGame } from "../player/api";
 import * as api from "./api";
@@ -281,15 +282,7 @@ function GameCommand({
   eligible: CurrentUser[];
   onOperation: (work: () => Promise<unknown>, success: string) => Promise<void>;
 }) {
-  const [memberId, setMemberId] = useState(
-    eligible.find(
-      (user) => !game.members.some((member) => member.user_id === user.user_id),
-    )?.user_id ?? "",
-  );
   const [sessionTitle, setSessionTitle] = useState("");
-  const available = eligible.filter(
-    (user) => !game.members.some((member) => member.user_id === user.user_id),
-  );
   return (
     <div className="dm-game-command">
       <div className="panel-heading">
@@ -373,44 +366,7 @@ function GameCommand({
             detail="Invite a player or co-DM with a role in this world."
           />
         )}
-        <div className="inline-action">
-          <select
-            aria-label="Eligible user"
-            value={memberId}
-            onChange={(event) => setMemberId(event.target.value)}
-          >
-            <option value="">Select a player or DM</option>
-            {available.map((user) => (
-              <option key={user.user_id} value={user.user_id}>
-                {user.profile.display_name} ·{" "}
-                {user.has_dm_role ? "DM" : "Player"}
-              </option>
-            ))}
-          </select>
-          <button
-            className="button"
-            disabled={!memberId}
-            type="button"
-            onClick={() =>
-              void onOperation(
-                () =>
-                  api.setMember(game.game_id, {
-                    user_id: memberId,
-                    membership_role: eligible.find(
-                      (user) => user.user_id === memberId,
-                    )?.has_dm_role
-                      ? "CO_DM"
-                      : "PLAYER",
-                    status: "INVITED",
-                  }),
-                "Roster updated.",
-              )
-            }
-          >
-            <UserPlus size={14} />
-            Invite
-          </button>
-        </div>
+        <RosterEditor key={game.game_id} game={game} eligible={eligible} onOperation={onOperation} />
       </section>
       <section className="dm-section">
         <div className="section-title">
@@ -497,4 +453,77 @@ function GameCommand({
       </section>
     </div>
   );
+}
+
+export function RosterEditor({ game, eligible, onOperation }: {
+  game: HostedGame;
+  eligible: CurrentUser[];
+  onOperation: (work: () => Promise<unknown>, success: string) => Promise<void>;
+}) {
+  const [memberId, setMemberId] = useState("");
+  const [role, setRole] = useState<api.MembershipRole>("PLAYER");
+  const [characterId, setCharacterId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const account = eligible.find((user) => user.user_id === memberId);
+  const worldRoles = account?.world_roles.find((grant) => grant.world_id === game.world_id)?.roles ?? [];
+  const canPlay = Boolean(account && (account.is_admin || worldRoles.includes("PLAYER")));
+  const canDm = Boolean(account && (account.is_admin || worldRoles.includes("DM")));
+  const member = game.members.find((row) => row.user_id === memberId);
+  const characters = useAsyncResource(
+    () => memberId && role === "PLAYER"
+      ? api.assignableCharacters(game.game_id, memberId)
+      : Promise.resolve([]),
+    [game.game_id, memberId, role],
+  );
+  const selectionValid = !characterId || characters.data?.some((row) => row.character_id === characterId);
+  return <div className="stack-list">
+    <div className="inline-action">
+      <label>Eligible user<select value={memberId} onChange={(event) => {
+        const id = event.target.value;
+        const user = eligible.find((row) => row.user_id === id);
+        const existing = game.members.find((row) => row.user_id === id);
+        const roles = user?.world_roles.find((grant) => grant.world_id === game.world_id)?.roles ?? [];
+        setMemberId(id);
+        setRole(existing?.membership_role === "CO_DM" ? "CO_DM"
+          : user?.is_admin || roles.includes("PLAYER") ? "PLAYER" : "CO_DM");
+        setCharacterId(existing?.character_id ?? "");
+      }}>
+        <option value="">Select a player or DM</option>
+        {eligible.map((user) => <option key={user.user_id} value={user.user_id}>{user.profile.display_name}</option>)}
+      </select></label>
+      <label>Membership role<select value={role} onChange={(event) => {
+        setRole(event.target.value as api.MembershipRole);
+        setCharacterId("");
+      }}>
+        <option value="PLAYER" disabled={!canPlay}>Player</option>
+        <option value="CO_DM" disabled={!canDm}>Co-DM</option>
+      </select></label>
+      {memberId && role === "PLAYER" ? <label>Playable character<select value={characterId}
+        disabled={characters.loading || Boolean(characters.error)}
+        onChange={(event) => setCharacterId(event.target.value)}>
+        <option value="">No character assigned</option>
+        {characters.data?.map((row) => <option key={row.character_id} value={row.character_id}>
+          {row.name} · Level {row.level} {row.class_name} · {row.status}
+        </option>)}
+      </select></label> : null}
+      <button className="button" type="button"
+        disabled={!account || saving || (role === "PLAYER"
+          ? !canPlay || characters.loading || Boolean(characters.error) || !selectionValid : !canDm)}
+        onClick={async () => {
+          setSaving(true);
+          try {
+            await onOperation(() => api.setMember(game.game_id, {
+              user_id: memberId, membership_role: role,
+              character_id: role === "PLAYER" ? characterId || null : null,
+              status: member?.status ?? "INVITED",
+            }), "Roster updated.");
+          } finally { setSaving(false); }
+        }}><UserPlus size={14} />{saving ? "Saving…" : member ? "Update member" : "Invite"}</button>
+    </div>
+    {memberId && role === "PLAYER" ? characters.loading
+      ? <p role="status">Loading characters…</p>
+      : characters.error ? <div role="alert">{characters.error} <button type="button" onClick={characters.reload}>Retry characters</button></div>
+      : !characters.data?.length ? <p>No characters available for this player in this world. They can create or import one in Player Dashboard.</p>
+      : !characterId ? <p>Select a character to give this player an embodied viewpoint in the Game Console.</p> : null : null}
+  </div>;
 }
