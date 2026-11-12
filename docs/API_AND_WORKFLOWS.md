@@ -367,6 +367,13 @@ interface capability, or evaluation retrieval filter. Playtester compilation ret
 evaluation behavior. Purpose does not confer authority, bind a persona to a body, or validate
 caller-supplied situation text; those are separate campaign knowledge/control requirements.
 
+`POST /api/v2/cognition/decide` accepts caller-authored situations/actions only for privileged
+`SIMULATED_PLAYTESTER` evaluation (administrator session or automation boundary, still subject to
+world/body checks). Its response identifies `mode: EVALUATION` and `committed: false`.
+Other browser accounts and `CHARACTER` personas receive `403`. Live character decision execution
+will use the server context and explicit persona/body binding; no request can supply that binding
+by choosing a persona ID. Human Game Console commands continue through their existing kernel path.
+
 ## Error contract
 
 Errors use a JSON body with a stable `error` code and, where safe, a human-readable detail.

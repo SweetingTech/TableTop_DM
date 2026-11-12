@@ -1791,7 +1791,16 @@ def create_app(
 
     @app.post("/api/v2/cognition/decide")
     def cognition_decide():
+        if not automation_boundary() and not current_user().is_admin:
+            raise PermissionError(
+                "caller-authored cognition is restricted to privileged evaluation"
+            )
         body = CognitionDecisionApiRequest.model_validate(request.get_json(silent=True) or {})
+        evaluation_persona = compiled_persona(body.persona_id)
+        if evaluation_persona.purpose != PersonaPurpose.SIMULATED_PLAYTESTER:
+            raise PermissionError(
+                "character decisions require trusted live context and identity binding"
+            )
         world_id = body.world_id or demo["world_id"]
         branch_id = body.branch_id or simulation.worlds[world_id].canonical_branch_id
         run_id = body.run_id or next(
@@ -1845,7 +1854,7 @@ def create_app(
         )
         outcome = decision_engine.decide(
             DecisionRequest(
-                persona=compiled_persona(body.persona_id),
+                persona=evaluation_persona,
                 world_id=world_id,
                 branch_id=branch_id,
                 run_id=run_id,
@@ -1880,6 +1889,7 @@ def create_app(
                     else None
                 ),
                 "committed": False,
+                "mode": "EVALUATION",
             }
         ), 201
 

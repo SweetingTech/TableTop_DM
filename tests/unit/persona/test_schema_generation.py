@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from persona.errors import FixedFieldFeasibilityError
+from persona.errors import FixedFieldFeasibilityError, InfeasibleStratumError
 from persona.generation import PersonaGenerator
 from persona.registry import PersonaSchemaRegistry
 from persona.validation import PersonaValidator
@@ -134,3 +134,25 @@ def test_persona_versions_are_content_addressed_and_parent_sensitive():
     assert len(first.content_hash) == 64
     assert child.version_id != first.version_id
     assert child.parent_version_id == first.version_id
+
+
+@pytest.mark.parametrize(
+    "weight", [float("nan"), float("inf"), float("-inf"), pytest.param(10**400, id="overflow")]
+)
+def test_nonfinite_distribution_weights_fail_with_feasibility_error(weight):
+    generator = PersonaGenerator(PersonaSchemaRegistry.load_default())
+    distribution = {"risk_tolerance": {"LOW": weight, "HIGH": 1.0}}
+    with pytest.raises(InfeasibleStratumError, match="finite non-negative"):
+        generator.generate(17, distributions=distribution)
+    report = generator.validate_stratum({}, distributions=distribution)
+    assert report.feasible is False
+    assert "finite non-negative" in report.errors[0]
+
+
+def test_finite_weights_with_overflowing_total_fail_before_sampling():
+    generator = PersonaGenerator(PersonaSchemaRegistry.load_default())
+    with pytest.raises(InfeasibleStratumError, match="total weight must be finite"):
+        generator.generate(17, distributions={"risk_tolerance": {"LOW": 1e308, "HIGH": 1e308}})
+    first = generator.generate(17, distributions={"risk_tolerance": {"LOW": 1e308}})
+    assert first == generator.generate(17, distributions={"risk_tolerance": {"LOW": 1e308}})
+    assert first.dimensions["risk_tolerance"] == "LOW"

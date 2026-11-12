@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import uuid
 from collections.abc import Iterator
@@ -217,11 +218,18 @@ class PersonaGenerator:
                 raise InfeasibleStratumError(
                     f"Distribution {name} has unknown values: {sorted(unknown, key=str)}"
                 )
-            if any(
-                not isinstance(weight, (int, float)) or weight < 0 for weight in weights.values()
-            ):
+            try:
+                invalid_weights = any(
+                    not isinstance(weight, (int, float))
+                    or weight < 0
+                    or not math.isfinite(float(weight))
+                    for weight in weights.values()
+                )
+            except OverflowError:
+                invalid_weights = True
+            if invalid_weights:
                 raise InfeasibleStratumError(
-                    f"Distribution {name} weights must be non-negative numbers"
+                    f"Distribution {name} weights must be finite non-negative numbers"
                 )
 
         feasible: list[Any] = []
@@ -236,7 +244,10 @@ class PersonaGenerator:
                 continue
             feasible.append(candidate)
             feasible_weights.append(float(weights.get(candidate, 0)) if weights else 1.0)
-        if not feasible or sum(feasible_weights) <= 0:
+        total_weight = sum(feasible_weights)
+        if not math.isfinite(total_weight):
+            raise InfeasibleStratumError(f"Distribution {name} total weight must be finite")
+        if not feasible or total_weight <= 0:
             raise InfeasibleStratumError(f"No feasible weighted value for {name}")
         selected = rng.choices(feasible, weights=feasible_weights, k=1)[0]
         source: ProvenanceSource = "weighted_distribution" if weights else "seeded_generator"

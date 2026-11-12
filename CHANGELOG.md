@@ -24,6 +24,11 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Restricted caller-authored cognition to privileged simulated-playtester evaluation and rejected
+  character requests pending trusted identity/context/action wiring.
+- Rejected non-finite/overflowing persona distribution weights and totals with the intended
+  feasibility error before seeded sampling.
+
 - Added explicit character and simulated-playtester persona purposes. Character compilation and
   prompt trait selection exclude player/interface metadata and onboarding/GM behavior; existing
   evaluation defaults retain historical persona IDs and version hashes.
