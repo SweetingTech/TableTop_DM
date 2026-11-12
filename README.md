@@ -34,6 +34,12 @@ interface preferences. Existing evaluation personas retain their playtester beha
 first knowledge-separation foundation; autonomous character context and unattended campaigns are
 still tracked in the [implementation checklist](docs/AUTONOMOUS_CAMPAIGN_CHECKLIST.md).
 
+Embodied context reads now share the perceived-scene service and validate remembered evidence
+against same-branch frozen perception grants. Caller-authored cognition requests are privileged
+playtester evaluation; live character decisions remain unavailable until authored identity and
+server-owned action candidates are connected. This prevents that evaluation API from injecting
+operator/player knowledge into character decisions while the remaining campaign wiring is built.
+
 The initial account is `admin` with password `admin123`. The first sign-in is restricted to the
 password-change screen, and the replacement password must be at least 12 characters and not a
 common default.

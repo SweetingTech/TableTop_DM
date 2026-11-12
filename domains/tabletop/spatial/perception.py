@@ -38,6 +38,13 @@ class GridSpatialPerceptionResolver:
         occluders = self._occluders(state)
         profiles = state.projections.get("tabletop.sensory_profiles", {})
         visible: dict[uuid.UUID, float] = {observer_entity_id: 1.0}
+        profile = profiles.get(str(observer_entity_id), {})
+        try:
+            acuity = float(profile.get("sight_acuity", 1.0))
+        except (TypeError, ValueError, OverflowError):
+            return visible
+        if profile.get("blinded") or not math.isfinite(acuity) or acuity <= 0:
+            return visible
         for target_id, target in sorted(positions.items(), key=lambda item: str(item[0])):
             if target_id == observer_entity_id or profiles.get(str(target_id), {}).get("invisible"):
                 continue
@@ -52,8 +59,9 @@ class GridSpatialPerceptionResolver:
                 zones,
                 occluders,
             )
+            confidence = round(max(0.0, min(1.0, confidence * acuity)), 6)
             if confidence > 0:
-                visible[target_id] = round(confidence, 6)
+                visible[target_id] = confidence
         return visible
 
     def resolve(

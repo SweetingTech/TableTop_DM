@@ -190,6 +190,32 @@ def test_current_scene_sight_does_not_reveal_entities_behind_a_zone_boundary():
     assert fixture["back_room"] not in visible
 
 
+@pytest.mark.parametrize(
+    "profile", [{"blinded": True}, {"sight_acuity": 0}, {"sight_acuity": float("nan")}]
+)
+def test_current_scene_sight_respects_observer_visual_limits(profile):
+    fixture = _world()
+    fixture["state"].projections["tabletop.sensory_profiles"][str(fixture["listener"])].update(
+        profile
+    )
+    visible = GridSpatialPerceptionResolver().visible_entities(
+        fixture["state"], fixture["listener"]
+    )
+    assert visible == {fixture["listener"]: 1.0}
+
+
+def test_current_scene_sight_acuity_reduces_detail_confidence():
+    fixture = _world()
+    resolver = GridSpatialPerceptionResolver()
+    before = resolver.visible_entities(fixture["state"], fixture["listener"])
+    fixture["state"].projections["tabletop.sensory_profiles"][str(fixture["listener"])][
+        "sight_acuity"
+    ] = 0.25
+    after = resolver.visible_entities(fixture["state"], fixture["listener"])
+    assert after[fixture["speaker"]] == round(before[fixture["speaker"]] * 0.25, 6)
+    assert after[fixture["listener"]] == 1.0
+
+
 def test_player_role_can_act_only_through_an_explicitly_assigned_body():
     roles, capabilities = kernel_authority(is_admin=False, world_roles=frozenset({"PLAYER"}))
     assert roles == frozenset({"PLAYER"})

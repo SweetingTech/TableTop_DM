@@ -131,6 +131,17 @@ and hashes omit the default purpose field to preserve immutable historical ident
 
 ## Subjective cognition
 
+The tabletop perceived-scene reader lives in `domains/tabletop/spatial/service.py` and is shared
+by scene and character-context reads. `cognition/context.py` assembles an immutable context using
+injected source-event and frozen-grant readers. Observation payloads must remain within both the
+recorded mask and the original physical grant; beliefs need matching visible claims, and memory
+summaries are grounded again in the same observation. Operator-tagged and other-branch evidence
+is excluded. The model-facing situation omits account/control and timeline/ledger metadata.
+Context reads do not mutate minds or the world. Legal action providers are a server injection
+point; the HTTP context route supplies no action catalog yet. The existing caller-authored
+decision API is now restricted to privileged playtester evaluation and refuses character personas
+until the live identity/context/candidate path is connected.
+
 Canonical truth, raw authorization, physical perception, observation, belief evidence, memory,
 relationship, and narration are separate records.
 The pure subjective pipeline is:

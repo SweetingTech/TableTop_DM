@@ -367,6 +367,17 @@ interface capability, or evaluation retrieval filter. Playtester compilation ret
 evaluation behavior. Purpose does not confer authority, bind a persona to a body, or validate
 caller-supplied situation text; those are separate campaign knowledge/control requirements.
 
+## Character context and evaluation boundary
+
+`GET /api/v2/worlds/{world_id}/branches/{branch_id}/entities/{entity_id}/context` uses the same
+world/viewpoint authorization as the perceived scene. It returns a versioned evidence hash,
+projection version, and a model-facing `situation`. Frozen event-time grants and source events
+must match the observer/world/branch; operator-tagged events, unbacked beliefs, and memory-summary
+overrides cannot add facts. The model-facing situation excludes controller, ledger, and timeline
+metadata. This endpoint is read-only and currently returns an empty `action_candidates` list;
+authored identity binding, a live action catalog, retrieval, and runner integration remain planned.
+It uses the current loaded projection; it does not establish a cross-process projector barrier.
+
 `POST /api/v2/cognition/decide` accepts caller-authored situations/actions only for privileged
 `SIMULATED_PLAYTESTER` evaluation (administrator session or automation boundary, still subject to
 world/body checks). Its response identifies `mode: EVALUATION` and `committed: false`.

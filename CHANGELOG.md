@@ -24,8 +24,14 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Added read-only embodied character context grounded in same-branch source events and frozen
+  perception grants; shared its scene reader with the Game Console. Operator records, unbacked
+  beliefs, and caller-authored memory summaries cannot add model-facing facts.
+- Fixed current scene reads to honor blindness and sight acuity while retaining self/perception
+  history; model-facing beliefs use consistent local subject references instead of kernel IDs.
 - Restricted caller-authored cognition to privileged simulated-playtester evaluation and rejected
-  character requests pending trusted identity/context/action wiring.
+  live character requests until identity/context/action wiring is complete. Context reads currently
+  expose no autonomous action catalog; authored backstories and the runner remain unfinished.
 - Rejected non-finite/overflowing persona distribution weights and totals with the intended
   feasibility error before seeded sampling.
 

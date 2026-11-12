@@ -225,6 +225,13 @@ def test_restart_hydrates_created_world_projection_and_event(
         assert isinstance(receipt, dict)
         event_id = receipt["event"]["event_id"]
         world_id = world["world_id"]
+        context_path = (
+            f"/api/v2/worlds/{world_id}/branches/{world['canonical_branch_id']}"
+            f"/entities/{entity['entity_id']}/context"
+        )
+        context_before = _api_json(first_url, context_path, token=token)
+        assert isinstance(context_before, dict)
+        assert "Restart Secret" not in json.dumps(context_before)
     finally:
         _stop_runtime(first)
 
@@ -282,6 +289,10 @@ def test_restart_hydrates_created_world_projection_and_event(
         assert restored_profile["starting_goals"] == []
         assert restored_profile["starting_relationships"] == []
         assert "dm_trust" not in restored_profile["deep_traits"]
+        context_after = _api_json(second_url, context_path, token=token)
+        assert isinstance(context_after, dict)
+        assert context_after["evidence_hash"] == context_before["evidence_hash"]
+        assert context_after["situation"] == context_before["situation"]
         worlds = _api_json(second_url, "/api/v2/worlds", token=token)
         assert isinstance(worlds, list)
         restored = next(item for item in worlds if item["world_id"] == world_id)

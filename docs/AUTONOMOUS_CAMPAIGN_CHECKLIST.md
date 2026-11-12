@@ -98,8 +98,14 @@ as composition glue; reusable execution services must also work from workers and
 - [ ] B3 — Introduce a trusted character-context builder under `cognition/`. Resolve current scene,
   mind, remembered testimony, known lore, and legal action candidates for one world/branch/entity.
   Reuse [scene](../domains/tabletop/spatial/scene.py), perception contracts, and mind repositories.
+  Foundation implemented: shared scene service, read-only [context builder](../cognition/context.py),
+  same-branch event/frozen-grant validation, grounded memories/beliefs, and authorized context reads.
+  This item remains open: authored identity, known-lore retrieval, legal action catalog, and worker
+  projection/decision barriers still need wiring; HTTP context reads currently return no candidates.
 - [ ] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
   evaluation situations confined to explicit privileged/testing flows rather than trusting them for live minds.
+  The caller-authored endpoint is now privileged playtester evaluation only and rejects CHARACTER
+  personas. Live decisions fail closed until explicit identity binding/context/candidates are wired.
 - [ ] B5 — Route lore retrieval, summaries, and model conversations through the same knowledge and
   timeline boundary. Public availability must not automatically mean a character has learned a fact.
 - [ ] B6 — Label operator/director records outside the sensory event stream. Audit [event finalization](../kernel/event_factory.py),

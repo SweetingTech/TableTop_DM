@@ -61,6 +61,12 @@ or GM relationships. Purpose is persistent and versioned; switching execution ru
 changes it. This filter does not authorize arbitrary situation text or establish which lore a
 character knows; trusted live context and knowledge-scoped retrieval remain separate boundaries.
 
+Read-only character-context assembly now validates stored experience against the same branch's
+source events and frozen physical grants. It cannot promote operator summaries into sensory
+facts. The model-facing situation excludes ledger/controller/timeline metadata. Caller-authored
+decision requests are restricted to privileged playtester evaluation; character requests fail
+closed until authored identity binding and a server-owned action catalog are wired.
+
 ## Constitutional order
 
 1. A human, policy, planner, or model creates a typed `CommandProposal`.
