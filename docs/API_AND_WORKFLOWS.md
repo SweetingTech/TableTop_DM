@@ -349,6 +349,24 @@ Capture requires opt-in and a consent version. Sensitive keys are redacted. Expo
 selective deletion, and retention purge are explicit operations. No external telemetry sink is
 configured by this repository.
 
+## Persona purpose
+
+`POST /api/v2/personas` and `POST /api/v2/personas/generate` accept an optional `purpose`:
+`CHARACTER` or `SIMULATED_PLAYTESTER` (the default for new identities). Manual successor creation
+inherits the existing persona or parent version's purpose when omitted and rejects an explicit
+purpose change; use a new identity for a different purpose. For example, generate an identity with
+`{"seed": 31, "purpose": "CHARACTER", "fixed": {"risk_tolerance": "LOW"}}`.
+Blueprint/detail/version and compile responses include the purpose. Invalid values return `400`
+before saving a persona. Compile and prompt routes derive purpose from the stored blueprint;
+they do not accept a purpose override. The existing Persona Studio generation form uses the
+playtester default; explicit character-purpose selection is currently available through the API.
+
+Character compilation includes core/world traits and excludes player/interface dimensions from
+both deep traits and requested prompt traits. It seeds no onboarding goals, GM relationship,
+interface capability, or evaluation retrieval filter. Playtester compilation retains existing
+evaluation behavior. Purpose does not confer authority, bind a persona to a body, or validate
+caller-supplied situation text; those are separate campaign knowledge/control requirements.
+
 ## Error contract
 
 Errors use a JSON body with a stable `error` code and, where safe, a human-readable detail.

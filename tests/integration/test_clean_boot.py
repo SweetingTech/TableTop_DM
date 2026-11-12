@@ -130,7 +130,7 @@ def test_clean_runtime_boots_with_non_owner_database(integration_stack, tmp_path
         readiness = _get_json(f"{base_url}/readyz")
         assert readiness["storage_mode"] == "postgres"
         assert readiness["checks"]["postgres"] == {
-            "migration": "003_spatial_epistemics.sql",
+            "migration": "004_persona_purpose.sql",
             "ok": True,
         }
         with urllib.request.urlopen(f"{base_url}/v2", timeout=3) as response:
@@ -170,6 +170,16 @@ def test_restart_hydrates_created_world_projection_and_event(
         _wait_for_ready(first, first_url)
         bootstrap = _api_json(first_url, "/api/v2/bootstrap", token=token)
         assert isinstance(bootstrap, dict)
+        character_persona = _api_json(
+            first_url,
+            "/api/v2/personas/generate",
+            token=token,
+            method="POST",
+            payload={"seed": 981723, "purpose": "CHARACTER"},
+        )
+        assert isinstance(character_persona, dict)
+        assert character_persona["purpose"] == "CHARACTER"
+        persona_id = character_persona["persona_id"]
         actor_id = bootstrap["ids"]["actor_id"]
         name = f"Restart World {os.getpid()}"
         world = _api_json(
@@ -254,6 +264,24 @@ def test_restart_hydrates_created_world_projection_and_event(
     second = _start_runtime(second_port, environment)
     try:
         _wait_for_ready(second, second_url)
+        restored_persona = _api_json(
+            second_url,
+            f"/api/v2/personas/{persona_id}",
+            token=token,
+        )
+        assert isinstance(restored_persona, dict)
+        assert restored_persona["purpose"] == "CHARACTER"
+        restored_profile = _api_json(
+            second_url,
+            f"/api/v2/personas/{persona_id}/compile",
+            token=token,
+            method="POST",
+        )
+        assert isinstance(restored_profile, dict)
+        assert restored_profile["purpose"] == "CHARACTER"
+        assert restored_profile["starting_goals"] == []
+        assert restored_profile["starting_relationships"] == []
+        assert "dm_trust" not in restored_profile["deep_traits"]
         worlds = _api_json(second_url, "/api/v2/worlds", token=token)
         assert isinstance(worlds, list)
         restored = next(item for item in worlds if item["world_id"] == world_id)

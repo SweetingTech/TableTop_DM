@@ -66,10 +66,10 @@ class PostgresPersonaRepository:
                     INSERT INTO persona.blueprints (
                       persona_id, version_id, parent_version_id, schema_version,
                       seed, generator_version, source, content_hash, dimensions,
-                      derived_traits, provenance, validation, created_at
+                      derived_traits, provenance, validation, created_at, purpose
                     ) VALUES (
                       %s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,
-                      %s::jsonb,%s
+                      %s::jsonb,%s,%s
                     )
                     ON CONFLICT (persona_id, content_hash) DO NOTHING
                     """,
@@ -93,6 +93,7 @@ class PostgresPersonaRepository:
                         ),
                         blueprint.validation.model_dump_json(),
                         record.created_at,
+                        blueprint.purpose.value,
                     ),
                 )
                 cursor.execute(
@@ -117,10 +118,10 @@ class PostgresPersonaRepository:
                       persona_id, persona_version_id, compiler_version,
                       identity_summary, policy_weights, starting_goals,
                       starting_beliefs, starting_relationships, routine_templates,
-                      capability_modifiers, retrieval_filters
+                      capability_modifiers, retrieval_filters, purpose
                     ) VALUES (
                       %s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,
-                      %s::jsonb,%s::jsonb,%s::jsonb
+                      %s::jsonb,%s::jsonb,%s::jsonb,%s
                     ) ON CONFLICT DO NOTHING
                     """,
                     (
@@ -135,8 +136,19 @@ class PostgresPersonaRepository:
                         json.dumps(compiled.routines, default=str),
                         json.dumps(compiled.capability_modifiers),
                         json.dumps({"filters": compiled.retrieval_filters}),
+                        compiled.purpose.value,
                     ),
                 )
+                cursor.execute(
+                    """
+                    SELECT purpose FROM persona.compiled_profiles
+                    WHERE persona_id = %s AND persona_version_id = %s AND compiler_version = %s
+                    """,
+                    (str(compiled.persona_id), str(version_id), compiled.compiler_version),
+                )
+                stored = cursor.fetchone()
+                if stored is None or stored[0] != compiled.purpose.value:
+                    raise ValueError("stored compiled profile purpose differs")
         return compiled
 
     def list_versions(self) -> tuple[PersonaVersionRecord, ...]:
@@ -147,7 +159,7 @@ class PostgresPersonaRepository:
                     SELECT persona_id, version_id, parent_version_id,
                            schema_version, seed, generator_version, source,
                            content_hash, dimensions, derived_traits, provenance,
-                           validation, created_at
+                           validation, created_at, purpose
                     FROM persona.blueprints
                     ORDER BY created_at, persona_id, version_id
                     """
@@ -160,6 +172,7 @@ class PostgresPersonaRepository:
         blueprint = PersonaBlueprint.model_validate(
             {
                 "persona_id": row["persona_id"],
+                "purpose": row["purpose"],
                 "schema_version": row["schema_version"],
                 "seed": row["seed"],
                 "generator_version": row["generator_version"],

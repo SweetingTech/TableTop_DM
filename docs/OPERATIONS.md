@@ -116,7 +116,7 @@ dependencies and returns `503` if any required check fails.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `003_spatial_epistemics.sql`;
+- migration history through `004_persona_purpose.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -197,6 +197,14 @@ The durable command transaction owns:
 7. idempotent entity materialization when requested by the command.
 
 Any error rolls the transaction back.
+
+Migration `004_persona_purpose.sql` adds validated persona purpose to blueprints and compiled
+profiles and a composite foreign key requiring each profile to match its blueprint purpose.
+Existing rows default to `SIMULATED_PLAYTESTER`; their immutable content hashes, version IDs,
+and old compiled profiles remain intact. New character versions include purpose in their identity.
+Compiler `persona-compiler-0.3.0` produces purpose-specific profiles. Upgrade the schema before
+starting this application version; readiness rejects the previous migration boundary. Existing
+runtime grants and append-only triggers continue to apply to the added columns.
 
 ## Storage and retention
 

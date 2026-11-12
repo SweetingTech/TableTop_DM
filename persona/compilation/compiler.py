@@ -1,15 +1,26 @@
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
-from persona.models import CompiledPersona, PersonaBlueprint, PromptAssembly
+from persona.models import CompiledPersona, PersonaBlueprint, PersonaPurpose, PromptAssembly
+from persona.registry import PersonaSchemaRegistry
 from persona.versioning import PersonaVersioning
 
 LEVEL = {"LOW": 0.25, "MEDIUM": 0.55, "HIGH": 0.85}
 
 
+@lru_cache(maxsize=1)
+def character_trait_names() -> frozenset[str]:
+    return frozenset(
+        name
+        for name, spec in PersonaSchemaRegistry.load_default().dimensions.items()
+        if spec.domain_pack in {"core", "world"}
+    )
+
+
 class PersonaCompiler:
-    VERSION = "persona-compiler-0.2.0"
+    VERSION = "persona-compiler-0.3.0"
 
     def compile(
         self,
@@ -17,6 +28,8 @@ class PersonaCompiler:
         *,
         persona_version: str | None = None,
     ) -> CompiledPersona:
+        if persona.purpose == PersonaPurpose.CHARACTER:
+            return self._compile_character(persona, persona_version=persona_version)
         dims = persona.dimensions
         risk = LEVEL.get(str(dims.get("risk_tolerance")), 0.55)
         patience = LEVEL.get(str(dims.get("patience")), 0.55)
@@ -30,6 +43,7 @@ class PersonaCompiler:
         experience = str(dims.get("rules_familiarity", "MEDIUM")).lower()
         return CompiledPersona(
             persona_id=persona.persona_id,
+            purpose=persona.purpose,
             persona_version=persona_version or str(PersonaVersioning.record(persona).version_id),
             compiler_version=self.VERSION,
             identity_summary=(
@@ -106,6 +120,49 @@ class PersonaCompiler:
             deep_traits=dict(sorted(dims.items())),
         )
 
+    def _compile_character(
+        self, persona: PersonaBlueprint, *, persona_version: str | None
+    ) -> CompiledPersona:
+        allowed = character_trait_names()
+        dims = {
+            name: value for name, value in sorted(persona.dimensions.items()) if name in allowed
+        }
+        risk = LEVEL.get(str(dims.get("risk_tolerance")), 0.55)
+        patience = LEVEL.get(str(dims.get("patience")), 0.55)
+        curiosity = LEVEL.get(str(dims.get("curiosity")), 0.55)
+        return CompiledPersona(
+            persona_id=persona.persona_id,
+            purpose=PersonaPurpose.CHARACTER,
+            persona_version=persona_version or str(PersonaVersioning.record(persona).version_id),
+            compiler_version=self.VERSION,
+            identity_summary=(
+                f"A {str(dims.get('species', 'HUMAN')).lower()} with "
+                f"{str(dims.get('risk_tolerance', 'MEDIUM')).lower()} risk tolerance, "
+                f"{str(dims.get('patience', 'MEDIUM')).lower()} patience, and "
+                f"{str(dims.get('curiosity', 'MEDIUM')).lower()} curiosity."
+            ),
+            policy_weights={
+                "risk_penalty": round(1.8 - risk, 4),
+                "patience": patience,
+                "curiosity": curiosity,
+                "invalid_action_penalty": 1.25,
+            },
+            # Specific goals/knowledge/relationships must come from the character's
+            # authored identity and same-timeline experience, not player defaults.
+            starting_goals=(),
+            retrieval_filters=(),
+            starting_beliefs=tuple(
+                {
+                    "subject_type": "self",
+                    "predicate": name,
+                    "value": dims.get(name, "MEDIUM"),
+                    "confidence": 1.0,
+                }
+                for name in ("risk_tolerance", "authority_trust")
+            ),
+            deep_traits=dims,
+        )
+
     @staticmethod
     def assemble_prompt(
         persona: CompiledPersona,
@@ -117,8 +174,11 @@ class PersonaCompiler:
     ) -> PromptAssembly:
         if max_tokens < 1 or max_characters < 1:
             raise ValueError("Prompt budgets must be positive")
+        allowed = character_trait_names() if persona.purpose == PersonaPurpose.CHARACTER else None
         selected = tuple(
-            name for name in sorted(set(relevant_traits)) if name in persona.deep_traits
+            name
+            for name in sorted(set(relevant_traits))
+            if name in persona.deep_traits and (allowed is None or name in allowed)
         )
         sections = [f"Identity: {persona.identity_summary}"]
         if situation_summary.strip():

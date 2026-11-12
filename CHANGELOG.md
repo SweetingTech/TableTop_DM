@@ -24,6 +24,13 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Added explicit character and simulated-playtester persona purposes. Character compilation and
+  prompt trait selection exclude player/interface metadata and onboarding/GM behavior; existing
+  evaluation defaults retain historical persona IDs and version hashes.
+- Added migration 004 to persist purpose and enforce matching blueprint/compiled-profile purpose,
+  with clean-install, previous-schema upgrade, rollback, and restart checks. Added API purpose
+  selection; autonomous live context and lore filtering remain planned campaign work.
+
 - Added explicit Player/Co-DM selection and playable character assignment to the DM roster,
   including existing-member updates, authorized character-summary lookup, and rejection of
   missing, wrong-owner, and cross-world character assignments.

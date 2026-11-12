@@ -83,6 +83,7 @@ from kernel.postgres_repository import PostgresCommandRepository
 from kernel.visibility import VisibilityPolicy
 from persona.compilation import PersonaCompiler
 from persona.generation import PersonaGenerator
+from persona.models import PersonaPurpose
 from persona.postgres import PostgresPersonaRepository
 from persona.registry import PersonaSchemaRegistry
 from persona.validation import PersonaValidator
@@ -123,11 +124,13 @@ class RunCreateRequest(BaseModel):
 
 class PersonaGenerateRequest(BaseModel):
     seed: int
+    purpose: PersonaPurpose = PersonaPurpose.SIMULATED_PLAYTESTER
     fixed: dict[str, Any] = Field(default_factory=dict)
 
 
 class PersonaCreateRequest(BaseModel):
     seed: int
+    purpose: PersonaPurpose | None = None
     dimensions: dict[str, Any] = Field(default_factory=dict)
     persona_id: uuid.UUID | None = None
     parent_version_id: uuid.UUID | None = None
@@ -1286,7 +1289,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "003_spatial_epistemics.sql",
+                    "ok": version == "004_persona_purpose.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -2247,15 +2250,24 @@ def create_app(
     def persona_create():
         body = PersonaCreateRequest.model_validate(request.get_json(silent=True) or {})
         identity = body.persona_id
+        prior = personas.get(identity) if identity is not None else None
         if body.parent_version_id is not None:
             parent = persona_versions[body.parent_version_id]
             if identity is not None and identity != parent.blueprint.persona_id:
                 raise ValueError("parent version belongs to another persona")
             identity = parent.blueprint.persona_id
+            prior = parent.blueprint
+        purpose = body.purpose or (
+            prior.purpose if prior is not None else PersonaPurpose.SIMULATED_PLAYTESTER
+        )
+        if prior is not None and purpose != prior.purpose:
+            raise ValueError("persona purpose cannot change for an existing identity")
         updates: dict[str, Any] = {"source": "manual"}
         if identity is not None:
             updates["persona_id"] = identity
-        blueprint = generator.generate(body.seed, body.dimensions).model_copy(update=updates)
+        blueprint = generator.generate(body.seed, body.dimensions, purpose=purpose).model_copy(
+            update=updates
+        )
         validation = persona_validator.validate_blueprint(blueprint)
         if validation.status != "valid":
             return jsonify(
@@ -2277,7 +2289,7 @@ def create_app(
     @app.post("/api/v2/personas/generate")
     def persona_generate():
         body = PersonaGenerateRequest.model_validate(request.get_json(silent=True) or {})
-        persona = generator.generate(body.seed, body.fixed)
+        persona = generator.generate(body.seed, body.fixed, purpose=body.purpose)
         if persona.validation.status != "valid":
             raise ValueError("generated persona failed validation")
         personas[persona.persona_id] = persona

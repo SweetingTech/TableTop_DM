@@ -5,11 +5,11 @@ import json
 import uuid
 from datetime import UTC, datetime
 
-from persona.models import PersonaBlueprint, PersonaVersionRecord
+from persona.models import PersonaBlueprint, PersonaPurpose, PersonaVersionRecord
 
 
 class PersonaVersioning:
-    VERSION = "persona-versioning-1.0.0"
+    VERSION = "persona-versioning-1.1.0"
 
     @staticmethod
     def record(
@@ -18,8 +18,12 @@ class PersonaVersioning:
         parent_version_id: uuid.UUID | None = None,
         created_at: datetime | None = None,
     ) -> PersonaVersionRecord:
+        content = blueprint.model_dump(mode="json", exclude={"validation": {"warnings"}})
+        # Legacy blueprints did not contain purpose. Their immutable hashes/IDs stay valid.
+        if blueprint.purpose == PersonaPurpose.SIMULATED_PLAYTESTER:
+            content.pop("purpose")
         encoded = json.dumps(
-            blueprint.model_dump(mode="json", exclude={"validation": {"warnings"}}),
+            content,
             sort_keys=True,
             separators=(",", ":"),
         ).encode()

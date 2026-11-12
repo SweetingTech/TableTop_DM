@@ -28,14 +28,14 @@ Checked items mean locally implemented and verified; Orderly acceptance and live
 
 | Area | Existing wiring | Gap established by inspection |
 | --- | --- | --- |
-| Character binding | `dm_game_member` in [API](../kernel/api/app.py) spawns/binds an entity when `character_id` is supplied | [Invite UI](../frontend/src/features/dm/DungeonMasterPage.tsx) sends user, role, and status but no character ID |
+| Character binding | A1 wires [roster selection](../frontend/src/features/dm/DungeonMasterPage.tsx) to authorized character lookup and assignment | Atomic binding/reassignment and removal semantics remain A2/A3 |
 | Console | [Page](../frontend/src/features/game-console/GameConsolePage.tsx) loads a perceived scene and submits commands | Submission appends a local event without scene reload; local events survive context changes; fixed Harborport map; four-token slice |
 | Commands | [Bus](../kernel/command_bus.py), [application](../kernel/application.py), [durable repository](../kernel/postgres_repository.py) | No connected autonomous campaign driver |
 | Scheduling | [DeterministicScheduler](../kernel/scheduling.py) | In-memory queue; production call sites were not found; only its test imports it |
 | Population | [Lifecycle](../population/lifecycle.py), [repository](../population/postgres.py) | Explicit transitions retain state; `world_step` is supplied by callers, not a world clock; no activity progression |
 | Background process | [WorldEventProjector](../cognition/projector.py), [CLI](../main.py) | Projects existing events into minds; does not generate next actions |
 | Decisions | [LayeredDecisionEngine](../cognition/engine.py), API `cognition_decide` | Caller supplies situation/actions; returns `committed: false`; API calls engine without a model provider |
-| Personas | [Compiler](../persona/compilation/compiler.py) | Current identity/goals/routines target simulated players and onboarding; no established per-player/per-character imitation pipeline |
+| Personas | B1 adds distinct character/playtester purpose and [compiler](../persona/compilation/compiler.py) trait filtering | Trusted live context, authored character identity, and player-history imitation remain unfinished |
 | Runtime assignment | [MindStore](../cognition/store.py), [durable minds](../cognition/postgres.py), entity runtime API | Assignment exists; presence, exclusive control, and safe handoff are not a complete flow |
 | Experiments | [ApplicationBranchExecutor.execute](../experiments/executor.py) | Applies a single scenario intervention, returns `steps=1`; horizon metadata is not a live campaign loop |
 | Factions/gods/quests | [Reputation](../domains/tabletop/factions/__init__.py), [blessing](../domains/tabletop/divine/__init__.py), [quest counter](../domains/tabletop/quests/__init__.py) | These commands do not constitute autonomous factions, divine agendas, or causally verified quest systems |
@@ -84,9 +84,14 @@ as composition glue; reusable execution services must also work from workers and
 
 ## B. Separate character knowledge from player and operator knowledge
 
-- [ ] B1 — Add explicit character-persona and simulated-playtester purposes to persona contracts and
+- [x] B1 — Add explicit character-persona and simulated-playtester purposes to persona contracts and
   compilation. Retain existing evaluation behavior; exclude GM trust, controls, onboarding, and
   interface preferences from in-world identity/context.
+  Implemented locally in [Orderly task 3](http://jarvis:8080/b/tabletop-dm-autonomous-campaign/t/3):
+  API purpose selection, inherited purpose on successor versions, core/world trait allowlist,
+  legacy playtester identity/hash compatibility, and migration 004 purpose persistence/constraints.
+  Character compilation seeds no player goals/relationships/interface capabilities. Live context,
+  lore, situation text, and body/persona binding remain B2–B7; B1 alone does not establish secrecy.
 - [ ] B2 — Add validated character backstory, motives, values, bonds, secrets, and initial known facts
   to [character records](../domains/tabletop/portal.py) and the Player form/import adapter. Version
   the card/backstory and establish its link to persona, mind, and embodied entity without merging identities.
@@ -338,3 +343,11 @@ production build); mypy passed; all 34 integration tests passed against an isola
 Final current-world DM lookup enforcement was additionally checked with service tests and the
 isolated Chromium journey. A complete campaign/model-backed playthrough remains untested.
 The running Docker app was not redeployed; local source and current production assets changed.
+
+For B1, the current fast gate passed (165 Python tests, 20 frontend tests, lint and production
+build); mypy passed for 99 source files; all 36 integration tests passed, including upgrade from
+migration 003, purpose constraints/rollback, and actual API-process restart. Authenticated Chromium
+verified persona creation/successors/compile/prompts and the existing Persona Studio at desktop
+and mobile sizes against an isolated ready reference server. A wheel built from a clean staging
+tree passed the runtime-asset verifier. Frontend assets are unchanged. The live Docker database
+and image were not upgraded; independent Orderly acceptance remains separate.
