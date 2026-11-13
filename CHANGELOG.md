@@ -48,6 +48,9 @@ This file records the current TableTop DM product line.
 
 ### Security
 
+- Applied browser write-origin checks to public login before creating a session.
+- Rejected differing compiled-profile retries at an existing immutable persona/version/compiler key.
+
 - Bound every command, event read, cognition decision, observation, and mind inspection to the
   actor of the signed-in account. Previously the actor came from the request, so any authenticated
   account could act and read as any actor, including the administrator's, and the ledger recorded

@@ -107,6 +107,9 @@ time, and an actual API process restart must preserve context evidence. API test
 viewpoint authorization, evaluation role gating, and rejection of caller-authored character decisions.
 Current visual context must honor blindness/acuity while retaining self and previous experience;
 distinct belief subjects must retain consistent context-local references without kernel IDs.
+Compiled-profile retries reject changes to every persisted profile field and leave the original
+usable after rollback. Browser authorization tests reject cross-site, opaque, malformed, and
+wrong-port login origins without issuing a cookie, while preserving same-origin login.
 
 Stop disposable dependencies:
 

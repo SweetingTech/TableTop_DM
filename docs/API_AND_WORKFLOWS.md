@@ -12,6 +12,10 @@ timestamps use ISO 8601.
 HTTP-only `ttdm_session` cookie with `SameSite=Lax`; HTTPS deployments also receive the `Secure`
 flag. The server stores only a hash of the session token.
 
+Login remains public but applies the same write-origin checks as authenticated browser writes.
+Cross-site Fetch Metadata, a foreign or opaque Origin, and malformed Origin ports are rejected
+before credentials can create a session cookie. Same-origin and headerless automation login work.
+
 Useful routes:
 
 | Method and route | Purpose |
