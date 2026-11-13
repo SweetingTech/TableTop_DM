@@ -174,6 +174,10 @@ class, level, and status for characters belonging to that player and either this
 world yet. It excludes character sheets and backstory. Assignment rejects missing characters,
 wrong owners, and characters bound to another world. Choosing Co-DM clears the character selection.
 
+Changing the selected user or membership role immediately clears old character choices and lookup
+errors, and disables player saves until the new lookup settles. Obsolete responses cannot replace
+the current user's choices. Changing games remounts the roster editor for that game.
+
 ## World and command workflow
 
 Control-plane collections:

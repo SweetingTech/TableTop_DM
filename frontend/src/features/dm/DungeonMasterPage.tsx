@@ -479,6 +479,7 @@ export function RosterEditor({ game, eligible, onOperation }: {
   return <div className="stack-list">
     <div className="inline-action">
       <label>Eligible user<select value={memberId} onChange={(event) => {
+        characters.reload();
         const id = event.target.value;
         const user = eligible.find((row) => row.user_id === id);
         const existing = game.members.find((row) => row.user_id === id);
@@ -492,6 +493,7 @@ export function RosterEditor({ game, eligible, onOperation }: {
         {eligible.map((user) => <option key={user.user_id} value={user.user_id}>{user.profile.display_name}</option>)}
       </select></label>
       <label>Membership role<select value={role} onChange={(event) => {
+        characters.reload();
         setRole(event.target.value as api.MembershipRole);
         setCharacterId("");
       }}>

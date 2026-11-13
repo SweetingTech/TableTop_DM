@@ -1,0 +1,39 @@
+
+> tabletop-simulation-kernel-ui@2.0.0 build
+> tsc -b && vite build
+
+vite v8.2.1 building client environment for production...
+
+transforming...✓ 1841 modules transformed.
+rendering chunks...
+computing gzip size...
+../static/v2/index.html                                 0.56 kB │ gzip:  0.33 kB
+../static/v2/assets/index-DIDITe-C.css                 39.37 kB │ gzip:  8.65 kB
+../static/v2/assets/plus-Czs7z-ja.js                    0.14 kB │ gzip:  0.14 kB
+../static/v2/assets/circle-check-BVMx9NJZ.js            0.16 kB │ gzip:  0.16 kB
+../static/v2/assets/play-Dtz4lJfh.js                    0.18 kB │ gzip:  0.17 kB
+../static/v2/assets/git-branch-zHVxZG_6.js              0.21 kB │ gzip:  0.18 kB
+../static/v2/assets/shield-DxVocnC9.js                  0.26 kB │ gzip:  0.21 kB
+../static/v2/assets/user-plus-DD1rv06i.js               0.30 kB │ gzip:  0.22 kB
+../static/v2/assets/save-BxXo_5a5.js                    0.31 kB │ gzip:  0.22 kB
+../static/v2/assets/trash-2-DhWL3bX2.js                 0.31 kB │ gzip:  0.21 kB
+../static/v2/assets/scale-CvVP_GWd.js                   0.32 kB │ gzip:  0.21 kB
+../static/v2/assets/shield-alert-DgdJIbFP.js            0.34 kB │ gzip:  0.25 kB
+../static/v2/assets/useAsyncResource-jDnpPquY.js        0.46 kB │ gzip:  0.29 kB
+../static/v2/assets/swords-Ds2pUxR7.js                  0.54 kB │ gzip:  0.28 kB
+../static/v2/assets/Primitives-y8-13U4Z.js              1.33 kB │ gzip:  0.57 kB
+../static/v2/assets/PopulationStudioPage-BGpYBEjb.js    7.77 kB │ gzip:  2.74 kB
+../static/v2/assets/CalibrationPage-CUlhvSoP.js         8.48 kB │ gzip:  2.86 kB
+../static/v2/assets/SettingsPage-DAaVEoF2.js            8.87 kB │ gzip:  2.99 kB
+../static/v2/assets/PersonaStudioPage-DoqcjYTz.js       9.66 kB │ gzip:  3.51 kB
+../static/v2/assets/AdminDashboardPage-BaPZ2dY8.js      9.94 kB │ gzip:  2.80 kB
+../static/v2/assets/RunInspectorPage-DpcXT4vE.js       11.14 kB │ gzip:  3.74 kB
+../static/v2/assets/GameConsolePage-BpEACJsg.js        11.77 kB │ gzip:  4.81 kB
+../static/v2/assets/ScenarioLabPage-B_pMBf_X.js        11.79 kB │ gzip:  3.96 kB
+../static/v2/assets/DungeonMasterPage-CjuOUJjk.js      12.59 kB │ gzip:  3.82 kB
+../static/v2/assets/States-DVuYADxX.js                 12.63 kB │ gzip:  5.09 kB
+../static/v2/assets/PlayerDashboardPage-nLg8F246.js    12.86 kB │ gzip:  3.78 kB
+../static/v2/assets/ControlPlanePage-H5lbLjed.js       16.30 kB │ gzip:  4.37 kB
+../static/v2/assets/index-jiLa1pmu.js                 249.74 kB │ gzip: 80.69 kB
+
+✓ built in 378ms
