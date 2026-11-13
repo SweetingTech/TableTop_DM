@@ -24,6 +24,9 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Cleared stale roster character choices and errors immediately on user/role changes and blocked
+  player saves while the selected user's lookup is pending.
+
 - Added explicit Player/Co-DM selection and playable character assignment to the DM roster,
   including existing-member updates, authorized character-summary lookup, and rejection of
   missing, wrong-owner, and cross-world character assignments.

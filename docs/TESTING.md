@@ -123,6 +123,11 @@ Playwright verifies:
 - completed jobs and detailed ledgers remain visible after a real application restart;
 - desktop/mobile layouts have no document overflow or unexpected console errors.
 
+Deferred roster tests verify immediate clearing of another user's choices/errors, disabled saves
+during pending lookups and player/co-DM switches, and rejection of obsolete responses after a
+newer lookup completes. Browser verification delays a real character lookup before inviting and
+updating the selected member.
+
 Screenshots, traces, and videos are retained under `test-results-e2e/` when configured or on
 failure. Those generated results are ignored by Git.
 
