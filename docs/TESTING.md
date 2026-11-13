@@ -40,6 +40,12 @@ services; lifecycle remains explicit.
 
 ## Function-level coverage
 
+Basic character-action tests cover deterministic typed movement attempts, required world
+capabilities, canonical versus trial authority, inspect-only access, perceived incapacity, and
+no private IDs in labels. Hidden obstacles leave the catalog/evidence hash unchanged; the kernel
+rejects blocked attempts without writes and commits a valid retried action once. Durable context
+reads retain the same versioned catalog after app recreation.
+
 Scene-refresh regressions cover delayed subjective projection, scoped/unknown receipt rejection,
 unperceived actions, cancellation, eight-second timeout, stale responses, source-event deduplication,
 world/viewpoint resets, keyboard focus, and read-only retry after acceptance. The durable test

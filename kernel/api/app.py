@@ -33,6 +33,7 @@ from cognition.relationships import (
     RelationshipModifiers,
 )
 from cognition.store import MindStore
+from domains.tabletop.character_actions import ACTION_CATALOG_VERSION, character_action_candidates
 from domains.tabletop.character_identity import CharacterIdentity
 from domains.tabletop.portal import (
     InMemoryPortalRepository,
@@ -1631,6 +1632,11 @@ def create_app(
             grant_reader=lambda event_id, entity_id: simulation.perceptions.get(
                 (event_id, entity_id)
             ),
+            action_provider=lambda authorized_scene: character_action_candidates(
+                authorized_scene,
+                actor=simulation.authority(world_id, actor_id),
+                branch_kind=simulation.states.get(branch_id).kind,
+            ),
         )
         return jsonify(
             {
@@ -1639,6 +1645,7 @@ def create_app(
                 "projection_version": scene.projection_version,
                 "situation": context.situation(),
                 "action_candidates": [action.model_dump(mode="json") for action in context.actions],
+                "action_catalog_version": ACTION_CATALOG_VERSION,
             }
         )
 

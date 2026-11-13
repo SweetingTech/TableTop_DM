@@ -422,9 +422,19 @@ world/viewpoint authorization as the perceived scene. It returns a versioned evi
 projection version, and a model-facing `situation`. Frozen event-time grants and source events
 must match the observer/world/branch; operator-tagged events, unbacked beliefs, and memory-summary
 overrides cannot add facts. The model-facing situation excludes controller, ledger, and timeline
-metadata. This endpoint is read-only and currently returns an empty `action_candidates` list;
-authored identity binding, a live action catalog, retrieval, and runner integration remain planned.
-It uses the current loaded projection; it does not establish a cross-process projector barrier.
+metadata. This endpoint is read-only. `action_candidates` currently contains four typed cardinal
+movement attempts when the caller controls this body, holds the command's world-scoped capabilities
+(including canonical commit authority), and the perceived self has a position and no known
+incapacity. Inspect-only viewpoints return no executable choices. `action_catalog_version` is
+`tabletop-character-actions-1.0.0`. Candidates carry typed command parameters outside `situation`;
+their action labels contain fiction only. There are no class/species/protagonist restrictions.
+
+These choices are attempts, not guaranteed outcomes. The provider never reads hidden obstacles
+or hidden entities to remove choices; otherwise the catalog itself would reveal unknown facts.
+The kernel must revalidate authority, lineage, and rules on submission. No model or read request
+commits an action. Authored identity binding, speech/combat/activity catalogs, learned lore, and
+runner integration remain planned. Durable reads hydrate the current subjective projection;
+the context route does not yet wait at a runner's dependent-decision projection barrier.
 
 `POST /api/v2/cognition/decide` accepts caller-authored situations/actions only for privileged
 `SIMULATED_PLAYTESTER` evaluation (administrator session or automation boundary, still subject to

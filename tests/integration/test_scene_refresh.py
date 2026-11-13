@@ -69,6 +69,8 @@ def test_scene_refresh_reads_external_projector_without_replacing_shared_cache(
     )
     context = client.get(path + "/context", headers=headers)
     assert context.status_code == 200
+    assert len(context.get_json()["action_candidates"]) == 4
+    assert context.get_json()["action_catalog_version"] == "tabletop-character-actions-1.0.0"
     assert "external projector delivered" in str(context.get_json()["situation"]["experiences"])
     assert simulation.states.get(ids["branch_id"]).version == cursor["projection_version"]
 
@@ -78,6 +80,11 @@ def test_scene_refresh_reads_external_projector_without_replacing_shared_cache(
     )
     assert restored.status_code == 200
     assert restored.get_json()["refresh"]["ready"] is True
+    restored_context = restarted.test_client().get(path + "/context", headers=headers)
+    assert restored_context.status_code == 200
+    assert (
+        restored_context.get_json()["action_candidates"] == context.get_json()["action_candidates"]
+    )
     assert [
         row
         for row in restored.get_json()["recent_observations"]

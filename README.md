@@ -46,8 +46,10 @@ still tracked in the [implementation checklist](docs/AUTONOMOUS_CAMPAIGN_CHECKLI
 
 Embodied context reads now share the perceived-scene service and validate remembered evidence
 against same-branch frozen perception grants. Caller-authored cognition requests are privileged
-playtester evaluation; live character decisions remain unavailable until authored identity and
-server-owned action candidates are connected. This prevents that evaluation API from injecting
+playtester evaluation. Context reads now supply a versioned basic movement-attempt catalog for
+controlled, capable bodies, using perceived self state and world-scoped authority. Hidden obstacles
+do not filter choices; the kernel checks every attempt. Live character decisions remain unavailable
+until authored identity, broader actions, and runner wiring are connected. This keeps that evaluation API from injecting
 operator/player knowledge into character decisions while the remaining campaign wiring is built.
 
 The initial account is `admin` with password `admin123`. The first sign-in is restricted to the
