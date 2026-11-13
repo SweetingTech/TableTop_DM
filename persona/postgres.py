@@ -8,6 +8,7 @@ from typing import Any
 import psycopg2.extras
 
 from kernel.database import transaction
+from kernel.state import stable_hash
 from persona.models import (
     CompiledPersona,
     PersonaBlueprint,
@@ -110,6 +111,10 @@ class PostgresPersonaRepository:
 
     def save_compiled(self, compiled: CompiledPersona) -> CompiledPersona:
         version_id = uuid.UUID(compiled.persona_version)
+        content = compiled.model_dump(mode="json", exclude={"deep_traits"})
+        content["persona_version_id"] = content.pop("persona_version")
+        content["routine_templates"] = content.pop("routines")
+        content["retrieval_filters"] = {"filters": content["retrieval_filters"]}
         with transaction(dsn=self.dsn) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -141,7 +146,8 @@ class PostgresPersonaRepository:
                 )
                 cursor.execute(
                     """
-                    SELECT purpose FROM persona.compiled_profiles
+                    SELECT purpose, to_jsonb(profile) - 'compiled_at'
+                    FROM persona.compiled_profiles AS profile
                     WHERE persona_id = %s AND persona_version_id = %s AND compiler_version = %s
                     """,
                     (str(compiled.persona_id), str(version_id), compiled.compiler_version),
@@ -149,6 +155,8 @@ class PostgresPersonaRepository:
                 stored = cursor.fetchone()
                 if stored is None or stored[0] != compiled.purpose.value:
                     raise ValueError("stored compiled profile purpose differs")
+                if stable_hash(stored[1]) != stable_hash(content):
+                    raise ValueError("stored compiled profile content differs")
         return compiled
 
     def list_versions(self) -> tuple[PersonaVersionRecord, ...]:

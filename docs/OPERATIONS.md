@@ -206,6 +206,10 @@ Compiler `persona-compiler-0.3.0` produces purpose-specific profiles. Upgrade th
 starting this application version; readiness rejects the previous migration boundary. Existing
 runtime grants and append-only triggers continue to apply to the added columns.
 
+Compiled-profile retries compare every persisted content field at the exact persona/version/compiler
+key. Identical retries succeed; differing identity, policy, goals, beliefs, relationships, routines,
+capability modifiers, retrieval filters, or purpose fail without replacing the immutable profile.
+
 ## Storage and retention
 
 | Data | Store and recovery notes |

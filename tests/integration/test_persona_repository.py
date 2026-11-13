@@ -100,6 +100,35 @@ def test_persona_versions_and_compiled_profile_survive_reload(integration_stack)
     assert stored[2] == {"filters": list(compiled.retrieval_filters)}
 
 
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"identity_summary": "Changed identity"},
+        {"policy_weights": {"risk": 0.42}},
+        {"starting_goals": ("Changed goal",)},
+        {"starting_beliefs": ({"known": "Changed belief"},)},
+        {"starting_relationships": ({"trust": 0.5},)},
+        {"routines": ({"activity": "Changed routine"},)},
+        {"capability_modifiers": {"changed": 1.0}},
+        {"retrieval_filters": ("Changed filter",)},
+    ],
+)
+def test_compiled_profile_retry_rejects_changed_persisted_content(integration_stack, updates):
+    registry = _IntegrationPersonaRegistry.load_default()
+    repository = PostgresPersonaRepository(integration_stack.database_url, registry)
+    repository.sync_schema()
+    blueprint = PersonaGenerator(registry).generate(997, purpose=PersonaPurpose.CHARACTER)
+    version = PersonaVersioning.record(blueprint)
+    repository.save_version(version)
+    compiled = PersonaCompiler().compile(blueprint, persona_version=str(version.version_id))
+    assert repository.save_compiled(compiled) == compiled
+    assert repository.save_compiled(compiled) == compiled
+    with pytest.raises(ValueError, match="profile content differs"):
+        repository.save_compiled(compiled.model_copy(update=updates))
+    # A conflict must neither replace the original immutable row nor poison the next transaction.
+    assert repository.save_compiled(compiled) == compiled
+
+
 def test_character_purpose_survives_reload_and_rejects_mismatched_profiles(integration_stack):
     registry = _IntegrationPersonaRegistry.load_default()
     repository = PostgresPersonaRepository(integration_stack.database_url, registry)

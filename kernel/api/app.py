@@ -854,6 +854,31 @@ def create_app(
         response.delete_cookie("ttdm_session", path="/", samesite="Lax")
         return response
 
+    def browser_write_boundary():
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            fetch_site = request.headers.get("Sec-Fetch-Site", "").casefold()
+            if fetch_site == "cross-site":
+                return jsonify({"error": "cross_site_request_rejected"}), 403
+            origin = request.headers.get("Origin")
+            if origin:
+                try:
+                    origin_parts = urlsplit(origin)
+                    request_parts = urlsplit(request.host_url)
+                    same_origin = (
+                        origin_parts.scheme.casefold() == request_parts.scheme.casefold()
+                        and origin_parts.hostname is not None
+                        and request_parts.hostname is not None
+                        and origin_parts.hostname.rstrip(".").casefold()
+                        == request_parts.hostname.rstrip(".").casefold()
+                        and (origin_parts.port or (443 if origin_parts.scheme == "https" else 80))
+                        == (request_parts.port or (443 if request_parts.scheme == "https" else 80))
+                    )
+                except ValueError:
+                    same_origin = False
+                if not same_origin:
+                    return jsonify({"error": "cross_site_request_rejected"}), 403
+        return None
+
     @app.before_request
     def authentication_boundary():
         if not request.path.startswith("/api/v2"):
@@ -861,10 +886,11 @@ def create_app(
         public_paths = {
             "/api/v2/health/live",
             "/api/v2/health/ready",
-            "/api/v2/auth/login",
         }
         if request.path in public_paths:
             return None
+        if request.path == "/api/v2/auth/login":
+            return browser_write_boundary()
         configured = os.environ.get("TTDM_OPERATOR_TOKEN", "")
         supplied = request.headers.get("X-TTDM-Operator-Token", "")
         if configured and supplied and hmac.compare_digest(configured, supplied):
@@ -937,29 +963,7 @@ def create_app(
             return jsonify(
                 {"error": "permission_denied", "details": "administrator role required"}
             ), 403
-        if request.method not in {"GET", "HEAD", "OPTIONS"}:
-            fetch_site = request.headers.get("Sec-Fetch-Site", "").casefold()
-            if fetch_site == "cross-site":
-                return jsonify({"error": "cross_site_request_rejected"}), 403
-            origin = request.headers.get("Origin")
-            if origin:
-                try:
-                    origin_parts = urlsplit(origin)
-                    request_parts = urlsplit(request.host_url)
-                    same_origin = (
-                        origin_parts.scheme.casefold() == request_parts.scheme.casefold()
-                        and origin_parts.hostname is not None
-                        and request_parts.hostname is not None
-                        and origin_parts.hostname.rstrip(".").casefold()
-                        == request_parts.hostname.rstrip(".").casefold()
-                        and (origin_parts.port or (443 if origin_parts.scheme == "https" else 80))
-                        == (request_parts.port or (443 if request_parts.scheme == "https" else 80))
-                    )
-                except ValueError:
-                    same_origin = False
-                if not same_origin:
-                    return jsonify({"error": "cross_site_request_rejected"}), 403
-        return None
+        return browser_write_boundary()
 
     @app.errorhandler(ValidationError)
     def validation_error(exc: ValidationError):
