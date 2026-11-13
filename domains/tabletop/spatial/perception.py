@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import uuid
 from collections import deque
+from typing import Any
 
 from kernel.contracts import CommandProposal
 from kernel.perception_contracts import (
@@ -20,7 +21,7 @@ from .models import SpatialOccluder, SpatialPortal, SpatialPosition, SpatialZone
 class GridSpatialPerceptionResolver:
     """Deterministic grid sight/sound resolver over event-time projections."""
 
-    VERSION = "grid-spatial-perception-1.0.0"
+    VERSION = "grid-spatial-perception-1.0.1"
 
     def visible_entities(
         self,
@@ -110,17 +111,19 @@ class GridSpatialPerceptionResolver:
                 confidence, sound_reasons = self._sound_confidence(
                     origin, observer, emission, zones, portals, occluders
                 )
+                confidence = self._adjusted_confidence(confidence, profile, "hearing_acuity")
                 if confidence > 0:
                     perceived.append(SensoryModality.SOUND)
-                    confidences.append(confidence * float(profile.get("hearing_acuity", 1.0)))
+                    confidences.append(confidence)
                     reasons.extend(sound_reasons)
             if SensoryModality.SIGHT in emission.modalities and not profile.get("blinded"):
                 confidence, sight_reasons = self._sight_confidence(
                     origin, observer, emission, zones, occluders
                 )
+                confidence = self._adjusted_confidence(confidence, profile, "sight_acuity")
                 if confidence > 0:
                     perceived.append(SensoryModality.SIGHT)
-                    confidences.append(confidence * float(profile.get("sight_acuity", 1.0)))
+                    confidences.append(confidence)
                     reasons.extend(sight_reasons)
             if not perceived:
                 continue
@@ -151,6 +154,16 @@ class GridSpatialPerceptionResolver:
                 )
             )
         return AudienceResolution(perceptions=tuple(grants))
+
+    @staticmethod
+    def _adjusted_confidence(confidence: float, profile: dict[str, Any], key: str) -> float:
+        try:
+            acuity = float(profile.get(key, 1.0))
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+        if not math.isfinite(acuity) or acuity <= 0:
+            return 0.0
+        return round(max(0.0, min(1.0, confidence * acuity)), 6)
 
     @staticmethod
     def _positions(state: BranchState) -> dict[uuid.UUID, SpatialPosition]:
@@ -302,11 +315,9 @@ class GridSpatialPerceptionResolver:
                 candidate = strength * base
                 if candidate <= best.get(next_zone, 0):
                     continue
-                if next_zone == goal:
-                    return candidate
                 best[next_zone] = candidate
                 queue.append((next_zone, candidate))
-        return 0.0
+        return best.get(goal, 0.0)
 
     @staticmethod
     def _supercover(x0: int, y0: int, x1: int, y1: int) -> tuple[tuple[int, int], ...]:

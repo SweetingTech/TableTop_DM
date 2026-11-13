@@ -2067,14 +2067,17 @@ def create_app(
 
     @app.get("/api/v2/entities/<uuid:entity_id>/mind")
     def cognition_inspect(entity_id: uuid.UUID):
+        entity = canonical_entity(entity_id)
+        require_world_access(entity.world_id)
+        requested = request.args.get("actor_id")
+        actor_id = requested_actor_id(uuid.UUID(requested) if requested else None)
+        authority = simulation.authority(entity.world_id, actor_id)
+        if entity.controller_actor_id != actor_id and not {
+            "mind.read.all",
+            "mind.write.all",
+        }.intersection(authority.capabilities):
+            raise PermissionError("actor cannot inspect this embodied mind")
         if mind_repository is not None:
-            entity = canonical_entity(entity_id)
-            require_world_access(entity.world_id)
-            requested = request.args.get("actor_id")
-            # In durable mode this actor becomes the transaction-local `app.actor_id`, so a
-            # caller-chosen value would select which row-level-security identity the read runs
-            # under.
-            actor_id = requested_actor_id(uuid.UUID(requested) if requested else None)
             return jsonify(
                 mind_repository.inspect(
                     world_id=entity.world_id,
@@ -2083,7 +2086,6 @@ def create_app(
                     actor_id=actor_id,
                 )
             )
-        entity = canonical_entity(entity_id)
         return jsonify(minds.inspect(entity_id, branch_id=entity.branch_id))
 
     @app.route("/api/v2/worlds/<uuid:world_id>/snapshots", methods=["GET", "POST"])

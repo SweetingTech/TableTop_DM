@@ -12,6 +12,7 @@ from identity.repository import kernel_authority
 from kernel.command_bus import CommandBus
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal
 from kernel.errors import AuthorizationDenied
+from kernel.perception_contracts import EventEmission, SensoryModality
 from kernel.state import BranchState, InMemoryStateStore
 
 pytestmark = pytest.mark.unit
@@ -126,6 +127,88 @@ def test_closed_room_freezes_entity_level_witnesses_and_keeps_raw_acl_narrow():
         "common"
     )
     assert fixture["back_room"] not in {item.observer_entity_id for item in receipt.perceptions}
+
+
+@pytest.mark.parametrize("modality,key", [("SIGHT", "sight_acuity"), ("SOUND", "hearing_acuity")])
+@pytest.mark.parametrize("acuity", [0, -1, float("nan"), float("inf"), "invalid", None, 1e-12])
+def test_event_grants_require_positive_finite_adjusted_sensation(modality, key, acuity):
+    fixture = _world()
+    fixture["state"].projections["tabletop.sensory_profiles"][str(fixture["listener"])][key] = (
+        acuity
+    )
+    resolution = GridSpatialPerceptionResolver().resolve(
+        event_id=uuid.uuid4(),
+        proposal=CommandProposal(
+            command_type="tabletop.dialogue.speak",
+            world_id=fixture["world"],
+            branch_id=fixture["branch"],
+            run_id=fixture["run"],
+            actor_id=fixture["source_actor"],
+            embodied_entity_id=fixture["speaker"],
+            parameters={"text": "A sensory event"},
+            idempotency_key="limited-senses",
+        ),
+        emission=EventEmission(
+            anchor={"entity_id": fixture["speaker"]},
+            modalities=(SensoryModality(modality),),
+        ),
+        before=fixture["state"],
+        after=fixture["state"],
+    )
+    assert fixture["listener"] not in {grant.observer_entity_id for grant in resolution.perceptions}
+    assert all(grant.confidence > 0 for grant in resolution.perceptions)
+
+
+@pytest.mark.parametrize(
+    "zero_key,remaining", [("sight_acuity", "SOUND"), ("hearing_acuity", "SIGHT")]
+)
+def test_mixed_emission_grants_only_the_perceived_modality(zero_key, remaining):
+    fixture = _world()
+    fixture["state"].projections["tabletop.sensory_profiles"][str(fixture["listener"])][
+        zero_key
+    ] = 0
+    resolution = GridSpatialPerceptionResolver().resolve(
+        event_id=uuid.uuid4(),
+        proposal=CommandProposal(
+            command_type="tabletop.dialogue.speak",
+            world_id=fixture["world"],
+            branch_id=fixture["branch"],
+            run_id=fixture["run"],
+            actor_id=fixture["source_actor"],
+            embodied_entity_id=fixture["speaker"],
+            parameters={"text": "A mixed event"},
+            idempotency_key="mixed-senses",
+        ),
+        emission=EventEmission(
+            anchor={"entity_id": fixture["speaker"]},
+            modalities=(SensoryModality.SIGHT, SensoryModality.SOUND),
+        ),
+        before=fixture["state"],
+        after=fixture["state"],
+    )
+    grant = next(g for g in resolution.perceptions if g.observer_entity_id == fixture["listener"])
+    assert grant.modalities == (SensoryModality(remaining),)
+    assert grant.confidence > 0
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_hearing_uses_strongest_portal_path_independent_of_order(reverse):
+    fixture = _world()
+    paths = [("common", "back", 0.1), ("common", "hall", 0.9), ("hall", "back", 0.9)]
+    fixture["state"].projections["tabletop.spatial.portals"] = {
+        str(uuid.UUID(int=index + 1)): {
+            "from_zone_id": left,
+            "to_zone_id": right,
+            "kind": "OPENING",
+            "state": "OPEN",
+            "sound_transmission": strength,
+        }
+        for index, (left, right, strength) in enumerate(reversed(paths) if reverse else paths)
+    }
+    receipt = _speak(fixture, "strongest-portal")
+    grant = next(g for g in receipt.perceptions if g.observer_entity_id == fixture["back_room"])
+    assert grant.confidence == round(1 - 4 / (8 * 0.81), 6)
+    assert grant.resolver_version == "grid-spatial-perception-1.0.1"
 
 
 def test_open_door_or_shout_changes_hearing_deterministically():

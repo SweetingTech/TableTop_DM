@@ -48,6 +48,10 @@ This file records the current TableTop DM product line.
 
 ### Security
 
+- Enforced controller/world mind-inspection checks in reference mode as well as durable storage.
+- Corrected frozen sensory grants for zero/invalid acuity and strongest-path sound propagation;
+  new grants record resolver version `grid-spatial-perception-1.0.1`.
+
 - Applied browser write-origin checks to public login before creating a session.
 - Rejected differing compiled-profile retries at an existing immutable persona/version/compiler key.
 
