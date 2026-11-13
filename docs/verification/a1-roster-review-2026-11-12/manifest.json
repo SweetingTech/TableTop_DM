@@ -1,0 +1,121 @@
+{
+  "schema": "ttdm.verification/v1",
+  "task": "A1 playable-character roster",
+  "tested_source_revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+  "created_at": "2026-11-13T02:03:19.866198+00:00",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "win32",
+    "browser": "Chromium/Playwright",
+    "storage": "isolated disposable PostgreSQL integration + isolated reference browser app"
+  },
+  "normalization": "Terminal ANSI sequences, CRLF line endings and final empty report lines normalized; result content retained. Digests computed from exact staged Git blob bytes.",
+  "results": {
+    "fast": "156 Python tests; 24 frontend tests; lint/build passed",
+    "types": "99 source files passed",
+    "integration": "34 passed, including actual restart",
+    "browser": "1 passed: delayed real lookup, invite/update, Player/Co-DM, authorization, desktop/mobile and no page errors",
+    "wheel": "clean-staged wheel runtime assets verified"
+  },
+  "commands": [
+    "python scripts/test.py fast",
+    "mypy kernel persona cognition population experiments domains identity infra main.py",
+    "TTDM_INTEGRATION=1 python -m pytest -m integration -v --tb=short",
+    "python -m pytest -m e2e tests/e2e/test_roster_assignment_isolated.py -v -s --tb=short --junitxml=<temporary output>",
+    "npm --prefix frontend run build",
+    "uv build --wheel --directory <clean temporary stage>; python scripts/verify_wheel.py <wheel>"
+  ],
+  "reports": [
+    {
+      "path": "docs/verification/a1-roster-review-2026-11-12/fast.txt",
+      "sha256": "28bc09925b760e3ec98cf3ae48349efbcf6d90d2174c93727bd878f53d4b1d1b",
+      "bytes": 3308
+    },
+    {
+      "path": "docs/verification/a1-roster-review-2026-11-12/types.txt",
+      "sha256": "d332a54e4742598f84155661ad3409eac68d79e43e90fe51ac5e4ca6b7476dcb",
+      "bytes": 109
+    },
+    {
+      "path": "docs/verification/a1-roster-review-2026-11-12/integration.txt",
+      "sha256": "39f36bf7960daad12484ef043a28a0fe295c540ed86f0a3465f595798c897386",
+      "bytes": 1441
+    },
+    {
+      "path": "docs/verification/a1-roster-review-2026-11-12/browser.txt",
+      "sha256": "2fb2873b13f763b7ad85713a4f1a16605cdced1932242d336168905bce52f146",
+      "bytes": 911
+    },
+    {
+      "path": "docs/verification/a1-roster-review-2026-11-12/browser.xml",
+      "sha256": "bb5357d2f524454bef3039edf2ae1b2c4a5d1a89b4daeeb1290fa6591435fb6f",
+      "bytes": 401
+    },
+    {
+      "path": "docs/verification/a1-roster-review-2026-11-12/build.txt",
+      "sha256": "96cab2ac024bd9ecb87b24eddba2823b799858972d82965fc7676448d45e50ca",
+      "bytes": 2560
+    },
+    {
+      "path": "docs/verification/a1-roster-review-2026-11-12/wheel.txt",
+      "sha256": "2a2726394622b02f42824236f3c0a6bd45a35c355b5bfb38c2c6a624044d618f",
+      "bytes": 131
+    }
+  ],
+  "source_artifacts": [
+    {
+      "path": "frontend/src/features/dm/DungeonMasterPage.tsx",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "07f6624df276bca37f8dade6df15d61fb9ac51abb2025397f6ce9199524286b9",
+      "bytes": 18293
+    },
+    {
+      "path": "frontend/src/features/dm/api.ts",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "e95eeec6a9ea8adfe87be72099595facc817e8ad49283c90bec4aec43d863b1c",
+      "bytes": 2854
+    },
+    {
+      "path": "frontend/src/test/DmRoster.test.tsx",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "46c8d7496adfc50e3739034dce7f4063f18feb4633f13b6edf8ab8588af6f94c",
+      "bytes": 8730
+    },
+    {
+      "path": "tests/e2e/test_roster_assignment_isolated.py",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "9b66fcce6f61486dda079a612da601ed8e462a1393e472f147024911d9320113",
+      "bytes": 7570
+    },
+    {
+      "path": "domains/tabletop/portal.py",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "b9440b46257301e56632c7937703f24dea851975f6f668224f917b9458b08714",
+      "bytes": 35340
+    },
+    {
+      "path": "kernel/api/app.py",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "eae629e45e58feb697db57c6205eb5549a86305cbfefea9f6e5d850b30f8a43a",
+      "bytes": 124941
+    },
+    {
+      "path": "tests/integration/test_identity_portal.py",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "26c8a729c586ce998fba4dad8f56de3a43dfb21722b27faed95a466a4d8b4487",
+      "bytes": 5021
+    },
+    {
+      "path": "static/v2/index.html",
+      "revision": "112e2e66e9b26968e0303da5c91168b6bcc45cba",
+      "sha256": "326d044ba1e2cb265263db3783fbe33d175639547f3d421d6748b69f56f88f5b",
+      "bytes": 568
+    }
+  ],
+  "remaining_outside_A1": [
+    "A2 atomic roster/entity/binding recovery",
+    "A3 removal/control semantics",
+    "live deployment",
+    "remaining autonomous campaign checklist"
+  ]
+}

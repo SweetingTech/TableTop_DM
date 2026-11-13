@@ -16,6 +16,21 @@ This file records the current TableTop DM product line.
 
 ## Unreleased
 
+### Planning
+
+- Added a code-mapped autonomous campaign checklist covering world progression, player-history
+  stand-ins, controller handoffs, open parties, timeline revision, story direction, and AI DM tools.
+  The checklist describes planned work and does not add runtime functionality.
+
+### Gameplay
+
+- Cleared stale roster character choices and errors immediately on user/role changes and blocked
+  player saves while the selected user's lookup is pending.
+
+- Added explicit Player/Co-DM selection and playable character assignment to the DM roster,
+  including existing-member updates, authorized character-summary lookup, and rejection of
+  missing, wrong-owner, and cross-world character assignments.
+
 ### Security
 
 - Bound every command, event read, cognition decision, observation, and mind inspection to the

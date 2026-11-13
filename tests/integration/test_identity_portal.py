@@ -87,6 +87,29 @@ def test_accounts_roles_characters_and_games_survive_restart(
         )
         assert game.status_code == 201
         game_id = game.get_json()["game_id"]
+        assignable = adventurer.get(f"/api/v2/dm/games/{game_id}/users/{user_id}/characters")
+        assert assignable.status_code == 200
+        summaries = assignable.get_json()["items"]
+        assert summaries == [
+            {
+                "character_id": character.get_json()["character_id"],
+                "name": "Vesper Vale",
+                "class_name": character.get_json()["class_name"],
+                "level": 1,
+                "status": "ALIVE",
+            }
+        ]
+        assigned = adventurer.put(
+            f"/api/v2/dm/games/{game_id}/members",
+            json={
+                "user_id": user_id,
+                "character_id": summaries[0]["character_id"],
+                "membership_role": "PLAYER",
+                "status": "READY",
+            },
+        )
+        assert assigned.status_code == 200
+        assert assigned.get_json()["members"][0]["character_name"] == "Vesper Vale"
 
     restarted = create_app(artifact_root=tmp_path)
     with restarted.test_client() as client:
@@ -101,3 +124,10 @@ def test_accounts_roles_characters_and_games_survive_restart(
         games = client.get("/api/v2/games").get_json()["items"]
         assert characters[0]["name"] == "Vesper Vale"
         assert games[0]["game_id"] == game_id
+        assert games[0]["members"][0]["character_id"] == characters[0]["character_id"]
+        assert (
+            client.get(f"/api/v2/dm/games/{game_id}/users/{user_id}/characters").get_json()[
+                "items"
+            ][0]["name"]
+            == "Vesper Vale"
+        )

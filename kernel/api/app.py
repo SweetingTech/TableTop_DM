@@ -1140,6 +1140,24 @@ def create_app(
         ]
         return jsonify({"items": rows})
 
+    @app.get("/api/v2/dm/games/<uuid:game_id>/users/<uuid:user_id>/characters")
+    def dm_assignable_characters(game_id: uuid.UUID, user_id: uuid.UUID):
+        rows = portal.assignable_characters(current_user(), game_id, user_id)
+        return jsonify(
+            {
+                "items": [
+                    {
+                        "character_id": str(row.character_id),
+                        "name": row.name,
+                        "class_name": row.class_name,
+                        "level": row.level,
+                        "status": row.status,
+                    }
+                    for row in rows
+                ]
+            }
+        )
+
     @app.post("/api/v2/dm/games")
     def dm_game_create():
         body = GameCreateRequest.model_validate(request.get_json(force=True))

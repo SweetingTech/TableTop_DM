@@ -496,6 +496,21 @@ class TabletopPortalService:
             owner_user_id=None if actor.is_admin else actor.user_id
         )
 
+    def assignable_characters(
+        self, actor: UserAccount, game_id: uuid.UUID, user_id: uuid.UUID
+    ) -> tuple[CharacterRecord, ...]:
+        game = self._hosted(actor, game_id)
+        IdentityService.require_world_role(actor, game.world_id, "DM")
+        account = self.identities.get_account(user_id)
+        if account is None or not account.is_active:
+            raise KeyError(user_id)
+        IdentityService.require_world_role(account, game.world_id, "PLAYER")
+        return tuple(
+            character
+            for character in self.repository.list_characters(owner_user_id=user_id)
+            if character.world_id in {None, game.world_id}
+        )
+
     def create_character(self, actor: UserAccount, payload: dict[str, Any]) -> CharacterRecord:
         self._require_player(actor)
         method = str(payload.get("creation_method", "BUILT")).upper()
@@ -655,8 +670,14 @@ class TabletopPortalService:
             uuid.UUID(str(payload["character_id"])) if payload.get("character_id") else None
         )
         character = self.repository.get_character(character_id) if character_id else None
+        if character_id is not None and character is None:
+            raise KeyError(character_id)
         if character and character.owner_user_id != user_id:
             raise ValueError("assigned character must belong to the selected user")
+        if character and character.world_id not in {None, game.world_id}:
+            raise ValueError("assigned character must belong to this world")
+        if character and membership_role != "PLAYER":
+            raise ValueError("only player memberships can have an assigned character")
         member = GameMember(
             user_id=user_id,
             username=account.username,
