@@ -3,6 +3,11 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
+The API version containing character history/bindings requires migration 005. Revision and binding
+records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
+The migration owner remains separate from the runtime login. Card revisions are authored source
+material, while binding rows are private controller configuration outside the sensory event stream.
+
 ## Default network diagram
 
 ```mermaid

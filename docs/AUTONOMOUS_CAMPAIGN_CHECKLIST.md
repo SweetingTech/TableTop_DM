@@ -96,13 +96,16 @@ as composition glue; reusable execution services must also work from workers and
   legacy playtester identity/hash compatibility, and migration 004 purpose persistence/constraints.
   Character compilation seeds no player goals/relationships/interface capabilities. Live context,
   lore, situation text, and body/persona binding remain B2–B7; B1 alone does not establish secrecy.
-- [ ] B2 — Add validated character backstory, motives, values, bonds, secrets, and initial known facts
+- [x] B2 — Add validated character backstory, motives, values, bonds, secrets, and initial known facts
   to [character records](../domains/tabletop/portal.py) and the Player form/import adapter. Version
   the card/backstory and establish its link to persona, mind, and embodied entity without merging identities.
-  Card foundation implemented locally: validated authored fields, private persistence in the
-  existing sheet, build/edit/import controls, and deterministic current `card_version`. Initial
-  knowledge remains an authored claim. This item stays open: historical card revisions and the
-  explicit persona/mind/body link are still missing; no live decision consumes this data yet.
+  Implemented: validated authored fields/build-edit-import controls, deterministic card hashes,
+  migration 005 immutable private history with upgrade backfill, and explicit version-pinned
+  CHARACTER persona/card/world-branch-run-body/mind bindings. Initial roster assignment creates
+  a missing binding; edits and roster retries preserve it until an authorized CAS successor.
+  Pinned self fiction enters trusted context; initial knowledge remains a separate authored claim.
+  Baseline persona traits are card-seeded, not semantic inference or learned player imitation.
+  Actual live decision execution remains B4/F and is not activated by this foundation.
 - [ ] B3 — Introduce a trusted character-context builder under `cognition/`. Resolve current scene,
   mind, remembered testimony, known lore, and legal action candidates for one world/branch/entity.
   Reuse [scene](../domains/tabletop/spatial/scene.py), perception contracts, and mind repositories.
@@ -111,12 +114,12 @@ as composition glue; reusable execution services must also work from workers and
   The HTTP context now supplies a versioned basic movement-attempt catalog through a trusted
   domain provider, gated by world capabilities/body control and perceived self state. Hidden
   obstacles never filter choices; submission still passes kernel validation. This item remains
-  open: authored identity, known lore, broader speech/combat/activity actions, and dependent-decision
+  open: known lore, broader speech/combat/activity actions, and dependent-decision
   projection barriers still need wiring. This catalog alone does not activate autonomous decisions.
 - [ ] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
   evaluation situations confined to explicit privileged/testing flows rather than trusting them for live minds.
   The caller-authored endpoint is now privileged playtester evaluation only and rejects CHARACTER
-  personas. Live decisions fail closed until explicit identity binding/context/candidates are wired.
+  personas. Live decisions remain disabled until execution/handoff/runner wiring is verified.
 - [ ] B5 — Route lore retrieval, summaries, and model conversations through the same knowledge and
   timeline boundary. Public availability must not automatically mean a character has learned a fact.
 - [ ] B6 — Label operator/director records outside the sensory event stream. Audit [event finalization](../kernel/event_factory.py),

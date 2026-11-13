@@ -103,6 +103,13 @@ returns the original committed receipt.
 
 ## Supporting documentation
 
+Character identity bindings are versioned controller configuration, like runtime assignments;
+they do not mutate world truth, grant body control, or enter the sensory ledger. A binding pins
+immutable authored content and a `CHARACTER` compiled profile to exact world/run/branch/entity
+lineage and an existing mind. Rebinding preserves subjective history and runtime selection.
+Authored starting claims stay outside canonical facts and learned evidence. Future autonomous
+execution must resolve this binding and still submit authorized typed kernel proposals.
+
 An accepted command's scene-refresh cursor is operational metadata, outside the character's
 situation and evidence hash. Checking readiness reads the original event-time perception grant
 and subjective projection; it does not resubmit the command, mutate a mind, recompute an audience

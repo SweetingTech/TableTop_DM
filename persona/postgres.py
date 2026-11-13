@@ -159,6 +159,25 @@ class PostgresPersonaRepository:
                     raise ValueError("stored compiled profile content differs")
         return compiled
 
+    def get_compiled(
+        self, persona_id: uuid.UUID, version_id: uuid.UUID, compiler_version: str
+    ) -> CompiledPersona | None:
+        with transaction(dsn=self.dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT * FROM persona.compiled_profiles WHERE "
+                    "(persona_id,persona_version_id,compiler_version)=(%s,%s,%s)",
+                    (str(persona_id), str(version_id), compiler_version),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                values = dict(row)
+                values["persona_version"] = str(values.pop("persona_version_id"))
+                values["routines"] = values.pop("routine_templates")
+                values["retrieval_filters"] = values["retrieval_filters"]["filters"]
+                return CompiledPersona.model_validate(values)
+
     def list_versions(self) -> tuple[PersonaVersionRecord, ...]:
         with transaction(dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:

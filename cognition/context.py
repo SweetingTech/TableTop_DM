@@ -10,6 +10,7 @@ from cognition.beliefs import BeliefClaim
 from cognition.engine import DecisionAction
 from cognition.models import Belief, Memory, MindState, Observation
 from cognition.perception import PerceptionEngine, PerceptionProfile
+from domains.tabletop.character_history import CharacterCardContent
 from domains.tabletop.spatial.scene import PerceivedScene
 from kernel.contracts import EventEnvelopeV2
 from kernel.perception_contracts import PerceptionGrant
@@ -85,12 +86,13 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.0.0"
+    context_version: str = "character-context-1.1.0"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
     memories: tuple[Memory, ...]
     actions: tuple[DecisionAction, ...] = ()
+    identity: CharacterCardContent | None = None
 
     @property
     def evidence_hash(self) -> str:
@@ -114,6 +116,20 @@ class CharacterContext(BaseModel):
             }
         )
         return {
+            "identity": {
+                "name": self.identity.name,
+                "species": self.identity.species,
+                "class_name": self.identity.class_name,
+                "background": self.identity.background,
+                **self.identity.authored_identity.model_dump(
+                    mode="json", exclude={"initial_known_facts"}
+                ),
+                "starting_knowledge_claims": list(
+                    self.identity.authored_identity.initial_known_facts
+                ),
+            }
+            if self.identity
+            else None,
             "surroundings": [
                 {
                     "reference": references[entity.entity_id],
@@ -164,6 +180,7 @@ def build_character_context(
     event_reader: EventReader,
     grant_reader: GrantReader,
     action_provider: ActionProvider | None = None,
+    identity: CharacterCardContent | None = None,
 ) -> CharacterContext:
     """Read-only context assembly; all readers/providers are trusted server dependencies."""
     entity_id = scene.observer_entity_id
@@ -209,6 +226,7 @@ def build_character_context(
                 memory.model_copy(update={"summary": experience_summary(source)}, deep=True)
             )
     return CharacterContext(
+        identity=identity.model_copy(deep=True) if identity is not None else None,
         scene=scene.model_copy(deep=True),
         observations=eligible[-80:],
         beliefs=tuple(sorted(beliefs, key=lambda item: str(item.belief_id))),

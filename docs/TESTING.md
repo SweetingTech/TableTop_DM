@@ -40,6 +40,16 @@ services; lifecycle remains explicit.
 
 ## Function-level coverage
 
+Character-history/binding tests preserve existing card hashes (including Unicode), archive only
+authored changes, pin running context across edits, and explicitly adopt a successor without
+resetting nonempty memories or human runtime selection. Forbidden playtester profiles, foreign
+bodies/runs/revisions, stale replacements, and broad scene inspection without mind access fail
+closed. Durable tests cover migration-004 upgrade/backfill, RLS, grants, immutable triggers,
+composite foreign keys, concurrent replacement, atomic neutral-mind rollback, app recreation, and
+two actual API processes reading the same pinned identity. The isolated Chromium journey edits
+a card through the built SPA, checks history/pinning, explicitly rebinds, and verifies movement,
+private-feed separation, reload, keyboard use, and mobile overflow.
+
 Basic character-action tests cover deterministic typed movement attempts, required world
 capabilities, canonical versus trial authority, inspect-only access, perceived incapacity, and
 no private IDs in labels. Hidden obstacles leave the catalog/evidence hash unchanged; the kernel

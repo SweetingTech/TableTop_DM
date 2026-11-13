@@ -24,6 +24,12 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Added migration 005 for immutable private authored-card history and version-pinned character
+  persona/body/mind bindings. Initial roster assignment creates a missing binding; later edits
+  require explicit successor adoption. Atomic/CAS persistence preserves existing experience and
+  runtime selection. Trusted context exposes only pinned self fiction, with starting claims kept
+  separate from learned facts. This does not yet enable unattended decisions or player imitation.
+
 - Added a versioned server-owned basic movement-attempt catalog to authorized character context.
   Choices use perceived self state and world-scoped capabilities/body control, without class or
   protagonist restrictions or hidden-obstacle filtering. Kernel validation remains authoritative;
@@ -39,7 +45,7 @@ This file records the current TableTop DM product line.
 - Added validated character backstory, motives, values, bonds, character secrets, and starting
   knowledge claims to card creation/import/editing. Private sheet storage and a deterministic
   current-content version survive restart. Authored claims do not enter world truth or minds;
-  historical card revisions and persona/mind/body bindings remain unfinished B2 work.
+  historical card revisions and persona/mind/body bindings are supplied by migration 005.
 
 - Added read-only embodied character context grounded in same-branch source events and frozen
   perception grants; shared its scene reader with the Game Console. Operator records, unbacked
