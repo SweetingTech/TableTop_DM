@@ -29,7 +29,7 @@ Checked items mean locally implemented and verified; Orderly acceptance and live
 | Area | Existing wiring | Gap established by inspection |
 | --- | --- | --- |
 | Character binding | A1 wires [roster selection](../frontend/src/features/dm/DungeonMasterPage.tsx) to authorized character lookup and assignment | Atomic binding/reassignment and removal semantics remain A2/A3 |
-| Console | [Page](../frontend/src/features/game-console/GameConsolePage.tsx) loads a perceived scene and submits commands | Submission appends a local event without scene reload; local events survive context changes; fixed Harborport map; four-token slice |
+| Console | [Page](../frontend/src/features/game-console/GameConsolePage.tsx) refreshes authorized scenes after actions and renders observations once per source event | Cross-client updates, fixed Harborport map, and four-token slice remain A5/A6 |
 | Commands | [Bus](../kernel/command_bus.py), [application](../kernel/application.py), [durable repository](../kernel/postgres_repository.py) | No connected autonomous campaign driver |
 | Scheduling | [DeterministicScheduler](../kernel/scheduling.py) | In-memory queue; production call sites were not found; only its test imports it |
 | Population | [Lifecycle](../population/lifecycle.py), [repository](../population/postgres.py) | Explicit transitions retain state; `world_step` is supplied by callers, not a world clock; no activity progression |
@@ -71,8 +71,12 @@ as composition glue; reusable execution services must also work from workers and
 - [ ] A3 — Define whether removing a member removes control, keeps an autonomous character,
   or only removes the human seat. Wire through [portal](../domains/tabletop/portal.py) and
   [identity grants](../identity/repository.py); never leave stale body control accidentally.
-- [ ] A4 — Refresh the scene after accepted actions, wait for the relevant observation projection
+- [x] A4 — Refresh the scene after accepted actions, wait for the relevant observation projection
   boundary, and deduplicate pending versus persisted feed entries. Clear local state on world/viewpoint changes.
+  Implemented with an authorized receipt cursor, bounded/cancellable polling, request-local durable
+  observation reads, and an observation-only feed. Verified with delayed-projection/retry/scope
+  regressions and a real built-SPA cookie session at desktop/mobile sizes. Failed reads retry GET
+  without resubmitting accepted actions. A5 continuous cross-client synchronization remains open.
 - [ ] A5 — Add version/cursor-based updates across clients, reconnect/resync, and out-of-order response
   protection. Start with bounded polling if appropriate; preserve perception-scoped reads.
 - [ ] A6 — Replace fixed map metadata with world/zone presentation configuration; remove the four-token

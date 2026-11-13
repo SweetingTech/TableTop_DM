@@ -2,11 +2,13 @@ import { apiRequest, unpackItems } from "../../core/api/client";
 import { withDemoFallback } from "../../core/api/fallback";
 import type { BranchSummary, EntitySummary, EventRecord, GameState, PerceivedScene, RunSummary, Sourced, ViewpointSummary } from "../../core/api/types";
 import { DEMO_BRANCH_ID, DEMO_RUN_ID, demoGameState } from "../../core/demo/fixtures";
+import { waitForScene, type SceneRefreshCursor } from "./sceneRefresh";
 
 function normalizeEvent(raw: Record<string, unknown>): EventRecord {
   const payload = raw.payload && typeof raw.payload === "object" ? raw.payload as Record<string, unknown> : {};
   return {
     event_id: String(raw.event_id ?? raw.id ?? "event-unidentified"),
+    source_event_id: raw.source_event_id ? String(raw.source_event_id) : undefined,
     event_type: String(raw.event_type ?? raw.type ?? "kernel.event"),
     actor_name: raw.actor_name ? String(raw.actor_name) : undefined,
     summary: String(raw.summary ?? payload.summary ?? payload.message ?? raw.event_type ?? "Event recorded"),
@@ -18,14 +20,13 @@ function normalizeEvent(raw: Record<string, unknown>): EventRecord {
   };
 }
 
-export async function loadGameState(worldId: string, requestedViewpoint = ""): Promise<Sourced<GameState>> {
+export async function loadGameState(worldId: string, requestedViewpoint = "", cursor?: SceneRefreshCursor, signal?: AbortSignal): Promise<Sourced<GameState>> {
   if (!worldId) return { data: demoGameState, source: "demo", reason: "No live world is selected; deterministic demo data is shown." };
-  return withDemoFallback(
-    async () => {
+  const load = async (): Promise<GameState> => {
       const [viewpointsPayload, runsPayload, branchesPayload] = await Promise.all([
-        apiRequest<{ items?: ViewpointSummary[] }>(`/worlds/${worldId}/viewpoints`),
-        apiRequest<RunSummary[] | { items?: RunSummary[] }>(`/runs?world_id=${encodeURIComponent(worldId)}`),
-        apiRequest<BranchSummary[] | { items?: BranchSummary[] }>(`/branches?world_id=${encodeURIComponent(worldId)}`),
+        apiRequest<{ items?: ViewpointSummary[] }>(`/worlds/${worldId}/viewpoints`, { signal }),
+        apiRequest<RunSummary[] | { items?: RunSummary[] }>(`/runs?world_id=${encodeURIComponent(worldId)}`, { signal }),
+        apiRequest<BranchSummary[] | { items?: BranchSummary[] }>(`/branches?world_id=${encodeURIComponent(worldId)}`, { signal }),
       ]);
       const runs = unpackItems(runsPayload);
       const branches = unpackItems(branchesPayload);
@@ -33,6 +34,7 @@ export async function loadGameState(worldId: string, requestedViewpoint = ""): P
       const branch = branches.find((item) => item.kind === "CANONICAL") ?? branches[0] ?? null;
       const observer = viewpoints.find((item) => item.entity_id === requestedViewpoint) ?? viewpoints[0];
       if (!branch || !observer) {
+        if (cursor) throw new Error("The assigned character or branch is no longer available.");
         return {
           run: runs.find((run) => run.status === "RUNNING" || run.status === "ACTIVE") ?? runs[0] ?? null,
           branch,
@@ -43,9 +45,15 @@ export async function loadGameState(worldId: string, requestedViewpoint = ""): P
           interaction_status: "ACTIVE",
         };
       }
-      const scene = await apiRequest<PerceivedScene>(
-        `/worlds/${encodeURIComponent(worldId)}/branches/${encodeURIComponent(branch.branch_id)}/entities/${encodeURIComponent(observer.entity_id)}/scene`,
+      if (cursor && (cursor.world_id !== worldId || cursor.branch_id !== branch.branch_id
+        || cursor.observer_entity_id !== observer.entity_id)) {
+        throw new Error("The assigned character or branch changed while refreshing.");
+      }
+      const path = `/worlds/${encodeURIComponent(worldId)}/branches/${encodeURIComponent(branch.branch_id)}/entities/${encodeURIComponent(observer.entity_id)}/scene`;
+      const read = (readSignal?: AbortSignal) => apiRequest<PerceivedScene>(
+        path + (cursor ? `?after_event_id=${encodeURIComponent(cursor.event_id)}` : ""), { signal: readSignal, cache: "no-store" },
       );
+      const scene = cursor ? await waitForScene(read, cursor, signal) : await read(signal);
       const entities: EntitySummary[] = scene.perceived_entities.map((entity) => ({
         entity_id: entity.entity_id,
         world_id: worldId,
@@ -78,22 +86,27 @@ export async function loadGameState(worldId: string, requestedViewpoint = ""): P
         turn: 0,
         interaction_status: "ACTIVE",
       };
-    },
-    () => demoGameState,
-    "Game console",
-  );
+    };
+  // An accepted live command must never become a demo receipt or a demo scene on failure.
+  if (cursor) return { data: await load(), source: "live" };
+  return withDemoFallback(load, () => {
+    if (signal?.aborted) throw new DOMException("Scene refresh cancelled", "AbortError");
+    return demoGameState;
+  }, "Game console");
 }
+
+export type CommandAcknowledgement = { event_id: string; scene_refresh: SceneRefreshCursor | null };
 
 export async function proposeCommand(
   worldId: string,
   command: string,
   state: GameState,
   embodiedEntityId: string | undefined,
-): Promise<Sourced<EventRecord>> {
+): Promise<Sourced<CommandAcknowledgement>> {
   const parsed = parseCommand(command, state);
-  return withDemoFallback(
-    async () => {
-      const result = await apiRequest<Record<string, unknown>>("/commands", {
+  const result = await apiRequest<{
+    result: { accepted: boolean }; event: { event_id: string }; scene_refresh?: SceneRefreshCursor | null;
+  }>("/commands", {
         method: "POST",
         body: JSON.stringify({
           command_type: parsed.commandType,
@@ -106,18 +119,8 @@ export async function proposeCommand(
           idempotency_key: `console:${crypto.randomUUID()}`,
         }),
       });
-      return normalizeEvent((result.event as Record<string, unknown> | undefined) ?? result);
-    },
-    () => ({
-      event_id: `demo-command-${command.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32)}`,
-      event_type: command.startsWith("/") ? "tabletop.command.proposed" : "tabletop.dialogue.spoken",
-      actor_name: "Local operator",
-      summary: command.startsWith("/") ? `Proposed ${command}.` : command,
-      created_at: "2026-08-17T14:34:00Z",
-      domain_tags: ["deterministic-demo"],
-    }),
-    "Command proposal",
-  );
+  if (!result.result.accepted) throw new Error("The action was not accepted.");
+  return { data: { event_id: result.event.event_id, scene_refresh: result.scene_refresh ?? null }, source: "live" };
 }
 
 type ParsedCommand = {

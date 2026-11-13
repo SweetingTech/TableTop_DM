@@ -40,6 +40,13 @@ services; lifecycle remains explicit.
 
 ## Function-level coverage
 
+Scene-refresh regressions cover delayed subjective projection, scoped/unknown receipt rejection,
+unperceived actions, cancellation, eight-second timeout, stale responses, source-event deduplication,
+world/viewpoint resets, keyboard focus, and read-only retry after acceptance. The durable test
+projects an event externally twice, reads it through a stale API cache, and recreates the app.
+`tests/e2e/test_scene_refresh_isolated.py` exercises a real cookie-authorized built SPA with delayed
+projection, automatic movement/position refresh, dialogue, reload, and desktop/mobile overflow.
+
 Authored-card tests cover bounded typed fiction, reserved sheet-key rejection, unchanged-card
 hash stability across wounds/binding, content edits, legacy hydration, and durable identity/hash
 restart round trips. Frontend tests preserve multiline editing and serialize separate claims;
