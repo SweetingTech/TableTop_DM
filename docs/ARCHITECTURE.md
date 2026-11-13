@@ -166,6 +166,15 @@ mind key. It grants no control and writes no canonical projection. Existing unus
 entity assignments are not a second binding source. Initial roster assignment creates a missing
 binding; adopting another revision requires an explicit successor. Only the pinned self fiction
 enters character context, and starting knowledge claims remain distinct from learned evidence.
+Live CHARACTER proposal advice uses `domains/tabletop/character_context.py` to resolve that pinned
+identity and the shared knowledge boundary. `cognition/character_decisions.py` derives scoped
+decision IDs/seeds and runs local utility policy over server-owned movement candidates. Migration
+006 stores proposal receipts and existing traces in one transaction, with private forced RLS and
+append-only provenance. The durable repository locks the authorized run before the branch and
+hydrates a request-local canonical snapshot; reference reads share a command publication lock.
+Generation waits for all frozen sensory grants to have corresponding subjective observations.
+Advice is PROPOSAL_ONLY, leaves runtime control untouched, and is not an autonomous scheduler.
+
 The pure subjective pipeline is:
 
 ```text

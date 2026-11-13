@@ -12,12 +12,12 @@ from kernel.api.app import create_app
 pytestmark = pytest.mark.unit
 
 
-def setup_bound_character(app, token=None):
+def setup_bound_character(app, token=None, *, scope=None):
     token = token or os.environ.get("TTDM_OPERATOR_TOKEN")
     admin = app.test_client()
     if token:
         admin.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = token
-    world = str(app.extensions["demo_ids"]["world_id"])
+    world = str(scope["world_id"] if scope else app.extensions["demo_ids"]["world_id"])
     name = "card" + uuid.uuid4().hex[:12]
     temporary = secrets.token_urlsafe(24)
     created = admin.post(
@@ -78,7 +78,11 @@ def setup_bound_character(app, token=None):
         for c in player.get("/api/v2/player/characters").get_json()["items"]
         if c["character_id"] == card["character_id"]
     )
-    ids = app.extensions["demo_ids"]
+    ids = (
+        {"branch_id": scope["canonical_branch_id"], "run_id": scope["current_run_id"]}
+        if scope
+        else app.extensions["demo_ids"]
+    )
     path = f"/api/v2/worlds/{world}/branches/{ids['branch_id']}/entities/{card['entity_id']}"
     run = str(ids["run_id"])
     return admin, player, card, game, path, run, user

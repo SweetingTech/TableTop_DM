@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
+import threading
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +20,8 @@ from kernel.replay import ReplayEngine, ReplayRecord
 from kernel.snapshots import SnapshotManifest, SnapshotStore
 from kernel.state import BranchState, InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
+
+ReadResult = TypeVar("ReadResult")
 
 
 def stable_id(label: str) -> uuid.UUID:
@@ -71,6 +74,7 @@ class SimulationApplication:
     """
 
     def __init__(self, artifact_root: Path | None = None) -> None:
+        self._reference_command_lock = threading.RLock()
         self.states = InMemoryStateStore()
         self.branches = BranchManager(self.states)
         self.bus = register_tabletop(CommandBus(self.states))
@@ -312,6 +316,17 @@ class SimulationApplication:
         return entity
 
     def submit(self, proposal: CommandProposal) -> CommandReceipt:
+        if self.durable_repository is None:
+            with self._reference_command_lock:
+                return self._submit(proposal)
+        return self._submit(proposal)
+
+    def read_reference(self, reader: Callable[[], ReadResult]) -> ReadResult:
+        """Capture a reference read through command, event, and perception publication."""
+        with self._reference_command_lock:
+            return reader()
+
+    def _submit(self, proposal: CommandProposal) -> CommandReceipt:
         branch = self.states.get(proposal.branch_id)
         if branch.world_id != proposal.world_id:
             raise ValueError("proposal branch does not belong to world")

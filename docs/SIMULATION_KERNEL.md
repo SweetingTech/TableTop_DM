@@ -69,6 +69,15 @@ closed until authored identity binding and a server-owned action catalog are wir
 
 ## Constitutional order
 
+Character proposal generation is an operational read/decision path, never canonical mutation.
+It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
+requires actual body control and scoped command capabilities, and waits for dependent perception
+projection. Immutable receipts/decision traces preserve server seeds and policy/context/catalog/
+compiler/persona provenance. Retry keys are scoped by world/branch/run/body/actor.
+Only normal command submission can apply the proposed action, after current kernel validation.
+Proposal receipts are not execution leases and must never substitute for future controller epochs.
+Policy advice is labeled CHARACTER_POLICY and cannot become human behavior ground truth.
+
 1. A human, policy, planner, or model creates a typed `CommandProposal`.
 2. The registry resolves a stable command contract and validates parameters.
 3. The kernel checks actor identity, world/run/branch lineage, capabilities, entity control, and

@@ -116,7 +116,7 @@ dependencies and returns `503` if any required check fails.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `005_character_history_and_bindings.sql`;
+- migration history through `006_character_proposal_receipts.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -219,11 +219,19 @@ and serialized successor checks. Runtime can read permitted revisions but cannot
 them directly. The migration does not auto-create personas for old characters; retry their roster
 assignment to create a missing initial binding. Existing bindings are never silently replaced.
 
-Apply 005 before starting this application version. Back up PostgreSQL and artifacts and verify
+Apply all migrations through 006 before starting this application version. Back up PostgreSQL and artifacts and verify
 the upgrade in an isolated restore first, using the normal schema-change procedure below.
 Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
 are retained; retire the saved card instead of deleting evidence beneath a running identity.
 Account/persona/body/mind/runtime identities remain separate. No model credentials are required.
+
+Migration `006_character_proposal_receipts.sql` adds private append-only character-policy receipts
+with composite binding/trace lineage, actor-scoped forced RLS, and SELECT/INSERT-only runtime
+grants. Receipt and trace insertion share one transaction; failure leaves neither record.
+It supports a clean install and upgrade from 005. Advice uses local policy, adds no provider,
+worker, port, or automatic runtime assignment, and writes no canonical event or projection.
+Back up receipts with cognition and the canonical database. Do not roll back by deleting receipts
+or rewriting migration history; restore an isolated verified backup for schema rollback.
 
 | Data | Store and recovery notes |
 | --- | --- |

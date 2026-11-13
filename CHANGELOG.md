@@ -24,6 +24,12 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Added trusted CHARACTER proposal advice from pinned identity and perception-scoped experience.
+  Server-owned seeds/actions and a sensory projection barrier feed local deterministic policy;
+  migration 006 stores immutable private retry receipts and decision traces atomically. Advice
+  leaves human control and canonical state unchanged; execution still requires a normal kernel
+  command. Automatic scheduling, player-history imitation, and broader actions remain planned.
+
 - Added migration 005 for immutable private authored-card history and version-pinned character
   persona/body/mind bindings. Initial roster assignment creates a missing binding; later edits
   require explicit successor adoption. Atomic/CAS persistence preserves existing experience and

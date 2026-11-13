@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import uuid
+from contextlib import nullcontext
 from typing import Any
 
 import psycopg2.extras
+from psycopg2.extensions import connection as PgConnection
 
 from cognition.engine import DecisionOutcome, SubjectiveUpdate
 from cognition.models import (
@@ -25,11 +27,18 @@ class PostgresMindRepository:
     def __init__(self, dsn: str) -> None:
         self.dsn = dsn
 
-    def save_decision(self, outcome: DecisionOutcome) -> None:
+    def save_decision(
+        self, outcome: DecisionOutcome, *, connection: PgConnection | None = None
+    ) -> None:
         proposal, trace = outcome.proposal, outcome.trace
         if proposal.embodied_entity_id is None:
             raise ValueError("durable decision traces require an embodied entity")
-        with transaction(actor_id=proposal.actor_id, dsn=self.dsn) as connection:
+        boundary = (
+            nullcontext(connection)
+            if connection is not None
+            else transaction(actor_id=proposal.actor_id, dsn=self.dsn)
+        )
+        with boundary as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
