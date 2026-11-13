@@ -121,6 +121,14 @@ Provenance records the source of each field. The compiler turns deep traits into
 starting beliefs/goals/relationships, routines, capability modifiers, retrieval filters, and a
 bounded prompt summary.
 
+Blueprints and compiled profiles carry a `CHARACTER` or `SIMULATED_PLAYTESTER` purpose. Purpose
+is part of character generation/version identity and cannot be overridden during compilation.
+The character compiler allows only core/world dimensions into deep traits and prompt selection;
+it does not seed player goals, GM trust, interface capabilities, or evaluation retrieval filters.
+Initial character goals and knowledge require authored identity and experience in later campaign
+wiring. Playtester behavior remains the default for existing callers. Legacy playtester UUIDs
+and hashes omit the default purpose field to preserve immutable historical identities.
+
 ## Subjective cognition
 
 Canonical truth, raw authorization, physical perception, observation, belief evidence, memory,

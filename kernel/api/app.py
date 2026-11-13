@@ -83,6 +83,7 @@ from kernel.postgres_repository import PostgresCommandRepository
 from kernel.visibility import VisibilityPolicy
 from persona.compilation import PersonaCompiler
 from persona.generation import PersonaGenerator
+from persona.models import PersonaPurpose
 from persona.postgres import PostgresPersonaRepository
 from persona.registry import PersonaSchemaRegistry
 from persona.validation import PersonaValidator
@@ -123,11 +124,13 @@ class RunCreateRequest(BaseModel):
 
 class PersonaGenerateRequest(BaseModel):
     seed: int
+    purpose: PersonaPurpose = PersonaPurpose.SIMULATED_PLAYTESTER
     fixed: dict[str, Any] = Field(default_factory=dict)
 
 
 class PersonaCreateRequest(BaseModel):
     seed: int
+    purpose: PersonaPurpose | None = None
     dimensions: dict[str, Any] = Field(default_factory=dict)
     persona_id: uuid.UUID | None = None
     parent_version_id: uuid.UUID | None = None
@@ -851,6 +854,31 @@ def create_app(
         response.delete_cookie("ttdm_session", path="/", samesite="Lax")
         return response
 
+    def browser_write_boundary():
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            fetch_site = request.headers.get("Sec-Fetch-Site", "").casefold()
+            if fetch_site == "cross-site":
+                return jsonify({"error": "cross_site_request_rejected"}), 403
+            origin = request.headers.get("Origin")
+            if origin:
+                try:
+                    origin_parts = urlsplit(origin)
+                    request_parts = urlsplit(request.host_url)
+                    same_origin = (
+                        origin_parts.scheme.casefold() == request_parts.scheme.casefold()
+                        and origin_parts.hostname is not None
+                        and request_parts.hostname is not None
+                        and origin_parts.hostname.rstrip(".").casefold()
+                        == request_parts.hostname.rstrip(".").casefold()
+                        and (origin_parts.port or (443 if origin_parts.scheme == "https" else 80))
+                        == (request_parts.port or (443 if request_parts.scheme == "https" else 80))
+                    )
+                except ValueError:
+                    same_origin = False
+                if not same_origin:
+                    return jsonify({"error": "cross_site_request_rejected"}), 403
+        return None
+
     @app.before_request
     def authentication_boundary():
         if not request.path.startswith("/api/v2"):
@@ -858,10 +886,11 @@ def create_app(
         public_paths = {
             "/api/v2/health/live",
             "/api/v2/health/ready",
-            "/api/v2/auth/login",
         }
         if request.path in public_paths:
             return None
+        if request.path == "/api/v2/auth/login":
+            return browser_write_boundary()
         configured = os.environ.get("TTDM_OPERATOR_TOKEN", "")
         supplied = request.headers.get("X-TTDM-Operator-Token", "")
         if configured and supplied and hmac.compare_digest(configured, supplied):
@@ -934,29 +963,7 @@ def create_app(
             return jsonify(
                 {"error": "permission_denied", "details": "administrator role required"}
             ), 403
-        if request.method not in {"GET", "HEAD", "OPTIONS"}:
-            fetch_site = request.headers.get("Sec-Fetch-Site", "").casefold()
-            if fetch_site == "cross-site":
-                return jsonify({"error": "cross_site_request_rejected"}), 403
-            origin = request.headers.get("Origin")
-            if origin:
-                try:
-                    origin_parts = urlsplit(origin)
-                    request_parts = urlsplit(request.host_url)
-                    same_origin = (
-                        origin_parts.scheme.casefold() == request_parts.scheme.casefold()
-                        and origin_parts.hostname is not None
-                        and request_parts.hostname is not None
-                        and origin_parts.hostname.rstrip(".").casefold()
-                        == request_parts.hostname.rstrip(".").casefold()
-                        and (origin_parts.port or (443 if origin_parts.scheme == "https" else 80))
-                        == (request_parts.port or (443 if request_parts.scheme == "https" else 80))
-                    )
-                except ValueError:
-                    same_origin = False
-                if not same_origin:
-                    return jsonify({"error": "cross_site_request_rejected"}), 403
-        return None
+        return browser_write_boundary()
 
     @app.errorhandler(ValidationError)
     def validation_error(exc: ValidationError):
@@ -1286,7 +1293,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "003_spatial_epistemics.sql",
+                    "ok": version == "004_persona_purpose.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -1788,7 +1795,16 @@ def create_app(
 
     @app.post("/api/v2/cognition/decide")
     def cognition_decide():
+        if not automation_boundary() and not current_user().is_admin:
+            raise PermissionError(
+                "caller-authored cognition is restricted to privileged evaluation"
+            )
         body = CognitionDecisionApiRequest.model_validate(request.get_json(silent=True) or {})
+        evaluation_persona = compiled_persona(body.persona_id)
+        if evaluation_persona.purpose != PersonaPurpose.SIMULATED_PLAYTESTER:
+            raise PermissionError(
+                "character decisions require trusted live context and identity binding"
+            )
         world_id = body.world_id or demo["world_id"]
         branch_id = body.branch_id or simulation.worlds[world_id].canonical_branch_id
         run_id = body.run_id or next(
@@ -1842,7 +1858,7 @@ def create_app(
         )
         outcome = decision_engine.decide(
             DecisionRequest(
-                persona=compiled_persona(body.persona_id),
+                persona=evaluation_persona,
                 world_id=world_id,
                 branch_id=branch_id,
                 run_id=run_id,
@@ -1877,6 +1893,7 @@ def create_app(
                     else None
                 ),
                 "committed": False,
+                "mode": "EVALUATION",
             }
         ), 201
 
@@ -2247,15 +2264,24 @@ def create_app(
     def persona_create():
         body = PersonaCreateRequest.model_validate(request.get_json(silent=True) or {})
         identity = body.persona_id
+        prior = personas.get(identity) if identity is not None else None
         if body.parent_version_id is not None:
             parent = persona_versions[body.parent_version_id]
             if identity is not None and identity != parent.blueprint.persona_id:
                 raise ValueError("parent version belongs to another persona")
             identity = parent.blueprint.persona_id
+            prior = parent.blueprint
+        purpose = body.purpose or (
+            prior.purpose if prior is not None else PersonaPurpose.SIMULATED_PLAYTESTER
+        )
+        if prior is not None and purpose != prior.purpose:
+            raise ValueError("persona purpose cannot change for an existing identity")
         updates: dict[str, Any] = {"source": "manual"}
         if identity is not None:
             updates["persona_id"] = identity
-        blueprint = generator.generate(body.seed, body.dimensions).model_copy(update=updates)
+        blueprint = generator.generate(body.seed, body.dimensions, purpose=purpose).model_copy(
+            update=updates
+        )
         validation = persona_validator.validate_blueprint(blueprint)
         if validation.status != "valid":
             return jsonify(
@@ -2277,7 +2303,7 @@ def create_app(
     @app.post("/api/v2/personas/generate")
     def persona_generate():
         body = PersonaGenerateRequest.model_validate(request.get_json(silent=True) or {})
-        persona = generator.generate(body.seed, body.fixed)
+        persona = generator.generate(body.seed, body.fixed, purpose=body.purpose)
         if persona.validation.status != "valid":
             raise ValueError("generated persona failed validation")
         personas[persona.persona_id] = persona

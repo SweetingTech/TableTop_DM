@@ -24,6 +24,17 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Restricted caller-authored cognition to privileged simulated-playtester evaluation and rejected
+  character requests pending trusted identity/context/action wiring.
+- Rejected non-finite/overflowing persona distribution weights and totals with the intended
+  feasibility error before seeded sampling.
+
+- Added explicit character and simulated-playtester persona purposes. Character compilation and
+  prompt trait selection exclude player/interface metadata and onboarding/GM behavior; existing
+  evaluation defaults retain historical persona IDs and version hashes.
+- Added migration 004 to persist purpose and enforce matching blueprint/compiled-profile purpose,
+  with clean-install, previous-schema upgrade, rollback, and restart checks. Added API purpose
+  selection; autonomous live context and lore filtering remain planned campaign work.
 - Cleared stale roster character choices and errors immediately on user/role changes and blocked
   player saves while the selected user's lookup is pending.
 
@@ -32,6 +43,9 @@ This file records the current TableTop DM product line.
   missing, wrong-owner, and cross-world character assignments.
 
 ### Security
+
+- Applied browser write-origin checks to public login before creating a session.
+- Rejected differing compiled-profile retries at an existing immutable persona/version/compiler key.
 
 - Bound every command, event read, cognition decision, observation, and mind inspection to the
   actor of the signed-in account. Previously the actor came from the request, so any authenticated

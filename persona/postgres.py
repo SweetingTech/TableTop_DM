@@ -8,6 +8,7 @@ from typing import Any
 import psycopg2.extras
 
 from kernel.database import transaction
+from kernel.state import stable_hash
 from persona.models import (
     CompiledPersona,
     PersonaBlueprint,
@@ -66,10 +67,10 @@ class PostgresPersonaRepository:
                     INSERT INTO persona.blueprints (
                       persona_id, version_id, parent_version_id, schema_version,
                       seed, generator_version, source, content_hash, dimensions,
-                      derived_traits, provenance, validation, created_at
+                      derived_traits, provenance, validation, created_at, purpose
                     ) VALUES (
                       %s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,
-                      %s::jsonb,%s
+                      %s::jsonb,%s,%s
                     )
                     ON CONFLICT (persona_id, content_hash) DO NOTHING
                     """,
@@ -93,6 +94,7 @@ class PostgresPersonaRepository:
                         ),
                         blueprint.validation.model_dump_json(),
                         record.created_at,
+                        blueprint.purpose.value,
                     ),
                 )
                 cursor.execute(
@@ -109,6 +111,10 @@ class PostgresPersonaRepository:
 
     def save_compiled(self, compiled: CompiledPersona) -> CompiledPersona:
         version_id = uuid.UUID(compiled.persona_version)
+        content = compiled.model_dump(mode="json", exclude={"deep_traits"})
+        content["persona_version_id"] = content.pop("persona_version")
+        content["routine_templates"] = content.pop("routines")
+        content["retrieval_filters"] = {"filters": content["retrieval_filters"]}
         with transaction(dsn=self.dsn) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -117,10 +123,10 @@ class PostgresPersonaRepository:
                       persona_id, persona_version_id, compiler_version,
                       identity_summary, policy_weights, starting_goals,
                       starting_beliefs, starting_relationships, routine_templates,
-                      capability_modifiers, retrieval_filters
+                      capability_modifiers, retrieval_filters, purpose
                     ) VALUES (
                       %s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,
-                      %s::jsonb,%s::jsonb,%s::jsonb
+                      %s::jsonb,%s::jsonb,%s::jsonb,%s
                     ) ON CONFLICT DO NOTHING
                     """,
                     (
@@ -135,8 +141,22 @@ class PostgresPersonaRepository:
                         json.dumps(compiled.routines, default=str),
                         json.dumps(compiled.capability_modifiers),
                         json.dumps({"filters": compiled.retrieval_filters}),
+                        compiled.purpose.value,
                     ),
                 )
+                cursor.execute(
+                    """
+                    SELECT purpose, to_jsonb(profile) - 'compiled_at'
+                    FROM persona.compiled_profiles AS profile
+                    WHERE persona_id = %s AND persona_version_id = %s AND compiler_version = %s
+                    """,
+                    (str(compiled.persona_id), str(version_id), compiled.compiler_version),
+                )
+                stored = cursor.fetchone()
+                if stored is None or stored[0] != compiled.purpose.value:
+                    raise ValueError("stored compiled profile purpose differs")
+                if stable_hash(stored[1]) != stable_hash(content):
+                    raise ValueError("stored compiled profile content differs")
         return compiled
 
     def list_versions(self) -> tuple[PersonaVersionRecord, ...]:
@@ -147,7 +167,7 @@ class PostgresPersonaRepository:
                     SELECT persona_id, version_id, parent_version_id,
                            schema_version, seed, generator_version, source,
                            content_hash, dimensions, derived_traits, provenance,
-                           validation, created_at
+                           validation, created_at, purpose
                     FROM persona.blueprints
                     ORDER BY created_at, persona_id, version_id
                     """
@@ -160,6 +180,7 @@ class PostgresPersonaRepository:
         blueprint = PersonaBlueprint.model_validate(
             {
                 "persona_id": row["persona_id"],
+                "purpose": row["purpose"],
                 "schema_version": row["schema_version"],
                 "seed": row["seed"],
                 "generator_version": row["generator_version"],

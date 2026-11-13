@@ -8,6 +8,7 @@ and is covered separately in `test_v2_api.py`.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import pytest
@@ -133,6 +134,42 @@ def test_session_cannot_submit_a_command_as_another_actor(table):
     )
     assert denied.status_code == 403
     assert denied.get_json()["error"] == "permission_denied"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Origin": "https://untrusted.example"},
+        {"Origin": "null"},
+        {"Origin": "http://localhost:8001"},
+        {"Origin": "https://localhost"},
+        {"Origin": "http://localhost:invalid"},
+        {"Sec-Fetch-Site": "cross-site"},
+    ],
+)
+def test_login_rejects_cross_site_credentials_without_issuing_a_session(table, headers):
+    client = table["app"].test_client()
+    denied = client.post(
+        "/api/v2/auth/login",
+        data=json.dumps({"username": "admin", "password": ADMIN_PASSWORD}),
+        content_type="text/plain",
+        headers=headers,
+    )
+    assert denied.status_code == 403
+    assert denied.get_json()["error"] == "cross_site_request_rejected"
+    assert client.get_cookie("ttdm_session") is None
+    assert client.get("/api/v2/auth/session").status_code == 401
+
+
+def test_same_origin_login_remains_public(table):
+    client = table["app"].test_client()
+    response = client.post(
+        "/api/v2/auth/login",
+        json={"username": "admin", "password": ADMIN_PASSWORD},
+        headers={"Origin": "http://localhost", "Sec-Fetch-Site": "same-origin"},
+    )
+    assert response.status_code == 200
+    assert client.get_cookie("ttdm_session") is not None
 
 
 def test_command_is_attributed_to_the_signed_in_actor(table):

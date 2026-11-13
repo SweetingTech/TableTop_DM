@@ -55,6 +55,12 @@ Changing a runtime does not change the persona. An event becoming canonical does
 observer know it. Narration does not become state. A platform role does not implicitly grant
 authority in every world.
 
+Persona purpose separates an in-world `CHARACTER` from a `SIMULATED_PLAYTESTER`. A character's
+compiled identity and trait prompts exclude tabletop/interface preferences and player onboarding
+or GM relationships. Purpose is persistent and versioned; switching execution runtime never
+changes it. This filter does not authorize arbitrary situation text or establish which lore a
+character knows; trusted live context and knowledge-scoped retrieval remain separate boundaries.
+
 ## Constitutional order
 
 1. A human, policy, planner, or model creates a typed `CommandProposal`.

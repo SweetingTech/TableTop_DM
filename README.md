@@ -28,6 +28,12 @@ DM roster controls explicitly choose Player or Co-DM and can assign a player's s
 when inviting them or updating an existing membership. Assigned player characters receive an
 embodied viewpoint in the Game Console.
 
+Persona APIs distinguish `CHARACTER` from `SIMULATED_PLAYTESTER`. Character compilation uses
+in-world core/world traits and omits player controls, onboarding goals, GM relationships, and
+interface preferences. Existing evaluation personas retain their playtester behavior. This is the
+first knowledge-separation foundation; autonomous character context and unattended campaigns are
+still tracked in the [implementation checklist](docs/AUTONOMOUS_CAMPAIGN_CHECKLIST.md).
+
 The initial account is `admin` with password `admin123`. The first sign-in is restricted to the
 password-change screen, and the replacement password must be at least 12 characters and not a
 common default.

@@ -94,6 +94,16 @@ Integration assertions include:
 - persona lineage, cognition/relationship/runtime-assignment persistence, population lifecycle,
   scenario/job/trial/report restoration, telemetry deletion/retention, and Redis worker retry.
 
+Persona-purpose tests also verify excluded player/interface traits cannot reenter character
+prompts, historical playtester hashes/UUIDs stay stable, character profiles survive repository
+reload, mismatched blueprint/profile purposes roll back, and upgrade from migration 003 preserves
+legacy rows. The integration lane creates and drops a separate disposable database for that
+upgrade; it never downgrades the application database.
+
+Compiled-profile retries reject changes to every persisted profile field and leave the original
+usable after rollback. Browser authorization tests reject cross-site, opaque, malformed, and
+wrong-port login origins without issuing a cookie, while preserving same-origin login.
+
 Stop disposable dependencies:
 
 ```powershell

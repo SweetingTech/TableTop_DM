@@ -39,6 +39,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("001_simulation_kernel.sql",),
             ("002_identity_and_tabletop_workspaces.sql",),
             ("003_spatial_epistemics.sql",),
+            ("004_persona_purpose.sql",),
         ]
         cursor.execute(
             """

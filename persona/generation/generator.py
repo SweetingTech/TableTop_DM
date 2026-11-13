@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import uuid
 from collections.abc import Iterator
 from typing import Any, Literal
 
 from persona.errors import FixedFieldFeasibilityError, InfeasibleStratumError
-from persona.models import FieldProvenance, PersonaBlueprint, StratumFeasibility
+from persona.models import FieldProvenance, PersonaBlueprint, PersonaPurpose, StratumFeasibility
 from persona.registry import PersonaSchemaRegistry
 from persona.validation import PersonaValidator
 
@@ -28,7 +29,9 @@ class PersonaGenerator:
         distributions: dict[str, dict[Any, float]] | None = None,
         *,
         use_defaults: bool = False,
+        purpose: PersonaPurpose = PersonaPurpose.SIMULATED_PLAYTESTER,
     ) -> PersonaBlueprint:
+        purpose = PersonaPurpose(purpose)
         fixed = fixed or {}
         distributions = distributions or {}
         unknown = set(fixed) - set(self.registry.dimensions)
@@ -134,13 +137,17 @@ class PersonaGenerator:
         validation = self.validator.validate_dimensions(values)
         if validation.status != "valid":
             raise InfeasibleStratumError("; ".join(validation.errors))
+        generation_inputs: dict[str, Any] = {
+            "fixed": fixed,
+            "distributions": distributions,
+            "use_defaults": use_defaults,
+            "generator": self.VERSION,
+        }
+        # Preserve historical playtester identities; characters have a separate namespace.
+        if purpose != PersonaPurpose.SIMULATED_PLAYTESTER:
+            generation_inputs["purpose"] = purpose.value
         generation_key = json.dumps(
-            {
-                "fixed": fixed,
-                "distributions": distributions,
-                "use_defaults": use_defaults,
-                "generator": self.VERSION,
-            },
+            generation_inputs,
             sort_keys=True,
             separators=(",", ":"),
             default=str,
@@ -151,12 +158,15 @@ class PersonaGenerator:
         )
         return PersonaBlueprint(
             persona_id=persona_id,
+            purpose=purpose,
             schema_version=self.registry.VERSION,
             seed=seed,
             generator_version=self.VERSION,
             source="synthetic",
             dimensions=values,
-            derived_traits=self._derive(values),
+            derived_traits=(
+                self._derive(values) if purpose == PersonaPurpose.SIMULATED_PLAYTESTER else {}
+            ),
             provenance=provenance,
             validation=validation,
         )
@@ -208,11 +218,18 @@ class PersonaGenerator:
                 raise InfeasibleStratumError(
                     f"Distribution {name} has unknown values: {sorted(unknown, key=str)}"
                 )
-            if any(
-                not isinstance(weight, (int, float)) or weight < 0 for weight in weights.values()
-            ):
+            try:
+                invalid_weights = any(
+                    not isinstance(weight, (int, float))
+                    or weight < 0
+                    or not math.isfinite(float(weight))
+                    for weight in weights.values()
+                )
+            except OverflowError:
+                invalid_weights = True
+            if invalid_weights:
                 raise InfeasibleStratumError(
-                    f"Distribution {name} weights must be non-negative numbers"
+                    f"Distribution {name} weights must be finite non-negative numbers"
                 )
 
         feasible: list[Any] = []
@@ -227,7 +244,10 @@ class PersonaGenerator:
                 continue
             feasible.append(candidate)
             feasible_weights.append(float(weights.get(candidate, 0)) if weights else 1.0)
-        if not feasible or sum(feasible_weights) <= 0:
+        total_weight = sum(feasible_weights)
+        if not math.isfinite(total_weight):
+            raise InfeasibleStratumError(f"Distribution {name} total weight must be finite")
+        if not feasible or total_weight <= 0:
             raise InfeasibleStratumError(f"No feasible weighted value for {name}")
         selected = rng.choices(feasible, weights=feasible_weights, k=1)[0]
         source: ProvenanceSource = "weighted_distribution" if weights else "seeded_generator"

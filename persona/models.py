@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -66,10 +67,16 @@ class PersonaValidation(BaseModel):
     active_dimensions: tuple[str, ...] = ()
 
 
+class PersonaPurpose(StrEnum):
+    SIMULATED_PLAYTESTER = "SIMULATED_PLAYTESTER"
+    CHARACTER = "CHARACTER"
+
+
 class PersonaBlueprint(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     persona_id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    purpose: PersonaPurpose = PersonaPurpose.SIMULATED_PLAYTESTER
     schema_version: str
     seed: int
     generator_version: str
@@ -84,6 +91,7 @@ class CompiledPersona(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     persona_id: uuid.UUID
+    purpose: PersonaPurpose = PersonaPurpose.SIMULATED_PLAYTESTER
     persona_version: str
     compiler_version: str
     identity_summary: str
