@@ -1,0 +1,11 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\github\TableTop_DM
+configfile: pyproject.toml
+plugins: anyio-4.12.1, base-url-2.1.0, cov-7.1.0, playwright-0.9.0
+collected 1 item
+
+tests\e2e\test_character_identity_isolated.py {"result": "PASS", "checks": ["real build", "private identity edit", "content version", "reload", "JSON import", "desktop/mobile overflow", "no page errors"], "screenshots": "C:\\Users\\dougl\\AppData\\Local\\Temp\\pytest-of-dougl\\pytest-46\\test_authored_identity_build_e0"}
+.
+
+============================== 1 passed in 4.82s ==============================
