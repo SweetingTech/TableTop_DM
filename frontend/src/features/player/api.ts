@@ -1,5 +1,14 @@
 import { apiRequest, unpackItems } from "../../core/api/client";
 
+export type CharacterIdentity = {
+  backstory: string;
+  motives: string[];
+  values: string[];
+  bonds: string[];
+  secrets: string[];
+  initial_known_facts: string[];
+};
+
 export type CharacterRecord = {
   character_id: string;
   owner_user_id: string;
@@ -16,6 +25,8 @@ export type CharacterRecord = {
   speed: number;
   ability_scores: Record<string, number>;
   sheet: Record<string, unknown>;
+  authored_identity: CharacterIdentity;
+  card_version: string;
   creation_method: "BUILT" | "GENERATED" | "IMPORTED";
   source_filename?: string | null;
   updated_at: string;

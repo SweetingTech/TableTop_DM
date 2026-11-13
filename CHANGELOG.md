@@ -24,6 +24,11 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Added validated character backstory, motives, values, bonds, character secrets, and starting
+  knowledge claims to card creation/import/editing. Private sheet storage and a deterministic
+  current-content version survive restart. Authored claims do not enter world truth or minds;
+  historical card revisions and persona/mind/body bindings remain unfinished B2 work.
+
 - Added read-only embodied character context grounded in same-branch source events and frozen
   perception grants; shared its scene reader with the Game Console. Operator records, unbacked
   beliefs, and caller-authored memory summaries cannot add model-facing facts.

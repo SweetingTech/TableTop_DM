@@ -77,10 +77,27 @@ def test_accounts_roles_characters_and_games_survive_restart(
                 "creation_method": "GENERATED",
                 "seed": 2026,
                 "name": "Vesper Vale",
+                "authored_identity": {
+                    "backstory": "Raised among the lantern keepers.",
+                    "motives": ["Find the missing keeper"],
+                    "values": ["Mercy"],
+                    "bonds": ["The harbor watch"],
+                    "secrets": ["I hid the spare key."],
+                    "initial_known_facts": ["The ferry sails at dawn."],
+                },
             },
         )
         assert character.status_code == 201
         assert character.get_json()["status"] == "ALIVE"
+        identity = character.get_json()["authored_identity"]
+        version = character.get_json()["card_version"]
+        assert len(version) == 64
+        rejected = adventurer.patch(
+            f"/api/v2/player/characters/{character.get_json()['character_id']}",
+            json={"authored_identity": {"secrets": ["private" * 100]}},
+        )
+        assert rejected.status_code == 400
+        assert "privateprivate" not in rejected.get_data(as_text=True)
         game = adventurer.post(
             "/api/v2/dm/games",
             json={"world_id": world_id, "name": "The Lantern Vault", "max_players": 5},
@@ -123,6 +140,9 @@ def test_accounts_roles_characters_and_games_survive_restart(
         characters = client.get("/api/v2/player/characters").get_json()["items"]
         games = client.get("/api/v2/games").get_json()["items"]
         assert characters[0]["name"] == "Vesper Vale"
+        assert characters[0]["authored_identity"] == identity
+        assert characters[0]["card_version"] == version
+        assert "_authored_identity_v1" not in characters[0]["sheet"]
         assert games[0]["game_id"] == game_id
         assert games[0]["members"][0]["character_id"] == characters[0]["character_id"]
         assert (

@@ -95,6 +95,10 @@ as composition glue; reusable execution services must also work from workers and
 - [ ] B2 — Add validated character backstory, motives, values, bonds, secrets, and initial known facts
   to [character records](../domains/tabletop/portal.py) and the Player form/import adapter. Version
   the card/backstory and establish its link to persona, mind, and embodied entity without merging identities.
+  Card foundation implemented locally: validated authored fields, private persistence in the
+  existing sheet, build/edit/import controls, and deterministic current `card_version`. Initial
+  knowledge remains an authored claim. This item stays open: historical card revisions and the
+  explicit persona/mind/body link are still missing; no live decision consumes this data yet.
 - [ ] B3 — Introduce a trusted character-context builder under `cognition/`. Resolve current scene,
   mind, remembered testimony, known lore, and legal action candidates for one world/branch/entity.
   Reuse [scene](../domains/tabletop/spatial/scene.py), perception contracts, and mind repositories.
