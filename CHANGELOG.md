@@ -35,6 +35,8 @@ This file records the current TableTop DM product line.
 - Added migration 004 to persist purpose and enforce matching blueprint/compiled-profile purpose,
   with clean-install, previous-schema upgrade, rollback, and restart checks. Added API purpose
   selection; autonomous live context and lore filtering remain planned campaign work.
+- Cleared stale roster character choices and errors immediately on user/role changes and blocked
+  player saves while the selected user's lookup is pending.
 
 - Added explicit Player/Co-DM selection and playable character assignment to the DM roster,
   including existing-member updates, authorized character-summary lookup, and rejection of

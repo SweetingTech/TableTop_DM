@@ -1,0 +1,2 @@
+Tested source revision: 112e2e66e9b26968e0303da5c91168b6bcc45cba
+wheel runtime assets verified: tabletop_dm-2.0.0-py3-none-any.whl

@@ -1,0 +1,23 @@
+Tested source revision: 112e2e66e9b26968e0303da5c91168b6bcc45cba
+Command: python -m pytest -m integration -v --tb=short
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\github\TableTop_DM\.local-run\a1-roster-fix
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.12.1, base-url-2.1.0, cov-7.1.0, playwright-0.9.0
+collected 213 items / 179 deselected / 34 selected
+
+tests\integration\test_clean_boot.py ......                              [ 17%]
+tests\integration\test_cognition_repository.py ...                       [ 26%]
+tests\integration\test_durable_authorization.py .....                    [ 41%]
+tests\integration\test_durable_command_repository.py ....                [ 52%]
+tests\integration\test_identity_portal.py .                              [ 55%]
+tests\integration\test_migrations.py ....                                [ 67%]
+tests\integration\test_persona_repository.py .                           [ 70%]
+tests\integration\test_population_repository.py .                        [ 73%]
+tests\integration\test_schema_invariants.py .......                      [ 94%]
+tests\integration\test_telemetry_repository.py .                         [ 97%]
+tests\integration\test_worker.py .                                       [100%]
+
+=============== 34 passed, 179 deselected, 1 warning in 48.72s ================
