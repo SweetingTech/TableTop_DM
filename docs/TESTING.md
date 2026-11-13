@@ -100,9 +100,21 @@ reload, mismatched blueprint/profile purposes roll back, and upgrade from migrat
 legacy rows. The integration lane creates and drops a separate disposable database for that
 upgrade; it never downgrades the application database.
 
+Character-context tests inject foreign-world, abandoned-branch, foreign-observer, operator-tagged,
+and ungranted evidence, plus forged belief/memory summaries. None may become model-facing facts.
+Frozen grants remain usable after the observer moves. Context hashes ignore wall-clock generation
+time, and an actual API process restart must preserve context evidence. API tests also verify
+viewpoint authorization, evaluation role gating, and rejection of caller-authored character decisions.
+Current visual context must honor blindness/acuity while retaining self and previous experience;
+distinct belief subjects must retain consistent context-local references without kernel IDs.
+
 Compiled-profile retries reject changes to every persisted profile field and leave the original
 usable after rollback. Browser authorization tests reject cross-site, opaque, malformed, and
 wrong-port login origins without issuing a cookie, while preserving same-origin login.
+
+Sensory regressions cover zero, invalid, non-finite, and sub-precision acuity, mixed modalities,
+and stronger indirect portal paths under reversed ordering. Reference and durable API tests
+both deny foreign-world and uncontrolled-mind reads while allowing a controller's own mind.
 
 Stop disposable dependencies:
 

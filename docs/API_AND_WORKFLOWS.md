@@ -309,6 +309,10 @@ Observations must derive from visible canonical/trial events. Relationship chang
 same-world, same-branch source event. A decision returns a trace and proposal; it does not mutate
 world state until the proposal enters `/commands`.
 
+Mind inspection applies the same server-side world and actor checks in reference and durable
+storage. It requires the entity's controller or a world-scoped `mind.read.all`/`mind.write.all`
+capability. A browser-supplied actor ID cannot borrow another actor's access.
+
 ## Population workflow
 
 1. Generate a pool for an explicit world and branch.
@@ -374,6 +378,17 @@ both deep traits and requested prompt traits. It seeds no onboarding goals, GM r
 interface capability, or evaluation retrieval filter. Playtester compilation retains existing
 evaluation behavior. Purpose does not confer authority, bind a persona to a body, or validate
 caller-supplied situation text; those are separate campaign knowledge/control requirements.
+
+## Character context and evaluation boundary
+
+`GET /api/v2/worlds/{world_id}/branches/{branch_id}/entities/{entity_id}/context` uses the same
+world/viewpoint authorization as the perceived scene. It returns a versioned evidence hash,
+projection version, and a model-facing `situation`. Frozen event-time grants and source events
+must match the observer/world/branch; operator-tagged events, unbacked beliefs, and memory-summary
+overrides cannot add facts. The model-facing situation excludes controller, ledger, and timeline
+metadata. This endpoint is read-only and currently returns an empty `action_candidates` list;
+authored identity binding, a live action catalog, retrieval, and runner integration remain planned.
+It uses the current loaded projection; it does not establish a cross-process projector barrier.
 
 `POST /api/v2/cognition/decide` accepts caller-authored situations/actions only for privileged
 `SIMULATED_PLAYTESTER` evaluation (administrator session or automation boundary, still subject to

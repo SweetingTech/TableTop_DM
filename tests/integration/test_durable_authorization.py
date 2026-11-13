@@ -243,6 +243,32 @@ def test_durable_role_grant_provisions_kernel_authority(durable_table) -> None:
     assert "canonical.promote" not in granted["capabilities"]
 
 
+def test_durable_mind_read_matches_reference_authorization(durable_table) -> None:
+    ids = durable_table["ids"]
+    foreign = f"/api/v2/entities/{ids['hero_id']}/mind"
+    assert durable_table["admin"].get(foreign).status_code == 200
+    for client in (durable_table["player"], durable_table["outsider"]):
+        assert client.get(foreign).status_code == 403
+        assert client.get(foreign + f"?actor_id={ids['actor_id']}").status_code == 403
+    player_actor = (
+        durable_table["player"].get("/api/v2/auth/session").get_json()["user"]["actor_id"]
+    )
+    own = durable_table["admin"].post(
+        f"/api/v2/worlds/{durable_table['world_id']}/entities",
+        json={"name": "Player mind", "entity_type": "NPC", "controller_actor_id": player_actor},
+    )
+    assert own.status_code == 201
+    own_url = f"/api/v2/entities/{own.get_json()['entity_id']}/mind"
+    assert durable_table["player"].get(own_url).status_code == 200
+    sealed = durable_table["admin"].post(
+        f"/api/v2/worlds/{durable_table['sealed_world_id']}/entities",
+        json={"name": "Private mind", "entity_type": "NPC"},
+    )
+    assert sealed.status_code == 201
+    sealed_url = f"/api/v2/entities/{sealed.get_json()['entity_id']}/mind"
+    assert durable_table["player"].get(sealed_url).status_code == 403
+
+
 def test_durable_event_reads_cannot_borrow_another_actors_visibility(durable_table) -> None:
     """In durable mode the reading actor also selects the row-level-security identity."""
     ids = durable_table["ids"]

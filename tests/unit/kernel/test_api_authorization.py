@@ -172,6 +172,31 @@ def test_same_origin_login_remains_public(table):
     assert client.get_cookie("ttdm_session") is not None
 
 
+def test_reference_mind_read_requires_world_access_and_controller_or_mind_capability(table):
+    ids = table["ids"]
+    foreign = f"/api/v2/entities/{ids['hero_id']}/mind"
+    assert table["admin"].get(foreign).status_code == 200
+    assert table["dm"].get(foreign).status_code == 200
+    for client in (table["player"], table["guest"]):
+        assert client.get(foreign).status_code == 403
+        assert client.get(foreign + f"?actor_id={ids['actor_id']}").status_code == 403
+    player_actor = table["player"].get("/api/v2/auth/session").get_json()["user"]["actor_id"]
+    own = table["admin"].post(
+        f"/api/v2/worlds/{table['world_id']}/entities",
+        json={"name": "Player mind", "entity_type": "NPC", "controller_actor_id": player_actor},
+    )
+    assert own.status_code == 201
+    own_url = f"/api/v2/entities/{own.get_json()['entity_id']}/mind"
+    assert table["player"].get(own_url).status_code == 200
+    sealed = table["admin"].post(
+        f"/api/v2/worlds/{table['private_world_id']}/entities",
+        json={"name": "Private mind", "entity_type": "NPC"},
+    )
+    assert sealed.status_code == 201
+    sealed_url = f"/api/v2/entities/{sealed.get_json()['entity_id']}/mind"
+    assert table["player"].get(sealed_url).status_code == 403
+
+
 def test_command_is_attributed_to_the_signed_in_actor(table):
     """The ledger must record who actually acted, not who the request claimed."""
     ids = table["ids"]
