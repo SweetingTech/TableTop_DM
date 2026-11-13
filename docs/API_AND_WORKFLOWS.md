@@ -121,6 +121,24 @@ GET    /api/v2/games/{game_id}/sessions
 Character writes are owner-scoped unless an administrator is acting through an administrative
 flow. Imported templates are parsed and validated before persistence.
 
+Character create/import and patch accept `authored_identity`: `backstory` (up to 12,000 characters)
+and `motives`, `values`, `bonds`, `secrets`, `initial_known_facts` (each up to 20 nonempty strings
+of 500 characters). Unknown identity fields, non-string entries, and over-limit input fail before
+persistence. Whitespace is trimmed. Patch replaces the complete identity when supplied; omitting
+it preserves the existing identity. An empty object clears it. Character sheet edits cannot use
+the reserved `_authored_identity_v1` storage key. Legacy records receive an empty identity.
+
+Responses include the typed identity and `card_version`, a SHA-256 content identifier over the
+card schema, name, species, class, background, level, ability scores, and authored identity.
+Wounds, status, ownership, world/body assignment, equipment, and timestamps do not alter this
+identity version. This identifies current content; it is not an archive of prior cards or a
+replacement for canonical entity state. Existing private JSON sheet storage persists the identity
+without a schema migration. DM assignment lookups still return summaries only.
+
+Starting knowledge is player-authored fiction, not a verified world fact or a sourced memory.
+This change does not feed the identity into model prompts, minds, lore retrieval, or live decisions;
+trusted approval and explicit persona/mind/body bindings remain required.
+
 When a DM assigns a character to a game membership, the portal character is linked to a kernel
 embodied entity. The player receives `entity.act` plus control of that specific body; this never
 confers administrative `entity.control` over the world.

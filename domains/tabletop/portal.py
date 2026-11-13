@@ -7,12 +7,14 @@ from datetime import datetime
 from typing import Any, Protocol
 
 import psycopg2.extras
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from domains.tabletop.character_identity import IDENTITY_SHEET_KEY, CharacterIdentity
 from identity.models import UserAccount
 from identity.repository import IdentityRepository
 from identity.service import IdentityService
 from kernel.database import transaction
+from kernel.state import stable_hash
 
 ABILITIES = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
 CLASSES = (
@@ -69,10 +71,28 @@ class CharacterRecord(BaseModel):
     speed: int
     ability_scores: dict[str, int]
     sheet: dict[str, Any] = Field(default_factory=dict)
+    authored_identity: CharacterIdentity = Field(default_factory=CharacterIdentity)
     creation_method: str
     source_filename: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def card_version(self) -> str:
+        """Content identity, independent of ownership, wounds, timestamps, and runtime binding."""
+        return stable_hash(
+            {
+                "schema": "character-card-1.0.0",
+                "name": self.name,
+                "species": self.species,
+                "class_name": self.class_name,
+                "background": self.background,
+                "level": self.level,
+                "ability_scores": self.ability_scores,
+                "authored_identity": self.authored_identity.model_dump(mode="json"),
+            }
+        )
 
 
 class GameMember(BaseModel):
@@ -269,7 +289,14 @@ class PostgresPortalRepository:
                         character.armor_class,
                         character.speed,
                         psycopg2.extras.Json(character.ability_scores),
-                        psycopg2.extras.Json(character.sheet),
+                        psycopg2.extras.Json(
+                            {
+                                **character.sheet,
+                                IDENTITY_SHEET_KEY: character.authored_identity.model_dump(
+                                    mode="json"
+                                ),
+                            }
+                        ),
                         character.creation_method,
                         character.source_filename,
                         character.created_at,
@@ -428,6 +455,8 @@ class PostgresPortalRepository:
 
     @staticmethod
     def _character(row: dict[str, Any]) -> CharacterRecord:
+        sheet = dict(row["sheet"])
+        identity = CharacterIdentity.model_validate(sheet.pop(IDENTITY_SHEET_KEY, {}))
         return CharacterRecord(
             character_id=uuid.UUID(str(row["id"])),
             owner_user_id=uuid.UUID(str(row["owner_user_id"])),
@@ -444,7 +473,8 @@ class PostgresPortalRepository:
             armor_class=int(row["armor_class"]),
             speed=int(row["speed"]),
             ability_scores=dict(row["ability_scores"]),
-            sheet=dict(row["sheet"]),
+            sheet=sheet,
+            authored_identity=identity,
             creation_method=str(row["creation_method"]),
             source_filename=row["source_filename"],
             created_at=row["created_at"],
@@ -537,6 +567,7 @@ class TabletopPortalService:
             speed=int(values.get("speed", 30)),
             ability_scores=scores,
             sheet=dict(values.get("sheet", {})),
+            authored_identity=CharacterIdentity.model_validate(values.get("authored_identity", {})),
             creation_method=method,
             source_filename=values.get("source_filename"),
             created_at=now,
@@ -564,6 +595,7 @@ class TabletopPortalService:
             "speed",
             "ability_scores",
             "sheet",
+            "authored_identity",
             "world_id",
         }
         updates = {key: value for key, value in payload.items() if key in allowed}
@@ -571,6 +603,10 @@ class TabletopPortalService:
             updates["world_id"] = uuid.UUID(str(updates["world_id"]))
         if "ability_scores" in updates:
             updates["ability_scores"] = self._scores(updates["ability_scores"])
+        if "authored_identity" in updates:
+            updates["authored_identity"] = CharacterIdentity.model_validate(
+                updates["authored_identity"]
+            )
         updates["updated_at"] = datetime.now().astimezone()
         character = existing.model_copy(update=updates)
         self._validate_character(character)
@@ -812,6 +848,8 @@ class TabletopPortalService:
 
     @staticmethod
     def _validate_character(character: CharacterRecord) -> None:
+        if IDENTITY_SHEET_KEY in character.sheet:
+            raise ValueError("authored identity must use the authored_identity field")
         if not character.name.strip():
             raise ValueError("character name is required")
         if character.level < 1 or character.level > 20:

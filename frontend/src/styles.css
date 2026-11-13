@@ -40,6 +40,9 @@ h3 { font-size: 13px; }
 p { line-height: 1.55; }
 input, select, textarea { width: 100%; color: var(--text); background: #0c191d; border: 1px solid #405156; border-radius: 2px; padding: 9px 10px; }
 textarea { resize: vertical; min-height: 74px; }
+.character-identity-fields { min-width: 0; display: grid; gap: 10px; margin: 0 0 12px; padding: 14px; border: 1px solid var(--line); }
+.character-identity-fields legend { color: var(--gold); padding: 0 5px; }
+.character-identity-fields p { overflow-wrap: anywhere; }
 label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; }
 small { color: var(--muted); }
 .mono { font-family: var(--mono); color: #6fc2af; }

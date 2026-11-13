@@ -14,6 +14,8 @@ import { EmptyState, LoadingState } from "../../components/ui/States";
 import { PageHeader, Status } from "../../components/ui/Primitives";
 import * as api from "./api";
 import type { CharacterRecord, HostedGame } from "./api";
+import { CharacterIdentityFields } from "./CharacterIdentityFields";
+import { identityDraft, identityPayload } from "./characterIdentity";
 
 const abilities = [
   "strength",
@@ -278,6 +280,8 @@ function CharacterSheet({
 }) {
   const [status, setStatus] = useState(character.status);
   const [hp, setHp] = useState(character.current_hit_points);
+  const [identity, setIdentity] = useState(() => identityDraft(character.authored_identity));
+  const [savingIdentity, setSavingIdentity] = useState(false);
   return (
     <div className="character-sheet">
       <div className="panel-heading">
@@ -359,6 +363,17 @@ function CharacterSheet({
           Save status
         </button>
       </div>
+      <form onSubmit={async (event) => {
+        event.preventDefault();
+        setSavingIdentity(true);
+        try { await onUpdate({ authored_identity: identityPayload(identity) }); }
+        finally { setSavingIdentity(false); }
+      }}>
+        <CharacterIdentityFields value={identity} onChange={setIdentity} />
+        <button className="button" type="submit" disabled={savingIdentity}>
+          {savingIdentity ? "Saving identity…" : "Save character identity"}
+        </button>
+      </form>
       <button
         className="button danger subtle-danger"
         type="button"
@@ -385,6 +400,7 @@ function CharacterBuilder({
   const [className, setClassName] = useState("Fighter");
   const [background, setBackground] = useState("Adventurer");
   const [scores, setScores] = useState<Record<string, number>>(initialScores);
+  const [identity, setIdentity] = useState(identityDraft);
   async function submit(event: FormEvent) {
     event.preventDefault();
     await onSave({
@@ -394,6 +410,7 @@ function CharacterBuilder({
       class_name: className,
       background,
       ability_scores: scores,
+      authored_identity: identityPayload(identity),
       maximum_hit_points: 10,
       current_hit_points: 10,
     });
@@ -458,6 +475,7 @@ function CharacterBuilder({
             </label>
           ))}
         </div>
+        <CharacterIdentityFields value={identity} onChange={setIdentity} />
         <div className="form-actions">
           <button className="button primary" type="submit" disabled={!name}>
             Save character

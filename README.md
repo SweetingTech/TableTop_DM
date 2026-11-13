@@ -28,6 +28,11 @@ DM roster controls explicitly choose Player or Co-DM and can assign a player's s
 when inviting them or updating an existing membership. Assigned player characters receive an
 embodied viewpoint in the Game Console.
 
+Character cards support a validated backstory, motives, values, bonds, character secrets, and
+starting knowledge claims in creation, JSON import, and editing. A deterministic `card_version`
+identifies the current authored content. These claims do not grant canonical knowledge or activate
+a stand-in; historical card storage and persona/mind/body binding remain planned work.
+
 Persona APIs distinguish `CHARACTER` from `SIMULATED_PLAYTESTER`. Character compilation uses
 in-world core/world traits and omits player controls, onboarding goals, GM relationships, and
 interface preferences. Existing evaluation personas retain their playtester behavior. This is the

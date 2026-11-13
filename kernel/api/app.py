@@ -33,6 +33,7 @@ from cognition.relationships import (
     RelationshipModifiers,
 )
 from cognition.store import MindStore
+from domains.tabletop.character_identity import CharacterIdentity
 from domains.tabletop.portal import (
     InMemoryPortalRepository,
     PostgresPortalRepository,
@@ -344,10 +345,13 @@ class CharacterCreateRequest(BaseModel):
     name: str | None = Field(default=None, max_length=160)
     source_filename: str | None = Field(default=None, max_length=255)
     seed: int | None = None
+    authored_identity: CharacterIdentity = Field(default_factory=CharacterIdentity)
 
 
 class CharacterUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+    authored_identity: CharacterIdentity | None = None
 
 
 class GameCreateRequest(BaseModel):

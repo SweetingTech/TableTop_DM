@@ -1,0 +1,21 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\github\TableTop_DM
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.12.1, base-url-2.1.0, cov-7.1.0, playwright-0.9.0
+collected 294 items / 249 deselected / 45 selected
+
+tests\integration\test_clean_boot.py ......                              [ 13%]
+tests\integration\test_cognition_repository.py ...                       [ 20%]
+tests\integration\test_durable_authorization.py ......                   [ 33%]
+tests\integration\test_durable_command_repository.py ....                [ 42%]
+tests\integration\test_identity_portal.py .                              [ 44%]
+tests\integration\test_migrations.py ....                                [ 53%]
+tests\integration\test_persona_repository.py ...........                 [ 77%]
+tests\integration\test_population_repository.py .                        [ 80%]
+tests\integration\test_schema_invariants.py .......                      [ 95%]
+tests\integration\test_telemetry_repository.py .                         [ 97%]
+tests\integration\test_worker.py .                                       [100%]
+
+=============== 45 passed, 249 deselected, 1 warning in 52.90s ================

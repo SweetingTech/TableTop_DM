@@ -40,6 +40,11 @@ services; lifecycle remains explicit.
 
 ## Function-level coverage
 
+Authored-card tests cover bounded typed fiction, reserved sheet-key rejection, unchanged-card
+hash stability across wounds/binding, content edits, legacy hydration, and durable identity/hash
+restart round trips. Frontend tests preserve multiline editing and serialize separate claims;
+the isolated character-identity browser journey exercises real build/edit/import API calls.
+
 Unit tests cover:
 
 - password policy, login failure/lockout, session rotation, account lifecycle, final-admin

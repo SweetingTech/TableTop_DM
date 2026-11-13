@@ -1,0 +1,72 @@
+{
+  "schema": "ttdm.verification/v1",
+  "task": "B2 authored character-card foundation",
+  "tested_source_revision": "ba7d2d9461ecac0a6354e78a913217eba80112d4",
+  "created_at": "2026-11-13T02:31:36.796405+00:00",
+  "results": {
+    "fast": "225 Python /26frontend; lint/build passed",
+    "types": "102 source files passed",
+    "integration": "45 passed including authored identity/card-version restart and rejected-input rollback",
+    "browser": "2 isolated journeys passed; final authored-card browser rerun passed after waiting for navigation animation before screenshots",
+    "wheel": "Clean staged wheel/runtime verifier passed",
+    "links": "56 relative Markdown links verified"
+  },
+  "normalization": "ANSI/CRLF and final blank lines normalized; wheel report retains actual verifier result line. Hashes identify committed report bytes. Browser JUnit records combined run; browser-final.txt is the later final card screenshot run.",
+  "commands": [
+    "uv run python scripts/test.py fast",
+    "uv run mypy kernel persona cognition population experiments domains identity infra main.py",
+    "TTDM_INTEGRATION=1 uv run pytest -m integration -v --tb=short (configured local service credentials; isolated disposable test database)",
+    "uv run pytest -m e2e tests/e2e/test_character_identity_isolated.py tests/e2e/test_roster_assignment_isolated.py -v -s --tb=short --junitxml=<temporary output>",
+    "uv run pytest -m e2e tests/e2e/test_character_identity_isolated.py -v -s --tb=short",
+    "npm --prefix frontend run build",
+    "uv build --wheel --directory <clean staged tree>; uv run python scripts/verify_wheel.py <wheel>"
+  ],
+  "reports": [
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/fast.txt",
+      "sha256": "8536d8461ddf9c2332209765f9892e8bddfce5c65b3b392d3af42b42bf1a971e",
+      "bytes": 3299
+    },
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/types.txt",
+      "sha256": "dc43c4a518c8b02be9b88992ec25413d8e874b5fe64eebf24c6e12d5007d2ccc",
+      "bytes": 45
+    },
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/integration.txt",
+      "sha256": "192fbcc3b26f412a466b2d6d71ef6c0630641ff30bfbfd496935515411b304bc",
+      "bytes": 1296
+    },
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/browser.txt",
+      "sha256": "af114b42befe6d0b4442f30afb667adcb116229dcb3a695e3da6ce7fe4b43550",
+      "bytes": 1142
+    },
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/browser-final.txt",
+      "sha256": "17860c0571480178d851e8bf26d697790e3c48cf11e661878ae73f4f1d92382a",
+      "bytes": 690
+    },
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/browser.xml",
+      "sha256": "bc7499432cadd4d1b8ec0e7272cd718138c466faa2c95bfef037c0e8e8b1be8c",
+      "bytes": 555
+    },
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/build.txt",
+      "sha256": "15f4ec285009a715097ed2ec87980a9dc4395519551d655636d0e10bf8da95d5",
+      "bytes": 2560
+    },
+    {
+      "path": "docs/verification/b2-authored-cards-2026-11-12/wheel.txt",
+      "sha256": "b086a84aaa31e7f217ba4f9d77f4178dc76e50ce311ed225a3226037e262ad98",
+      "bytes": 66
+    }
+  ],
+  "remaining": [
+    "Historical card revision archive",
+    "Explicit persona/mind/body binding",
+    "Approved starting knowledge and live context consumption",
+    "Remaining B2-B7/full autonomous campaign acceptance"
+  ]
+}

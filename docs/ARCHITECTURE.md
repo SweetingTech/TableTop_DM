@@ -54,6 +54,12 @@ entities; PostgreSQL repeats protected-state checks with forced RLS.
 
 ## State, commands, and events
 
+Authored character identity is private portal data, distinct from account identity, persona,
+embodied entity, and mind. Its typed backstory/values/knowledge claims persist in the existing
+character sheet and receive a deterministic current-content identifier. They do not create
+canonical facts, observations, memories, or runtime assignments. Live character binding and an
+archive of earlier card versions remain separate implementation work.
+
 `BranchState` contains named projections, a monotonically increasing version, and a stable
 SHA-256 state hash. Supported delta operations are `SET`, `MERGE`, `DELETE`, and `INCREMENT`.
 
