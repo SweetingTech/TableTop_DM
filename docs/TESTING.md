@@ -128,6 +128,11 @@ during pending lookups and player/co-DM switches, and rejection of obsolete resp
 newer lookup completes. Browser verification delays a real character lookup before inviting and
 updating the selected member.
 
+The isolated regression is `tests/e2e/test_roster_assignment_isolated.py`. The committed
+[A1 verification manifest](verification/a1-roster-review-2026-11-12/manifest.json) links actual
+fast/type/integration/browser/build reports, their SHA-256 hashes, and the tested source revision.
+Screenshots stay local and are not part of the repository evidence bundle.
+
 Screenshots, traces, and videos are retained under `test-results-e2e/` when configured or on
 failure. Those generated results are ignored by Git.
 
