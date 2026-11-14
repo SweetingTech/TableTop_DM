@@ -15,7 +15,7 @@ from kernel.branching import BranchManager, promotion_definition
 from kernel.command_bus import CommandBus, CommandReceipt
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
 from kernel.control import ControllerState, advanced, validate_controller
-from kernel.errors import AuthorizationDenied, BranchIsolationError
+from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayEngine, ReplayRecord
 from kernel.snapshots import SnapshotManifest, SnapshotStore
@@ -346,7 +346,7 @@ class SimulationApplication:
                 .get("singleton")
             )
             if clock is not None and clock["paused"]:
-                raise AuthorizationDenied("world clock is paused")
+                raise WorldClockPaused("world clock is paused")
         if proposal.command_type == "tabletop.clock.configure":
             executor = self.authority(
                 proposal.world_id, uuid.UUID(str(proposal.parameters["executor_actor_id"]))

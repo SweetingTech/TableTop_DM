@@ -17,7 +17,12 @@ from kernel.api.app import create_app
 from kernel.contracts import CommandProposal
 from kernel.database import transaction
 from kernel.errors import AuthorizationDenied
-from tests.unit.kernel.test_world_time import NOW, api_command, clock_game
+from tests.unit.kernel.test_world_time import (
+    NOW,
+    api_command,
+    clock_game,
+    pause_during_decision_and_resume,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -371,3 +376,13 @@ def test_clock_pause_fences_captured_character_action_inside_durable_lock(
         stale.submit(pending.outcome.proposal)
     control = player.get(path + "/control?run_id=" + run).get_json()["control"]
     assert control["step"] == 0 and control["failures"] == 0
+
+
+def test_pause_during_actual_character_runner_preserves_resume_without_handoff(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, card, path, run, target, base) = prepare(
+        integration_stack, monkeypatch, tmp_path
+    )
+    WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
+    pause_during_decision_and_resume(app, admin, player, path, run, base, monkeypatch)

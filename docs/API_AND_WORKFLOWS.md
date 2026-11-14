@@ -767,6 +767,8 @@ Reconfiguration resets that operational boundary, so paused time is not later ca
 Pause using a new configure command with the current epoch and `paused: true`. A configured clock
 pause also suspends unattended character runners without spending their failure budget. The kernel
 fences captured character proposals at commit. Worlds without clocks retain their previous behavior.
+The typed `WorldClockPaused` rejection is an expected suspension, including pauses during model
+generation; it preserves controller mode, step and failure budget so resume needs no new handoff.
 Human/operator commands remain explicit instantaneous actions. Action duration, initiative and
 scaling character cooldowns with simulated speed remain C3 work. The character observation barrier
 continues to apply; clock/configuration events emit no fictional observations.

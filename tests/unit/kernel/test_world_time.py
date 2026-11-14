@@ -324,3 +324,78 @@ def test_character_and_world_runners_share_a_branch_without_stalling_offscreen_w
         "resume-world",
     )
     assert app.extensions["character_runner"].run_once() == 1
+
+
+def pause_during_decision_and_resume(app, admin, player, path, run, base, monkeypatch):
+    clock_path = f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}/clock"
+    executor = admin.get(clock_path).get_json()["clock"]["executor_actor_id"]
+    api_command(
+        admin,
+        base,
+        "tabletop.clock.configure",
+        {
+            "expected_epoch": 1,
+            "executor_actor_id": executor,
+            "wall_time": NOW.isoformat(),
+            "paused": False,
+        },
+        "enable",
+    )
+    response = player.post(
+        path + "/control",
+        json={
+            "run_id": run,
+            "mode": "AUTONOMOUS",
+            "expected_epoch": 0,
+            "max_steps": 2,
+            "interval_ms": 100,
+            "idempotency_key": "leave",
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    decisions = app.extensions["character_decisions"]
+    original = decisions.decide
+
+    def pause(*args, **kwargs):
+        receipt = original(*args, **kwargs)
+        api_command(
+            admin,
+            base,
+            "tabletop.clock.configure",
+            {"expected_epoch": 2, "executor_actor_id": executor, "wall_time": NOW.isoformat()},
+            "racing-pause",
+        )
+        return receipt
+
+    # Restrict the durable scanner to this test's controller without bypassing its store.
+    controllers = app.extensions["controllers"]
+    due = controllers.due
+    monkeypatch.setattr(
+        controllers, "due", lambda: tuple(row for row in due() if str(row.run_id) == run)
+    )
+    monkeypatch.setattr(decisions, "decide", pause)
+    assert app.extensions["character_runner"].run_once() == 0
+    control = player.get(path + "/control?run_id=" + run).get_json()["control"]
+    assert control["mode"] == "AUTONOMOUS" and control["step"] == 0 and control["failures"] == 0
+    monkeypatch.setattr(decisions, "decide", original)
+    api_command(
+        admin,
+        base,
+        "tabletop.clock.configure",
+        {
+            "expected_epoch": 3,
+            "executor_actor_id": executor,
+            "wall_time": NOW.isoformat(),
+            "paused": False,
+        },
+        "resume-after-race",
+    )
+    assert app.extensions["character_runner"].run_once() == 1
+    control = player.get(path + "/control?run_id=" + run).get_json()["control"]
+    assert control["mode"] == "AUTONOMOUS" and control["step"] == 1 and control["failures"] == 0
+
+
+def test_clock_pause_during_character_decision_is_expected_suspension(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = clock_game(app)
+    pause_during_decision_and_resume(app, admin, player, path, run, base, monkeypatch)

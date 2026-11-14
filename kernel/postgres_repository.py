@@ -19,7 +19,7 @@ from kernel.contracts import (
 )
 from kernel.control import advanced, load_controller, persist_controller, validate_controller
 from kernel.database import transaction
-from kernel.errors import AuthorizationDenied, BranchIsolationError
+from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.event_factory import EventFactory
 from kernel.perception_contracts import PerceptionGrant
 from kernel.state import BranchState
@@ -242,7 +242,7 @@ class PostgresCommandRepository:
                     and clock is not None
                     and clock["paused"]
                 ):
-                    raise AuthorizationDenied("world clock is paused")
+                    raise WorldClockPaused("world clock is paused")
                 evidence = (
                     self.evidence_builder(proposal, before) if self.evidence_builder else None
                 )
