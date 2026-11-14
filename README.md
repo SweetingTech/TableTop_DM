@@ -23,12 +23,19 @@ direction, reply intent/volume, attack, withdrawal and visible-target priorities
 persona/card tendencies as fallback. A one-attack guard and fixed-cost ARCANE_BOLT/MEND spells
 expand combat when resources allow. An optional OpenAI-compatible adapter turns speech intents
 into contextual generated utterances; you choose its endpoint, model and credentials. Generation
-is off by default. Full tactical planning, relationship strategy, narrative goals and the world
-clock remain planned.
+is off by default. Full tactical planning, relationship strategy and narrative goals remain planned.
 See [controller handoff and runner](docs/API_AND_WORKFLOWS.md#controller-handoff-and-runner).
 
 See [generated dialogue and tactical choices](docs/API_AND_WORKFLOWS.md#generated-dialogue-and-tactical-choices)
 for activation, exact combat rules and current limits. No provider is silently selected or activated.
+
+An opt-in persistent world clock now advances offscreen weeding and rest alongside character
+actions, without a browser or nearby observer. Scheduled rain interrupts work at simulated-time
+boundaries; returning players see inspected activity/progress in the console. A separate
+`world-runner` uses an explicitly granted agent, epoch/step fencing and the normal atomic kernel
+transaction. Configure pause, speed, stop boundary and downtime policy through typed commands;
+see [world time and offscreen activities](docs/API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
+Travel, consumption, population lifecycle coupling and automatic routines remain planned.
 
 ## Product workspaces
 

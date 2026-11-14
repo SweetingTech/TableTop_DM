@@ -101,6 +101,9 @@ def test_compose_separates_migration_and_runtime_credentials() -> None:
     assert services["app"]["read_only"] is True
     assert services["worker"]["read_only"] is True
     assert services["worker"]["healthcheck"]["disable"] is True
+    assert services["world-runner"]["command"] == ["python", "main.py", "world-runner"]
+    assert services["world-runner"]["read_only"] is True
+    assert "DATABASE_ADMIN_URL" not in services["world-runner"]["environment"]
     assert "build" in services["app"]
     assert "build" not in services["worker"]
     assert "build" not in services["migrate"]

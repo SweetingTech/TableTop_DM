@@ -146,6 +146,14 @@ class CharacterRunner:
         committed = 0
         for controller in self.controllers.due():
             try:
+                source = self.snapshot()
+                clock = (
+                    source.states.get(controller.branch_id)
+                    .projections.get("tabletop.clock", {})
+                    .get("singleton")
+                )
+                if clock is not None and clock["paused"]:
+                    continue
                 receipt = self.decisions.decide(
                     controller.scope,
                     controller.executor_actor_id,

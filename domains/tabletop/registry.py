@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from domains.tabletop.activities import command_definitions as activities
 from domains.tabletop.battlefield import command_definitions as battlefield
 from domains.tabletop.combat import command_definition as combat
 from domains.tabletop.combat.tactics import command_definition as guard
@@ -14,11 +15,14 @@ from domains.tabletop.onboarding import command_definition as onboarding
 from domains.tabletop.quests import command_definition as quests
 from domains.tabletop.spatial import command_definition as spatial
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
+from domains.tabletop.world_time import command_definitions as world_time
 from kernel.command_bus import CommandBus, CommandDefinition
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:
     return (
+        *world_time(),
+        *activities(),
         *battlefield(),
         onboarding(),
         *dialogue(),

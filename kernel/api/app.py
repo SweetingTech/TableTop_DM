@@ -2937,17 +2937,23 @@ def create_app(
 
     @app.get("/api/v2/branches/<uuid:branch_id>/replay")
     def replay(branch_id: uuid.UUID):
-        require_world_access(simulation.states.get(branch_id).world_id)
-        state = simulation.replay(branch_id)
-        return jsonify(
+        source = controller_snapshot()
+        world_id = source.states.get(branch_id).world_id
+        require_world_access(world_id, source)
+        if "world.read.all" not in source.authority(world_id, current_actor_id()).capabilities:
+            raise PermissionError("whole-branch replay requires world inspection authority")
+        state = source.replay(branch_id)
+        response = jsonify(
             {
                 "branch_id": str(branch_id),
                 "state_hash": state.state_hash,
                 "projection_version": state.version,
                 "projections": state.projections,
-                "verified": state.state_hash == simulation.states.get(branch_id).state_hash,
+                "verified": state.state_hash == source.states.get(branch_id).state_hash,
             }
         )
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.post("/api/v2/branches/<uuid:branch_id>/promotions")
     def promote(branch_id: uuid.UUID):
@@ -3737,6 +3743,11 @@ def create_app(
             {"status": "frontend_not_built", "hint": "run npm --prefix frontend run build"}
         ), 503
 
+    from kernel.api.world_time import register_world_time
+    from kernel.world_runner import WorldRunner
+
+    app.extensions["world_runner"] = WorldRunner(controller_snapshot)
+    register_world_time(app, controller_snapshot, current_actor_id, require_world_access)
     return app
 
 

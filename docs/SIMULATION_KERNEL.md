@@ -101,6 +101,13 @@ returns the original committed receipt.
 
 ## Acceptance properties
 
+Typed world-clock configuration, advance and ticks mutate the existing branch projection. A tick
+rechecks executor/epoch/step and LIVE run status in the command transaction. Scheduled weather,
+activity progress, body outputs, next clock step, command/event/outbox either all commit or all
+roll back. Exact retries return the original receipt after pause; new stale work is rejected.
+Configured clock pause also fences unattended character proposals inside the mutation lock.
+No arbitrary queued model command executes, and no viewer is required for offscreen progression.
+
 Optional dialogue generation proposes text only after policy action selection. Bounded network
 and schema failures use deterministic fallback. Accepted text/model/prompt/source metadata freeze
 in the existing private receipt before submission. Retries reuse that receipt. Speech carries

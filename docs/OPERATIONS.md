@@ -4,7 +4,7 @@
 
 ### Durable stack
 
-Durable mode is the supported operational profile. Compose defines eight services:
+Durable mode is the supported operational profile. Compose defines nine services:
 
 - `postgres`: canonical and application records;
 - `redis`: authenticated RQ queue transport;
@@ -14,6 +14,7 @@ Durable mode is the supported operational profile. Compose defines eight service
 - `worker`: unprivileged experiment worker.
 - `projector`: frozen world-event perception and cognition projection;
 - `runner`: bounded character executor, idle until explicit autonomy opt-in.
+- `world-runner`: persistent time/offscreen activity driver, idle until explicit clock opt-in.
 
 Start and verify:
 
@@ -252,7 +253,17 @@ must deliver observations for successive decisions. Missing/stuck projection cau
 deferred attempts and an explicit controller pause. Default budget is 20 actions at one-second
 intervals; maximum budget is 1,000. A restart preserves mode, epoch, step, and remaining budget.
 Browser disconnection preserves the selected mode. Use Pause autonomy or Take control to stop
-execution. Worker-health/throughput dashboards and the canonical world clock remain planned.
+character execution. Worker-health/throughput dashboards remain planned.
+
+The world-runner uses the runtime database role and artifact volume, with no new port, credential
+or SQL migration. Managed startup includes it. Existing clocks stay absent/idle until an operator
+configures an explicitly granted AGENT; see [world time](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
+Stop it by pausing the clock through a typed configure command. That also suspends unattended
+characters; explicit human/operator commands remain possible. FREEZE is the default downtime
+policy; choose CATCH_UP explicitly if missed ticks should be processed, bounded per commit.
+Neither starts a full narrative campaign or attaches statistical population records automatically.
+Back up clock/activity/weather projections with their canonical ledger, grants and artifact volume.
+Existing projection snapshots contain them, but remain incomplete whole-campaign checkpoints.
 
 | Data | Store and recovery notes |
 | --- | --- |

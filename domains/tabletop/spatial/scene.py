@@ -16,6 +16,14 @@ class SceneCoordinate(BaseModel):
     zone_id: uuid.UUID | str = "world"
 
 
+class VisibleActivity(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    kind: Literal["WEED", "REST"]
+    status: Literal["RUNNING", "WAITING", "COMPLETED", "CANCELLED"]
+    progress_percent: int = Field(ge=0, le=100)
+    weeded_units: int = Field(ge=0)
+
+
 class PerceivedEntity(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -33,6 +41,7 @@ class PerceivedEntity(BaseModel):
     mana: int | None = None
     guarded: bool | None = None
     attack_reach: int | None = None
+    activity: VisibleActivity | None = None
 
 
 class ObservationPresentation(BaseModel):

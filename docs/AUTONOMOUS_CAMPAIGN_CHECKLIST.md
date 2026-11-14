@@ -170,6 +170,13 @@ as composition glue; reusable execution services must also work from workers and
 
 ## E. Offscreen people and continuous activities
 
+Initial D/E foundation now persists branch time and WEED/REST activities through typed canonical
+commands, with a separate world-runner, explicit downtime policy, epoch/step fencing, deterministic
+weather boundaries and inspected scene/console progress. Tests cover no viewers, concurrent workers,
+restart, rollback and character/world execution on one branch. D3's generic leased queue, full
+population lifecycle coupling, richer routines/vocabulary and whole D/E acceptance remain open.
+See [world time and activities](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
+
 - [ ] E1 — Add typed activity definitions/state for work, travel, sleep, consumption, and interruptions
   under `domains/tabletop/activities/` (proposed). Persist start/due time, progress, inputs/outputs, owner, and cause.
 - [ ] E2 — Connect materialized population state to due activities and canonical entities where needed;

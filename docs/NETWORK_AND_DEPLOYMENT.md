@@ -17,6 +17,13 @@ volume. It has no listening port or provider connection. The perception `project
 observations before dependent decisions. Managed startup and full-stack CI include both services.
 Autonomy is explicit per body; old runtime selections do not activate it.
 
+The internal `world-runner` service independently drives enabled canonical LIVE clocks and initial
+offscreen WEED/REST activities through normal kernel commands. It shares the runtime role/artifact
+volume and has no listening port or provider dependency. Clock setup selects an explicitly granted
+world AGENT; UTC cadence and offline policy are operational, simulated time is branch-scoped.
+It is idle for unconfigured/paused clocks. No schema migration or new store is added; projection,
+activity effects and next work commit with the existing ledger/outbox.
+
 Optional dialogue generation adds outbound HTTP(S) only when `TTDM_DIALOGUE_MODE=openai-compatible`
 is explicitly configured with an endpoint/model. API and runner call that chosen base's
 `/chat/completions`; the browser receives no provider credential. Requests contain sanitized
@@ -43,6 +50,7 @@ flowchart LR
             App[app\nFlask API + React assets\n:8000]
             Worker[worker\nRQ experiment executor]
             Runner[runner\nBounded character executor]
+            WorldRunner[world-runner\nClock and offscreen activities]
             Projector[projector\nFrozen perception outbox]
             Migrate[migrate\none-shot owner job]
             PG[(PostgreSQL 16\n:5432)]
@@ -58,6 +66,7 @@ flowchart LR
     App -->|least-privilege SQL + actor context| PG
     Worker -->|least-privilege SQL| PG
     Runner -->|fenced commands and due work| PG
+    WorldRunner -->|atomic clock/activity ticks| PG
     Projector -->|frozen observation delivery| PG
     Migrate -->|owner SQL; exits after apply| PG
     App -->|authenticated Redis protocol| Redis
@@ -67,6 +76,7 @@ flowchart LR
     App <-->|content-addressed files| Artifacts
     Worker <-->|trial/report files| Artifacts
     Runner <-->|snapshot artifacts| Artifacts
+    WorldRunner <-->|snapshot artifacts| Artifacts
 ```
 
 All published ports bind to `127.0.0.1` unless the operator explicitly changes a bind-address
