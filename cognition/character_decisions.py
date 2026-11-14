@@ -18,6 +18,7 @@ from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import CharacterBinding
 from kernel.application import SimulationApplication
 from kernel.contracts import BranchKind
+from kernel.control import ControllerState
 from kernel.state import stable_hash
 from persona.models import CompiledPersona, PersonaPurpose
 
@@ -144,6 +145,8 @@ def propose_for_character(
     binding: CharacterBinding,
     profile: CompiledPersona,
     engine: LayeredDecisionEngine | None = None,
+    controller: ControllerState | None = None,
+    human_epoch: int | None = None,
 ) -> CharacterProposalReceipt:
     if (
         binding.scope != scope.key
@@ -187,8 +190,20 @@ def propose_for_character(
     )
     trace = outcome.trace.model_copy(update={"trace_id": decision_id})
     proposal = outcome.proposal.model_copy(
-        update={"command_id": uuid.uuid5(decision_id, "command"), "decision_trace_id": decision_id}
+        update={
+            "command_id": uuid.uuid5(decision_id, "command"),
+            "decision_trace_id": decision_id,
+            "control_epoch": human_epoch,
+        }
     )
+    if controller is not None:
+        proposal = proposal.model_copy(
+            update={
+                "control_epoch": controller.epoch,
+                "control_step": controller.step,
+                "decision_authorship": "CHARACTER_POLICY",
+            }
+        )
     outcome = outcome.model_copy(update={"trace": trace, "proposal": proposal})
     return CharacterProposalReceipt(
         decision_id=decision_id,

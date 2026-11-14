@@ -42,6 +42,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("004_persona_purpose.sql",),
             ("005_character_history_and_bindings.sql",),
             ("006_character_proposal_receipts.sql",),
+            ("007_controller_handoff_runner.sql",),
         ]
         cursor.execute(
             """

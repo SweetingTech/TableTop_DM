@@ -24,6 +24,7 @@ from cognition.character_decisions import (
     require_character_proposal_authority,
     require_projected_character_experience,
 )
+from cognition.control import ControlConflict, HandoffRequest, InMemoryControllers
 from cognition.engine import (
     DecisionAction,
     DecisionRequest,
@@ -34,6 +35,7 @@ from cognition.models import RuntimeAssignment, RuntimeKind
 from cognition.perception import PerceptionProfile
 from cognition.planning import GoapAction
 from cognition.postgres import PostgresMindRepository
+from cognition.postgres_control import PostgresControllers
 from cognition.postgres_decisions import PostgresCharacterProposals
 from cognition.reflexes import ReflexRule
 from cognition.relationships import (
@@ -41,6 +43,7 @@ from cognition.relationships import (
     RelationshipEngine,
     RelationshipModifiers,
 )
+from cognition.runner import CharacterDecisionService, CharacterRunner
 from cognition.store import MindStore
 from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import (
@@ -90,6 +93,7 @@ from identity.service import AuthenticationError, IdentityService
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
+from kernel.control import ControllerState, ControlScope
 from kernel.database import execute_one
 from kernel.errors import KernelError
 from kernel.postgres_control_plane import PostgresControlPlane
@@ -553,6 +557,79 @@ def create_app(
         for stored_version in persona_repository.list_versions():
             persona_versions[stored_version.version_id] = stored_version
             personas[stored_version.blueprint.persona_id] = stored_version.blueprint
+
+    def controller_snapshot() -> SimulationApplication:
+        if durable_control is None:
+            return simulation
+        fresh = SimulationApplication(simulation.snapshot_store.root)
+        durable_control.hydrate(fresh)
+        fresh.configure_durable(
+            simulation.durable_repository,
+            durable_control.load_projection,
+            durable_control.persist_snapshot,
+        )
+        return fresh
+
+    def controller_minds(scope: ControlScope, actor_id: uuid.UUID) -> MindStore:
+        if mind_repository is None:
+            return minds
+        state, observations, relationships = mind_repository.load_projection(
+            world_id=scope.world_id,
+            branch_id=scope.branch_id,
+            entity_id=scope.entity_id,
+            actor_id=actor_id,
+        )
+        observed = MindStore()
+        observed.restore(
+            state, branch_id=scope.branch_id, observations=observations, relationships=relationships
+        )
+        return observed
+
+    def store_controller_runtime(state: ControllerState) -> None:
+        previous = minds.runtime_assignment(
+            world_id=state.world_id,
+            branch_id=state.branch_id,
+            run_id=state.run_id,
+            entity_id=state.entity_id,
+        )
+        minds.set_runtime_assignment(
+            RuntimeAssignment(
+                world_id=state.world_id,
+                branch_id=state.branch_id,
+                run_id=state.run_id,
+                entity_id=state.entity_id,
+                runtime_kind="HUMAN" if state.mode == "HUMAN" else "UTILITY",
+                runtime_config=previous.runtime_config if previous else {},
+            )
+        )
+
+    controllers = (
+        PostgresControllers(database_dsn, demo["actor_id"])
+        if database_dsn
+        else InMemoryControllers(
+            simulation,
+            lambda scope, actor: character_bindings.latest(scope.key, actor_id=actor) is not None,
+            store_controller_runtime,
+        )
+    )
+    live_decisions = CharacterDecisionService(
+        snapshot=controller_snapshot,
+        read_minds=controller_minds,
+        bindings=character_bindings,
+        cards=portal.repository,
+        profiles=lambda persona, version, compiler: (
+            persona_repository.get_compiled(persona, version, compiler)
+            if persona_repository
+            else bound_profiles.get((persona, version, compiler))
+        ),
+        proposals=character_proposals,
+        reference=simulation if database_dsn is None else None,
+    )
+    app.extensions["controllers"] = controllers
+    app.extensions["character_decisions"] = live_decisions
+    app.extensions["character_runner"] = CharacterRunner(
+        controllers, live_decisions, controller_snapshot
+    )
     populations: dict[uuid.UUID, dict[str, Any]] = {}
     population_lifecycles: dict[uuid.UUID, PopulationLifecycle] = {}
     population_repository = PostgresPopulationRepository(database_dsn) if database_dsn else None
@@ -1020,6 +1097,10 @@ def create_app(
     @app.errorhandler(CharacterContextPending)
     def character_context_pending(exc: CharacterContextPending):
         return jsonify({"error": "character_context_pending", "details": str(exc)}), 409
+
+    @app.errorhandler(ControlConflict)
+    def control_conflict(exc: ControlConflict):
+        return jsonify({"error": "controller_changed", "details": str(exc)}), 409
 
     @app.errorhandler(KeyError)
     def missing_error(exc: KeyError):
@@ -1523,7 +1604,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "006_character_proposal_receipts.sql",
+                    "ok": version == "007_controller_handoff_runner.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -1824,12 +1905,13 @@ def create_app(
         "/entities/<uuid:observer_entity_id>/scene"
     )
     def perceived_scene(world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID):
-        scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id)
+        source = controller_snapshot()
+        scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id, source)
         payload = scene.model_dump(mode="json")
         after_event = request.args.get("after_event_id")
         if after_event is not None:
             payload["refresh"] = scene_refresh_status(
-                simulation,
+                source,
                 observed_minds,
                 world_id=world_id,
                 branch_id=branch_id,
@@ -1894,6 +1976,9 @@ def create_app(
                 context=resolved.context,
                 binding=resolved.binding,
                 profile=resolved.profile,
+                human_epoch=source.controller_states[scope.key].epoch
+                if scope.key in source.controller_states
+                else None,
             )
 
         def reference_proposal():
@@ -1913,12 +1998,43 @@ def create_app(
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    @app.route(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
+        "/entities/<uuid:entity_id>/control",
+        methods=["GET", "POST"],
+    )
+    def character_control(world_id: uuid.UUID, branch_id: uuid.UUID, entity_id: uuid.UUID):
+        require_world_access(world_id)
+        actor_id = current_actor_id()
+        if request.method == "GET":
+            scope = ControlScope(
+                world_id=world_id,
+                branch_id=branch_id,
+                entity_id=entity_id,
+                run_id=uuid.UUID(request.args["run_id"]),
+            )
+            state = controllers.get(scope, actor_id)
+            response = jsonify(
+                {
+                    "control": state.model_dump(mode="json") if state else None,
+                    "disconnect_policy": "EXPLICIT_HANDOFF",
+                }
+            )
+        else:
+            body = HandoffRequest.model_validate(request.get_json(silent=True) or {})
+            scope = ControlScope(
+                world_id=world_id, branch_id=branch_id, entity_id=entity_id, run_id=body.run_id
+            )
+            response = jsonify(controllers.handoff(scope, actor_id, body).model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get(
         "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
         "/entities/<uuid:observer_entity_id>/context"
     )
     def character_context(world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID):
-        source = simulation
+        source = controller_snapshot()
         scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id, source)
         requested_run = request.args.get("run_id")
         resolved = resolve_frame(
@@ -2205,18 +2321,53 @@ def create_app(
             and "mind.write.all" not in actor.capabilities
         ):
             raise PermissionError("actor cannot manage this entity's runtime")
-        existing = minds.runtime_assignment(
-            world_id=scope.world_id,
-            branch_id=scope.branch_id,
-            run_id=scope.run_id,
-            entity_id=entity_id,
+        existing = (
+            mind_repository.load_runtime_assignment(
+                world_id=scope.world_id,
+                branch_id=scope.branch_id,
+                run_id=scope.run_id,
+                entity_id=entity_id,
+                actor_id=actor_id,
+            )
+            if mind_repository
+            else minds.runtime_assignment(
+                world_id=scope.world_id,
+                branch_id=scope.branch_id,
+                run_id=scope.run_id,
+                entity_id=entity_id,
+            )
         )
         if request.method == "GET":
             if existing is None:
                 raise KeyError((scope.world_id, scope.branch_id, scope.run_id, entity_id))
-            return _json(existing)
+            runtime_payload = existing.model_dump(mode="json")
+            controller = controllers.get(
+                ControlScope(
+                    world_id=scope.world_id,
+                    branch_id=scope.branch_id,
+                    run_id=scope.run_id,
+                    entity_id=entity_id,
+                ),
+                actor_id,
+            )
+            if controller is not None:
+                runtime_payload["controller"] = controller.model_dump(mode="json")
+            return jsonify(runtime_payload)
         if assignment_request is None:  # pragma: no cover - narrowed by request method
             raise RuntimeError("runtime assignment request was not validated")
+        if (
+            controllers.get(
+                ControlScope(
+                    world_id=scope.world_id,
+                    branch_id=scope.branch_id,
+                    run_id=scope.run_id,
+                    entity_id=entity_id,
+                ),
+                actor_id,
+            )
+            is not None
+        ):
+            raise ValueError("use the explicit controller handoff for a managed character")
         assignment = RuntimeAssignment(
             world_id=scope.world_id,
             branch_id=scope.branch_id,

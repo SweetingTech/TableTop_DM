@@ -46,7 +46,7 @@ jobs:
           uv sync --frozen
           uv run playwright install --with-deps chromium
       - name: Build and start the full v2 stack
-        run: docker compose --env-file .env.example -f infra/docker-compose.yml up -d --build app worker
+        run: docker compose --env-file .env.example -f infra/docker-compose.yml up -d --build app worker projector runner
       - name: Wait for dependency-aware readiness
         run: uv run python scripts/wait_ready.py --url http://127.0.0.1:8000/readyz --timeout 180
       - name: Run user-level journeys

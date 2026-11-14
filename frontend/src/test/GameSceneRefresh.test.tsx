@@ -7,7 +7,9 @@ import type { EventRecord, GameState, Sourced } from "../core/api/types";
 
 const scope = vi.hoisted(() => ({ world: "world-a" }));
 vi.mock("../app/AppContext", () => ({ useAppContext: () => ({ activeWorldId: scope.world }) }));
-vi.mock("../features/game-console/api", () => ({ loadGameState: vi.fn(), proposeCommand: vi.fn() }));
+vi.mock("../features/game-console/api", () => ({ loadGameState: vi.fn(), proposeCommand: vi.fn(),
+  loadController: vi.fn(async () => ({ control: null, disconnect_policy: "EXPLICIT_HANDOFF" })),
+  handoffController: vi.fn() }));
 const cursor = { world_id: "world-a", branch_id: "branch-a", observer_entity_id: "hero", event_id: "canonical-event", projection_version: 2 };
 const experience: EventRecord = { event_id: "observation-1", source_event_id: "canonical-event", event_type: "tabletop.spatial.move", summary: "A footstep nearby.", created_at: "2026-11-13T00:00:00Z" };
 const acknowledgement = { source: "live" as const, data: { event_id: "canonical-event", scene_refresh: cursor,

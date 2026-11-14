@@ -78,6 +78,14 @@ Only normal command submission can apply the proposed action, after current kern
 Proposal receipts are not execution leases and must never substitute for future controller epochs.
 Policy advice is labeled CHARACTER_POLICY and cannot become human behavior ground truth.
 
+Managed execution requires the current controller epoch and authority. HUMAN ownership and the
+autonomous AGENT executor remain distinct. Autonomous proposals carry CHARACTER_POLICY authorship,
+epoch, and expected step. The kernel validates inside the mutation lock, before the handler; one
+transaction commits action/event/outbox and advances step/budget. Private handoff takes the same
+lock and increments the epoch, fencing in-flight work. The API never upgrades old managed commands
+by stamping a new epoch. No handoff is sensory. These controls apply to canonical LIVE runs;
+complete campaign checkpoint/timeline restoration must eventually restore and fence them too.
+
 1. A human, policy, planner, or model creates a typed `CommandProposal`.
 2. The registry resolves a stable command contract and validates parameters.
 3. The kernel checks actor identity, world/run/branch lineage, capabilities, entity control, and

@@ -56,6 +56,8 @@ class CommandBus:
         self.event_factory = event_factory or EventFactory()
         self._definitions: dict[str, CommandDefinition] = {}
         self._receipts: dict[tuple[uuid.UUID, uuid.UUID, str], CommandReceipt] = {}
+        self.control_validator: Callable[[CommandProposal], None] | None = None
+        self.control_committer: Callable[[CommandProposal], None] | None = None
 
     def register(self, definition: CommandDefinition) -> None:
         if definition.command_type in self._definitions:
@@ -97,6 +99,8 @@ class CommandBus:
         key = (proposal.run_id, proposal.actor_id, proposal.idempotency_key)
 
         def run(state: BranchState) -> CommandReceipt:
+            if self.control_validator is not None:
+                self.control_validator(proposal)
             if state.world_id != proposal.world_id:
                 raise AuthorizationDenied("Branch does not belong to proposal world")
             if state.kind not in definition.allowed_branch_kinds:
@@ -121,6 +125,8 @@ class CommandBus:
                 after=state,
                 emission_builder=definition.emission_builder,
             )
+            if self.control_committer is not None:
+                self.control_committer(proposal)
             return CommandReceipt(
                 result=result,
                 event=materialized.event,

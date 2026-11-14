@@ -469,9 +469,10 @@ their action labels contain fiction only. There are no class/species/protagonist
 These choices are attempts, not guaranteed outcomes. The provider never reads hidden obstacles
 or hidden entities to remove choices; otherwise the catalog itself would reveal unknown facts.
 The kernel must revalidate authority, lineage, and rules on submission. No model or read request
-commits an action. Speech/combat/activity catalogs, learned lore, and
-runner integration remain planned. Durable reads hydrate the current subjective projection;
-the context route does not yet wait at a runner's dependent-decision projection barrier.
+commits an action. Speech/combat/activity catalogs and learned lore remain planned. Durable reads
+hydrate fresh canonical and subjective projections. The context read itself does not wait for
+dependent observations; trusted proposal generation and the runner enforce that barrier before
+choosing an action.
 
 `POST /api/v2/cognition/decide` accepts caller-authored situations/actions only for privileged
 `SIMULATED_PLAYTESTER` evaluation (administrator session or automation boundary, still subject to
@@ -510,8 +511,65 @@ on the authorized run and branch; a request-local durable snapshot avoids stale 
 Reference mode serializes proposal reads against command publication. A receipt does not grant
 permission to execute later. Submit `outcome.proposal` through `POST /api/v2/commands` to request
 normal kernel revalidation and idempotent execution. The proposal endpoint never advances time,
-changes runtime assignments, or automatically submits a command. Exclusive controller epochs,
-autonomous scheduling, broader actions, learned lore, and player-history imitation remain planned.
+changes runtime assignments, or automatically submits a command. The separate controller/runner
+workflow below adds exclusive epochs and bounded scheduling. Broader actions, learned lore, and
+player-history imitation remain planned.
+
+## Controller handoff and runner
+
+`GET /api/v2/worlds/{world}/branches/{branch}/entities/{body}/control?run_id={run}` reads private
+controller status for the body owner or a world-scoped `mind.write.all` operator. An unconfigured
+body returns `control: null`; use expected epoch zero for its first handoff.
+
+`POST` to the same path accepts only:
+
+```json
+{
+  "run_id": "UUID",
+  "expected_epoch": 0,
+  "mode": "AUTONOMOUS",
+  "idempotency_key": "one-logical-handoff",
+  "max_steps": 20,
+  "interval_ms": 1000
+}
+```
+
+Modes are HUMAN, AUTONOMOUS, and PAUSED. Handoffs are restricted to canonical LIVE runs. The owner
+or authorized operator must hold execution capabilities before enabling autonomy. The action
+budget is 1–1,000 and interval is 100–60,000 ms. Each handoff increments the exclusive controller
+epoch; a stale expected epoch returns `409 controller_changed`. Retry an uncertain operation with
+its original key. The browser rereads current control so an old receipt cannot overwrite later state.
+
+The body retains its human owner, persona, pinned card, and mind. A separate AGENT receives minimal
+world capabilities and entity-scoped private context/command grants. Its proposals and ledger rows
+carry CHARACTER_POLICY authorship, controller epoch, step, and decision-trace/pinned-identity
+attribution. They are not human preference evidence. Handoffs have private append-only receipts,
+never emit sensory events, and do not change the character context hash.
+
+Every new managed command must carry the epoch observed by its controller. The typed console
+adapter sends `control_epoch`; autonomous commands also carry `control_step`. The server never
+upgrades a delayed command by stamping a fresh epoch. Unmanaged legacy bodies retain their
+existing behavior. Kernel fencing occurs inside the same branch/state lock as canonical mutation.
+Old controllers cannot act after takeover; committed retries cannot advance the world or step twice.
+
+`python main.py runner` processes due autonomous controllers using trusted pinned context and
+local utility/movement candidates, then submits through the normal kernel. No provider call or
+browser cookie is used. The canonical commit and step/budget advance share one database transaction.
+Epoch/step proposal keys survive crashes and concurrent workers. Observations still flow through
+the frozen perception outbox; the next decision waits for them. Invalid actions pause with
+`action_failed`; pending observations defer every 250 ms and pause after 40 unsuccessful checks.
+The budget pauses with `step_limit`. Resume explicitly with a new handoff/key/current epoch.
+
+The Game Console exposes Let character act, Pause autonomy, Take control, and an action limit.
+It polls status, refreshes the authorized scene on progress, and disables human submission until
+takeover. Saved mode survives browser closure and process restart. Closing a browser while HUMAN
+does not enable autonomy. Presence timeouts/reconnect policies, human-history inference, richer
+actions, narrative goals, and the canonical world clock remain separate work; due times here are
+operational wall-clock scheduling only.
+
+Runtime GET reads durable assignments fresh and adds controller metadata for managed bodies.
+Handoff atomically selects HUMAN or UTILITY while preserving runtime configuration. Legacy runtime
+PUT cannot bypass explicit handoff for a managed body.
 
 ## Error contract
 
@@ -524,5 +582,6 @@ Common status meanings:
   branch operation;
 - `404`: resource is absent or not visible to the caller;
 - `409 character_context_pending`: retry character advice after subjective projection catches up;
+- `409 controller_changed`: reload control before making a new logical handoff;
 - `409`: idempotency, uniqueness, version, or state-hash conflict;
 - `503`: configured dependencies or migrations are not ready.

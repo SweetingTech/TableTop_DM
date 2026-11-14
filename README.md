@@ -13,6 +13,13 @@ and perception-scoped experience. The proposal endpoint uses local deterministic
 basic movement catalog; it does not execute actions, change a human assignment, or run a campaign.
 See [character proposals](docs/API_AND_WORKFLOWS.md#trusted-character-proposals).
 
+The Game Console now offers **Let character act**, **Pause autonomy**, and **Take control**.
+Explicit handoff starts a bounded local movement policy through a dedicated character executor;
+the runner and perception projector continue without a browser connection. Controller epochs
+prevent old human or autonomous actions committing after takeover. This is basic unattended
+movement; narrative goals, the world clock, and learned player imitation remain planned.
+See [controller handoff and runner](docs/API_AND_WORKFLOWS.md#controller-handoff-and-runner).
+
 ## Product workspaces
 
 | Workspace | Audience | Purpose |
@@ -58,9 +65,10 @@ Embodied context reads now share the perceived-scene service and validate rememb
 against same-branch frozen perception grants. Caller-authored cognition requests are privileged
 playtester evaluation. Context reads now supply a versioned basic movement-attempt catalog for
 controlled, capable bodies, using perceived self state and world-scoped authority. Hidden obstacles
-do not filter choices; the kernel checks every attempt. Live character decisions remain unavailable
-until broader actions, safe controller handoff, and runner wiring are connected. This keeps that evaluation API from injecting
-operator/player knowledge into character decisions while the remaining campaign wiring is built.
+do not filter choices; the kernel checks every attempt. Trusted character proposals and explicit
+controller handoff now enable bounded unattended movement through the runner. Caller-authored
+evaluation remains separate from live character inputs. Broader actions, narrative planning, and
+player-history imitation remain in the implementation checklist.
 
 The initial account is `admin` with password `admin123`. The first sign-in is restricted to the
 password-change screen, and the replacement password must be at least 12 characters and not a
@@ -182,6 +190,7 @@ players.
 tabletop-dm serve [--host HOST] [--port PORT]
 tabletop-dm worker
 tabletop-dm projector
+tabletop-dm runner
 tabletop-dm scenario [--cohort-size N] [--seeds ...] [--include-trials N]
 tabletop-dm persona --seed SEED [--fixed JSON]
 tabletop-dm population --size N --seed SEED --output FILE.parquet

@@ -14,6 +14,7 @@ from domains.tabletop import register_tabletop
 from kernel.branching import BranchManager, promotion_definition
 from kernel.command_bus import CommandBus, CommandReceipt
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
+from kernel.control import ControllerState, advanced, validate_controller
 from kernel.errors import AuthorizationDenied, BranchIsolationError
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayEngine, ReplayRecord
@@ -75,9 +76,12 @@ class SimulationApplication:
 
     def __init__(self, artifact_root: Path | None = None) -> None:
         self._reference_command_lock = threading.RLock()
+        self.controller_states: dict[tuple, ControllerState] = {}
         self.states = InMemoryStateStore()
         self.branches = BranchManager(self.states)
         self.bus = register_tabletop(CommandBus(self.states))
+        self.bus.control_validator = self.validate_control
+        self.bus.control_committer = self.advance_control
         self.bus.register(promotion_definition())
         self.worlds: dict[uuid.UUID, WorldRecord] = {}
         self.runs: dict[uuid.UUID, RunRecord] = {}
@@ -211,7 +215,19 @@ class SimulationApplication:
 
     def authority(self, world_id: uuid.UUID, actor_id: uuid.UUID) -> Actor:
         try:
-            return self.world_authorities[(world_id, actor_id)]
+            actor = self.world_authorities[(world_id, actor_id)]
+            delegated = {
+                row.entity_id
+                for row in tuple(self.controller_states.values())
+                if row.world_id == world_id
+                and (
+                    row.owner_actor_id == actor_id
+                    or (row.executor_actor_id == actor_id and row.mode == "AUTONOMOUS")
+                )
+            }
+            return actor.model_copy(
+                update={"controlled_entity_ids": actor.controlled_entity_ids | delegated}
+            )
         except KeyError as exc:
             raise AuthorizationDenied("Actor has no authority in this world") from exc
 
@@ -321,10 +337,49 @@ class SimulationApplication:
                 return self._submit(proposal)
         return self._submit(proposal)
 
+    def validate_control(self, proposal: CommandProposal) -> None:
+        scope = (
+            proposal.world_id,
+            proposal.branch_id,
+            proposal.run_id,
+            proposal.embodied_entity_id,
+        )
+        if scope not in self.controller_states and any(
+            row.executor_actor_id == proposal.actor_id
+            for row in tuple(self.controller_states.values())
+        ):
+            raise AuthorizationDenied("executor is not assigned to this run and body")
+        if proposal.decision_authorship == "CHARACTER_POLICY" and (
+            self.runs[proposal.run_id].status not in {"ACTIVE", "RUNNING"}
+        ):
+            raise AuthorizationDenied("autonomous run is not active")
+        if proposal.embodied_entity_id is not None:
+            validate_controller(
+                proposal,
+                self.controller_states.get(
+                    (
+                        proposal.world_id,
+                        proposal.branch_id,
+                        proposal.run_id,
+                        proposal.embodied_entity_id,
+                    )
+                ),
+            )
+
+    def advance_control(self, proposal: CommandProposal) -> None:
+        if proposal.decision_authorship == "CHARACTER_POLICY":
+            key = (
+                proposal.world_id,
+                proposal.branch_id,
+                proposal.run_id,
+                proposal.embodied_entity_id,
+            )
+            self.controller_states[key] = advanced(self.controller_states[key])
+
     def read_reference(self, reader: Callable[[], ReadResult]) -> ReadResult:
         """Capture a reference read through command, event, and perception publication."""
         with self._reference_command_lock:
-            return reader()
+            return self.states.synchronized(reader)
 
     def _submit(self, proposal: CommandProposal) -> CommandReceipt:
         branch = self.states.get(proposal.branch_id)
