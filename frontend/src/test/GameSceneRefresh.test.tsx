@@ -28,9 +28,33 @@ function deferred<T>() {
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
-beforeEach(() => { scope.world = "world-a"; vi.mocked(api.loadGameState).mockReset(); vi.mocked(api.proposeCommand).mockReset(); });
+beforeEach(() => {
+  scope.world = "world-a";
+  vi.mocked(api.loadGameState).mockReset(); vi.mocked(api.proposeCommand).mockReset();
+  vi.mocked(api.loadController).mockReset().mockResolvedValue({ control: null, disconnect_policy: "EXPLICIT_HANDOFF" });
+});
 
 describe("accepted action scene refresh", () => {
+  it("catches controller progress that occurs while a scene reload unmounts the control panel", async () => {
+    const pending = deferred<Sourced<GameState>>();
+    const control = (step: number): Awaited<ReturnType<typeof api.loadController>> => ({
+      control: { epoch: 1, mode: "PAUSED", step, max_steps: 2, last_error: "step_limit", next_due: "" },
+      disconnect_policy: "EXPLICIT_HANDOFF",
+    });
+    vi.mocked(api.loadController).mockResolvedValueOnce(control(0)).mockResolvedValueOnce(control(1)).mockResolvedValue(control(2));
+    vi.mocked(api.loadGameState).mockResolvedValueOnce(game()).mockResolvedValueOnce(game(2, [experience]))
+      .mockImplementationOnce(() => pending.promise).mockResolvedValue(game(3, [experience, { ...experience, event_id: "observation-2", source_event_id: "event-2" }]));
+    const user = userEvent.setup(); render(<GameConsolePage />);
+    await screen.findByText("Autonomy paused");
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(api.loadGameState).toHaveBeenCalledTimes(3));
+    await act(async () => pending.resolve(game(2, [experience])));
+    await screen.findByText("Projection 3");
+    expect(screen.getByText("2 perceived events")).toBeInTheDocument();
+    expect(api.loadGameState).toHaveBeenCalledTimes(4);
+    expect(api.proposeCommand).not.toHaveBeenCalled();
+  });
+
   it("reloads the scene automatically and never duplicates the persisted observation", async () => {
     vi.mocked(api.loadGameState).mockResolvedValueOnce(game()).mockResolvedValue(game(2, [experience]));
     vi.mocked(api.proposeCommand).mockResolvedValue(acknowledgement);

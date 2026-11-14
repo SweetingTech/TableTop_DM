@@ -97,8 +97,23 @@ def resolve_character_context(
         ),
         event_reader=simulation.events.get,
         grant_reader=lambda event, observer: simulation.perceptions.get((event, observer)),
-        action_provider=lambda authorized_scene: character_action_candidates(
-            authorized_scene, actor=authority, branch_kind=simulation.states.get(branch).kind
-        ),
+    )
+    event_order = {event: index for index, event in enumerate(simulation.events)}
+    context = context.model_copy(
+        update={
+            "observations": tuple(
+                sorted(context.observations, key=lambda row: event_order[row.source_event_id])
+            )
+        }
+    )
+    context = context.model_copy(
+        update={
+            "actions": character_action_candidates(
+                scene,
+                actor=authority,
+                branch_kind=simulation.states.get(branch).kind,
+                observations=context.observations,
+            )
+        }
     )
     return ResolvedCharacterContext(context, binding, profile)

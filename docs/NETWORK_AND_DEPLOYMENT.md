@@ -3,8 +3,8 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
-This API version requires migrations through 007, including character history/bindings and
-private proposal receipts. Revision, binding, and proposal
+This API version requires migrations through 009, including character history/bindings,
+private proposal receipts, controller ownership and human choice evidence. Revision, binding, and proposal
 records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
 The migration owner remains separate from the runtime login. Card revisions are authored source
 material, while binding rows are private controller configuration outside the sensory event stream.
@@ -16,6 +16,12 @@ Character execution adds an internal `runner` service using the runtime database
 volume. It has no listening port or provider connection. The perception `projector` delivers frozen
 observations before dependent decisions. Managed startup and full-stack CI include both services.
 Autonomy is explicit per body; old runtime selections do not activate it.
+
+Movement and speech/combat profiles use private forced-RLS evidence stored atomically with source
+commands. Profile inspection requires body control or the same world's explicit mind-read authority
+and sends `Cache-Control: no-store`. Neither history weighting nor fixed speech templates introduce
+a network provider. Apply migration 009 with the owner before upgrading API and runner processes;
+the runtime keeps SELECT/INSERT-only access to append-only choice evidence.
 
 ## Default network diagram
 

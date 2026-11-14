@@ -16,6 +16,7 @@ from cognition.character_decisions import (
     require_character_proposal_authority,
     require_projected_character_experience,
 )
+from cognition.choices import ChoiceProfile
 from cognition.context import CharacterContext
 from cognition.control import ControllerRepository
 from cognition.store import MindStore
@@ -52,11 +53,13 @@ class CharacterDecisionService:
             BehaviorProfile,
         ]
         | None = None,
+        choice_reader: Callable[..., ChoiceProfile] | None = None,
     ) -> None:
         self.snapshot, self.read_minds = snapshot, read_minds
         self.bindings, self.cards, self.profiles = bindings, cards, profiles
         self.proposals, self.reference = proposals, reference
         self.behavior_reader = behavior_reader
+        self.choice_reader = choice_reader
 
     def decide(
         self,
@@ -110,6 +113,11 @@ class CharacterDecisionService:
                     source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
                 )
                 if self.behavior_reader
+                else None,
+                choices=self.choice_reader(
+                    source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
+                )
+                if self.choice_reader
                 else None,
             )
 

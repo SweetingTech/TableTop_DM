@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+from cognition.choice_state import SPEECH, VOLUMES, choice_frame
 from cognition.engine import DecisionAction
+from cognition.models import Observation
+from domains.tabletop.combat import AttackRequest
+from domains.tabletop.combat import command_definition as attack_definition
+from domains.tabletop.dialogue import SpeechRequest
 from domains.tabletop.spatial import MoveRequest, command_definition
 from domains.tabletop.spatial.scene import PerceivedScene
 from kernel.contracts import Actor, BranchKind
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.0.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.1.0"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
 
 
 def character_action_candidates(
-    scene: PerceivedScene, *, actor: Actor, branch_kind: BranchKind
+    scene: PerceivedScene,
+    *,
+    actor: Actor,
+    branch_kind: BranchKind,
+    observations: tuple[Observation, ...] = (),
 ) -> tuple[DecisionAction, ...]:
     """Caller supplies world-scoped authority, after authorizing this exact scene.
 
@@ -41,7 +50,7 @@ def character_action_candidates(
         or body.status in {"DEAD", "DEFEATED", "UNCONSCIOUS", "INCAPACITATED"}
     ):
         return ()
-    return tuple(
+    actions = tuple(
         DecisionAction(
             action=f"Try to take one step {name}",
             command_type=definition.command_type,
@@ -49,3 +58,25 @@ def character_action_candidates(
         )
         for name, dx, dy in _DIRECTIONS
     )
+    frame = choice_frame(scene, observations)
+    if frame is not None and frame.speech_ready:
+        actions += tuple(
+            DecisionAction(
+                action=f"Say {intent.lower()} in a {volume.lower()} voice",
+                command_type="tabletop.dialogue.speak",
+                parameters=SpeechRequest(text=text, volume=volume).model_dump(mode="json"),
+            )
+            for intent, text in SPEECH.items()
+            for volume in VOLUMES
+        )
+    if frame is not None and actor.has_capabilities(attack_definition().required_capabilities):
+        actions += tuple(
+            DecisionAction(
+                action=f"Try a basic melee attack against perceived threat {index + 1}",
+                command_type="tabletop.combat.attack",
+                parameters=AttackRequest(target_id=threat.entity_id).model_dump(mode="json"),
+            )
+            for index, threat in enumerate(frame.threats)
+            if threat.distance <= 1
+        )
+    return actions

@@ -11,6 +11,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cognition.behavior import BehaviorProfile, weighted_actions
+from cognition.choices import ChoiceProfile, weighted_choices
 from cognition.context import NON_SENSORY_TAGS, CharacterContext
 from cognition.engine import DecisionOutcome, DecisionRequest, LayeredDecisionEngine
 from cognition.perception import PerceptionEngine, PerceptionProfile
@@ -23,7 +24,7 @@ from kernel.control import ControllerState
 from kernel.state import stable_hash
 from persona.models import CompiledPersona, PersonaPurpose
 
-PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.1.0"
+PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.2.0"
 
 
 class CharacterProposalScope(BaseModel):
@@ -59,11 +60,26 @@ class CharacterProposalReceipt(BaseModel):
     committed: Literal[False] = False
     outcome: DecisionOutcome
     behavior: BehaviorProfile | None = None
+    choices: ChoiceProfile | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
     def validate_proposal_lineage(self) -> CharacterProposalReceipt:
         proposal = self.outcome.proposal
+        if self.choices is not None and (
+            (
+                self.choices.world_id,
+                self.choices.branch_id,
+                self.choices.run_id,
+                self.choices.entity_id,
+            )
+            != self.scope.key
+            or self.choices.character_id != self.character_id
+            or self.choices.binding_id != self.binding_id
+            or self.choices.context_hash != self.context_hash
+            or self.choices.persona_version != self.outcome.trace.persona_version
+        ):
+            raise ValueError("choice profile lineage is inconsistent")
         if self.behavior is not None and (
             (
                 self.behavior.world_id,
@@ -164,6 +180,7 @@ def propose_for_character(
     controller: ControllerState | None = None,
     human_epoch: int | None = None,
     behavior: BehaviorProfile | None = None,
+    choices: ChoiceProfile | None = None,
 ) -> CharacterProposalReceipt:
     if (
         binding.scope != scope.key
@@ -200,7 +217,10 @@ def propose_for_character(
             seed=seed,
             idempotency_key="character-proposal:" + str(decision_id),
             situation=context.situation(),
-            actions=weighted_actions(context.actions, behavior) if behavior else context.actions,
+            actions=weighted_choices(
+                weighted_actions(context.actions, behavior) if behavior else context.actions,
+                choices,
+            ),
             allow_llm=False,
             utility_margin=0,
         )
@@ -238,6 +258,7 @@ def propose_for_character(
         compiler_version=binding.compiler_version,
         outcome=outcome,
         behavior=behavior,
+        choices=choices,
     )
 
 

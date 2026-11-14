@@ -10,15 +10,18 @@ append-only ledger decide what actually happened.
 
 Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
 and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
-basic movement catalog; it does not execute actions, change a human assignment, or run a campaign.
+perception-scoped movement, speech-intent and basic melee catalog. The proposal endpoint itself
+does not execute actions, change a human assignment, or run a campaign.
 See [character proposals](docs/API_AND_WORKFLOWS.md#trusted-character-proposals).
 
 The Game Console now offers **Let character act**, **Pause autonomy**, and **Take control**.
-Explicit handoff starts a bounded local movement policy through a dedicated character executor;
+Explicit handoff starts a bounded local character policy through a dedicated executor;
 the runner and perception projector continue without a browser connection. Controller epochs
 prevent old human or autonomous actions committing after takeover. This is basic unattended
-movement; comparable human choices now guide its movement, with pinned persona/card tendencies
-as fallback. Narrative goals, the world clock, and speech/combat imitation remain planned.
+movement, contextual speech and responses to perceived attacks. Comparable human choices guide
+direction, reply intent/volume, attack, withdrawal and visible-target priorities, with pinned
+persona/card tendencies as fallback. Open-ended dialogue, spells, full tactics, narrative goals
+and the world clock remain planned.
 See [controller handoff and runner](docs/API_AND_WORKFLOWS.md#controller-handoff-and-runner).
 
 ## Product workspaces

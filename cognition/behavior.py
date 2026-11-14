@@ -238,10 +238,11 @@ def weighted_actions(
         action.model_copy(
             update={
                 "utility_factors": {
+                    **action.utility_factors,
                     "behavior": profile.direction_scores.get(
                         direction_for(action.parameters),
                         0,
-                    )
+                    ),
                 }
             }
         )

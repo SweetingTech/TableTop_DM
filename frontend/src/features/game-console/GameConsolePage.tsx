@@ -60,11 +60,16 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
   const [commandError, setCommandError] = useState("");
   const [controlMode, setControlMode] = useState<ControlMode | "UNAVAILABLE">("HUMAN");
   const [controlEpoch, setControlEpoch] = useState<number | undefined>();
+  const previousStep = useRef<number | null>(null);
   const updateController = useCallback((mode: ControlMode | "UNAVAILABLE", epoch?: number) => {
     setControlMode(mode); setControlEpoch(epoch);
   }, []);
   const reloadScene = resource.reload;
-  const refreshProgress = useCallback(() => reloadScene(), [reloadScene]);
+  const refreshProgress = useCallback((step: number) => {
+    const changed = previousStep.current !== null && previousStep.current !== step;
+    previousStep.current = step;
+    if (changed) reloadScene();
+  }, [reloadScene]);
   const game = resource.data?.data;
   const selectedViewpointId = selectedEntityId || game?.observer_entity_id || "";
   const selectedViewpoint = game?.viewpoints?.find((item) => item.entity_id === selectedViewpointId);

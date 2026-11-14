@@ -443,7 +443,7 @@ class PostgresControlPlane:
                     SELECT event.*, event.observed_by::text[] AS observed_by,
                            event.visible_to::text[] AS visible_to
                     FROM sim.events event
-                    ORDER BY event.created_at, event.event_id
+                    ORDER BY event.seq_id
                     """
                 )
                 event_fields = set(EventEnvelopeV2.model_fields)

@@ -86,7 +86,7 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.1.0"
+    context_version: str = "character-context-1.1.1"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]

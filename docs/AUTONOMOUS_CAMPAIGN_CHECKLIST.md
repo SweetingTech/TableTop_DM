@@ -218,18 +218,26 @@ as composition glue; reusable execution services must also work from workers and
   Movement foundation: private content-addressed profiles use up to 256 accepted manual movement
   samples in the exact player/character/world/branch/run/body, matching perceived layout, distance,
   injury and company. Profiles freeze in proposal receipts with evidence IDs and confidence.
-  Speech, relationships, broader risk/tactics inference and negative-choice learning remain open.
+  Relationships, broader risk/tactics inference and negative-choice learning remain open.
+  Speech/combat extension: new profiles now learn template intent/volume, basic melee target style,
+  advance/withdrawal from matching new human choices. Open-ended phrasing, relationship strategy,
+  spells and full tactical planning remain open.
 - [ ] G3 — Combine that history with character card/backstory: human evidence guides demonstrated
   behavior; card/backstory supplies initial identity and unknown situations. Surface contradictions for operator/player correction.
   Comparable movement history now guides advice and the runner, with pinned persona curiosity/risk
   weights and an explicit limited English authored-tendency vocabulary as fallback. Private conflict
   notices are inspectable through behavior-profile GET. Broad semantic interpretation remains open.
+  Compiled risk/conflict/social/directness and explicit peaceful/aggressive card tendencies now
+  drive speech/combat fallback; choice-profile GET exposes separate versioned scores and conflicts.
 - [ ] G4 — Exclude autonomous decisions from human preference evidence. Define treatment of revised
   timelines and retain human-vs-stand-in provenance across restart and profile rebuilding.
   Migration 008 atomically records only untraced accepted HUMAN_INPUT movement. Operator automation,
   submitted policy advice, autonomous actions, unknown legacy origin and foreign scope are excluded.
   Origins survive restart; no historical backfill guesses authorship. Complete rewind/restoration
   and broader decision types remain open.
+  Migration 009 extends atomic source-linked evidence to contextual speech/combat/movement and
+  preserves synthetic exclusion. Context uses canonical source order for equal timestamps; full
+  rewind/restoration and arbitrary decision types remain open.
 - [x] G5 — Extend runtime assignment with exclusive control ownership, version/epoch, and an atomic
   handoff boundary. Reject stale in-flight proposals from a previous controller.
   Implemented for canonical LIVE runs: private controller state extends HUMAN/UTILITY runtime

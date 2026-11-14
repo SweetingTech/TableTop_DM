@@ -1,5 +1,14 @@
 # Changelog
 
+- Fixed autonomous scene refresh losing a step when the controller panel remounted during loading.
+
+- Extend trusted character choices to contextual speech intent/volume, known-threat basic melee
+  and withdrawal, driven by comparable human history plus pinned persona/card fallbacks. Preserve
+  legacy movement profiles; freeze separate choice provenance in proposal receipts.
+- Add migration 009 private append-only RLS choice evidence committed atomically with actions.
+  Add physical combat perception and canonical observation ordering across timestamp ties/restarts.
+  Open-ended dialogue, spells, full tactics and narrative planning remain unfinished.
+
 - Wire comparable human movement history and pinned persona/card tendencies into character advice
   and the unattended runner. Add private content-addressed behavior profiles and conflict notices.
 - Migration 008 records perception-scoped human movement evidence atomically with canonical actions;

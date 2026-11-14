@@ -32,7 +32,7 @@ def test_character_context_excludes_secrets(monkeypatch, tmp_path):
     candidates = first.get_json()["action_candidates"]
     assert len(candidates) == 4
     assert {item["command_type"] for item in candidates} == {"tabletop.spatial.move"}
-    assert first.get_json()["action_catalog_version"] == "tabletop-character-actions-1.0.0"
+    assert first.get_json()["action_catalog_version"] == "tabletop-character-actions-1.1.0"
     assert first.get_json()["evidence_hash"] == client.get(endpoint).get_json()["evidence_hash"]
     assert client.get(endpoint.replace(str(ids["world_id"]), str(uuid.uuid4()))).status_code in {
         400,

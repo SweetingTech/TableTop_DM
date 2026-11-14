@@ -166,6 +166,9 @@ def test_persona_identity_supports_version_lineage_with_one_schema(
         assert len(rows) == 2
         assert (str(first_version), None) in rows
         assert (str(second_version), str(first_version)) in rows
+        # These intentionally minimal rows test SQL lineage, not loadable persona data.
+        # Keep them out of later application boots in the shared disposable database.
+        connection.rollback()
 
 
 def test_forced_rls_is_fail_closed_and_actor_scoped(integration_stack) -> None:
