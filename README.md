@@ -36,7 +36,12 @@ the action; switching worlds or viewpoints clears local drafts and ignores old r
 Character cards support a validated backstory, motives, values, bonds, character secrets, and
 starting knowledge claims in creation, JSON import, and editing. A deterministic `card_version`
 identifies the current authored content. These claims do not grant canonical knowledge or activate
-a stand-in; historical card storage and persona/mind/body binding remain planned work.
+a stand-in. Authored edits now retain private immutable revisions. Assigning a saved character
+to a game creates an initial binding that pins its card revision and `CHARACTER` persona to the
+world, branch, run, body, and existing mind. Later edits do not silently change that binding;
+an explicit successor binding adopts a selected revision without resetting experience or control.
+The initial persona uses a deterministic card-seeded baseline with the authored fiction supplied
+separately in character context. It does not yet learn the human player's demonstrated behavior.
 
 Persona APIs distinguish `CHARACTER` from `SIMULATED_PLAYTESTER`. Character compilation uses
 in-world core/world traits and omits player controls, onboarding goals, GM relationships, and
@@ -49,7 +54,7 @@ against same-branch frozen perception grants. Caller-authored cognition requests
 playtester evaluation. Context reads now supply a versioned basic movement-attempt catalog for
 controlled, capable bodies, using perceived self state and world-scoped authority. Hidden obstacles
 do not filter choices; the kernel checks every attempt. Live character decisions remain unavailable
-until authored identity, broader actions, and runner wiring are connected. This keeps that evaluation API from injecting
+until broader actions, safe controller handoff, and runner wiring are connected. This keeps that evaluation API from injecting
 operator/player knowledge into character decisions while the remaining campaign wiring is built.
 
 The initial account is `admin` with password `admin123`. The first sign-in is restricted to the

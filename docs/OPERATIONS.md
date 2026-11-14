@@ -116,7 +116,7 @@ dependencies and returns `503` if any required check fails.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `004_persona_purpose.sql`;
+- migration history through `005_character_history_and_bindings.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -211,6 +211,19 @@ key. Identical retries succeed; differing identity, policy, goals, beliefs, rela
 capability modifiers, retrieval filters, or purpose fail without replacing the immutable profile.
 
 ## Storage and retention
+
+Migration `005_character_history_and_bindings.sql` backfills each existing saved card as private
+revision 1, then archives authored changes through a trigger in the card transaction. It adds
+append-only binding metadata with composite card/run/entity/mind/profile foreign keys, forced RLS,
+and serialized successor checks. Runtime can read permitted revisions but cannot insert or rewrite
+them directly. The migration does not auto-create personas for old characters; retry their roster
+assignment to create a missing initial binding. Existing bindings are never silently replaced.
+
+Apply 005 before starting this application version. Back up PostgreSQL and artifacts and verify
+the upgrade in an isolated restore first, using the normal schema-change procedure below.
+Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
+are retained; retire the saved card instead of deleting evidence beneath a running identity.
+Account/persona/body/mind/runtime identities remain separate. No model credentials are required.
 
 | Data | Store and recovery notes |
 | --- | --- |

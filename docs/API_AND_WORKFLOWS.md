@@ -417,12 +417,49 @@ caller-supplied situation text; those are separate campaign knowledge/control re
 
 ## Character context and evaluation boundary
 
+`GET /api/v2/player/characters/{character_id}/history` returns immutable authored-card revisions
+for the owner or an administrator. Each has `revision_id`, `revision_number`, `recorded_at`, the
+authored `content`, and its existing deterministic `card_version`. Wounds, status, controller/body
+association, and timestamps do not create card revisions. Deleting an unbound saved card also
+deletes its private authored history; bound history is retained and the card can instead be retired.
+
+An initial Player roster assignment automatically creates a character binding after the existing
+typed body-spawn path. Existing bindings survive roster retries and card edits. Old installations
+retain their current cards as revision 1; retrying a roster assignment initializes a missing binding.
+
+```text
+GET  /api/v2/worlds/{world}/branches/{branch}/entities/{body}/character-binding?run_id={run}
+POST /api/v2/worlds/{world}/branches/{branch}/entities/{body}/character-binding
+```
+
+The POST body contains `character_id`, `run_id`, `card_revision_id`, optional `persona_version_id`,
+and `replaces_binding_id` (null only for the first binding). The selected card must already be
+associated with that world/body. The caller needs body control and `entity.act`, or world-scoped
+`mind.write.all`, plus canonical commit/trial proposal authority. Selecting a persona never grants
+control. Only `CHARACTER` profiles are accepted. Omitting a persona selects a deterministic
+card-seeded baseline; it is not semantic backstory inference or human-history imitation.
+
+Bindings pin the exact compiled persona version/compiler and an immutable card revision, with
+composite world/branch/run/body/mind lineage. Replacement uses compare-and-swap: a stale parent
+fails; an identical retry returns the original binding without making an old binding current.
+Concurrent replacements serialize, and a failed first binding rolls back neutral-mind creation.
+Existing memories, beliefs, relationships, goals, and runtime assignments are preserved. Binding
+is private controller configuration; it emits no sensory event and changes no canonical projection.
+These operations do not make the existing roster/spawn operation atomic (checklist A2).
+
 `GET /api/v2/worlds/{world_id}/branches/{branch_id}/entities/{entity_id}/context` uses the same
 world/viewpoint authorization as the perceived scene. It returns a versioned evidence hash,
 projection version, and a model-facing `situation`. Frozen event-time grants and source events
 must match the observer/world/branch; operator-tagged events, unbacked beliefs, and memory-summary
 overrides cannot add facts. The model-facing situation excludes controller, ledger, and timeline
-metadata. This endpoint is read-only. `action_candidates` currently contains four typed cardinal
+metadata. Context version `character-context-1.1.0` includes the pinned self-authored identity only
+when the caller controls the body or holds `mind.read.all`; broad scene inspection alone does not
+grant private identity access. `binding` is operational response metadata outside `situation`.
+The situation's `identity` contains fiction and explicitly labeled `starting_knowledge_claims`;
+authored claims are not added to observations, beliefs, memories, or canonical truth. Other bodies'
+secrets, binding IDs, account/control settings, and persona/compiler IDs never enter that fiction.
+Specify `?run_id={run}` when reading a non-default run; multiple live runs require explicit selection.
+This endpoint is read-only. `action_candidates` currently contains four typed cardinal
 movement attempts when the caller controls this body, holds the command's world-scoped capabilities
 (including canonical commit authority), and the perceived self has a position and no known
 incapacity. Inspect-only viewpoints return no executable choices. `action_catalog_version` is
@@ -432,7 +469,7 @@ their action labels contain fiction only. There are no class/species/protagonist
 These choices are attempts, not guaranteed outcomes. The provider never reads hidden obstacles
 or hidden entities to remove choices; otherwise the catalog itself would reveal unknown facts.
 The kernel must revalidate authority, lineage, and rules on submission. No model or read request
-commits an action. Authored identity binding, speech/combat/activity catalogs, learned lore, and
+commits an action. Speech/combat/activity catalogs, learned lore, and
 runner integration remain planned. Durable reads hydrate the current subjective projection;
 the context route does not yet wait at a runner's dependent-decision projection barrier.
 
@@ -440,8 +477,9 @@ the context route does not yet wait at a runner's dependent-decision projection 
 `SIMULATED_PLAYTESTER` evaluation (administrator session or automation boundary, still subject to
 world/body checks). Its response identifies `mode: EVALUATION` and `committed: false`.
 Other browser accounts and `CHARACTER` personas receive `403`. Live character decision execution
-will use the server context and explicit persona/body binding; no request can supply that binding
-by choosing a persona ID. Human Game Console commands continue through their existing kernel path.
+will use this server-owned binding and context; the evaluation request cannot invent a binding by
+choosing a persona ID. Binding alone does not enable live decisions. Human Game Console commands
+continue through their existing kernel path.
 
 ## Error contract
 

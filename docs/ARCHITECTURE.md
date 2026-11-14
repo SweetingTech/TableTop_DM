@@ -158,6 +158,14 @@ and its evidence hash. The console renders only observations and cancels reads o
 
 Canonical truth, raw authorization, physical perception, observation, belief evidence, memory,
 relationship, and narration are separate records.
+
+`tabletop.character_card_revisions` archives authored content on a saved-card insert or authored
+edit. `tabletop.character_bindings` is an append-only controller-configuration ledger that pins a
+card revision and exact `CHARACTER` compiled profile to one world/branch/run/body and the existing
+mind key. It grants no control and writes no canonical projection. Existing unused legacy persona
+entity assignments are not a second binding source. Initial roster assignment creates a missing
+binding; adopting another revision requires an explicit successor. Only the pinned self fiction
+enters character context, and starting knowledge claims remain distinct from learned evidence.
 The pure subjective pipeline is:
 
 ```text

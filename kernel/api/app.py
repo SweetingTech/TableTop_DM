@@ -34,6 +34,11 @@ from cognition.relationships import (
 )
 from cognition.store import MindStore
 from domains.tabletop.character_actions import ACTION_CATALOG_VERSION, character_action_candidates
+from domains.tabletop.character_bindings import (
+    InMemoryCharacterBindings,
+    PostgresCharacterBindings,
+    new_binding,
+)
 from domains.tabletop.character_identity import CharacterIdentity
 from domains.tabletop.portal import (
     InMemoryPortalRepository,
@@ -82,7 +87,7 @@ from kernel.postgres_repository import PostgresCommandRepository
 from kernel.visibility import VisibilityPolicy
 from persona.compilation import PersonaCompiler
 from persona.generation import PersonaGenerator
-from persona.models import PersonaPurpose
+from persona.models import CompiledPersona, PersonaPurpose
 from persona.postgres import PostgresPersonaRepository
 from persona.registry import PersonaSchemaRegistry
 from persona.validation import PersonaValidator
@@ -323,6 +328,15 @@ class AdminUserCreateRequest(BaseModel):
     profile: ProfileRequest
 
 
+class CharacterBindingRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    character_id: uuid.UUID
+    run_id: uuid.UUID
+    card_revision_id: uuid.UUID
+    persona_version_id: uuid.UUID | None = None
+    replaces_binding_id: uuid.UUID | None = None
+
+
 class AdminUserUpdateRequest(BaseModel):
     username: str | None = Field(default=None, min_length=3, max_length=64)
     is_active: bool | None = None
@@ -436,6 +450,10 @@ def create_app(
         PostgresTelemetryRepository(database_dsn, demo["actor_id"]) if database_dsn else None,
     )
     minds = MindStore()
+    character_bindings = (
+        PostgresCharacterBindings(database_dsn) if database_dsn else InMemoryCharacterBindings()
+    )
+    app.extensions["character_bindings"] = character_bindings
     mind_repository = PostgresMindRepository(database_dsn) if database_dsn else None
     if mind_repository is not None:
         for entity in simulation.entities.values():
@@ -508,6 +526,7 @@ def create_app(
         )
     personas: dict[uuid.UUID, Any] = {}
     persona_versions: dict[uuid.UUID, Any] = {}
+    bound_profiles: dict[tuple[uuid.UUID, uuid.UUID, str], CompiledPersona] = {}
     persona_repository: PostgresPersonaRepository | None = None
     if database_dsn:
         persona_repository = PostgresPersonaRepository(database_dsn, registry)
@@ -1112,6 +1131,174 @@ def create_app(
             }
         )
 
+    @app.get("/api/v2/player/characters/<uuid:character_id>/history")
+    def player_character_history(character_id: uuid.UUID):
+        character = portal.repository.get_character(character_id)
+        if character is None:
+            raise KeyError(character_id)
+        actor = current_user()
+        if not actor.is_admin and character.owner_user_id != actor.user_id:
+            raise PermissionError("only the character owner can read authored card history")
+        return jsonify(
+            {
+                "items": [
+                    row.model_dump(mode="json")
+                    for row in portal.repository.character_revisions(
+                        character_id, actor_id=current_actor_id()
+                    )
+                ]
+            }
+        )
+
+    def bind_character_persona(
+        character_id: uuid.UUID,
+        world_id: uuid.UUID,
+        branch_id: uuid.UUID,
+        run_id: uuid.UUID,
+        entity_id: uuid.UUID,
+        *,
+        revision_id: uuid.UUID | None = None,
+        persona_version_id: uuid.UUID | None = None,
+        replaces_binding_id: uuid.UUID | None = None,
+        initial_only: bool = False,
+    ):
+        require_world_access(world_id)
+        actor_id = current_actor_id()
+        require_scene_access(
+            simulation,
+            world_id=world_id,
+            branch_id=branch_id,
+            observer_entity_id=entity_id,
+            actor_id=actor_id,
+        )
+        authority = simulation.authority(world_id, actor_id)
+        branch = simulation.states.get(branch_id)
+        if not authority.has_capabilities(
+            frozenset(
+                {"action.commit" if branch.kind is BranchKind.CANONICAL else "action.propose"}
+            )
+        ):
+            raise PermissionError("actor cannot configure this branch")
+        if "mind.write.all" not in authority.capabilities and (
+            entity_id not in authority.controlled_entity_ids
+            or "entity.act" not in authority.capabilities
+        ):
+            raise PermissionError("actor cannot configure this character")
+        character = portal.repository.get_character(character_id)
+        if character is None:
+            raise KeyError(character_id)
+        if (character.world_id, character.entity_id) != (world_id, entity_id):
+            raise ValueError("character is not associated with this world and body")
+        if (
+            character.owner_user_id != current_user().user_id
+            and "mind.write.all" not in authority.capabilities
+        ):
+            raise PermissionError("only the owner or world DM can bind this character")
+        run = simulation.runs.get(run_id)
+        if run is None or (run.world_id, run.branch_id) != (world_id, branch_id):
+            raise ValueError("binding run does not belong to this world and branch")
+        if run.status not in {"ACTIVE", "RUNNING", "PAUSED", "QUEUED"}:
+            raise ValueError("binding requires an unfinished run")
+        scope = (world_id, branch_id, run_id, entity_id)
+        existing = character_bindings.latest(scope, actor_id=actor_id)
+        if initial_only and existing:
+            if existing.character_id != character_id:
+                raise ValueError("body already represents another character")
+            return existing
+        revisions = portal.repository.character_revisions(character_id, actor_id=actor_id)
+        revision = (
+            next((row for row in revisions if row.revision_id == revision_id), None)
+            if revision_id
+            else (revisions[-1] if revisions else None)
+        )
+        if revision is None:
+            raise ValueError("authored card revision is unavailable")
+        if persona_version_id is not None:
+            version = persona_versions.get(persona_version_id)
+            if version is None and persona_repository is not None:
+                version = next(
+                    (
+                        row
+                        for row in persona_repository.list_versions()
+                        if row.version_id == persona_version_id
+                    ),
+                    None,
+                )
+            if version is None:
+                raise ValueError("persona version is unavailable")
+        else:
+            seed = int(revision.card_version[:15], 16) ^ (character_id.int & ((1 << 60) - 1))
+            blueprint = generator.generate(seed, purpose=PersonaPurpose.CHARACTER)
+            version = PersonaVersioning.record(blueprint)
+        if version.blueprint.purpose is not PersonaPurpose.CHARACTER:
+            raise ValueError("a character binding requires a CHARACTER persona")
+        compiled = compiler.compile(version.blueprint, persona_version=str(version.version_id))
+        if persona_repository is not None:
+            persona_repository.save_version(version)
+            persona_repository.save_compiled(compiled)
+        personas[version.blueprint.persona_id] = version.blueprint
+        persona_versions[version.version_id] = version
+        binding = new_binding(
+            character_id=character_id,
+            card_revision_id=revision.revision_id,
+            scope=scope,
+            persona_id=compiled.persona_id,
+            persona_version_id=version.version_id,
+            compiler_version=compiled.compiler_version,
+            actor_id=actor_id,
+            replaces_binding_id=replaces_binding_id,
+        )
+        saved = character_bindings.save(binding, actor_id=actor_id)
+        bound_profiles[(compiled.persona_id, version.version_id, compiled.compiler_version)] = (
+            compiled
+        )
+        minds.get(entity_id, branch_id=branch_id)
+        if isinstance(portal.repository, InMemoryPortalRepository):
+            portal.repository.protected_characters.add(character_id)
+        return saved
+
+    @app.route(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>/entities/<uuid:entity_id>/character-binding",
+        methods=["GET", "POST"],
+    )
+    def character_binding(world_id: uuid.UUID, branch_id: uuid.UUID, entity_id: uuid.UUID):
+        require_world_access(world_id)
+        require_scene_access(
+            simulation,
+            world_id=world_id,
+            branch_id=branch_id,
+            observer_entity_id=entity_id,
+            actor_id=current_actor_id(),
+        )
+        if request.method == "POST":
+            body = CharacterBindingRequest.model_validate(request.get_json(force=True))
+            return _json(
+                bind_character_persona(
+                    body.character_id,
+                    world_id,
+                    branch_id,
+                    body.run_id,
+                    entity_id,
+                    revision_id=body.card_revision_id,
+                    persona_version_id=body.persona_version_id,
+                    replaces_binding_id=body.replaces_binding_id,
+                )
+            )
+        read_authority = simulation.authority(world_id, current_actor_id())
+        if (
+            entity_id not in read_authority.controlled_entity_ids
+            and "mind.read.all" not in read_authority.capabilities
+        ):
+            raise PermissionError("actor cannot read this character binding")
+        run_id = uuid.UUID(request.args["run_id"])
+        run = simulation.runs.get(run_id)
+        if run is None or (run.world_id, run.branch_id) != (world_id, branch_id):
+            raise ValueError("binding run does not belong to this world and branch")
+        binding = character_bindings.latest(
+            (world_id, branch_id, run_id, entity_id), actor_id=current_actor_id()
+        )
+        return jsonify({"binding": binding.model_dump(mode="json") if binding else None})
+
     @app.post("/api/v2/player/characters")
     def player_character_create():
         body = CharacterCreateRequest.model_validate(request.get_json(force=True))
@@ -1241,6 +1428,22 @@ def create_app(
                 world_id=game.world_id,
                 entity_id=entity_id,
             )
+            binding_run = next(
+                run
+                for run in simulation.runs.values()
+                if run.world_id == game.world_id
+                and run.branch_id == world.canonical_branch_id
+                and run.kind is RunKind.LIVE
+                and run.status in {"ACTIVE", "RUNNING", "PAUSED", "QUEUED"}
+            )
+            bind_character_persona(
+                character.character_id,
+                game.world_id,
+                world.canonical_branch_id,
+                binding_run.run_id,
+                entity_id,
+                initial_only=True,
+            )
         return _json(portal.repository.get_game(game_id) or game)
 
     @app.delete("/api/v2/dm/games/<uuid:game_id>/members/<uuid:user_id>")
@@ -1295,7 +1498,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "004_persona_purpose.sql",
+                    "ok": version == "005_character_history_and_bindings.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -1617,7 +1820,60 @@ def create_app(
         require_world_access(world_id)
         actor_id = current_actor_id()
         scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id)
+        requested_run = request.args.get("run_id")
+        if requested_run:
+            context_run = simulation.runs.get(uuid.UUID(requested_run))
+            if context_run is None or (context_run.world_id, context_run.branch_id) != (
+                world_id,
+                branch_id,
+            ):
+                raise ValueError("context run does not belong to this world and branch")
+        else:
+            candidates = [
+                run
+                for run in simulation.runs.values()
+                if (run.world_id, run.branch_id) == (world_id, branch_id)
+                and run.kind is RunKind.LIVE
+                and run.status in {"ACTIVE", "RUNNING", "PAUSED", "QUEUED"}
+            ]
+            if len(candidates) > 1:
+                raise ValueError("multiple live runs; select run_id for character context")
+            context_run = candidates[0] if candidates else None
+        context_authority = simulation.authority(world_id, actor_id)
+        can_read_binding = (
+            observer_entity_id in context_authority.controlled_entity_ids
+            or "mind.read.all" in context_authority.capabilities
+        )
+        binding = (
+            character_bindings.latest(
+                (world_id, branch_id, context_run.run_id, observer_entity_id), actor_id=actor_id
+            )
+            if context_run and can_read_binding
+            else None
+        )
+        bound_identity = None
+        if binding is not None:
+            revisions = portal.repository.character_revisions(
+                binding.character_id, actor_id=actor_id
+            )
+            revision = next(
+                (row for row in revisions if row.revision_id == binding.card_revision_id), None
+            )
+            key = (binding.persona_id, binding.persona_version_id, binding.compiler_version)
+            profile = (
+                persona_repository.get_compiled(*key)
+                if persona_repository
+                else bound_profiles.get(key)
+            )
+            if (
+                revision is None
+                or profile is None
+                or profile.purpose is not PersonaPurpose.CHARACTER
+            ):
+                raise ValueError("pinned character identity is unavailable")
+            bound_identity = revision.content
         context = build_character_context(
+            identity=bound_identity,
             scene=scene,
             mind=observed_minds.get(observer_entity_id, branch_id=branch_id),
             actor_id=actor_id,
@@ -1646,6 +1902,7 @@ def create_app(
                 "situation": context.situation(),
                 "action_candidates": [action.model_dump(mode="json") for action in context.actions],
                 "action_catalog_version": ACTION_CATALOG_VERSION,
+                "binding": binding.model_dump(mode="json") if binding else None,
             }
         )
 

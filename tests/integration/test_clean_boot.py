@@ -5,6 +5,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -58,7 +59,8 @@ def _api_json(
 
 
 def _start_runtime(port: int, environment: dict[str, str]) -> subprocess.Popen[str]:
-    return subprocess.Popen(
+    output = tempfile.TemporaryFile(mode="w+t", encoding="utf-8")
+    process = subprocess.Popen(
         [
             sys.executable,
             "main.py",
@@ -70,10 +72,18 @@ def _start_runtime(port: int, environment: dict[str, str]) -> subprocess.Popen[s
         ],
         cwd=ROOT,
         env=environment,
-        stdout=subprocess.PIPE,
+        stdout=output,
         stderr=subprocess.STDOUT,
         text=True,
     )
+    process.runtime_output = output
+    return process
+
+
+def _runtime_output(process: subprocess.Popen[str]) -> str:
+    output = process.runtime_output
+    output.seek(0)
+    return output.read()[-8000:]
 
 
 def _wait_for_ready(process: subprocess.Popen[str], base_url: str) -> dict:
@@ -81,26 +91,39 @@ def _wait_for_ready(process: subprocess.Popen[str], base_url: str) -> dict:
     last_error = "server did not answer"
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            output = process.stdout.read() if process.stdout else ""
+            output = _runtime_output(process)
             pytest.fail(f"runtime exited with {process.returncode}:\n{output}")
         try:
             readiness = _get_json(f"{base_url}/readyz")
             if readiness.get("ready") is True:
                 return readiness
             last_error = str(readiness)
+        except urllib.error.HTTPError as exc:
+            last_error = exc.read().decode("utf-8", errors="replace")
         except (OSError, ValueError, urllib.error.URLError) as exc:
             last_error = str(exc)
         time.sleep(0.25)
-    pytest.fail(f"runtime readiness timed out: {last_error}")
+    pytest.fail(f"runtime readiness timed out: {last_error}\n{_runtime_output(process)}")
 
 
 def _stop_runtime(process: subprocess.Popen[str]) -> None:
-    process.terminate()
+    if os.name == "nt":
+        # The Windows venv redirector owns a child interpreter. Stop this test's
+        # entire process tree so a surviving child cannot retain ports/handles.
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    else:
+        process.terminate()
     try:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=5)
+    process.runtime_output.close()
 
 
 def test_clean_runtime_boots_with_non_owner_database(integration_stack, tmp_path: Path) -> None:
@@ -130,7 +153,7 @@ def test_clean_runtime_boots_with_non_owner_database(integration_stack, tmp_path
         readiness = _get_json(f"{base_url}/readyz")
         assert readiness["storage_mode"] == "postgres"
         assert readiness["checks"]["postgres"] == {
-            "migration": "004_persona_purpose.sql",
+            "migration": "005_character_history_and_bindings.sql",
             "ok": True,
         }
         with urllib.request.urlopen(f"{base_url}/v2", timeout=3) as response:

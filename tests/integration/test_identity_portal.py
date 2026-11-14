@@ -125,7 +125,7 @@ def test_accounts_roles_characters_and_games_survive_restart(
                 "status": "READY",
             },
         )
-        assert assigned.status_code == 200
+        assert assigned.status_code == 200, assigned.get_json()
         assert assigned.get_json()["members"][0]["character_name"] == "Vesper Vale"
 
     restarted = create_app(artifact_root=tmp_path)

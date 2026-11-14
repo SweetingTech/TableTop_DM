@@ -27,6 +27,7 @@ def test_clean_break_has_one_numbered_baseline() -> None:
         "002_identity_and_tabletop_workspaces.sql",
         "003_spatial_epistemics.sql",
         "004_persona_purpose.sql",
+        "005_character_history_and_bindings.sql",
     ]
     assert not (ROOT / "infra" / "sql" / "init").exists()
     assert not (ROOT / "infra" / "sql" / "seed").exists()

@@ -2,19 +2,20 @@
 from __future__ import annotations
 
 import random
+import threading
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import psycopg2.extras
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from domains.tabletop.character_history import CharacterCardContent, CharacterCardRevision
 from domains.tabletop.character_identity import IDENTITY_SHEET_KEY, CharacterIdentity
 from identity.models import UserAccount
 from identity.repository import IdentityRepository
 from identity.service import IdentityService
 from kernel.database import transaction
-from kernel.state import stable_hash
 
 ABILITIES = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
 CLASSES = (
@@ -81,18 +82,7 @@ class CharacterRecord(BaseModel):
     @property
     def card_version(self) -> str:
         """Content identity, independent of ownership, wounds, timestamps, and runtime binding."""
-        return stable_hash(
-            {
-                "schema": "character-card-1.0.0",
-                "name": self.name,
-                "species": self.species,
-                "class_name": self.class_name,
-                "background": self.background,
-                "level": self.level,
-                "ability_scores": self.ability_scores,
-                "authored_identity": self.authored_identity.model_dump(mode="json"),
-            }
-        )
+        return CharacterCardContent.from_record(self).content_hash
 
 
 class GameMember(BaseModel):
@@ -146,8 +136,15 @@ class PortalRepository(Protocol):
         self, *, owner_user_id: uuid.UUID | None = None
     ) -> tuple[CharacterRecord, ...]: ...
     def get_character(self, character_id: uuid.UUID) -> CharacterRecord | None: ...
-    def save_character(self, character: CharacterRecord) -> CharacterRecord: ...
-    def delete_character(self, character_id: uuid.UUID) -> None: ...
+    def save_character(
+        self, character: CharacterRecord, *, actor_id: uuid.UUID | None = None
+    ) -> CharacterRecord: ...
+    def character_revisions(
+        self, character_id: uuid.UUID, *, actor_id: uuid.UUID
+    ) -> tuple[CharacterCardRevision, ...]: ...
+    def delete_character(
+        self, character_id: uuid.UUID, *, actor_id: uuid.UUID | None = None
+    ) -> None: ...
     def list_games(self) -> tuple[HostedGame, ...]: ...
     def get_game(self, game_id: uuid.UUID) -> HostedGame | None: ...
     def save_game(self, game: HostedGame) -> HostedGame: ...
@@ -161,6 +158,9 @@ class PortalRepository(Protocol):
 class InMemoryPortalRepository:
     def __init__(self) -> None:
         self.characters: dict[uuid.UUID, CharacterRecord] = {}
+        self.revisions: dict[uuid.UUID, list[CharacterCardRevision]] = {}
+        self._card_lock = threading.RLock()
+        self.protected_characters: set[uuid.UUID] = set()
         self.games: dict[uuid.UUID, HostedGame] = {}
         self.sessions: dict[uuid.UUID, HostedSession] = {}
 
@@ -175,14 +175,39 @@ class InMemoryPortalRepository:
     def get_character(self, character_id: uuid.UUID) -> CharacterRecord | None:
         return self.characters.get(character_id)
 
-    def save_character(self, character: CharacterRecord) -> CharacterRecord:
-        self.characters[character.character_id] = character
+    def save_character(
+        self, character: CharacterRecord, *, actor_id: uuid.UUID | None = None
+    ) -> CharacterRecord:
+        with self._card_lock:
+            content = CharacterCardContent.from_record(character)
+            revisions = self.revisions.setdefault(character.character_id, [])
+            if not revisions or revisions[-1].card_version != content.content_hash:
+                revisions.append(
+                    CharacterCardRevision(
+                        revision_id=uuid.uuid4(),
+                        character_id=character.character_id,
+                        revision_number=len(revisions) + 1,
+                        content=content.model_copy(deep=True),
+                        recorded_at=datetime.now(UTC),
+                    )
+                )
+            self.characters[character.character_id] = character.model_copy(deep=True)
         return character
 
-    def delete_character(self, character_id: uuid.UUID) -> None:
+    def character_revisions(
+        self, character_id: uuid.UUID, *, actor_id: uuid.UUID
+    ) -> tuple[CharacterCardRevision, ...]:
+        return tuple(row.model_copy(deep=True) for row in self.revisions.get(character_id, ()))
+
+    def delete_character(
+        self, character_id: uuid.UUID, *, actor_id: uuid.UUID | None = None
+    ) -> None:
+        if character_id in self.protected_characters:
+            raise ValueError("bound character history is retained; retire the character instead")
         if character_id not in self.characters:
             raise KeyError(character_id)
         del self.characters[character_id]
+        self.revisions.pop(character_id, None)
 
     def list_games(self) -> tuple[HostedGame, ...]:
         return tuple(self.games.values())
@@ -256,8 +281,10 @@ class PostgresPortalRepository:
                 row = cursor.fetchone()
                 return self._character(dict(row)) if row else None
 
-    def save_character(self, character: CharacterRecord) -> CharacterRecord:
-        with transaction(dsn=self._dsn) as connection:
+    def save_character(
+        self, character: CharacterRecord, *, actor_id: uuid.UUID | None = None
+    ) -> CharacterRecord:
+        with transaction(actor_id=actor_id, dsn=self._dsn) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
@@ -305,10 +332,32 @@ class PostgresPortalRepository:
                 )
         return character
 
-    def delete_character(self, character_id: uuid.UUID) -> None:
-        with transaction(dsn=self._dsn) as connection:
+    def character_revisions(
+        self, character_id: uuid.UUID, *, actor_id: uuid.UUID
+    ) -> tuple[CharacterCardRevision, ...]:
+        with transaction(actor_id=actor_id, dsn=self._dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT * FROM tabletop.character_card_revisions WHERE character_id=%s ORDER BY revision_number",
+                    (str(character_id),),
+                )
+                return tuple(
+                    CharacterCardRevision.model_validate(dict(row)) for row in cursor.fetchall()
+                )
+
+    def delete_character(
+        self, character_id: uuid.UUID, *, actor_id: uuid.UUID | None = None
+    ) -> None:
+        with transaction(actor_id=actor_id, dsn=self._dsn) as connection:
             with connection.cursor() as cursor:
-                cursor.execute("DELETE FROM tabletop.characters WHERE id=%s", (str(character_id),))
+                try:
+                    cursor.execute(
+                        "DELETE FROM tabletop.characters WHERE id=%s", (str(character_id),)
+                    )
+                except psycopg2.errors.ForeignKeyViolation:
+                    raise ValueError(
+                        "bound character history is retained; retire the character instead"
+                    ) from None
                 if cursor.rowcount != 1:
                     raise KeyError(character_id)
 
@@ -574,7 +623,7 @@ class TabletopPortalService:
             updated_at=now,
         )
         self._validate_character(character)
-        return self.repository.save_character(character)
+        return self.repository.save_character(character, actor_id=actor.actor_id)
 
     def update_character(
         self, actor: UserAccount, character_id: uuid.UUID, payload: dict[str, Any]
@@ -610,13 +659,13 @@ class TabletopPortalService:
         updates["updated_at"] = datetime.now().astimezone()
         character = existing.model_copy(update=updates)
         self._validate_character(character)
-        return self.repository.save_character(character)
+        return self.repository.save_character(character, actor_id=actor.actor_id)
 
     def delete_character(self, actor: UserAccount, character_id: uuid.UUID) -> None:
         existing = self._character(character_id)
         if not actor.is_admin and existing.owner_user_id != actor.user_id:
             raise PermissionError("only the character owner can delete this character")
-        self.repository.delete_character(character_id)
+        self.repository.delete_character(character_id, actor_id=actor.actor_id)
 
     def bind_character_entity(
         self,
@@ -641,7 +690,8 @@ class TabletopPortalService:
                     "entity_id": entity_id,
                     "updated_at": datetime.now().astimezone(),
                 }
-            )
+            ),
+            actor_id=actor.actor_id,
         )
 
     def list_games(self, actor: UserAccount) -> tuple[HostedGame, ...]:

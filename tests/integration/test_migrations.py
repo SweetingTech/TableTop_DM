@@ -40,6 +40,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("002_identity_and_tabletop_workspaces.sql",),
             ("003_spatial_epistemics.sql",),
             ("004_persona_purpose.sql",),
+            ("005_character_history_and_bindings.sql",),
         ]
         cursor.execute(
             """
