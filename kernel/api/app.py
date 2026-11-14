@@ -15,17 +15,26 @@ from urllib.request import urlopen
 from flask import Flask, g, jsonify, make_response, request, send_from_directory
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from cognition.context import build_character_context
+from cognition.character_decisions import (
+    CharacterContextPending,
+    CharacterProposalRepository,
+    CharacterProposalScope,
+    InMemoryCharacterProposals,
+    propose_for_character,
+    require_character_proposal_authority,
+    require_projected_character_experience,
+)
 from cognition.engine import (
     DecisionAction,
     DecisionRequest,
     LayeredDecisionEngine,
     SubjectiveStatePipeline,
 )
-from cognition.models import Observation, RuntimeAssignment, RuntimeKind
+from cognition.models import RuntimeAssignment, RuntimeKind
 from cognition.perception import PerceptionProfile
 from cognition.planning import GoapAction
 from cognition.postgres import PostgresMindRepository
+from cognition.postgres_decisions import PostgresCharacterProposals
 from cognition.reflexes import ReflexRule
 from cognition.relationships import (
     RelationshipChangeRecord,
@@ -33,12 +42,13 @@ from cognition.relationships import (
     RelationshipModifiers,
 )
 from cognition.store import MindStore
-from domains.tabletop.character_actions import ACTION_CATALOG_VERSION, character_action_candidates
+from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import (
     InMemoryCharacterBindings,
     PostgresCharacterBindings,
     new_binding,
 )
+from domains.tabletop.character_context import resolve_character_context
 from domains.tabletop.character_identity import CharacterIdentity
 from domains.tabletop.portal import (
     InMemoryPortalRepository,
@@ -124,6 +134,12 @@ class RunCreateRequest(BaseModel):
     branch_id: uuid.UUID | None = None
     kind: RunKind = RunKind.LIVE
     seed: int | None = None
+
+
+class CharacterProposalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: uuid.UUID
+    idempotency_key: str = Field(min_length=1, max_length=200)
 
 
 class PersonaGenerateRequest(BaseModel):
@@ -527,6 +543,9 @@ def create_app(
     personas: dict[uuid.UUID, Any] = {}
     persona_versions: dict[uuid.UUID, Any] = {}
     bound_profiles: dict[tuple[uuid.UUID, uuid.UUID, str], CompiledPersona] = {}
+    character_proposals: CharacterProposalRepository = (
+        PostgresCharacterProposals(database_dsn) if database_dsn else InMemoryCharacterProposals()
+    )
     persona_repository: PostgresPersonaRepository | None = None
     if database_dsn:
         persona_repository = PostgresPersonaRepository(database_dsn, registry)
@@ -831,13 +850,15 @@ def create_app(
         for account in identity_repository.list_accounts():
             sync_world_authority(account)
 
-    def require_world_access(world_id: uuid.UUID) -> None:
+    def require_world_access(
+        world_id: uuid.UUID, source: SimulationApplication | None = None
+    ) -> None:
         """Authorize a world-scoped read.
 
         Authority is never unioned across worlds: holding a role in one world grants nothing
         in another. Automation keeps its global reach.
         """
-        if world_id not in simulation.worlds:
+        if world_id not in (source or simulation).worlds:
             raise KeyError(world_id)
         if automation_boundary():
             return
@@ -995,6 +1016,10 @@ def create_app(
     @app.errorhandler(ValueError)
     def value_error(exc: ValueError):
         return jsonify({"error": "invalid_operation", "details": str(exc)}), 400
+
+    @app.errorhandler(CharacterContextPending)
+    def character_context_pending(exc: CharacterContextPending):
+        return jsonify({"error": "character_context_pending", "details": str(exc)}), 409
 
     @app.errorhandler(KeyError)
     def missing_error(exc: KeyError):
@@ -1498,7 +1523,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "005_character_history_and_bindings.sql",
+                    "ok": version == "006_character_proposal_receipts.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -1753,12 +1778,16 @@ def create_app(
         )
 
     def read_scene(
-        world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID
+        world_id: uuid.UUID,
+        branch_id: uuid.UUID,
+        observer_entity_id: uuid.UUID,
+        source: SimulationApplication | None = None,
     ) -> tuple[PerceivedScene, MindStore]:
-        require_world_access(world_id)
+        source = source or simulation
+        require_world_access(world_id, source)
         actor_id = current_actor_id()
         require_scene_access(
-            simulation,
+            source,
             world_id=world_id,
             branch_id=branch_id,
             observer_entity_id=observer_entity_id,
@@ -1780,7 +1809,7 @@ def create_app(
             )
         return (
             build_perceived_scene(
-                simulation,
+                source,
                 observed_minds,
                 world_id=world_id,
                 branch_id=branch_id,
@@ -1812,88 +1841,90 @@ def create_app(
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    def resolve_frame(source, scene, observed_minds, run_id):
+        return resolve_character_context(
+            simulation=source,
+            scene=scene,
+            minds=observed_minds,
+            actor_id=current_actor_id(),
+            run_id=run_id,
+            bindings=character_bindings,
+            cards=portal.repository,
+            profile_reader=lambda persona, version, compiler: (
+                persona_repository.get_compiled(persona, version, compiler)
+                if persona_repository
+                else bound_profiles.get((persona, version, compiler))
+            ),
+        )
+
+    @app.post(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
+        "/entities/<uuid:observer_entity_id>/character-proposals"
+    )
+    def character_proposal(
+        world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID
+    ):
+        body = CharacterProposalRequest.model_validate(request.get_json(silent=True) or {})
+        actor_id = current_actor_id()
+        scope = CharacterProposalScope(
+            world_id=world_id, branch_id=branch_id, run_id=body.run_id, entity_id=observer_entity_id
+        )
+        require_world_access(world_id)
+
+        def generate():
+            source = simulation
+            if durable_control is not None:
+                # The receipt repository holds the authorized run and branch locks.
+                # Read fresh canonical state without replacing a shared worker cache.
+                source = SimulationApplication(simulation.snapshot_store.root)
+                durable_control.hydrate(source)
+            require_character_proposal_authority(source, scope, actor_id)
+            if source.runs[scope.run_id].status not in {"ACTIVE", "RUNNING"}:
+                raise ValueError("character proposals require an active run")
+            scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id, source)
+            require_projected_character_experience(source, observed_minds, scope, actor_id)
+            resolved = resolve_frame(source, scene, observed_minds, body.run_id)
+            if resolved.binding is None or resolved.profile is None:
+                raise ValueError("a pinned character binding is required")
+            return propose_for_character(
+                scope=scope,
+                actor_id=actor_id,
+                key=body.idempotency_key,
+                run_seed=source.runs[scope.run_id].seed,
+                context=resolved.context,
+                binding=resolved.binding,
+                profile=resolved.profile,
+            )
+
+        def reference_proposal():
+            # Recheck current authority even when returning a prior receipt.
+            require_character_proposal_authority(simulation, scope, actor_id)
+            return character_proposals.get_or_create(
+                scope, actor_id, body.idempotency_key, generate
+            )
+
+        receipt = (
+            character_proposals.get_or_create(scope, actor_id, body.idempotency_key, generate)
+            if durable_control is not None
+            else simulation.read_reference(reference_proposal)
+        )
+        minds.record_decision(receipt.outcome)
+        response = jsonify(receipt.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get(
         "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
         "/entities/<uuid:observer_entity_id>/context"
     )
     def character_context(world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID):
-        require_world_access(world_id)
-        actor_id = current_actor_id()
-        scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id)
+        source = simulation
+        scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id, source)
         requested_run = request.args.get("run_id")
-        if requested_run:
-            context_run = simulation.runs.get(uuid.UUID(requested_run))
-            if context_run is None or (context_run.world_id, context_run.branch_id) != (
-                world_id,
-                branch_id,
-            ):
-                raise ValueError("context run does not belong to this world and branch")
-        else:
-            candidates = [
-                run
-                for run in simulation.runs.values()
-                if (run.world_id, run.branch_id) == (world_id, branch_id)
-                and run.kind is RunKind.LIVE
-                and run.status in {"ACTIVE", "RUNNING", "PAUSED", "QUEUED"}
-            ]
-            if len(candidates) > 1:
-                raise ValueError("multiple live runs; select run_id for character context")
-            context_run = candidates[0] if candidates else None
-        context_authority = simulation.authority(world_id, actor_id)
-        can_read_binding = (
-            observer_entity_id in context_authority.controlled_entity_ids
-            or "mind.read.all" in context_authority.capabilities
+        resolved = resolve_frame(
+            source, scene, observed_minds, uuid.UUID(requested_run) if requested_run else None
         )
-        binding = (
-            character_bindings.latest(
-                (world_id, branch_id, context_run.run_id, observer_entity_id), actor_id=actor_id
-            )
-            if context_run and can_read_binding
-            else None
-        )
-        bound_identity = None
-        if binding is not None:
-            revisions = portal.repository.character_revisions(
-                binding.character_id, actor_id=actor_id
-            )
-            revision = next(
-                (row for row in revisions if row.revision_id == binding.card_revision_id), None
-            )
-            key = (binding.persona_id, binding.persona_version_id, binding.compiler_version)
-            profile = (
-                persona_repository.get_compiled(*key)
-                if persona_repository
-                else bound_profiles.get(key)
-            )
-            if (
-                revision is None
-                or profile is None
-                or profile.purpose is not PersonaPurpose.CHARACTER
-            ):
-                raise ValueError("pinned character identity is unavailable")
-            bound_identity = revision.content
-        context = build_character_context(
-            identity=bound_identity,
-            scene=scene,
-            mind=observed_minds.get(observer_entity_id, branch_id=branch_id),
-            actor_id=actor_id,
-            observations=tuple(
-                Observation.model_validate(item)
-                for item in observed_minds.inspect(
-                    observer_entity_id,
-                    branch_id=branch_id,
-                )["observations"]
-            ),
-            event_reader=simulation.events.get,
-            grant_reader=lambda event_id, entity_id: simulation.perceptions.get(
-                (event_id, entity_id)
-            ),
-            action_provider=lambda authorized_scene: character_action_candidates(
-                authorized_scene,
-                actor=simulation.authority(world_id, actor_id),
-                branch_kind=simulation.states.get(branch_id).kind,
-            ),
-        )
+        context, binding = resolved.context, resolved.binding
         return jsonify(
             {
                 "context_version": context.context_version,

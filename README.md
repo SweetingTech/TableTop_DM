@@ -8,6 +8,11 @@ Language models may propose dialogue or actions, but they never write canonical 
 commands, world-scoped authorization, deterministic handlers, atomic transactions, and an
 append-only ledger decide what actually happened.
 
+Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
+and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
+basic movement catalog; it does not execute actions, change a human assignment, or run a campaign.
+See [character proposals](docs/API_AND_WORKFLOWS.md#trusted-character-proposals).
+
 ## Product workspaces
 
 | Workspace | Audience | Purpose |

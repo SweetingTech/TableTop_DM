@@ -476,10 +476,42 @@ the context route does not yet wait at a runner's dependent-decision projection 
 `POST /api/v2/cognition/decide` accepts caller-authored situations/actions only for privileged
 `SIMULATED_PLAYTESTER` evaluation (administrator session or automation boundary, still subject to
 world/body checks). Its response identifies `mode: EVALUATION` and `committed: false`.
-Other browser accounts and `CHARACTER` personas receive `403`. Live character decision execution
-will use this server-owned binding and context; the evaluation request cannot invent a binding by
+Other browser accounts and `CHARACTER` personas receive `403`. Trusted character proposals
+use the server-owned binding and context; the evaluation request cannot invent a binding by
 choosing a persona ID. Binding alone does not enable live decisions. Human Game Console commands
 continue through their existing kernel path.
+
+### Trusted character proposals
+
+`POST /api/v2/worlds/{world}/branches/{branch}/entities/{body}/character-proposals`
+accepts only `{"run_id": "{run}", "idempotency_key": "logical-decision-key"}`. Unknown fields,
+including situations, actions, personas, runtime configuration, and seeds, are rejected.
+The caller must control this body and hold its world-scoped movement/proposal capabilities,
+including commit authority on a canonical branch. DM inspection authority alone is insufficient.
+New decisions require an active run and an exact version-pinned CHARACTER binding.
+
+The server assembles the same trusted context as the context read, then uses the pinned compiled
+persona and versioned basic movement catalog with local deterministic utility policy. This initial
+policy has no narrative planner or player-behavior imitation. No provider/model calls occur.
+Before generation, every sensory event with a frozen grant for this body must have its dependent
+observation persisted. Otherwise the response is `409 character_context_pending`; retry the same
+key after projection catches up. Operator records are outside this barrier and character fiction.
+
+The response contains `authorship: CHARACTER_POLICY`, `execution_mode: PROPOSAL_ONLY`,
+`committed: false`, pinned binding metadata, evidence hash, versions, server-derived seed,
+and `outcome.proposal`. Operational provenance is outside the model-facing situation. Receipts
+contain no context/backstory copy. This is policy-generated evidence, never human preference data.
+The same world/branch/run/body/actor/key returns the original receipt, even after world changes,
+rebinding, or a durable restart; current body control/capabilities are checked again before retry.
+Use a new key for a new decision.
+
+Migration 006 stores each immutable private receipt and decision trace atomically. Requests serialize
+on the authorized run and branch; a request-local durable snapshot avoids stale worker caches.
+Reference mode serializes proposal reads against command publication. A receipt does not grant
+permission to execute later. Submit `outcome.proposal` through `POST /api/v2/commands` to request
+normal kernel revalidation and idempotent execution. The proposal endpoint never advances time,
+changes runtime assignments, or automatically submits a command. Exclusive controller epochs,
+autonomous scheduling, broader actions, learned lore, and player-history imitation remain planned.
 
 ## Error contract
 
@@ -491,5 +523,6 @@ Common status meanings:
 - `403`: password change required, missing role/capability, invisible evidence, or disallowed
   branch operation;
 - `404`: resource is absent or not visible to the caller;
+- `409 character_context_pending`: retry character advice after subjective projection catches up;
 - `409`: idempotency, uniqueness, version, or state-hash conflict;
 - `503`: configured dependencies or migrations are not ready.

@@ -119,7 +119,12 @@ as composition glue; reusable execution services must also work from workers and
 - [ ] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
   evaluation situations confined to explicit privileged/testing flows rather than trusting them for live minds.
   The caller-authored endpoint is now privileged playtester evaluation only and rejects CHARACTER
-  personas. Live decisions remain disabled until execution/handoff/runner wiring is verified.
+    personas. A trusted CHARACTER proposal endpoint now resolves pinned identity/context/actions,
+    derives scoped server seeds, waits for sensory projection, and stores private append-only
+    idempotent receipts plus traces atomically (006). It uses local basic movement utility policy,
+    returns PROPOSAL_ONLY, and leaves human runtime assignments untouched. Automatic execution,
+    exclusive controller epochs/handoff, scheduler wiring, broader actions, and history imitation
+    remain unimplemented; B4 is not complete.
 - [ ] B5 — Route lore retrieval, summaries, and model conversations through the same knowledge and
   timeline boundary. Public availability must not automatically mean a character has learned a fact.
 - [ ] B6 — Label operator/director records outside the sensory event stream. Audit [event finalization](../kernel/event_factory.py),

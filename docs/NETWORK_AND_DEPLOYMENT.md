@@ -3,10 +3,14 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
-The API version containing character history/bindings requires migration 005. Revision and binding
+This API version requires migrations through 006, including character history/bindings and
+private proposal receipts. Revision, binding, and proposal
 records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
 The migration owner remains separate from the runtime login. Card revisions are authored source
 material, while binding rows are private controller configuration outside the sensory event stream.
+Character advice uses local deterministic policy; it makes no external model call. Receipt routes
+require authenticated world/body control and preserve the browser origin boundary. Apply migrations
+and verify readiness before routing traffic to the upgraded API; no network topology changes.
 
 ## Default network diagram
 
