@@ -992,6 +992,7 @@ def create_app(
         }
 
     def population_payload(record: dict[str, Any]) -> dict[str, Any]:
+        record = population_runtime.overlay(record)
         return {key: value for key, value in record.items() if not key.startswith("_")}
 
     def new_population_target(
@@ -1843,7 +1844,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "010_tactical_choice_evidence.sql",
+                    "ok": version == "011_population_body_binding.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -3257,7 +3258,7 @@ def create_app(
         record = populations[population_id]
         world_id, branch_id = population_target(record, body.world_id, body.branch_id)
         lifecycle = population_lifecycles[population_id]
-        active_ids: list[str] = record["_active_ids"]
+        active_ids: list[str] = population_runtime.overlay(record)["_active_ids"]
         candidates = [
             identity for identity in record["_materialized_ids"] if identity not in active_ids
         ][: body.count]
@@ -3265,6 +3266,11 @@ def create_app(
             max((transition.world_step for transition in lifecycle.history), default=-1) + 1
         )
         for offset, identity in enumerate(candidates):
+            bound = population_runtime.bound(record, uuid.UUID(identity))
+            if bound is not None:
+                population_runtime.change_level(record, bound, "ACTIVE")
+                active_ids.append(identity)
+                continue
             member = lifecycle.activate(
                 uuid.UUID(identity),
                 active_state={"attention_budget": 100, "activation_reason": "ui_request"},
@@ -3278,6 +3284,7 @@ def create_app(
                     activation_state="ACTIVE",
                 )
             active_ids.append(identity)
+        record["_active_ids"] = active_ids
         record["active"] = len(active_ids)
         return jsonify(
             {
@@ -3289,13 +3296,25 @@ def create_app(
 
     @app.get("/api/v2/populations/<uuid:population_id>/members/<uuid:persona_id>")
     def population_member(population_id: uuid.UUID, persona_id: uuid.UUID):
-        return _json(population_lifecycles[population_id].get(persona_id))
+        member = population_runtime.bound(
+            populations[population_id], persona_id
+        ) or population_lifecycles[population_id].get(persona_id)
+        response = jsonify(member.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.post("/api/v2/populations/<uuid:population_id>/members/<uuid:persona_id>/activate")
     def population_activate(population_id: uuid.UUID, persona_id: uuid.UUID):
         body = ActivateRequest.model_validate(request.get_json(silent=True) or {})
         record = populations[population_id]
         population_target(record, body.world_id, body.branch_id)
+        bound = population_runtime.bound(record, persona_id)
+        if bound is not None:
+            if body.active_state:
+                raise ValueError(
+                    "bound lifecycle metadata is canonical; use typed population commands"
+                )
+            return _json(population_runtime.change_level(record, bound, "ACTIVE"))
         lifecycle = population_lifecycles[population_id]
         member = lifecycle.activate(
             persona_id,
@@ -3319,6 +3338,13 @@ def create_app(
         body = DeactivateRequest.model_validate(request.get_json(silent=True) or {})
         record = populations[population_id]
         population_target(record, body.world_id, body.branch_id)
+        bound = population_runtime.bound(record, persona_id)
+        if bound is not None:
+            if body.compressed_state:
+                raise ValueError(
+                    "bound lifecycle metadata is canonical; use typed population commands"
+                )
+            return _json(population_runtime.change_level(record, bound, "MATERIALIZED"))
         lifecycle = population_lifecycles[population_id]
         member = lifecycle.deactivate(
             persona_id,
@@ -3339,8 +3365,27 @@ def create_app(
 
     @app.get("/api/v2/populations/<uuid:population_id>/transitions")
     def population_transitions(population_id: uuid.UUID):
+        from population.runtime import HISTORY, MEMBERS
+
+        _, state = population_runtime.state(populations[population_id])
+        bound_ids = {
+            identity
+            for identity, row in state.projections.get(MEMBERS, {}).items()
+            if row["population_id"] == str(population_id)
+        }
+        items = [
+            item.model_dump(mode="json") for item in population_lifecycles[population_id].history
+        ]
+        items += [
+            {**row, "world_id": str(state.world_id), "branch_id": str(state.branch_id)}
+            for _, row in sorted(state.projections.get(HISTORY, {}).items())
+            if row["persona_id"] in bound_ids
+        ]
         return jsonify(
-            [item.model_dump(mode="json") for item in population_lifecycles[population_id].history]
+            sorted(
+                items,
+                key=lambda row: (row["world_step"], row["persona_id"], row["lifecycle_version"]),
+            )
         )
 
     @app.route("/api/v2/scenarios", methods=["GET", "POST"])
@@ -3748,6 +3793,37 @@ def create_app(
 
     app.extensions["world_runner"] = WorldRunner(controller_snapshot)
     register_world_time(app, controller_snapshot, current_actor_id, require_world_access)
+    from kernel.api.population_runtime import PopulationRuntime, register_population_runtime
+
+    def read_population_source(population_id: uuid.UUID, persona_id: uuid.UUID):
+        lifecycle = (
+            population_repository.load_lifecycle(population_id)
+            if population_repository
+            else population_lifecycles[population_id]
+        )
+        return lifecycle.get(persona_id)
+
+    population_runtime = PopulationRuntime(
+        simulation,
+        controller_snapshot,
+        current_actor_id,
+        require_world_access,
+        read_population_source,
+    )
+    app.extensions["population_runtime"] = population_runtime
+    register_population_runtime(app, population_runtime, populations)
+
+    @app.before_request
+    def lock_reference_population():
+        if database_dsn is None and request.path.startswith("/api/v2/populations"):
+            simulation._reference_command_lock.acquire()
+            g.population_reference_locked = True
+
+    @app.teardown_request
+    def unlock_reference_population(_error):
+        if g.pop("population_reference_locked", False):
+            simulation._reference_command_lock.release()
+
     return app
 
 

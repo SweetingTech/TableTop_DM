@@ -11,6 +11,7 @@ from urllib.request import url2pathname
 
 import psycopg2.extras
 
+from kernel.contracts import CommandProposal, CommandResult
 from kernel.database import transaction
 from persona.models import PersonaVersionRecord
 from population.lifecycle import PopulationLifecycle
@@ -23,6 +24,73 @@ from population.models import (
 
 class PostgresPopulationRepository:
     """Metadata catalog for immutable Parquet pools and materialized people."""
+
+    @staticmethod
+    def apply_bindings(
+        cursor: Any, proposal: CommandProposal, result: CommandResult, event_id: uuid.UUID
+    ) -> None:
+        """Lock and verify the source inside the command/projection/event transaction."""
+        from population.runtime import source_hash
+
+        for binding in result.population_bindings:
+            cursor.execute(
+                """
+                SELECT person.activation_state, person.persistent_state, person.active_state,
+                       person.compressed_state, person.lifecycle_version, person.world_step,
+                       blueprint.dimensions, person.entity_id, person.binding_event_id
+                FROM population.materialized_people person
+                JOIN persona.blueprints blueprint ON blueprint.persona_id=person.persona_id
+                  AND blueprint.version_id=person.persona_version_id
+                WHERE person.population_id=%s AND person.persona_id=%s
+                  AND person.world_id=%s AND person.branch_id=%s
+                FOR UPDATE OF person
+                """,
+                (
+                    str(binding.population_id),
+                    str(binding.persona_id),
+                    str(proposal.world_id),
+                    str(proposal.branch_id),
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None or row["binding_event_id"] is not None:
+                raise ValueError("population source is missing or already bound")
+            member = PopulationMember(
+                persona_id=binding.persona_id,
+                world_id=proposal.world_id,
+                branch_id=proposal.branch_id,
+                level=PopulationLevel.ACTIVE
+                if row["activation_state"] == "ACTIVE"
+                else PopulationLevel.MATERIALIZED,
+                persistent_state=row["persistent_state"],
+                active_state=row["active_state"],
+                compressed_state=row["compressed_state"],
+                version=row["lifecycle_version"],
+                world_step=row["world_step"],
+                profile=row["dimensions"],
+                entity_id=row["entity_id"],
+            )
+            if (
+                member.version != binding.source_version
+                or source_hash(member) != binding.source_hash
+            ):
+                raise ValueError("population source changed before binding")
+            cursor.execute(
+                """
+                UPDATE population.materialized_people
+                SET entity_id=%s, binding_event_id=%s, binding_source_hash=%s
+                WHERE population_id=%s AND persona_id=%s AND world_id=%s AND branch_id=%s
+                """,
+                (
+                    str(binding.entity_id),
+                    str(event_id),
+                    binding.source_hash,
+                    str(binding.population_id),
+                    str(binding.persona_id),
+                    str(proposal.world_id),
+                    str(proposal.branch_id),
+                ),
+            )
 
     GENERATOR_VERSION = "persona-gen-0.4"
 
@@ -370,6 +438,7 @@ class PostgresPopulationRepository:
                         ),
                         world_id=uuid.UUID(str(row["world_id"])),
                         branch_id=uuid.UUID(str(row["branch_id"])),
+                        entity_id=uuid.UUID(str(row["entity_id"])) if row["entity_id"] else None,
                         profile=dict(row["dimensions"]),
                         persistent_state=dict(row["persistent_state"]),
                         active_state=dict(row["active_state"]),

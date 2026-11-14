@@ -89,6 +89,17 @@ class EntityMutation(BaseModel):
     controller_actor_id: uuid.UUID | None = None
 
 
+class PopulationBindingMutation(BaseModel):
+    """Internal instruction validated against the locked source in the commit transaction."""
+
+    model_config = ConfigDict(frozen=True)
+    population_id: uuid.UUID
+    persona_id: uuid.UUID
+    entity_id: uuid.UUID
+    source_version: int = Field(ge=0)
+    source_hash: str
+
+
 class CommandResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -99,6 +110,9 @@ class CommandResult(BaseModel):
     # receipts and ledger result JSON; projections/events expose only public
     # command facts while the transaction persists private entity metadata.
     entity_mutations: tuple[EntityMutation, ...] = Field(default=(), exclude=True, repr=False)
+    population_bindings: tuple[PopulationBindingMutation, ...] = Field(
+        default=(), exclude=True, repr=False
+    )
     domain_tags: tuple[str, ...] = ()
 
 

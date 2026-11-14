@@ -20,13 +20,14 @@ class Activity(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     activity_id: uuid.UUID
     entity_id: uuid.UUID
-    kind: Literal["WEED", "REST"]
+    kind: Literal["WEED", "REST", "EAT"]
+    routine_id: uuid.UUID | None = None
     duration_seconds: int = Field(ge=1, le=86400)
     started_seconds: int = Field(ge=0)
     updated_seconds: int = Field(ge=0)
     progress_seconds: int = Field(default=0, ge=0)
     status: Literal["RUNNING", "WAITING", "COMPLETED", "CANCELLED"] = "RUNNING"
-    reason: Literal["RAIN", "INCAPACITATED", "MOVED"] | None = None
+    reason: Literal["RAIN", "INCAPACITATED", "MOVED", "NO_FOOD"] | None = None
     origin: dict
 
 
@@ -89,6 +90,8 @@ def start(proposal: CommandProposal, state: BranchState) -> CommandResult:
     if body is None or int(body.get("hp", 0)) <= 0:
         raise ValueError("activity requires a capable body")
     rows = state.projections.get(ACTIVITIES, {})
+    if state.projections.get("tabletop.routines", {}).get(key, {}).get("enabled"):
+        raise ValueError("disable the body routine before starting a manual activity")
     if key in rows and rows[key]["status"] in {"RUNNING", "WAITING"}:
         raise ValueError("cancel the existing activity first")
     if key not in rows and len(rows) >= 256:
@@ -123,6 +126,12 @@ def cancel(proposal: CommandProposal, state: BranchState) -> CommandResult:
     row = state.projections.get(ACTIVITIES, {}).get(str(request.entity_id))
     if row is None or row["activity_id"] != str(request.activity_id):
         raise ValueError("activity changed")
+    if (
+        state.projections.get("tabletop.routines", {})
+        .get(str(request.entity_id), {})
+        .get("enabled")
+    ):
+        raise ValueError("disable the body routine before cancelling its activity")
     return CommandResult(
         result={"activity_id": str(request.activity_id)},
         deltas=(
@@ -185,6 +194,8 @@ def progress(state: BranchState, until: int) -> None:
     """Advance a private working copy; never persist or inspect cameras/minds."""
     for key, raw in sorted(state.projections.get(ACTIVITIES, {}).items()):
         activity = Activity.model_validate(raw)
+        if activity.routine_id is not None:
+            continue
         if activity.status in {"COMPLETED", "CANCELLED"}:
             continue
         body = state.projections["tabletop.entities"].get(key)
@@ -231,6 +242,9 @@ def progress(state: BranchState, until: int) -> None:
 
 
 def advance_activities(state: BranchState, until: int) -> None:
+    from population.routines import advance_routines, reconcile_relevance
+
+    reconcile_relevance(state, seconds(state))
     pending = state.projections.get(SCHEDULE, {})
     for key, row in sorted(
         tuple(pending.items()), key=lambda item: (item[1]["due_seconds"], item[1]["order"], item[0])
@@ -238,11 +252,13 @@ def advance_activities(state: BranchState, until: int) -> None:
         if row["due_seconds"] > until:
             continue
         progress(state, row["due_seconds"])
+        advance_routines(state, row["due_seconds"])
         state.projections.setdefault(WEATHER, {}).setdefault("singleton", {})[row["zone_id"]] = row[
             "raining"
         ]
         del pending[key]
     progress(state, until)
+    advance_routines(state, until)
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:

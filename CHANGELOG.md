@@ -1,5 +1,12 @@
 # Changelog
 
+- Bind materialized population identities to one canonical body through a typed command with
+  transactional source validation. Migration 011 freezes embodied source rows and rejects stale
+  legacy transitions; the branch projection owns live lifecycle metadata.
+- Add opt-in recurring NPC work/rest/meals, body-owned hunger/fatigue and finite food consumption,
+  physical relevance transitions, and inspected eating in the console. Keep partial work across
+  lifecycle changes, rain, shortage, incapacitation, worker races, replay and restart.
+
 - Add opt-in persistent branch clocks and a world-runner CLI/Compose service, explicit FREEZE or
   bounded CATCH_UP, pause/stop boundaries and executor epoch/step fencing through atomic commands.
 - Add persistent offscreen WEED/REST work, ordered scheduled rain, partial progress/cancellation

@@ -176,3 +176,26 @@ experience. Durable scene/context hydration is request-local and leaves projecto
 The visual product direction is captured in
 [the simulation-kernel concept](design/simulation-kernel-concept.png). The running React client
 and typed API contracts are authoritative for interaction behavior.
+
+## Population binding and continuous routines
+
+`tabletop.population.bind` is a canonical-only command. Its internal binding instruction is excluded
+from public result JSON. Durable execution locks and verifies the source version/content hash in
+the same transaction as its projection, command, event and outbox. Migration 011 freezes that
+source after binding and rejects stale legacy transition inserts. Generic consequence promotion
+cannot create, remove or rebind population identities; live lifecycle changes may still be promoted
+from trials. The source member parameter is redacted from the command log. Reference validation
+runs before publishing under the command lock.
+
+`tabletop.population.level` and `tabletop.routine.configure` support canonical and isolated trial
+branches with normal world capabilities and version checks. Bound member/history projections omit
+stored world/branch IDs and resolve them from the current branch when restored. The canonical
+body is the single physical resource owner; lifecycle changes preserve work and never copy balances.
+
+Clock advancement updates routine phase, activities, needs, food consumption, work output and
+relevance transitions atomically. The initial policy is `npc-routines-1.0.0`; stable phase IDs and
+ordered completion/need/weather boundaries produce identical results for coarse and split advances.
+Food is spent once when a meal completes. Zero food, rain, displacement and incapacity wait without
+awarding unavailable work. Routine ownership excludes simultaneous manual activity ownership.
+Reconfiguration is an explicit replacement; disabling cancels managed work. There is no new worker
+or wall-clock progression path outside the existing fenced world clock.

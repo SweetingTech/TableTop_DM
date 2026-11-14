@@ -275,3 +275,18 @@ JavaScript/CSS assets with their correct MIME types rather than the SPA fallback
 When a failure crosses layers, preserve the earliest deterministic evidence: account/actor role
 scope, request contract, idempotency key, seed, state hash, event/trace IDs, migration checksum,
 and failing artifact or browser trace. Never preserve credentials or private content in logs.
+
+Population routine coverage is in `tests/unit/population/test_runtime.py`,
+`tests/unit/kernel/test_population_runtime_api.py`, `tests/integration/test_population_runtime.py`
+and `tests/e2e/test_population_routines_isolated.py`. Run the repository fast/types gates, the full
+integration lane, frontend lint/tests/build and the population/world-time browser journeys.
+The browser journey checks the built SPA at desktop/mobile sizes; when no browser connector is
+available, use the repository's Playwright/Chromium lane.
+
+The durable population lane exercises clean schema 011, upgrade from 010 with an existing member,
+idempotent migration rerun, binding/source validation, SQL freeze guards and runtime grants,
+cross-world/RLS denial, injected rollback, fresh API reads, two real world-runner processes and a
+subsequent worker restart. The reference lane compares coarse/split progression, including hunger
+during long rain waits, partial-work lifecycle continuity and trial isolation. Build a clean wheel
+and run its verifier because packaged migration expectations changed. Never point these tests at
+the user's live application database.

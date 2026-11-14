@@ -173,21 +173,29 @@ as composition glue; reusable execution services must also work from workers and
 Initial D/E foundation now persists branch time and WEED/REST activities through typed canonical
 commands, with a separate world-runner, explicit downtime policy, epoch/step fencing, deterministic
 weather boundaries and inspected scene/console progress. Tests cover no viewers, concurrent workers,
-restart, rollback and character/world execution on one branch. D3's generic leased queue, full
-population lifecycle coupling, richer routines/vocabulary and whole D/E acceptance remain open.
+restart, rollback and character/world execution on one branch. D3's generic leased queue,
+richer routines/vocabulary and whole D/E acceptance remain open.
 See [world time and activities](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
+
+Population binding now connects materialized members to a single canonical body. Live lifecycle
+metadata is branch-local; migration 011 freezes the source rather than keeping a second mutable
+resource store. Opt-in WEED/REST/EAT routines persist hunger, fatigue, finite food consumption and
+partial work across physical relevance, lifecycle transitions and worker restart. Physical anchors
+drive automatic relevance independently of human presence. Both active and offscreen members use
+the same coarse routine; detailed activity planning, travel, sleep cycles and social obligations
+remain open. See [population routines](API_AND_WORKFLOWS.md#population-binding-and-npc-routines).
 
 - [ ] E1 — Add typed activity definitions/state for work, travel, sleep, consumption, and interruptions
   under `domains/tabletop/activities/` (proposed). Persist start/due time, progress, inputs/outputs, owner, and cause.
-- [ ] E2 — Connect materialized population state to due activities and canonical entities where needed;
+- [x] E2 — Connect materialized population state to due activities and canonical entities where needed;
   statistical/materialized/active representation must not create duplicate people or resource balances.
 - [ ] E3 — Advance coarse offscreen activities from elapsed simulated time; use detailed actions when
   relevant. Choose update resolution from interaction needs, not whether a human camera observes the person.
-- [ ] E4 — Reconcile pending work and progress on activation/deactivation in `PopulationLifecycle`;
+- [x] E4 — Reconcile pending work and progress on activation/deactivation in `PopulationLifecycle`;
   neither reset activity nor award its output twice. Define how relevance is computed automatically.
 - [ ] E5 — Add persistent needs/routines and causal interruptions: hunger, fatigue, rain, danger,
   resource shortage, social obligations, travel arrival. Scope initial activity vocabulary explicitly.
-- [ ] E6 — Acceptance: gardener weeds while party leaves; rain interrupts at the right time; returning
+- [x] E6 — Acceptance: gardener weeds while party leaves; rain interrupts at the right time; returning
   party sees the resulting partial work and location. Repeat across deactivation and process restart.
 
 ## F. Autonomous decisions, models, and narration

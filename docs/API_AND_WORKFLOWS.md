@@ -710,7 +710,8 @@ the accepted utterance for replay. Spontaneous conversations and narrative/world
 World time is an integer number of simulated seconds per branch. New worlds have no running
 clock. Configure one explicitly, initially paused. Clock state, pending weather and current
 activities live in the existing canonical projection: the normal kernel transaction commits
-progress, physical effects, receipt, event and outbox together. No new SQL migration is required.
+progress, physical effects, receipt, event and outbox together. Clock storage uses existing tables;
+the population binding workflow below adds migration 011.
 
 Setup uses the existing authenticated JSON APIs:
 
@@ -799,6 +800,82 @@ activation/deactivation reconciliation, persistent hunger/routines, travel/sleep
 automatic detailed activity selection, weather narration and complete timeline restoration remain
 open checklist work. Existing `PopulationLifecycle` records do not create a second worker/resource
 balance and are not automatically attached to this first activity vocabulary.
+
+## Population binding and NPC routines
+
+Population generation/materialization and the new binding convenience route retain the existing
+global-admin gate. Typed population and routine commands require world-scoped `entity.control`,
+`action.propose` and canonical commit authority. Players cannot inspect private population state.
+
+1. Configure a branch clock and its explicitly granted AGENT executor using the world-time workflow.
+2. Generate a population and materialize the desired members with the existing population routes.
+3. Create or choose an existing canonical body using normal entity commands. Set its actual health,
+   inventory and location deliberately. Source population finances never replace body resources.
+4. Bind once with
+   `POST /api/v2/populations/{population_id}/members/{persona_id}/bind`:
+
+   ```json
+   {
+     "entity_id": "<existing body UUID>",
+     "run_id": "<clock's live run UUID>",
+     "expected_source_version": 1,
+     "idempotency_key": "bind-gardener-1"
+   }
+   ```
+
+   The server reads the source; the command transaction locks and verifies its version and full
+   hash. Population identity is provenance, separate from the body's pinned CHARACTER persona,
+   authored card and mind. Bodies and population identities each bind once in a branch. Binding
+   is canonical-only; trial snapshots inherit their own branch-local live metadata.
+   Consequence promotion can carry live lifecycle changes but cannot create, erase or rebind
+   a source identity. Rewinding to before embodiment requires a future timeline/import workflow.
+5. Submit `tabletop.routine.configure` through `POST /api/v2/commands` with parameters:
+
+   ```json
+   {
+     "entity_id": "<bound body UUID>",
+     "expected_version": 0,
+     "enabled": true,
+     "work_seconds": 1800,
+     "rest_seconds": 600,
+     "meal_seconds": 5,
+     "fatigue_limit": 3600,
+     "hunger_limit": 14400,
+     "relevance_radius": 12,
+     "relevance_anchors": []
+   }
+   ```
+
+   Work/rest periods are 60–86400 seconds; meals are 5–3600 seconds. Initial version is zero;
+   subsequent configuration requires the current version and deliberately replaces the routine.
+   Cancel any manual activity first. Disable the routine before starting/cancelling manual work.
+   Up to 32 routines and 256 bound members are supported per branch.
+6. Resume the clock and run `world-runner`, or use paused manual clock advances. No browser is
+   required. WEED produces one `weeded_units` and one fatigue per working second; REST removes
+   one fatigue per second. Hunger grows one per living routine second. EAT consumes exactly one
+   `inventory.food` on completion and relieves 14400 hunger. Missing food waits with `NO_FOOD`;
+   authorized replenishment resumes the same partial meal. Routines do not create free food or
+   import archived finances. Rain, displacement and incapacitation preserve partial work.
+
+`GET /api/v2/worlds/{world_id}/branches/{branch_id}/population` is a fresh, `no-store`, world-manager
+inspection of bindings, routines and canonical transitions. Existing population member, counts,
+activation/deactivation, bulk activation and transition routes read the canonical bound member.
+Bound legacy transitions reject replacement state, use simulated time rather than client
+`world_step`, and set an explicit relevance override. Use `tabletop.population.level` with
+`persona_id`, `expected_version`, `level` and `relevance: "AUTO"` to restore automatic relevance.
+
+Automatic relevance uses capable same-zone bodies within the configured 3D radius. Explicit
+anchors may be any existing body; empty anchors use other physically embodied controllers.
+Relevance changes are reconciled at the start of elapsed time, using the current simulated instant;
+tick size and unrelated weather boundaries do not move their transition timestamps.
+Human connection and camera state are absent from the calculation. ACTIVE/MATERIALIZED changes
+use `PopulationLifecycle`, preserve mental metadata, and never recreate a body or reset its job.
+Both representations run the same coarse physical routine. Characters only see inspected physical
+activity; pool IDs, lifecycle levels, schedules and private source cognition stay operator-side.
+
+The initial vocabulary is gardening/rest/food consumption. Travel, sleep cycles, wages, social
+obligations, tactical danger responses and a general activity planner remain incomplete. Health
+at or below zero stops work; hunger currently drives meals without applying starvation damage.
 
 ## Error contract
 

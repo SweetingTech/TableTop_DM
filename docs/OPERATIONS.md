@@ -123,7 +123,7 @@ losing the bootstrap authority fails closed without widening grants.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `010_tactical_choice_evidence.sql`;
+- migration history through `011_population_body_binding.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -227,7 +227,7 @@ and serialized successor checks. Runtime can read permitted revisions but cannot
 them directly. The migration does not auto-create personas for old characters; retry their roster
 assignment to create a missing initial binding. Existing bindings are never silently replaced.
 
-Apply migrations through 010 before starting this application version. Back up PostgreSQL and artifacts and verify
+Apply migrations through 011 before starting this application version. Back up PostgreSQL and artifacts and verify
 the upgrade in an isolated restore first, using the normal schema-change procedure below.
 Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
 are retained; retire the saved card instead of deleting evidence beneath a running identity.
@@ -352,3 +352,24 @@ docker compose --env-file .env -f infra/docker-compose.yml build app
 uv build --wheel
 uv run python scripts/verify_wheel.py dist/tabletop_dm-2.0.0-py3-none-any.whl
 ```
+
+## Migration 011 and population routines
+
+Run the normal owner migration lane before starting an image that expects schema 011. This additive
+migration preserves existing pools, source members and transition history; it adds binding evidence,
+a scoped event foreign key, one embodied identity per body, and source/legacy-transition freeze
+guards. Runtime table grants remain unchanged. The wheel verifier and readiness check now require
+`011_population_body_binding.sql`. Upgrade and rerun tests use disposable databases.
+
+After a source binds, its old row becomes an immutable import record. Read or change the live member
+through the canonical population API/commands; direct legacy state writes intentionally fail.
+The canonical body's resources win, so explicitly provision any initial food or equipment. Existing
+character cards, pinned personas and minds retain their separate bindings. A source row already
+manually linked to an entity cannot silently be rebound.
+
+Routines are opt-in, bounded to 32 bodies per branch, and use the existing world-runner. No extra
+service, provider or credential is required. Pause the clock for maintenance; resume with its normal
+epoch fence and selected FREEZE/CATCH_UP policy. Routine reconfiguration replaces its managed phase;
+disabling cancels managed work before manual activities can take ownership. Monitor the private
+population and clock inspections for waiting food, movement, weather or incapacitation. This change
+does not apply migrations to a running user database or deploy/restart the live stack automatically.

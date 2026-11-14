@@ -3,7 +3,7 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
-This API version requires migrations through 010, including character history/bindings,
+This API version requires migrations through 011, including character history/bindings,
 private proposal receipts, controller ownership and human choice evidence. Revision, binding, and proposal
 records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
 The migration owner remains separate from the runtime login. Card revisions are authored source
@@ -238,3 +238,9 @@ flowchart LR
 - Missing actor context fails closed under RLS.
 
 See [Operations](OPERATIONS.md) for lifecycle commands, backups, credentials, and migrations.
+
+Population routines use the existing application, PostgreSQL projection and world-runner services;
+they add no listener or provider endpoint. Deploy migration 011 before the new application image.
+The readiness check expects `011_population_body_binding.sql`. Routine execution is opt-in and
+follows the clock's explicit pause/downtime policy. This change does not enable a model provider or
+alter operator credentials. See the [setup workflow](API_AND_WORKFLOWS.md#population-binding-and-npc-routines).

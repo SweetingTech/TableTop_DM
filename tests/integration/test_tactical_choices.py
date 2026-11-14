@@ -202,7 +202,7 @@ def test_009_upgrade_and_repeat_with_preserved_old_evidence(
             assert (
                 len(old_rows) == 1 and old_rows[0][0]["version"] == "speech-combat-behavior-1.0.0"
             )
-        assert migrate(url, migrations) == 1
+        assert migrate(url, migrations) == 2
         assert migrate(url, migrations) == 0
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT payload FROM cognition.human_choice_evidence")

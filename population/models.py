@@ -84,6 +84,7 @@ class PopulationMember(BaseModel):
     level: PopulationLevel
     world_id: uuid.UUID | None = None
     branch_id: uuid.UUID | None = None
+    entity_id: uuid.UUID | None = None
     profile: dict[str, Any] = Field(default_factory=dict)
     persistent_state: dict[str, Any] = Field(default_factory=dict)
     active_state: dict[str, Any] = Field(default_factory=dict)
