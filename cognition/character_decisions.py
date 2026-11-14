@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from cognition.behavior import BehaviorProfile, weighted_actions
 from cognition.choices import ChoiceProfile, weighted_choices
 from cognition.context import NON_SENSORY_TAGS, CharacterContext
+from cognition.dialogue_generation import DialogueProvider, DialogueReceipt, generate_dialogue
 from cognition.engine import DecisionOutcome, DecisionRequest, LayeredDecisionEngine
 from cognition.perception import PerceptionEngine, PerceptionProfile
 from cognition.store import MindStore
@@ -24,7 +25,7 @@ from kernel.control import ControllerState
 from kernel.state import stable_hash
 from persona.models import CompiledPersona, PersonaPurpose
 
-PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.2.0"
+PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.3.0"
 
 
 class CharacterProposalScope(BaseModel):
@@ -61,11 +62,27 @@ class CharacterProposalReceipt(BaseModel):
     outcome: DecisionOutcome
     behavior: BehaviorProfile | None = None
     choices: ChoiceProfile | None = None
+    dialogue: DialogueReceipt | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
     def validate_proposal_lineage(self) -> CharacterProposalReceipt:
         proposal = self.outcome.proposal
+        if self.dialogue is not None and (
+            proposal.command_type != "tabletop.dialogue.speak"
+            or self.dialogue.output_hash != stable_hash(proposal.parameters.get("text"))
+            or (
+                self.dialogue.status == "GENERATED"
+                and (
+                    proposal.model_version != self.dialogue.model_version
+                    or proposal.prompt_contract_version != self.dialogue.version
+                    or self.outcome.trace.model_version != self.dialogue.model_version
+                    or self.outcome.trace.prompt_contract_version != self.dialogue.version
+                    or not self.dialogue.source_event_ids
+                )
+            )
+        ):
+            raise ValueError("dialogue receipt differs from its speech proposal")
         if self.choices is not None and (
             (
                 self.choices.world_id,
@@ -181,6 +198,7 @@ def propose_for_character(
     human_epoch: int | None = None,
     behavior: BehaviorProfile | None = None,
     choices: ChoiceProfile | None = None,
+    dialogue_provider: DialogueProvider | None = None,
 ) -> CharacterProposalReceipt:
     if (
         binding.scope != scope.key
@@ -225,6 +243,36 @@ def propose_for_character(
             utility_margin=0,
         )
     )
+    dialogue = None
+    if dialogue_provider is not None and outcome.proposal.command_type == "tabletop.dialogue.speak":
+        text, dialogue = generate_dialogue(
+            context, outcome.proposal.parameters, profile.deep_traits, seed, dialogue_provider
+        )
+        proposed = outcome.proposal.model_copy(
+            update={"parameters": {**outcome.proposal.parameters, "text": text, "claims": []}}
+        )
+        if dialogue.status == "GENERATED":
+            proposed = proposed.model_copy(
+                update={
+                    "model_version": dialogue.model_version,
+                    "prompt_contract_version": dialogue.version,
+                }
+            )
+            outcome = outcome.model_copy(
+                update={
+                    "tier": "LLM",
+                    "trace": outcome.trace.model_copy(
+                        update={
+                            "decision_tier": "LLM",
+                            "runtime_kind": dialogue.runtime_kind,
+                            "model_version": dialogue.model_version,
+                            "prompt_contract_version": dialogue.version,
+                            "rationale": "Grounded speech after policy intent selection.",
+                        }
+                    ),
+                }
+            )
+        outcome = outcome.model_copy(update={"proposal": proposed})
     trace = outcome.trace.model_copy(update={"trace_id": decision_id})
     proposal = outcome.proposal.model_copy(
         update={
@@ -259,6 +307,7 @@ def propose_for_character(
         outcome=outcome,
         behavior=behavior,
         choices=choices,
+        dialogue=dialogue,
     )
 
 

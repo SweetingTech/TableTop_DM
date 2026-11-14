@@ -10,7 +10,7 @@ append-only ledger decide what actually happened.
 
 Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
 and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
-perception-scoped movement, speech-intent and basic melee catalog. The proposal endpoint itself
+perception-scoped movement, speech and tactical catalog. The proposal endpoint itself
 does not execute actions, change a human assignment, or run a campaign.
 See [character proposals](docs/API_AND_WORKFLOWS.md#trusted-character-proposals).
 
@@ -20,9 +20,15 @@ the runner and perception projector continue without a browser connection. Contr
 prevent old human or autonomous actions committing after takeover. This is basic unattended
 movement, contextual speech and responses to perceived attacks. Comparable human choices guide
 direction, reply intent/volume, attack, withdrawal and visible-target priorities, with pinned
-persona/card tendencies as fallback. Open-ended dialogue, spells, full tactics, narrative goals
-and the world clock remain planned.
+persona/card tendencies as fallback. A one-attack guard and fixed-cost ARCANE_BOLT/MEND spells
+expand combat when resources allow. An optional OpenAI-compatible adapter turns speech intents
+into contextual generated utterances; you choose its endpoint, model and credentials. Generation
+is off by default. Full tactical planning, relationship strategy, narrative goals and the world
+clock remain planned.
 See [controller handoff and runner](docs/API_AND_WORKFLOWS.md#controller-handoff-and-runner).
+
+See [generated dialogue and tactical choices](docs/API_AND_WORKFLOWS.md#generated-dialogue-and-tactical-choices)
+for activation, exact combat rules and current limits. No provider is silently selected or activated.
 
 ## Product workspaces
 

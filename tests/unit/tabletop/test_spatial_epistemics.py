@@ -208,7 +208,7 @@ def test_hearing_uses_strongest_portal_path_independent_of_order(reverse):
     receipt = _speak(fixture, "strongest-portal")
     grant = next(g for g in receipt.perceptions if g.observer_entity_id == fixture["back_room"])
     assert grant.confidence == round(1 - 4 / (8 * 0.81), 6)
-    assert grant.resolver_version == "grid-spatial-perception-1.1.0"
+    assert grant.resolver_version == "grid-spatial-perception-1.2.0"
 
 
 def test_open_door_or_shout_changes_hearing_deterministically():

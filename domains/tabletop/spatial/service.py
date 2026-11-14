@@ -111,6 +111,13 @@ def build_perceived_scene(
                 health=int(current["hp"]) if inspected and "hp" in current else None,
                 max_health=(int(current["max_hp"]) if inspected and "max_hp" in current else None),
                 status=("DEFEATED" if current.get("defeated") else "ACTIVE") if inspected else None,
+                mana=max(0, int(current.get("mana", 0)))
+                if entity_id == observer_entity_id
+                else None,
+                guarded=bool(current.get("guarded")) if inspected else None,
+                attack_reach=max(1, int(current.get("reach", 1)))
+                if entity_id == observer_entity_id
+                else None,
             )
         )
     mind = minds.inspect(observer_entity_id, branch_id=branch_id)

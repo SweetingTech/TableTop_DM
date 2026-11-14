@@ -1,5 +1,17 @@
 # Testing
 
+Generated-dialogue tests use a local OpenAI-compatible HTTP fixture, never a real provider/key.
+They exercise the actual API/runner, multiple turns, sanitized subjective input, unknown sources,
+metafiction/extra-field rejection, outage fallback, immutable retries and separate-worker/restart
+provenance. A live model smoke test requires the operator's later provider configuration; fixture
+tests do not establish a particular model's conversational quality or semantic truthfulness.
+
+Tactical tests cover one-attack guard consumption, no stacking, fixed spell costs/effects, caller
+power/cost rejection, live range/sight/zone/resource checks, resource rollback and idempotency,
+learned guard choices through a restarted worker, 009→010/repeat migration, new option/source
+guards, and retained synthetic exclusion. Browser journeys use the built console for guard/bolt,
+autonomous healing and generated speech, then take control. No new screenshot artifacts are committed.
+
 Speech/combat tests demonstrate learned reply intent/volume, basic melee and withdrawal choices
 through the actual runner, history-free persona/card differences, no unprovoked/hidden targets,
 and no self-reply loop. Durable tests cover equal-timestamp canonical ordering across restart,

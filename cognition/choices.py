@@ -13,18 +13,22 @@ from cognition.engine import DecisionAction
 from kernel.state import stable_hash
 from persona.models import CompiledPersona
 
-CHOICE_VERSION = "speech-combat-behavior-1.0.0"
+CHOICE_VERSION = "speech-combat-behavior-1.1.0"
 
 
 class ChoiceOption(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     key: str
-    kind: Literal["MOVE", "SPEECH", "ATTACK"]
+    kind: Literal["MOVE", "SPEECH", "ATTACK", "GUARD", "SPELL"]
     style: str
     volume: str = ""
 
 
 def option_key(command_type: str, parameters: dict) -> str:
+    if command_type == "tabletop.combat.guard":
+        return "guard"
+    if command_type == "tabletop.magic.invoke":
+        return f"spell:{parameters.get('spell_id')}:{parameters.get('target_id')}"
     if command_type == "tabletop.spatial.move":
         return f"move:{parameters.get('dx')},{parameters.get('dy')}"
     if command_type == "tabletop.combat.attack":
@@ -69,7 +73,11 @@ def describe_options(context: CharacterContext, frame: ChoiceFrame) -> tuple[Cho
                     volume=action.parameters.get("volume", "NORMAL"),
                 )
             )
-        elif key.startswith("attack:"):
+        elif key == "guard":
+            result.append(ChoiceOption(key=key, kind="GUARD", style="DEFEND"))
+        elif key.startswith("spell:MEND:"):
+            result.append(ChoiceOption(key=key, kind="SPELL", style="HEAL_SELF"))
+        elif key.startswith("attack:") or key.startswith("spell:ARCANE_BOLT:"):
             target = next(
                 (
                     row
@@ -82,7 +90,7 @@ def describe_options(context: CharacterContext, frame: ChoiceFrame) -> tuple[Cho
                 result.append(
                     ChoiceOption(
                         key=key,
-                        kind="ATTACK",
+                        kind="ATTACK" if key.startswith("attack:") else "SPELL",
                         style="WOUNDED"
                         if target.wounded
                         else "NEAREST"
@@ -107,7 +115,9 @@ def describe_options(context: CharacterContext, frame: ChoiceFrame) -> tuple[Cho
 
 class HumanChoiceEvidence(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    version: Literal["speech-combat-behavior-1.0.0"] = "speech-combat-behavior-1.0.0"
+    version: Literal["speech-combat-behavior-1.0.0", "speech-combat-behavior-1.1.0"] = (
+        "speech-combat-behavior-1.1.0"
+    )
     world_id: uuid.UUID
     branch_id: uuid.UUID
     run_id: uuid.UUID
@@ -122,6 +132,10 @@ class HumanChoiceEvidence(BaseModel):
 
     @model_validator(mode="after")
     def selected_option(self) -> HumanChoiceEvidence:
+        if self.version == "speech-combat-behavior-1.0.0" and any(
+            row.kind in {"GUARD", "SPELL"} for row in self.options
+        ):
+            raise ValueError("tactical options require the current evidence version")
         if self.chosen_key not in {row.key for row in self.options}:
             raise ValueError("human choice is absent from perceived options")
         return self
@@ -213,17 +227,27 @@ def choice_profile(
     battle = bool(frame and frame.threats)
     scores = {}
     for option in options:
-        if option.kind == "ATTACK":
+        if option.kind == "GUARD":
+            base = 0.8 + (1 if frame and frame.spatial.injured else 0) + (0.6 if avoid else 0)
+        elif option.kind == "SPELL" and option.style == "HEAL_SELF":
+            base = 3.5 if frame and frame.spatial.injured else 0.5
+        elif option.kind in {"ATTACK", "SPELL"}:
             base = (
                 1
                 + (risk - 0.55) * 2
                 + (0.8 if aggressive else 0)
                 - (1.8 if peaceful or avoid else 0)
             )
+            if option.style == "WOUNDED":
+                base += 0.25
+            if option.kind == "SPELL":
+                base += 0.25 if frame and min(row.distance for row in frame.threats) > 1 else -0.2
         elif option.kind == "MOVE":
             base = (
                 (1.5 if frame and frame.spatial.injured else 0.4) + (0.55 - risk) * 2
                 if option.style == "RETREAT" and battle
+                else 0.6
+                if battle and option.style == "ADVANCE" and aggressive
                 else 0.1
             )
         else:

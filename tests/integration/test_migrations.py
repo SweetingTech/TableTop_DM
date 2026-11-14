@@ -45,6 +45,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("007_controller_handoff_runner.sql",),
             ("008_player_behavior_evidence.sql",),
             ("009_speech_combat_evidence.sql",),
+            ("010_tactical_choice_evidence.sql",),
         ]
         cursor.execute(
             """

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from domains.tabletop.battlefield import command_definitions as battlefield
 from domains.tabletop.combat import command_definition as combat
+from domains.tabletop.combat.tactics import command_definition as guard
 from domains.tabletop.dialogue import command_definitions as dialogue
 from domains.tabletop.divine import command_definition as divine
 from domains.tabletop.economy import command_definition as economy
 from domains.tabletop.entities import command_definition as entities
 from domains.tabletop.factions import command_definition as factions
 from domains.tabletop.magic import command_definition as magic
+from domains.tabletop.magic.tactical import command_definition as invoke
 from domains.tabletop.onboarding import command_definition as onboarding
 from domains.tabletop.quests import command_definition as quests
 from domains.tabletop.spatial import command_definition as spatial
@@ -23,7 +25,9 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
         entities(),
         spatial(),
         combat(),
+        guard(),
         magic(),
+        invoke(),
         economy(),
         factions(),
         divine(),

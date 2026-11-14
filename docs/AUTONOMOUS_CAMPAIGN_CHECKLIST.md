@@ -206,6 +206,12 @@ as composition glue; reusable execution services must also work from workers and
 
 ## G. Player-history stand-ins and control handoffs
 
+Current bounded extension: optional OpenAI-compatible speech expression (operator selects provider,
+off by default) uses sourced subjective experience and preserves policy-selected intent/volume.
+Fixed guard/bolt/mend tactics and new human choice evidence are wired through the real runner.
+Generic phrasing imitation, ally/relationship strategy, full tactical plans, world goals and complete
+rewind remain incomplete; these foundations do not close all F/G acceptance criteria.
+
 - [ ] G1 — Record decision authorship independently from actor authority: human input, stand-in,
   NPC policy/model, director, and operator. Link human decisions to player, character, context, options,
   dialogue, and outcome without revealing options/facts the character did not know.
