@@ -44,6 +44,8 @@ class ChoiceFrame(BaseModel):
     spatial: MovementFrame
     threats: tuple[KnownThreat, ...]
     speech_ready: bool
+    mana: int = Field(default=0, ge=0)
+    guarded: bool = False
 
     @property
     def signature(self) -> tuple:
@@ -55,6 +57,8 @@ class ChoiceFrame(BaseModel):
             spatial.layout,
             min(2, len(self.threats)),
             self.speech_ready,
+            min(3, self.mana // 2),
+            self.guarded,
         )
 
 
@@ -73,9 +77,12 @@ def choice_frame(
     # The trusted resolver supplies canonical source-event order, including clock ties.
     for index, observation in enumerate(observations):
         payload = observation.perceived_payload
-        if str(payload.get("target_id")) == str(body.entity_id) and payload.get("attacker_id"):
+        attacker_id = payload.get("attacker_id") or (
+            payload.get("caster_id") if payload.get("effect") == "DAMAGE" else None
+        )
+        if str(payload.get("target_id")) == str(body.entity_id) and attacker_id:
             try:
-                attacker = uuid.UUID(str(payload["attacker_id"]))
+                attacker = uuid.UUID(str(attacker_id))
             except ValueError:
                 continue
             attacks[attacker] = index
@@ -111,4 +118,6 @@ def choice_frame(
         spatial=spatial,
         threats=tuple(threats[:8]),
         speech_ready=bool(spatial.company and max(other_speech, latest_attack) > own_speech),
+        mana=body.mana or 0,
+        guarded=bool(body.guarded),
     )

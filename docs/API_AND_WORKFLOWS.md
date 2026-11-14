@@ -452,7 +452,7 @@ world/viewpoint authorization as the perceived scene. It returns a versioned evi
 projection version, and a model-facing `situation`. Frozen event-time grants and source events
 must match the observer/world/branch; operator-tagged events, unbacked beliefs, and memory-summary
 overrides cannot add facts. The model-facing situation excludes controller, ledger, and timeline
-metadata. Context version `character-context-1.1.2` includes the pinned self-authored identity only
+metadata. Context version `character-context-1.2.0` includes the pinned self-authored identity only
 when the caller controls the body or holds `mind.read.all`; broad scene inspection alone does not
 grant private identity access. `binding` is operational response metadata outside `situation`.
 The situation's `identity` contains fiction and explicitly labeled `starting_knowledge_claims`;
@@ -493,9 +493,9 @@ including commit authority on a canonical branch. DM inspection authority alone 
 New decisions require an active run and an exact version-pinned CHARACTER binding.
 
 The server assembles the same trusted context as the context read, then uses the pinned compiled
-persona and versioned basic movement catalog with local deterministic utility policy. This initial
-policy uses the movement behavior profile described below; it has no narrative planner or
-open-ended speech or full tactical planning. No provider/model calls occur.
+persona and perceived action catalog with local deterministic utility policy. Human profiles guide
+choices; an explicitly configured provider can express selected speech in free form. This does not
+add a narrative planner or full tactical planning.
 Before generation, every sensory event with a frozen grant for this body must have its dependent
 observation persisted. Otherwise the response is `409 character_context_pending`; retry the same
 key after projection catches up. Operator records are outside this barrier and character fiction.
@@ -555,8 +555,8 @@ existing behavior. Kernel fencing occurs inside the same branch/state lock as ca
 Old controllers cannot act after takeover; committed retries cannot advance the world or step twice.
 
 `python main.py runner` processes due autonomous controllers using trusted pinned context and
-local utility/movement candidates, then submits through the normal kernel. No provider call or
-browser cookie is used. The canonical commit and step/budget advance share one database transaction.
+local utility candidates and optional configured speech generation, then submits through the kernel.
+No browser cookie is used. Canonical commit and budget advance share one database transaction.
 Epoch/step proposal keys survive crashes and concurrent workers. Observations still flow through
 the frozen perception outbox; the next decision waits for them. Invalid actions pause with
 `action_failed`; pending observations defer every 250 ms and pause after 40 unsuccessful checks.
@@ -649,6 +649,61 @@ canonical source-event order before taking the bounded window, even when timesta
 Operator/profile/handoff metadata is kept
 outside sensory fiction, character prompts and speech. Full tactical plans, learned arbitrary
 phrasing, spell selection, narrative planning and complete timeline restoration remain open.
+
+## Generated dialogue and tactical choices
+
+Context `character-context-1.2.0` adds the body's own mana/reach and inspected guard stance. Other
+bodies' mana/reach stay hidden. Catalog `tabletop-character-actions-1.2.0` and proposal policy
+`character-proposal-policy-1.3.0` add these typed attempts:
+
+- `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next
+  physical attack; that attempt consumes the guard, including a miss. Guards do not stack.
+- `tabletop.magic.invoke` takes only `spell_id` and `target_id`. ARCANE_BOLT costs two mana,
+  deals three damage and reaches six grid steps. MEND costs two mana, heals four up to maximum
+  health and reaches two steps. Both require current same-zone visible capable targets. Callers
+  cannot supply power, cost, range or extra fields. There is no class/protagonist gate.
+- Autonomy offers damaging spells only against perceived attackers, MEND for its own wounds,
+  and guard in threat situations. Injury favors healing/withdrawal; range, wounds, demonstrated
+  choices and persona/card tendencies influence priority. All execution rechecks live state.
+
+The console accepts `/guard` and `/invoke ARCANE_BOLT|MEND <perceived target name or id>`.
+New roster-spawned bodies read optional nonnegative starting mana from `character.sheet.mana`,
+default zero. Validation precedes roster mutation. Card changes do not refill a running body.
+Choice version `speech-combat-behavior-1.1.0` and migration 010 extend guard/spell history while
+retaining old 1.0.0 evidence and frozen profiles. Ally strategy, resurrection, broader spell and
+loadout systems, ceasefires and full tactical planning remain open.
+
+To generate free-form utterances, set `TTDM_DIALOGUE_MODE=openai-compatible`, explicitly choose
+`TTDM_DIALOGUE_BASE_URL` (API base ending in `/v1`) and `TTDM_DIALOGUE_MODEL`, and provide
+`TTDM_DIALOGUE_API_KEY` only if that endpoint needs bearer authentication. Defaults are off/blank:
+no endpoint, model or key is chosen. Restart API and runner with matching configuration.
+
+The adapter calls `/chat/completions` with bounded messages/output and JSON mode. It accepts only
+spoken text and known experience references. Model output cannot choose a command, target,
+effect, volume, language, claims or deltas. History/persona first select intent and volume;
+generation expresses the choice from sanitized identity, motives, values, authorized experience
+and recollections. Private card secrets, hidden world state and account/control/profile/ledger
+IDs are excluded. The latest incoming speech reference must support the reply. Explicit
+metafiction/UUIDs, repeated utterances, stage directions, extra fields, unknown sources, incomplete
+responses and network failures use the bounded template fallback. This is not a semantic proof of
+every sentence: generated text remains fallible testimony and creates no automatic belief claims
+or canonical facts beyond the act of speaking.
+
+Private receipts add `dialogue.status` (GENERATED/FALLBACK), source-event references, output hash,
+configured model and prompt version `character-dialogue-1.0.0`. They store no endpoint/key or full
+prompt. Exact retries/restart return the frozen receipt without another HTTP call. Synthetic
+speech never trains human evidence. Outages do not retry within a decision; request a new key
+after recovery for fresh generation. Existing budgets, projection barriers and epoch fences apply.
+Generation is serialized within proposal creation and bounded by timeout; slow providers can delay
+other work on that branch.
+
+Compatibility settings are `TTDM_DIALOGUE_TOKEN_PARAMETER=max_tokens|max_completion_tokens`,
+`TTDM_DIALOGUE_JSON_MODE=0|1`, `TTDM_DIALOGUE_SEND_SEED=0|1`,
+`TTDM_DIALOGUE_RUNTIME_KIND=LOCAL_LLM|HOSTED_LLM`, `TTDM_DIALOGUE_TIMEOUT` (0–30 seconds, exclusive
+of zero), and `TTDM_DIALOGUE_MAX_TOKENS` (32–1024). Defaults are in [.env.example](../.env.example).
+The endpoint must support the selected options; see the [official Chat Completions contract](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
+Model outputs are not promised bitwise deterministic even with seeds; saved proposals/events retain
+the accepted utterance for replay. Spontaneous conversations and narrative/world planning remain open.
 
 ## Error contract
 

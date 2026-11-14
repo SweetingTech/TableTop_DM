@@ -21,7 +21,7 @@ from .models import SpatialOccluder, SpatialPortal, SpatialPosition, SpatialZone
 class GridSpatialPerceptionResolver:
     """Deterministic grid sight/sound resolver over event-time projections."""
 
-    VERSION = "grid-spatial-perception-1.1.0"
+    VERSION = "grid-spatial-perception-1.2.0"
 
     def visible_entities(
         self,
@@ -116,7 +116,11 @@ class GridSpatialPerceptionResolver:
                     perceived.append(SensoryModality.SOUND)
                     confidences.append(confidence)
                     reasons.extend(sound_reasons)
-            if SensoryModality.SIGHT in emission.modalities and not profile.get("blinded"):
+            if (
+                SensoryModality.SIGHT in emission.modalities
+                and not profile.get("blinded")
+                and not sensor_profiles.get(str(origin.entity_id), {}).get("invisible")
+            ):
                 confidence, sight_reasons = self._sight_confidence(
                     origin, observer, emission, zones, occluders
                 )
@@ -137,7 +141,7 @@ class GridSpatialPerceptionResolver:
                 controller = proposal.actor_id
             allowed_fields = emission.allowed_payload_fields
             overrides = emission.payload_overrides
-            if proposal.command_type == "tabletop.combat.attack":
+            if proposal.command_type in {"tabletop.combat.attack", "tabletop.magic.invoke"}:
                 # A sound grants awareness of fighting, not hidden identities or damage.
                 # Freeze each subject's visibility against the same event-time state.
                 visible = (
@@ -146,18 +150,30 @@ class GridSpatialPerceptionResolver:
                     else {}
                 )
                 attacker = proposal.embodied_entity_id
+                magic = proposal.command_type == "tabletop.magic.invoke"
                 target = uuid.UUID(str(proposal.parameters["target_id"]))
-                fields = []
+                fields: list[str] = []
                 if attacker in visible:
-                    fields.append("attacker_id")
+                    fields.extend(("caster_id", "spell_id") if magic else ("attacker_id",))
                 if target in visible:
                     fields.append("target_id")
-                if min(visible.get(attacker, 0) if attacker else 0, visible.get(target, 0)) >= 0.8:
-                    fields.extend(("hit", "damage"))
+                sight = min(visible.get(attacker, 0) if attacker else 0, visible.get(target, 0))
+                if magic and sight > 0:
+                    fields.append("effect")
+                if sight >= 0.8:
+                    fields.extend(("power",) if magic else ("hit", "damage"))
                 allowed_fields = tuple(
                     field for field in fields if allowed_fields is None or field in allowed_fields
                 )
-                overrides = {"summary": "Sounds of nearby fighting."} if not fields else {}
+                overrides = (
+                    {
+                        "summary": "Sounds of nearby spellcasting."
+                        if magic
+                        else "Sounds of nearby fighting."
+                    }
+                    if not fields
+                    else {}
+                )
             grants.append(
                 PerceptionGrant(
                     event_id=event_id,

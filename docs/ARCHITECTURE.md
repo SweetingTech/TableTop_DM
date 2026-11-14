@@ -54,6 +54,18 @@ entities; PostgreSQL repeats protected-state checks with forced RLS.
 
 ## State, commands, and events
 
+Generated dialogue is an optional expression layer after deterministic intent selection. An
+injected provider receives sanitized identity and sourced subjective experience, never simulation
+authority or profile/controller metadata. Its typed text/source response replaces only speech
+text; claims stay empty. Private immutable receipts freeze output hashes, supporting events and
+model/prompt versions. References bound evidence but cannot certify semantic truth. The kernel
+remains the sole canonical mutation path, including fallback speech.
+
+Guard and spell invocation are registered deterministic commands. The server owns guard benefit
+and spell effect/cost/range. Candidates use perceived own resources and known visible threats.
+Migration 010 extends new human choice evidence without rewriting old profiles or learning from
+autonomous output.
+
 Speech/combat choice profiles are separate from the immutable movement-profile schema. They
 freeze their own content-addressed version and private human source IDs inside proposal receipts.
 New choice evidence and legacy movement evidence commit in one kernel transaction through an
@@ -62,7 +74,7 @@ The trusted context orders eligible observations by canonical source-event seque
 wall-clock timestamps cannot reverse a conversation across restart.
 
 Only a validated perceived attack against this body marks a currently visible body as a threat.
-The catalog offers basic melee attempts, directional movement and fact-free speech intents. A
+The catalog offers melee, guard, fixed spell attempts, movement and speech intents. A
 fresh conversational/attack turn permits one reply; the character's own reply cannot keep itself
 talking. Combat emits frozen physical observations; controller and profile metadata never do.
 

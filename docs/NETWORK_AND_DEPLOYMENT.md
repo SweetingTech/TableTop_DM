@@ -3,7 +3,7 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
-This API version requires migrations through 009, including character history/bindings,
+This API version requires migrations through 010, including character history/bindings,
 private proposal receipts, controller ownership and human choice evidence. Revision, binding, and proposal
 records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
 The migration owner remains separate from the runtime login. Card revisions are authored source
@@ -16,6 +16,14 @@ Character execution adds an internal `runner` service using the runtime database
 volume. It has no listening port or provider connection. The perception `projector` delivers frozen
 observations before dependent decisions. Managed startup and full-stack CI include both services.
 Autonomy is explicit per body; old runtime selections do not activate it.
+
+Optional dialogue generation adds outbound HTTP(S) only when `TTDM_DIALOGUE_MODE=openai-compatible`
+is explicitly configured with an endpoint/model. API and runner call that chosen base's
+`/chat/completions`; the browser receives no provider credential. Requests contain sanitized
+subjective identity/experience, not hidden world state, card secrets or controller/profile IDs.
+Choose a trusted endpoint. Redirects are rejected; calls have bounded timeout/response size and
+no automatic retry. Existing ports and inbound authentication remain unchanged. Deterministic
+actions and template fallback work with the default `off` mode and no provider access.
 
 Movement and speech/combat profiles use private forced-RLS evidence stored atomically with source
 commands. Profile inspection requires body control or the same world's explicit mind-read authority

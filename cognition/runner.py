@@ -19,6 +19,7 @@ from cognition.character_decisions import (
 from cognition.choices import ChoiceProfile
 from cognition.context import CharacterContext
 from cognition.control import ControllerRepository
+from cognition.dialogue_generation import DialogueProvider
 from cognition.store import MindStore
 from domains.tabletop.character_bindings import CharacterBinding, CharacterBindingRepository
 from domains.tabletop.character_context import ProfileReader, resolve_character_context
@@ -54,12 +55,14 @@ class CharacterDecisionService:
         ]
         | None = None,
         choice_reader: Callable[..., ChoiceProfile] | None = None,
+        dialogue_provider: DialogueProvider | None = None,
     ) -> None:
         self.snapshot, self.read_minds = snapshot, read_minds
         self.bindings, self.cards, self.profiles = bindings, cards, profiles
         self.proposals, self.reference = proposals, reference
         self.behavior_reader = behavior_reader
         self.choice_reader = choice_reader
+        self.dialogue_provider = dialogue_provider
 
     def decide(
         self,
@@ -106,6 +109,7 @@ class CharacterDecisionService:
                 binding=resolved.binding,
                 profile=resolved.profile,
                 controller=controller,
+                dialogue_provider=self.dialogue_provider,
                 human_epoch=source.controller_states[scope.key].epoch
                 if scope.key in source.controller_states
                 else None,

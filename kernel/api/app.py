@@ -38,6 +38,7 @@ from cognition.engine import (
     SubjectiveStatePipeline,
 )
 from cognition.models import RuntimeAssignment, RuntimeKind
+from cognition.openai_compatible import configured_dialogue
 from cognition.perception import PerceptionProfile
 from cognition.planning import GoapAction
 from cognition.postgres import PostgresMindRepository
@@ -59,6 +60,7 @@ from domains.tabletop.character_bindings import (
 )
 from domains.tabletop.character_context import resolve_character_context
 from domains.tabletop.character_identity import CharacterIdentity
+from domains.tabletop.magic.tactical import StartingResources
 from domains.tabletop.portal import (
     InMemoryPortalRepository,
     PostgresPortalRepository,
@@ -709,7 +711,13 @@ def create_app(
     def capture_human_movement(proposal, before):
         if (
             proposal.command_type
-            not in {"tabletop.spatial.move", "tabletop.dialogue.speak", "tabletop.combat.attack"}
+            not in {
+                "tabletop.spatial.move",
+                "tabletop.dialogue.speak",
+                "tabletop.combat.attack",
+                "tabletop.combat.guard",
+                "tabletop.magic.invoke",
+            }
             or proposal.input_origin != "HUMAN_INPUT"
             or proposal.decision_authorship != "HUMAN"
             or proposal.decision_trace_id is not None
@@ -826,6 +834,7 @@ def create_app(
         simulation.durable_repository.evidence_builder = capture_human_movement
         simulation.durable_repository.evidence_persister = persist_choice_bundle
 
+    dialogue_provider = configured_dialogue()
     live_decisions = CharacterDecisionService(
         snapshot=controller_snapshot,
         read_minds=controller_minds,
@@ -840,6 +849,7 @@ def create_app(
         reference=simulation if database_dsn is None else None,
         behavior_reader=read_behavior,
         choice_reader=read_choices,
+        dialogue_provider=dialogue_provider,
     )
     app.extensions["controllers"] = controllers
     app.extensions["character_decisions"] = live_decisions
@@ -1697,6 +1707,18 @@ def create_app(
     def dm_game_member(game_id: uuid.UUID):
         body = GameMemberRequest.model_validate(request.get_json(force=True))
         account_actor = current_user()
+        starting_mana = 0
+        if body.character_id is not None and body.membership_role == "PLAYER":
+            selected = next(
+                (
+                    row
+                    for row in portal.assignable_characters(account_actor, game_id, body.user_id)
+                    if row.character_id == body.character_id
+                ),
+                None,
+            )
+            if selected is not None:
+                starting_mana = StartingResources(mana=selected.sheet.get("mana", 0)).mana
         game = portal.set_member(account_actor, game_id, body.model_dump(mode="json"))
         if body.character_id is not None and body.membership_role == "PLAYER":
             character = portal.repository.get_character(body.character_id)
@@ -1737,6 +1759,7 @@ def create_app(
                                 "hp": character.current_hit_points,
                                 "max_hp": character.maximum_hit_points,
                                 "armor": character.armor_class,
+                                "mana": starting_mana,
                                 "speed": character.speed,
                             },
                             "controller_actor_id": member_account.actor_id,
@@ -1820,7 +1843,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "009_speech_combat_evidence.sql",
+                    "ok": version == "010_tactical_choice_evidence.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -2201,6 +2224,7 @@ def create_app(
                 choices=read_choices(
                     source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
                 ),
+                dialogue_provider=dialogue_provider,
             )
 
         def reference_proposal():

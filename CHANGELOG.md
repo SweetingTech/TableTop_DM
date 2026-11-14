@@ -1,5 +1,12 @@
 # Changelog
 
+- Add optional configurable OpenAI-compatible generated character dialogue after history/persona
+  intent selection, with sourced subjective input, typed output, private immutable provenance and
+  bounded outage fallback. Leave provider/model/key selection and activation to the operator.
+- Add typed one-attack guarding and server-owned ARCANE_BOLT/MEND presets, own-resource perception,
+  tactical choice weighting, console commands and initial explicit card mana. Migration 010 extends
+  private human evidence without changing old profiles, RLS authority or synthetic exclusion.
+
 - Retain the durable control plane's bootstrap identity after authority reordering; fail closed
   on its loss instead of selecting an unrelated world's actor during synchronization.
 

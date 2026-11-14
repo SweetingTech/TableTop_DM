@@ -30,6 +30,9 @@ class PerceivedEntity(BaseModel):
     health: int | None = None
     max_health: int | None = None
     status: str | None = None
+    mana: int | None = None
+    guarded: bool | None = None
+    attack_reach: int | None = None
 
 
 class ObservationPresentation(BaseModel):

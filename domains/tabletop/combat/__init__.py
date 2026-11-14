@@ -50,7 +50,9 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
     rng = random.Random(proposal.seed)
     attack_roll = rng.randint(1, 20)
     hit = attack_roll == 20 or (
-        attack_roll != 1 and attack_roll + request.attack_bonus >= int(target.get("armor", 10))
+        attack_roll != 1
+        and attack_roll + request.attack_bonus
+        >= int(target.get("armor", 10)) + (2 if target.get("guarded") else 0)
     )
     damage = 0
     if hit:
@@ -76,7 +78,11 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
                 projection="tabletop.entities",
                 operation="MERGE",
                 entity_id=request.target_id,
-                values={"hp": hp_after, "defeated": hp_after == 0},
+                values={
+                    "hp": hp_after,
+                    "defeated": hp_after == 0,
+                    **({"guarded": False} if target.get("guarded") else {}),
+                },
             ),
         ),
         domain_tags=("tabletop", "combat", "attack"),
