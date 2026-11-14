@@ -82,6 +82,7 @@ export type PerceivedScene = {
     immediate_source_entity_id: string | null;
   }>;
   available_viewpoints: string[];
+  refresh?: { event_id: string; ready: boolean; observed: boolean };
 };
 
 export type RunSummary = {
@@ -116,6 +117,7 @@ export type BranchSummary = {
 
 export type EventRecord = {
   event_id: string;
+  source_event_id?: string;
   event_type: string;
   actor_name?: string;
   actor_id?: string;

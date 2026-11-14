@@ -28,6 +28,11 @@ DM roster controls explicitly choose Player or Co-DM and can assign a player's s
 when inviting them or updating an existing membership. Assigned player characters receive an
 embodied viewpoint in the Game Console.
 
+After an accepted action, the Game Console reloads that character's perceived scene and waits
+up to eight seconds for the corresponding observation. Its feed renders observations once per
+source event. A failed refresh preserves the accepted status and retries reads without resending
+the action; switching worlds or viewpoints clears local drafts and ignores old responses.
+
 Character cards support a validated backstory, motives, values, bonds, character secrets, and
 starting knowledge claims in creation, JSON import, and editing. A deterministic `card_version`
 identifies the current authored content. These claims do not grant canonical knowledge or activate

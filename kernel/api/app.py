@@ -39,7 +39,9 @@ from domains.tabletop.portal import (
     PostgresPortalRepository,
     TabletopPortalService,
 )
-from domains.tabletop.spatial.service import build_perceived_scene
+from domains.tabletop.spatial.refresh import command_scene_cursor, scene_refresh_status
+from domains.tabletop.spatial.scene import PerceivedScene
+from domains.tabletop.spatial.service import build_perceived_scene, require_scene_access
 from experiments.aggregation import compare_reports
 from experiments.calibration import CalibrationEngine, CalibrationStore
 from experiments.executor import ApplicationBranchExecutor
@@ -1546,22 +1548,65 @@ def create_app(
             }
         )
 
+    def read_scene(
+        world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID
+    ) -> tuple[PerceivedScene, MindStore]:
+        require_world_access(world_id)
+        actor_id = current_actor_id()
+        require_scene_access(
+            simulation,
+            world_id=world_id,
+            branch_id=branch_id,
+            observer_entity_id=observer_entity_id,
+            actor_id=actor_id,
+        )
+        observed_minds = minds
+        if mind_repository is not None:
+            state, observations, relationships = mind_repository.load_projection(
+                world_id=world_id,
+                branch_id=branch_id,
+                entity_id=observer_entity_id,
+                actor_id=actor_id,
+            )
+            # Read a request-local snapshot. Never replace the shared projector's cache
+            # with a reader's RLS-scoped state while another request may be projecting.
+            observed_minds = MindStore()
+            observed_minds.restore(
+                state, branch_id=branch_id, observations=observations, relationships=relationships
+            )
+        return (
+            build_perceived_scene(
+                simulation,
+                observed_minds,
+                world_id=world_id,
+                branch_id=branch_id,
+                observer_entity_id=observer_entity_id,
+                actor_id=actor_id,
+            ),
+            observed_minds,
+        )
+
     @app.get(
         "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
         "/entities/<uuid:observer_entity_id>/scene"
     )
     def perceived_scene(world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID):
-        require_world_access(world_id)
-        return _json(
-            build_perceived_scene(
+        scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id)
+        payload = scene.model_dump(mode="json")
+        after_event = request.args.get("after_event_id")
+        if after_event is not None:
+            payload["refresh"] = scene_refresh_status(
                 simulation,
-                minds,
+                observed_minds,
                 world_id=world_id,
                 branch_id=branch_id,
                 observer_entity_id=observer_entity_id,
                 actor_id=current_actor_id(),
-            )
-        )
+                after_event_id=uuid.UUID(after_event),
+            ).model_dump(mode="json")
+        response = jsonify(payload)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get(
         "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
@@ -1570,21 +1615,14 @@ def create_app(
     def character_context(world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID):
         require_world_access(world_id)
         actor_id = current_actor_id()
-        scene = build_perceived_scene(
-            simulation,
-            minds,
-            world_id=world_id,
-            branch_id=branch_id,
-            observer_entity_id=observer_entity_id,
-            actor_id=actor_id,
-        )
+        scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id)
         context = build_character_context(
             scene=scene,
-            mind=minds.get(observer_entity_id, branch_id=branch_id),
+            mind=observed_minds.get(observer_entity_id, branch_id=branch_id),
             actor_id=actor_id,
             observations=tuple(
                 Observation.model_validate(item)
-                for item in minds.inspect(
+                for item in observed_minds.inspect(
                     observer_entity_id,
                     branch_id=branch_id,
                 )["observations"]
@@ -1681,11 +1719,13 @@ def create_app(
         proposal = CommandProposal.model_validate(payload)
         require_world_access(proposal.world_id)
         receipt = simulation.submit(proposal)
+        cursor = command_scene_cursor(receipt, simulation.states.get(proposal.branch_id).version)
         return jsonify(
             {
                 "result": receipt.result.model_dump(mode="json"),
                 "event": receipt.event.model_dump(mode="json"),
                 "state_hash": receipt.state_hash,
+                "scene_refresh": cursor.model_dump(mode="json") if cursor is not None else None,
             }
         )
 

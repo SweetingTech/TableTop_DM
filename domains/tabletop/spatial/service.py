@@ -16,15 +16,14 @@ from domains.tabletop.spatial.scene import (
 from kernel.application import SimulationApplication
 
 
-def build_perceived_scene(
+def require_scene_access(
     simulation: SimulationApplication,
-    minds: MindStore,
     *,
     world_id: uuid.UUID,
     branch_id: uuid.UUID,
     observer_entity_id: uuid.UUID,
     actor_id: uuid.UUID,
-) -> PerceivedScene:
+) -> None:
     state = simulation.states.get(branch_id)
     if state.world_id != world_id:
         raise ValueError("scene branch does not belong to world")
@@ -35,6 +34,27 @@ def build_perceived_scene(
     privileged = "world.read.all" in actor.capabilities or "mind.read.all" in actor.capabilities
     if observer_entity_id not in actor.controlled_entity_ids and not privileged:
         raise PermissionError("actor cannot inspect this embodied viewpoint")
+
+
+def build_perceived_scene(
+    simulation: SimulationApplication,
+    minds: MindStore,
+    *,
+    world_id: uuid.UUID,
+    branch_id: uuid.UUID,
+    observer_entity_id: uuid.UUID,
+    actor_id: uuid.UUID,
+) -> PerceivedScene:
+    require_scene_access(
+        simulation,
+        world_id=world_id,
+        branch_id=branch_id,
+        observer_entity_id=observer_entity_id,
+        actor_id=actor_id,
+    )
+    state = simulation.states.get(branch_id)
+    actor = simulation.authority(world_id, actor_id)
+    privileged = "world.read.all" in actor.capabilities or "mind.read.all" in actor.capabilities
     viewpoints = tuple(
         sorted(
             (

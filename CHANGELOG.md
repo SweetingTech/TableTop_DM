@@ -24,6 +24,12 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Fixed automatic scene refresh after accepted Game Console actions, including delayed external
+  observation projection. The feed renders each perceived source event once; world/viewpoint
+  switches clear local state and discard late responses. Accepted actions remain visibly accepted
+  if a scene read fails, and retry only reloads the scene. Durable scene/context reads use fresh,
+  request-local RLS snapshots without replacing the shared projector cache.
+
 - Added validated character backstory, motives, values, bonds, character secrets, and starting
   knowledge claims to card creation/import/editing. Private sheet storage and a deterministic
   current-content version survive restart. Authored claims do not enter world truth or minds;

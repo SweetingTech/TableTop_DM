@@ -148,6 +148,12 @@ point; the HTTP context route supplies no action catalog yet. The existing calle
 decision API is now restricted to privileged playtester evaluation and refuses character personas
 until the live identity/context/candidate path is connected.
 
+Scene and context reads hydrate durable observations into a request-local mind snapshot under
+the caller's RLS scope. They never replace the shared projector cache. Accepted embodied command
+receipts carry a scoped refresh cursor; the scene API checks the frozen grant's expected
+observation before acknowledging readiness. Refresh metadata stays outside character context
+and its evidence hash. The console renders only observations and cancels reads on scope changes.
+
 Canonical truth, raw authorization, physical perception, observation, belief evidence, memory,
 relationship, and narration are separate records.
 The pure subjective pipeline is:

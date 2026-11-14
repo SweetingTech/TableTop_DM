@@ -103,6 +103,12 @@ returns the original committed receipt.
 
 ## Supporting documentation
 
+An accepted command's scene-refresh cursor is operational metadata, outside the character's
+situation and evidence hash. Checking readiness reads the original event-time perception grant
+and subjective projection; it does not resubmit the command, mutate a mind, recompute an audience
+from current location, or expose canonical payloads. An unperceived action needs no fabricated
+experience. Durable scene/context hydration is request-local and leaves projector caches intact.
+
 - [Architecture and invariants](ARCHITECTURE.md)
 - [Network and deployment diagram](NETWORK_AND_DEPLOYMENT.md)
 - [Battlefield control modes and renderer hooks](BATTLEFIELD_CONTROL_AND_RENDERER_HOOKS.md)

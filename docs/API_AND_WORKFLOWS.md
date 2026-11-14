@@ -159,6 +159,24 @@ their typed movement/combat/magic contracts; explicit OOC/interface text remains
 `tabletop.console.submit`. The scene contains only current perceived entities and subjective
 observation presentations, with detail levels from anonymous `PRESENCE` through `INSPECTED`.
 
+Accepted embodied `POST /api/v2/commands` receipts include `scene_refresh` with `world_id`,
+`branch_id`, `observer_entity_id`, `event_id`, and the committed `projection_version`. The client
+reads the same scene with `?after_event_id={event_id}`; the response adds `refresh` containing
+`event_id`, `ready`, and `observed`. Normal scene reads omit this metadata. Scene responses use
+`Cache-Control: no-store`. The cursor is authorized for the submitting actor and exact body and
+timeline; it grants no additional visibility. `ready` requires the expected subjective observation
+when the frozen event-time grant produces one. Unperceived actions are ready without inventing
+an observation. Durable reads hydrate a request-local mind snapshot from the RLS repository, so
+separate projector processes are visible without replacing the API's shared projector cache.
+
+The console polls every 200 ms for at most eight seconds after acceptance, requiring both the
+canonical version and observation boundary. Only authorized observations enter the feed, keyed
+by source event. A timeout or read failure reports that the action was accepted and offers a
+read-only retry. Writes and post-acceptance reads never fall back to successful demo data.
+World/viewpoint changes cancel pending reads and clear drafts, focus selection, and receipt state;
+late command responses cannot populate the new viewpoint. This is per-action refresh, not yet
+cross-client continuous updates.
+
 ## Dungeon Master workflow
 
 1. An administrator grants `DM` for a world.
