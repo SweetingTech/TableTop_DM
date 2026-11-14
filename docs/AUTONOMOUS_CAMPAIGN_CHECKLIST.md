@@ -116,15 +116,17 @@ as composition glue; reusable execution services must also work from workers and
   obstacles never filter choices; submission still passes kernel validation. This item remains
   open: known lore, broader speech/combat/activity actions, and dependent-decision
   projection barriers still need wiring. This catalog alone does not activate autonomous decisions.
-- [ ] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
+- [x] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
   evaluation situations confined to explicit privileged/testing flows rather than trusting them for live minds.
   The caller-authored endpoint is now privileged playtester evaluation only and rejects CHARACTER
     personas. A trusted CHARACTER proposal endpoint now resolves pinned identity/context/actions,
     derives scoped server seeds, waits for sensory projection, and stores private append-only
     idempotent receipts plus traces atomically (006). It uses local basic movement utility policy,
-    returns PROPOSAL_ONLY, and leaves human runtime assignments untouched. Automatic execution,
-    exclusive controller epochs/handoff, scheduler wiring, broader actions, and history imitation
-    remain unimplemented; B4 is not complete.
+    returns PROPOSAL_ONLY. A separate bounded runner now consumes that builder and submits fenced
+    kernel commands after explicit controller handoff (007), with atomic step/budget accounting,
+    observation readiness, concurrent retry/restart recovery, and player takeover. Caller-authored
+    evaluation remains privileged playtester-only. Execution currently uses local basic movement
+    utility; richer actions, narrative goals, the world clock, and history imitation remain F/G/D.
 - [ ] B5 — Route lore retrieval, summaries, and model conversations through the same knowledge and
   timeline boundary. Public availability must not automatically mean a character has learned a fact.
 - [ ] B6 — Label operator/director records outside the sensory event stream. Audit [event finalization](../kernel/event_factory.py),
@@ -185,6 +187,8 @@ as composition glue; reusable execution services must also work from workers and
 
 - [ ] F1 — Connect due character work to context builder → candidate actions → layered cognition →
   typed proposal → normal command submission → observations → next work. Replan on invalidated actions.
+  The bounded local movement loop is wired through these boundaries. Invalid actions pause visibly;
+  richer replanning, goals, and activity scheduling remain open.
 - [ ] F2 — Persist goals, plan progress, needs, cooldowns, and next-decision time. Execute plans stepwise;
   recheck preconditions rather than blindly applying an entire generated plan.
 - [ ] F3 — Implement injected model providers behind [DeliberationProvider](../cognition/deliberation.py).
@@ -211,12 +215,21 @@ as composition glue; reusable execution services must also work from workers and
   behavior; card/backstory supplies initial identity and unknown situations. Surface contradictions for operator/player correction.
 - [ ] G4 — Exclude autonomous decisions from human preference evidence. Define treatment of revised
   timelines and retain human-vs-stand-in provenance across restart and profile rebuilding.
-- [ ] G5 — Extend runtime assignment with exclusive control ownership, version/epoch, and an atomic
+- [x] G5 — Extend runtime assignment with exclusive control ownership, version/epoch, and an atomic
   handoff boundary. Reject stale in-flight proposals from a previous controller.
+  Implemented for canonical LIVE runs: private controller state extends HUMAN/UTILITY runtime
+  selection with owner/executor, epoch, mode, bounded steps, and due time. Reference state locks
+  and durable branch locks serialize handoff with command fencing/commit. Managed requests carry
+  the observed epoch; the server never stamps stale requests with new authority. Complete
+  timeline/checkpoint integration remains I.
 - [ ] G6 — Add explicit leave/takeover plus presence timeout/reconnect handling. Disconnect policy
   and campaign pause policy must be visible; identity stays the same while runtime changes.
+  Explicit Let character act / Pause autonomy / Take control and persistent disconnect behavior
+  are implemented. Automatic presence timeout/reconnect policy remains unimplemented.
 - [ ] G7 — Authorize stand-in execution through explicit world/entity grants; do not impersonate a
   browser account or reuse its session. Record both execution authority and behavior-profile attribution.
+  Dedicated AGENT execution, scoped grants, CHARACTER_POLICY ledger authorship, and pinned
+  character/persona trace attribution are implemented. Learned player-behavior profiles remain G2/G3.
 - [ ] G8 — Build an authorized recap from the character's actual experience; wire takeover/return
   controls through typed adapters and preserve partially completed actions exactly once.
 - [ ] G9 — Acceptance: history-rich stand-in follows contextual human examples; history-free stand-in

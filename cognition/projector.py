@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import socket
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -92,8 +93,24 @@ class WorldEventProjector:
         return tuple(claimed)
 
     def _project(self, item: ClaimedWorldEvent) -> None:
+        projection_actor: uuid.UUID | None = None
         for grant in item.perceptions:
-            actor_id = grant.controller_actor_id or item.event.actor_id
+            if grant.controller_actor_id is None and projection_actor is None:
+                # Unowned witnesses need infrastructure projection authority, not
+                # the speaker's character executor (which can access only its own mind).
+                with psycopg2.connect(self.dsn) as connection:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT a.id FROM sim.actor_capabilities c JOIN sim.actors a "
+                            "ON a.id=c.actor_id AND a.is_active WHERE c.world_id=%s "
+                            "AND c.capability='mind.write.all' ORDER BY "
+                            "CASE WHEN a.actor_kind='SYSTEM' THEN 0 ELSE 1 END,"
+                            "a.created_at,a.id LIMIT 1",
+                            (str(item.event.world_id),),
+                        )
+                        row = cursor.fetchone()
+                        projection_actor = uuid.UUID(str(row[0])) if row else item.event.actor_id
+            actor_id = grant.controller_actor_id or projection_actor or item.event.actor_id
             state, observations, relationships = self.repository.load_projection(
                 world_id=item.event.world_id,
                 branch_id=item.event.branch_id,

@@ -4,6 +4,26 @@ import type { BranchSummary, EntitySummary, EventRecord, GameState, PerceivedSce
 import { DEMO_BRANCH_ID, DEMO_RUN_ID, demoGameState } from "../../core/demo/fixtures";
 import { waitForScene, type SceneRefreshCursor } from "./sceneRefresh";
 
+export type ControlMode = "HUMAN" | "AUTONOMOUS" | "PAUSED";
+export type ControllerState = {
+  epoch: number; mode: ControlMode; step: number; max_steps: number;
+  last_error: string | null; next_due: string;
+};
+export type ControllerScope = { world: string; branch: string; run: string; entity: string };
+function controlPath(scope: ControllerScope): string {
+  return `/worlds/${encodeURIComponent(scope.world)}/branches/${encodeURIComponent(scope.branch)}/entities/${encodeURIComponent(scope.entity)}/control`;
+}
+export async function loadController(scope: ControllerScope, signal?: AbortSignal) {
+  return apiRequest<{ control: ControllerState | null; disconnect_policy: string }>(
+    controlPath(scope) + `?run_id=${encodeURIComponent(scope.run)}`, { signal, cache: "no-store" });
+}
+export async function handoffController(scope: ControllerScope, mode: ControlMode, epoch: number,
+                                      maxSteps: number, idempotencyKey: string) {
+  return apiRequest<{ state: ControllerState }>(controlPath(scope), { method: "POST",
+    body: JSON.stringify({ run_id: scope.run, mode, expected_epoch: epoch,
+      max_steps: maxSteps, interval_ms: 1000, idempotency_key: idempotencyKey }) });
+}
+
 function normalizeEvent(raw: Record<string, unknown>): EventRecord {
   const payload = raw.payload && typeof raw.payload === "object" ? raw.payload as Record<string, unknown> : {};
   return {
@@ -102,6 +122,7 @@ export async function proposeCommand(
   command: string,
   state: GameState,
   embodiedEntityId: string | undefined,
+  controlEpoch?: number,
 ): Promise<Sourced<CommandAcknowledgement>> {
   const parsed = parseCommand(command, state);
   const result = await apiRequest<{
@@ -117,6 +138,7 @@ export async function proposeCommand(
           parameters: parsed.parameters,
           seed: parsed.seed,
           idempotency_key: `console:${crypto.randomUUID()}`,
+          control_epoch: controlEpoch,
         }),
       });
   if (!result.result.accepted) throw new Error("The action was not accepted.");

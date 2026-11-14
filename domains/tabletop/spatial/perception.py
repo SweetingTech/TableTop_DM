@@ -129,7 +129,11 @@ class GridSpatialPerceptionResolver:
                 continue
             confidence = round(max(0.0, min(1.0, max(confidences))), 6)
             controller = profile.get("controller_actor_id")
-            if entity_id == proposal.embodied_entity_id:
+            if (
+                entity_id == proposal.embodied_entity_id
+                and not controller
+                and proposal.decision_authorship == "HUMAN"
+            ):
                 controller = proposal.actor_id
             grants.append(
                 PerceptionGrant(

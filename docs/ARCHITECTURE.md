@@ -175,6 +175,26 @@ hydrates a request-local canonical snapshot; reference reads share a command pub
 Generation waits for all frozen sensory grants to have corresponding subjective observations.
 Advice is PROPOSAL_ONLY, leaves runtime control untouched, and is not an autonomous scheduler.
 
+Explicit handoff is a separate operational path. Migration 007 adds a world/branch/run/body
+controller projection and append-only receipts, extending runtime selection with owner/executor
+identities, epoch, mode, budget, step, and due time. Body ownership remains unchanged. A dedicated
+AGENT receives minimal world capabilities and entity-scoped context grants; it never borrows a
+player's session. Ordinary runtime configuration cannot change a managed controller.
+
+The worker reads due rows, resolves pinned context, generates an epoch/step proposal, and submits
+through the kernel. Under the mutation lock, controller validation, canonical changes, and step/
+budget advancement are atomic. Handoff takes the same branch lock; reference handoff also shares
+the direct CommandBus state lock. Missing/stale managed epochs fail closed, including old human
+requests. Concurrent workers can commit a logical action only once. Failure pauses and perception
+lag defers bounded work. This worker uses local movement utility, not a narrative/world-clock
+scheduler. Physical perception grants retain the actual body owner when an executor acts.
+Unowned witnesses use authorized world projection infrastructure, leaving the character executor
+limited to its own mind. Control records and scheduling metadata never enter sensory fiction.
+
+Durable scene/context requests also hydrate current canonical state into a request-local
+snapshot, so actions committed by a separate runner update the existing API's view without
+restarting it. This read does not replace the API/projector's shared state caches.
+
 The pure subjective pipeline is:
 
 ```text

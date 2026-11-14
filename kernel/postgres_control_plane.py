@@ -21,6 +21,7 @@ from kernel.contracts import (
     EventEnvelopeV2,
     RunKind,
 )
+from kernel.control import ControllerState
 from kernel.database import transaction
 from kernel.errors import BranchIsolationError
 from kernel.perception_contracts import PerceptionGrant
@@ -395,6 +396,11 @@ class PostgresControlPlane:
                     )
                     simulation.world_authorities[(world_id, actor_id)] = actor
 
+                cursor.execute("SELECT payload FROM cognition.controller_assignments")
+                simulation.controller_states.clear()
+                for row in cursor.fetchall():
+                    controller = ControllerState.model_validate(row["payload"])
+                    simulation.controller_states[controller.key] = controller
                 cursor.execute("SELECT * FROM sim.runs ORDER BY created_at, id")
                 for row in cursor.fetchall():
                     run_id = _uuid(row["id"])
@@ -482,6 +488,9 @@ class PostgresControlPlane:
                     proposal = CommandProposal(
                         command_id=_uuid(row["command_id"]),
                         command_type=row["command_type"],
+                        control_epoch=row["control_epoch"],
+                        control_step=row["control_step"],
+                        decision_authorship=row["decision_authorship"],
                         world_id=_uuid(row["world_id"]),
                         branch_id=branch_id,
                         run_id=_uuid(row["run_id"]),

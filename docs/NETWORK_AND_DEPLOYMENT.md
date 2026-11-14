@@ -3,7 +3,7 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
-This API version requires migrations through 006, including character history/bindings and
+This API version requires migrations through 007, including character history/bindings and
 private proposal receipts. Revision, binding, and proposal
 records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
 The migration owner remains separate from the runtime login. Card revisions are authored source
@@ -11,6 +11,11 @@ material, while binding rows are private controller configuration outside the se
 Character advice uses local deterministic policy; it makes no external model call. Receipt routes
 require authenticated world/body control and preserve the browser origin boundary. Apply migrations
 and verify readiness before routing traffic to the upgraded API; no network topology changes.
+
+Character execution adds an internal `runner` service using the runtime database role and artifact
+volume. It has no listening port or provider connection. The perception `projector` delivers frozen
+observations before dependent decisions. Managed startup and full-stack CI include both services.
+Autonomy is explicit per body; old runtime selections do not activate it.
 
 ## Default network diagram
 
@@ -23,6 +28,8 @@ flowchart LR
         subgraph Compose[Docker Compose project: tabletop-dm-v2]
             App[app\nFlask API + React assets\n:8000]
             Worker[worker\nRQ experiment executor]
+            Runner[runner\nBounded character executor]
+            Projector[projector\nFrozen perception outbox]
             Migrate[migrate\none-shot owner job]
             PG[(PostgreSQL 16\n:5432)]
             Redis[(Redis 7\n:6379)]
@@ -36,6 +43,8 @@ flowchart LR
     CLI -->|Compose lifecycle| Compose
     App -->|least-privilege SQL + actor context| PG
     Worker -->|least-privilege SQL| PG
+    Runner -->|fenced commands and due work| PG
+    Projector -->|frozen observation delivery| PG
     Migrate -->|owner SQL; exits after apply| PG
     App -->|authenticated Redis protocol| Redis
     Worker <-->|RQ jobs + retry state| Redis
@@ -43,6 +52,7 @@ flowchart LR
     Worker -->|HTTP semantic retrieval| Qdrant
     App <-->|content-addressed files| Artifacts
     Worker <-->|trial/report files| Artifacts
+    Runner <-->|snapshot artifacts| Artifacts
 ```
 
 All published ports bind to `127.0.0.1` unless the operator explicitly changes a bind-address

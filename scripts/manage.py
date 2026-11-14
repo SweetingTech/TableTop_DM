@@ -194,7 +194,7 @@ def start(args: argparse.Namespace) -> None:
     up = ["up", "-d"]
     if not args.no_build:
         up.append("--build")
-    up.extend(("app", "worker", "projector"))
+    up.extend(("app", "worker", "projector", "runner"))
     compose(*up)
     payload = wait_ready(args.ready_url, args.timeout)
     print(json.dumps(payload, indent=2, sort_keys=True))
@@ -221,7 +221,7 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     start_parser = subparsers.add_parser(
-        "start", help="build and start app, worker, and dependencies"
+        "start", help="build and start app, workers, projector, runner, and dependencies"
     )
     start_parser.add_argument(
         "--reset", action="store_true", help="delete this stack's data volumes first"

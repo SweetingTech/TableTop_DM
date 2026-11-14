@@ -122,6 +122,26 @@ services:
         condition: service_started
     command: ["python", "main.py", "worker"]
 
+  runner:
+    image: *app-image
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      <<: *runtime-environment
+    volumes:
+      - artifacts_data:/app/artifacts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    command: ["python", "main.py", "runner"]
+
   projector:
     image: *app-image
     restart: unless-stopped

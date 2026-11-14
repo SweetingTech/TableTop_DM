@@ -24,6 +24,13 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Added explicit human/autonomous/pause handoffs and a bounded character runner with dedicated
+  AGENT authority, typed kernel submission, stale-controller epoch fencing, atomic step/budget
+  accounting, durable retry/restart recovery, and Game Console controls. Migration 007 stores
+  private controller state and append-only handoff provenance; transitions are never sensory.
+  Managed commands must carry their observed epoch. The current runner uses local basic movement
+  utility; narrative planning, world-clock activities, and player-history imitation remain planned.
+
 - Hardened pre-run foundations: card revision ability scores are immutable and saved-character
   reads are defensive copies; spawning retries reach the kernel receipt lookup; snapshot trials
   exclude bodies created after their snapshot. Membership join timestamps honor normalized status.

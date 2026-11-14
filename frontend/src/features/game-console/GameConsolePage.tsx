@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Crosshair, Map, MessageSquare, RefreshCw, Send, Swords } from "lucide-react";
 import { useAppContext } from "../../app/AppContext";
 import { DefinitionList, PageHeader, Panel, Status } from "../../components/ui/Primitives";
 import { EmptyState, ErrorState, LoadingState, SourceNotice } from "../../components/ui/States";
 import type { EntitySummary } from "../../core/api/types";
 import { useAsyncResource } from "../../core/hooks/useAsyncResource";
-import { loadGameState, proposeCommand, type CommandAcknowledgement } from "./api";
+import { loadGameState, proposeCommand, type CommandAcknowledgement, type ControlMode } from "./api";
+import ControlPanel from "./ControlPanel";
 import { entityMapPosition } from "./mapPosition";
 import { uniqueObservations } from "./sceneRefresh";
 
@@ -57,10 +58,18 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
   const [command, setCommand] = useState("");
   const [sending, setSending] = useState(false);
   const [commandError, setCommandError] = useState("");
+  const [controlMode, setControlMode] = useState<ControlMode | "UNAVAILABLE">("HUMAN");
+  const [controlEpoch, setControlEpoch] = useState<number | undefined>();
+  const updateController = useCallback((mode: ControlMode | "UNAVAILABLE", epoch?: number) => {
+    setControlMode(mode); setControlEpoch(epoch);
+  }, []);
+  const reloadScene = resource.reload;
+  const refreshProgress = useCallback(() => reloadScene(), [reloadScene]);
   const game = resource.data?.data;
   const selectedViewpointId = selectedEntityId || game?.observer_entity_id || "";
   const selectedViewpoint = game?.viewpoints?.find((item) => item.entity_id === selectedViewpointId);
-  const canAct = Boolean(selectedViewpoint) && selectedViewpoint?.can_act !== false && resource.data?.source === "live";
+  const ownedViewpoint = Boolean(selectedViewpoint) && selectedViewpoint?.can_act !== false && resource.data?.source === "live";
+  const canAct = ownedViewpoint && Boolean(game?.run) && controlMode === "HUMAN";
   const selected = game?.entities.find((entity) => entity.entity_id === focusedEntityId)
     ?? game?.entities.find((entity) => entity.entity_id === selectedViewpointId)
     ?? game?.entities[0]
@@ -75,7 +84,7 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
     setSending(true);
     setCommandError("");
     try {
-      const result = await proposeCommand(activeWorldId, text, game, selectedViewpointId || undefined);
+      const result = await proposeCommand(activeWorldId, text, game, selectedViewpointId || undefined, controlEpoch);
       if (submittedScope !== scopeEpoch.current) return;
       setAccepted(result.data);
       setCommand("");
@@ -101,6 +110,10 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
         description="See and hear only what the selected embodied character can perceive, then submit typed proposals."
         actions={<><Status value={game.interaction_status} /><button ref={refreshButton} className="button" type="button" onClick={() => { restoreFocus.current = "refresh"; resource.reload(); }}><RefreshCw size={15} />Refresh</button></>}
       />
+      {ownedViewpoint && game.branch && game.run ? <ControlPanel
+        key={`${game.branch.branch_id}:${game.run.run_id}:${selectedViewpointId}`}
+        scope={{ world: activeWorldId, branch: game.branch.branch_id, run: game.run.run_id, entity: selectedViewpointId }}
+        onModeChange={updateController} onProgress={refreshProgress} /> : null}
       <div className="game-grid">
         <Panel title="Perceived Harborport" meta={<span>Projection {game.projection_version ?? "—"}</span>} className="map-panel">
           <div className="map-stage" aria-label="Perception-scoped tactical map of Harborport">
@@ -130,7 +143,7 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
           <form className="command-form" onSubmit={submitCommand}>
             <label>Embodied viewpoint<select value={selectedViewpointId} onChange={(event) => onViewpointChange(event.target.value)}>{(game.viewpoints ?? []).map((entity) => <option key={entity.entity_id} value={entity.entity_id}>{entity.name}{entity.can_act === false ? " · inspect only" : ""}</option>)}</select></label>
             <label>Command or dialogue<textarea ref={commandInput} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="/move north, /attack Dockmaster Vale, /cast …, or speak naturally" rows={4} /></label>
-            {!canAct ? <p className="field-error" role="status">This viewpoint is available for inspection only. Select a body assigned to you to act.</p> : null}
+            {!canAct ? <p className="field-error" role="status">{!game.run ? "Start a live run before acting." : controlMode !== "HUMAN" ? "Take control before submitting a command." : "This viewpoint is available for inspection only. Select a body assigned to you to act."}</p> : null}
             {commandError ? <p className="field-error" role="alert">{commandError}</p> : null}
             <button className="button primary" type="submit" disabled={sending || !command.trim() || !canAct}><Send size={15} />{sending ? "Proposing…" : "Send proposal"}</button>
           </form>

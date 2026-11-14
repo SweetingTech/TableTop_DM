@@ -49,7 +49,8 @@ class PostgresCharacterProposals:
                     AND sim.has_world_capability(r.world_id,'entity.act')
                     AND sim.can_mutate_branch(r.world_id,r.branch_id)
                     AND EXISTS (SELECT 1 FROM sim.entities e WHERE (e.world_id,e.branch_id,e.id)=(r.world_id,r.branch_id,%s)
-                      AND e.controller_actor_id=sim.current_actor_id()) FOR UPDATE
+                      AND (e.controller_actor_id=sim.current_actor_id()
+                           OR sim.runtime_controls_entity(e.world_id,e.branch_id,e.id))) FOR UPDATE
                     """,
                     tuple(map(str, scope.key)),
                 )

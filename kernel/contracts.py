@@ -43,6 +43,9 @@ class CommandProposal(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     command_id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    control_epoch: int | None = Field(default=None, ge=1)
+    control_step: int | None = Field(default=None, ge=0)
+    decision_authorship: Literal["HUMAN", "CHARACTER_POLICY"] = "HUMAN"
     command_type: str = Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
     world_id: uuid.UUID
     branch_id: uuid.UUID

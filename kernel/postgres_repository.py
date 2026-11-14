@@ -16,6 +16,7 @@ from kernel.contracts import (
     CommandResult,
     EventEnvelopeV2,
 )
+from kernel.control import advanced, load_controller, persist_controller, validate_controller
 from kernel.database import transaction
 from kernel.errors import AuthorizationDenied, BranchIsolationError
 from kernel.event_factory import EventFactory
@@ -116,6 +117,25 @@ class PostgresCommandRepository:
                 if existing is not None:
                     return existing
 
+                controller = load_controller(cursor, proposal)
+                if controller is None:
+                    cursor.execute(
+                        "SELECT 1 FROM cognition.controller_assignments "
+                        "WHERE executor_actor_id=%s LIMIT 1",
+                        (str(proposal.actor_id),),
+                    )
+                    if cursor.fetchone() is not None:
+                        raise AuthorizationDenied("executor is not assigned to this run and body")
+                validate_controller(proposal, controller)
+                if proposal.decision_authorship == "CHARACTER_POLICY":
+                    cursor.execute(
+                        "SELECT 1 FROM sim.runs WHERE "
+                        "(world_id,branch_id,id)=(%s,%s,%s) AND status IN ('ACTIVE','RUNNING')",
+                        tuple(map(str, (proposal.world_id, proposal.branch_id, proposal.run_id))),
+                    )
+                    if cursor.fetchone() is None:
+                        raise AuthorizationDenied("autonomous run is not active")
+
                 kind = BranchKind(str(branch["branch_kind"]))
                 if kind not in definition.allowed_branch_kinds:
                     raise AuthorizationDenied(
@@ -151,7 +171,8 @@ class PostgresCommandRepository:
                         SELECT 1
                         FROM sim.entities
                         WHERE world_id = %s AND branch_id = %s AND id = %s
-                          AND controller_actor_id = %s
+                          AND (controller_actor_id = %s
+                               OR sim.runtime_controls_entity(world_id,branch_id,id))
                         """,
                         (
                             str(proposal.world_id),
@@ -230,10 +251,10 @@ class PostgresCommandRepository:
                       branch_id, run_id, interaction_id, actor_id,
                       embodied_entity_id, parameters, result, seed,
                       idempotency_key, correlation_id, causation_id,
-                      resulting_state_hash
+                      resulting_state_hash,control_epoch,control_step,decision_authorship
                     ) VALUES (
                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,
-                      %s,%s,%s,%s
+                      %s,%s,%s,%s,%s,%s,%s
                     )
                     """,
                     (
@@ -253,8 +274,13 @@ class PostgresCommandRepository:
                         str(proposal.correlation_id),
                         str(proposal.causation_id) if proposal.causation_id else None,
                         state_hash,
+                        proposal.control_epoch,
+                        proposal.control_step,
+                        proposal.decision_authorship,
                     ),
                 )
+                if controller is not None and proposal.decision_authorship == "CHARACTER_POLICY":
+                    persist_controller(cursor, advanced(controller))
                 self._insert_event(cursor, event)
                 self._insert_perceptions(cursor, materialized.perceptions)
                 cursor.execute(

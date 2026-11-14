@@ -91,6 +91,10 @@ class InMemoryStateStore:
             except KeyError as exc:
                 raise BranchIsolationError(f"Unknown branch {branch_id}") from exc
 
+    def synchronized(self, reader: Callable[[], AtomicResult]) -> AtomicResult:
+        with self._lock:
+            return reader()
+
     def all(self) -> tuple[BranchState, ...]:
         with self._lock:
             return tuple(self._branches[key] for key in sorted(self._branches, key=str))

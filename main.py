@@ -25,6 +25,7 @@ def parser() -> argparse.ArgumentParser:
 
     commands.add_parser("worker", help="run the Redis experiment worker")
     commands.add_parser("projector", help="project world-event outbox records into cognition")
+    commands.add_parser("runner", help="execute explicitly enabled character policy controllers")
 
     scenario = commands.add_parser("scenario", help="run simulated-player onboarding")
     scenario.add_argument("--cohort-size", type=int, default=12)
@@ -62,6 +63,11 @@ def main(argv: list[str] | None = None) -> int:
         from cognition.projector import run_world_event_projector
 
         run_world_event_projector()
+        return 0
+    if args.command == "runner":
+        from kernel.api.app import app
+
+        app.extensions["character_runner"].run_forever()
         return 0
     if args.command == "scenario":
         from experiments.onboarding import OnboardingExperiment

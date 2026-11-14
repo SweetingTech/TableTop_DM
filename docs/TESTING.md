@@ -1,5 +1,18 @@
 # Testing
 
+Controller/runner coverage includes explicit leave/pause/takeover, missing/stale human epochs,
+captured old agent authority, two-worker idempotency, atomic canonical action and step budget,
+paused-run and invalid-action handling, private RLS/grant revocation, handoff rollback, migration
+006→007, and actual `main.py runner` process restart without a player session. Mixed-world tests
+verify unowned NPC witnesses receive observations while the execution agent stays body-scoped.
+Controller changes must leave character fiction/evidence unchanged.
+
+The browser journey `tests/e2e/test_controller_runner_isolated.py` exercises Let character act →
+bounded autonomous movement → budget pause → Take control → human movement, then repeats handoff
+on mobile. It verifies page identity, meaningful content, no page errors, no horizontal overflow,
+and desktop/mobile captures. No Browser plugin is available in this environment; the existing
+pytest/Chromium Playwright workflow is used. Generated screenshots stay outside the repository.
+
 Verification is split into deterministic function/contract checks, real durable-boundary tests,
 and user-level browser journeys. The default model mode is `mock`; hosted model credentials are
 not required.

@@ -4,7 +4,7 @@
 
 ### Durable stack
 
-Durable mode is the supported operational profile. It runs six services:
+Durable mode is the supported operational profile. Compose defines eight services:
 
 - `postgres`: canonical and application records;
 - `redis`: authenticated RQ queue transport;
@@ -12,6 +12,8 @@ Durable mode is the supported operational profile. It runs six services:
 - `migrate`: one-shot owner-credential migration job;
 - `app`: unprivileged Flask API plus compiled React assets;
 - `worker`: unprivileged experiment worker.
+- `projector`: frozen world-event perception and cognition projection;
+- `runner`: bounded character executor, idle until explicit autonomy opt-in.
 
 Start and verify:
 
@@ -116,7 +118,7 @@ dependencies and returns `503` if any required check fails.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `006_character_proposal_receipts.sql`;
+- migration history through `007_controller_handoff_runner.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -154,7 +156,8 @@ uv run python infra/migrate.py --check
 uv run python scripts/manage.py migrate
 ```
 
-Compose runs `migrate` before `app`, the experiment `worker`, and the world-event `projector`.
+Compose runs `migrate` before `app`, experiment `worker`, world-event `projector`, and character
+`runner`. Managed startup includes all four runtime services.
 Readiness verifies the latest migration rather
 than assuming the one-shot container succeeded.
 
@@ -219,7 +222,7 @@ and serialized successor checks. Runtime can read permitted revisions but cannot
 them directly. The migration does not auto-create personas for old characters; retry their roster
 assignment to create a missing initial binding. Existing bindings are never silently replaced.
 
-Apply all migrations through 006 before starting this application version. Back up PostgreSQL and artifacts and verify
+Apply migrations through 007 before starting this application version. Back up PostgreSQL and artifacts and verify
 the upgrade in an isolated restore first, using the normal schema-change procedure below.
 Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
 are retained; retire the saved card instead of deleting evidence beneath a running identity.
@@ -232,6 +235,20 @@ It supports a clean install and upgrade from 005. Advice uses local policy, adds
 worker, port, or automatic runtime assignment, and writes no canonical event or projection.
 Back up receipts with cognition and the canonical database. Do not roll back by deleting receipts
 or rewriting migration history; restore an isolated verified backup for schema rollback.
+
+Migration `007_controller_handoff_runner.sql` adds private forced-RLS controller projections,
+append-only handoffs, AGENT/epoch guards, scoped executor grants, and ledger authorship/epoch/step.
+It supports clean installation and upgrade from 006. Existing runtime assignments do not become
+autonomous automatically. Back up controllers and handoffs with runtime assignments, receipts,
+and canonical history; existing snapshots/trials are not complete campaign checkpoints.
+
+The runner uses the existing runtime database URL and artifact volume; no model credential or
+new port is required. It acts through a dedicated AGENT, never a browser cookie. The projector
+must deliver observations for successive decisions. Missing/stuck projection causes bounded
+deferred attempts and an explicit controller pause. Default budget is 20 actions at one-second
+intervals; maximum budget is 1,000. A restart preserves mode, epoch, step, and remaining budget.
+Browser disconnection preserves the selected mode. Use Pause autonomy or Take control to stop
+execution. Worker-health/throughput dashboards and the canonical world clock remain planned.
 
 | Data | Store and recovery notes |
 | --- | --- |
