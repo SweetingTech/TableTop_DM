@@ -1,5 +1,12 @@
 # Testing
 
+Movement behavior tests demonstrate manual choices changing actual runner movement, persona and
+authored-card fallback, comparable-layout filtering, foreign scope exclusion, and rejection of
+automation/advice as human evidence. Durable tests cover migration 007→008, atomic evidence/action
+rollback, idempotency, source guards, forced RLS, append-only privilege/trigger checks, and profiles
+surviving application recreation. `test_player_behavior_isolated.py` demonstrates five human moves
+through the built console, then a matching autonomous move without training on that move.
+
 Controller/runner coverage includes explicit leave/pause/takeover, missing/stale human epochs,
 captured old agent authority, two-worker idempotency, atomic canonical action and step budget,
 paused-run and invalid-action handling, private RLS/grant revocation, handoff rollback, migration

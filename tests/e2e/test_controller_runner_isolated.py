@@ -56,7 +56,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         page.get_by_role("button", name="Let character act", exact=True).click()
         expect(page.get_by_text("Autonomy paused", exact=True)).to_be_visible(timeout=12000)
         expect(page.get_by_text("2 / 2 autonomous actions", exact=False)).to_be_visible()
-        assert len(page.locator(".event-row").all()) == 2
+        expect(page.locator(".event-row")).to_have_count(2)
         assert "handoff" not in page.locator(".event-feed").inner_text().lower()
         page.screenshot(path=str(tmp_path / "controller-desktop.png"), full_page=True)
         page.get_by_role("button", name="Take control", exact=True).click()

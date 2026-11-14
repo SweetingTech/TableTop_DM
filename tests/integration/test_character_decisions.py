@@ -200,7 +200,7 @@ def test_upgrade_from_005_and_idempotent_rerun(integration_stack, tmp_path):
         for path in sorted(migrations.glob("*.sql"))[:5]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 5
-        assert migrate(url, migrations) == 2
+        assert migrate(url, migrations) == 3
         assert migrate(url, migrations) == 0
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute(

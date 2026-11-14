@@ -118,7 +118,7 @@ dependencies and returns `503` if any required check fails.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `007_controller_handoff_runner.sql`;
+- migration history through `008_player_behavior_evidence.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -222,7 +222,7 @@ and serialized successor checks. Runtime can read permitted revisions but cannot
 them directly. The migration does not auto-create personas for old characters; retry their roster
 assignment to create a missing initial binding. Existing bindings are never silently replaced.
 
-Apply migrations through 007 before starting this application version. Back up PostgreSQL and artifacts and verify
+Apply migrations through 008 before starting this application version. Back up PostgreSQL and artifacts and verify
 the upgrade in an isolated restore first, using the normal schema-change procedure below.
 Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
 are retained; retire the saved card instead of deleting evidence beneath a running identity.
@@ -269,6 +269,12 @@ and support export, selective delete, and retention purge. This repository does 
 telemetry to a third party.
 
 ## Backup and restore
+
+Migration `008_player_behavior_evidence.sql` adds private, forced-RLS, append-only human movement
+evidence and independent command input origin. It supports clean install and upgrade from 007.
+Existing commands stay UNSPECIFIED and are not training examples. Back up evidence with its source
+events, bindings and proposal receipts; profile versions are content-addressed and frozen in those
+receipts. There is no new service, port or provider. Keep migration-owner and runtime roles separate.
 
 Back up PostgreSQL and the artifact volume at the same consistency boundary. A database row may
 refer to a snapshot, population pool, report, or calibration artifact by URI and content hash.

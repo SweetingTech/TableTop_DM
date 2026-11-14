@@ -54,11 +54,24 @@ entities; PostgreSQL repeats protected-state checks with forced RLS.
 
 ## State, commands, and events
 
+Human movement preferences are operational evidence, separate from character memory and canonical
+truth. An injected builder captures only perception-scoped pre-command features while the kernel
+holds its mutation lock. The durable adapter commits private append-only evidence with its source
+command/event/outbox; failure rolls back the entire action. Reference receipts retain the same
+internal evidence and publish it after commit. Evidence never enters sensory event payloads.
+
+Input origin is independent of execution authority: the HTTP boundary derives HUMAN_INPUT,
+POLICY_ADVICE, or OPERATOR; old/direct commands default to UNSPECIFIED. Only untraced HUMAN_INPUT
+movement through the bound human owner's body trains this first policy. Profiles are deterministic,
+content-addressed, keyed by player actor/character/exact world-branch-run-body, and frozen inside
+private proposal receipts. They do not change the pinned persona or introduce account/control facts
+into character fiction. Broader language, risk, relationship and tactical inference remains planned.
+
 Authored character identity is private portal data, distinct from account identity, persona,
 embodied entity, and mind. Its typed backstory/values/knowledge claims persist in the existing
 character sheet and receive a deterministic current-content identifier. They do not create
-canonical facts, observations, memories, or runtime assignments. Live character binding and an
-archive of earlier card versions remain separate implementation work.
+canonical facts, observations, memories, or runtime assignments. Private immutable revisions and
+explicit live bindings pin the authored identity independently from experience and runtime.
 
 `BranchState` contains named projections, a monotonically increasing version, and a stable
 SHA-256 state hash. Supported delta operations are `SET`, `MERGE`, `DELETE`, and `INCREMENT`.

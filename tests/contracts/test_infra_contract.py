@@ -30,6 +30,7 @@ def test_clean_break_has_one_numbered_baseline() -> None:
         "005_character_history_and_bindings.sql",
         "006_character_proposal_receipts.sql",
         "007_controller_handoff_runner.sql",
+        "008_player_behavior_evidence.sql",
     ]
     assert not (ROOT / "infra" / "sql" / "init").exists()
     assert not (ROOT / "infra" / "sql" / "seed").exists()

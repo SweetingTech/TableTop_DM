@@ -209,12 +209,27 @@ as composition glue; reusable execution services must also work from workers and
 - [ ] G1 — Record decision authorship independently from actor authority: human input, stand-in,
   NPC policy/model, director, and operator. Link human decisions to player, character, context, options,
   dialogue, and outcome without revealing options/facts the character did not know.
+  Movement foundation: server-derived input origin is distinct from controller authority; private
+  append-only samples link accepted manual choices to player, character, binding, pre-command
+  perceived features, four attempted options and source outcome. All other decision types and
+  richer authorship categories remain open.
 - [ ] G2 — Add versioned behavior profiles keyed by player/character. Retrieve comparable human
   decisions to infer speech, priorities, relationships, risk, and tactical choices with confidence/provenance.
+  Movement foundation: private content-addressed profiles use up to 256 accepted manual movement
+  samples in the exact player/character/world/branch/run/body, matching perceived layout, distance,
+  injury and company. Profiles freeze in proposal receipts with evidence IDs and confidence.
+  Speech, relationships, broader risk/tactics inference and negative-choice learning remain open.
 - [ ] G3 — Combine that history with character card/backstory: human evidence guides demonstrated
   behavior; card/backstory supplies initial identity and unknown situations. Surface contradictions for operator/player correction.
+  Comparable movement history now guides advice and the runner, with pinned persona curiosity/risk
+  weights and an explicit limited English authored-tendency vocabulary as fallback. Private conflict
+  notices are inspectable through behavior-profile GET. Broad semantic interpretation remains open.
 - [ ] G4 — Exclude autonomous decisions from human preference evidence. Define treatment of revised
   timelines and retain human-vs-stand-in provenance across restart and profile rebuilding.
+  Migration 008 atomically records only untraced accepted HUMAN_INPUT movement. Operator automation,
+  submitted policy advice, autonomous actions, unknown legacy origin and foreign scope are excluded.
+  Origins survive restart; no historical backfill guesses authorship. Complete rewind/restoration
+  and broader decision types remain open.
 - [x] G5 — Extend runtime assignment with exclusive control ownership, version/epoch, and an atomic
   handoff boundary. Reject stale in-flight proposals from a previous controller.
   Implemented for canonical LIVE runs: private controller state extends HUMAN/UTILITY runtime

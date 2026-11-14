@@ -42,6 +42,7 @@ class CommandReceipt:
     event: EventEnvelopeV2
     state_hash: str
     perceptions: tuple[PerceptionGrant, ...] = ()
+    decision_evidence: dict[str, Any] | None = None
 
 
 class CommandBus:
@@ -58,6 +59,7 @@ class CommandBus:
         self._receipts: dict[tuple[uuid.UUID, uuid.UUID, str], CommandReceipt] = {}
         self.control_validator: Callable[[CommandProposal], None] | None = None
         self.control_committer: Callable[[CommandProposal], None] | None = None
+        self.evidence_builder: Callable[[CommandProposal, BranchState], dict | None] | None = None
 
     def register(self, definition: CommandDefinition) -> None:
         if definition.command_type in self._definitions:
@@ -113,6 +115,7 @@ class CommandBus:
             if branch_capability not in actor.capabilities:
                 raise AuthorizationDenied(f"Missing capabilities: ['{branch_capability}']")
             before = state.working_copy()
+            evidence = self.evidence_builder(proposal, before) if self.evidence_builder else None
             result = definition.handler(proposal, state)
             if definition.result_model is not None:
                 definition.result_model.model_validate(result.result)
@@ -132,6 +135,7 @@ class CommandBus:
                 event=materialized.event,
                 state_hash=state.state_hash,
                 perceptions=materialized.perceptions,
+                decision_evidence=evidence if result.accepted else None,
             )
 
         receipt, _duplicate = self.states.execute_atomic(proposal.branch_id, key, run)

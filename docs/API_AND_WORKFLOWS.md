@@ -493,7 +493,8 @@ New decisions require an active run and an exact version-pinned CHARACTER bindin
 
 The server assembles the same trusted context as the context read, then uses the pinned compiled
 persona and versioned basic movement catalog with local deterministic utility policy. This initial
-policy has no narrative planner or player-behavior imitation. No provider/model calls occur.
+policy uses the movement behavior profile described below; it has no narrative planner or
+speech/combat imitation. No provider/model calls occur.
 Before generation, every sensory event with a frozen grant for this body must have its dependent
 observation persisted. Otherwise the response is `409 character_context_pending`; retry the same
 key after projection catches up. Operator records are outside this barrier and character fiction.
@@ -513,7 +514,7 @@ permission to execute later. Submit `outcome.proposal` through `POST /api/v2/com
 normal kernel revalidation and idempotent execution. The proposal endpoint never advances time,
 changes runtime assignments, or automatically submits a command. The separate controller/runner
 workflow below adds exclusive epochs and bounded scheduling. Broader actions, learned lore, and
-player-history imitation remain planned.
+speech/combat imitation remain planned.
 
 ## Controller handoff and runner
 
@@ -563,13 +564,50 @@ The budget pauses with `step_limit`. Resume explicitly with a new handoff/key/cu
 The Game Console exposes Let character act, Pause autonomy, Take control, and an action limit.
 It polls status, refreshes the authorized scene on progress, and disables human submission until
 takeover. Saved mode survives browser closure and process restart. Closing a browser while HUMAN
-does not enable autonomy. Presence timeouts/reconnect policies, human-history inference, richer
+does not enable autonomy. Presence timeouts/reconnect policies, broader human-history inference, richer
 actions, narrative goals, and the canonical world clock remain separate work; due times here are
 operational wall-clock scheduling only.
 
 Runtime GET reads durable assignments fresh and adds controller metadata for managed bodies.
 Handoff atomically selects HUMAN or UTILITY while preserving runtime configuration. Legacy runtime
 PUT cannot bypass explicit handoff for a managed body.
+
+## Movement behavior profiles
+
+`GET /api/v2/worlds/{world}/branches/{branch}/entities/{body}/behavior-profile?run_id={run}`
+is a private, read-only, no-store inspection for the body controller or a world-scoped mind reader.
+It returns a content-addressed `profile_id`, policy version, exact player/character/binding scope,
+matching source-event IDs, sample count, confidence, direction scores and reviewable contradictions.
+Generated proposal receipts freeze this same profile under `behavior`; an exact proposal retry
+returns its original profile even after further human actions. Profile metadata never enters
+character-context `situation`, speech, memories or sensory events.
+
+Migration 008 stores only new accepted, untraced HUMAN_INPUT cardinal movement in canonical LIVE
+runs, through the bound body's human owner. Server-derived `input_origin` distinguishes manual
+input, submitted policy advice, and operator automation independently from controller authority.
+Client origin labels cannot authorize training. Historical commands remain UNSPECIFIED and are
+not backfilled as human evidence. Direct kernel callers must explicitly supply trusted input origin.
+
+The kernel captures its locked pre-command perceived spatial features, offered movement attempts,
+chosen direction and binding. Evidence insertion shares the command/event/outbox transaction.
+Rollback and duplicate submissions cannot create partial or repeated preference evidence. Neither
+hidden obstacles nor other characters' secrets are used to filter or score options.
+
+The current policy compares the latest 256 samples in this exact world/branch/run/body/player/
+character. It matches perceived zone, injury, company count, relative quadrants and distance buckets.
+Confidence is `matching_samples / (matching_samples + 3)`. Comparable demonstrated direction
+frequencies guide movement; current persona curiosity/risk weights supply approach/avoid behavior,
+with fallback influence reduced as comparable human evidence gains confidence.
+The pinned card's backstory, motives and values also supply a bounded English tendency vocabulary:
+cautious/caution/careful/avoid/survive/survival versus curious/curiosity/explore/exploration/discover/
+discovery/sociable. This is explicit rule-based inference, not general semantic understanding.
+Card secrets and starting lore do not become behavioral instructions. Repeated opposing human
+movement creates a private conflict notice for card/history review. All four actions remain typed
+attempts; every chosen action still passes the kernel's current authorization and collision checks.
+
+Other branches, runs, players, bodies and characters are excluded. Full rewind/promotion evidence
+restoration, negative/rejected-choice learning, dialogue, relationships, tactical styles and broad
+backstory interpretation remain checklist work. No new provider credential is required.
 
 ## Error contract
 

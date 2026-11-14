@@ -77,6 +77,7 @@ class SimulationApplication:
     def __init__(self, artifact_root: Path | None = None) -> None:
         self._reference_command_lock = threading.RLock()
         self.controller_states: dict[tuple, ControllerState] = {}
+        self.human_decision_evidence: dict[uuid.UUID, dict] = {}
         self.states = InMemoryStateStore()
         self.branches = BranchManager(self.states)
         self.bus = register_tabletop(CommandBus(self.states))
@@ -447,6 +448,8 @@ class SimulationApplication:
                     elif existing != expected:
                         raise ValueError("idempotent entity mutation differs from entity")
             self.events[receipt.event.event_id] = receipt.event
+            if receipt.decision_evidence is not None:
+                self.human_decision_evidence[receipt.event.event_id] = receipt.decision_evidence
             self.command_history.setdefault(proposal.branch_id, []).append(
                 ReplayRecord(
                     proposal=proposal,

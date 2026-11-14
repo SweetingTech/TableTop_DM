@@ -17,7 +17,8 @@ The Game Console now offers **Let character act**, **Pause autonomy**, and **Tak
 Explicit handoff starts a bounded local movement policy through a dedicated character executor;
 the runner and perception projector continue without a browser connection. Controller epochs
 prevent old human or autonomous actions committing after takeover. This is basic unattended
-movement; narrative goals, the world clock, and learned player imitation remain planned.
+movement; comparable human choices now guide its movement, with pinned persona/card tendencies
+as fallback. Narrative goals, the world clock, and speech/combat imitation remain planned.
 See [controller handoff and runner](docs/API_AND_WORKFLOWS.md#controller-handoff-and-runner).
 
 ## Product workspaces
@@ -53,7 +54,8 @@ to a game creates an initial binding that pins its card revision and `CHARACTER`
 world, branch, run, body, and existing mind. Later edits do not silently change that binding;
 an explicit successor binding adopts a selected revision without resetting experience or control.
 The initial persona uses a deterministic card-seeded baseline with the authored fiction supplied
-separately in character context. It does not yet learn the human player's demonstrated behavior.
+separately in character context. Accepted human movement now supplies separate private behavior
+evidence without changing that persona, card, mind, or control ownership.
 
 Persona APIs distinguish `CHARACTER` from `SIMULATED_PLAYTESTER`. Character compilation uses
 in-world core/world traits and omits player controls, onboarding goals, GM relationships, and
@@ -68,7 +70,8 @@ controlled, capable bodies, using perceived self state and world-scoped authorit
 do not filter choices; the kernel checks every attempt. Trusted character proposals and explicit
 controller handoff now enable bounded unattended movement through the runner. Caller-authored
 evaluation remains separate from live character inputs. Broader actions, narrative planning, and
-player-history imitation remain in the implementation checklist.
+broader player-history imitation remain in the implementation checklist. See
+[movement behavior profiles](docs/API_AND_WORKFLOWS.md#movement-behavior-profiles).
 
 The initial account is `admin` with password `admin123`. The first sign-in is restricted to the
 password-change screen, and the replacement password must be at least 12 characters and not a
