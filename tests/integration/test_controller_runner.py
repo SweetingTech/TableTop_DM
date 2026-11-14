@@ -299,7 +299,7 @@ def test_upgrade_from_006_is_idempotent(integration_stack, tmp_path):
         for path in sorted(migrations.glob("*.sql"))[:6]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 6
-        assert migrate(url, migrations) == 2
+        assert migrate(url, migrations) == 3
         assert migrate(url, migrations) == 0
     finally:
         with maintenance.cursor() as cursor:

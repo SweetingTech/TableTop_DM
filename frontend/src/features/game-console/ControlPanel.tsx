@@ -5,7 +5,7 @@ import { handoffController, loadController, type ControllerScope, type Controlle
 export default function ControlPanel({ scope, onModeChange, onProgress }: {
   scope: ControllerScope;
   onModeChange: (mode: ControlMode | "UNAVAILABLE", epoch?: number) => void;
-  onProgress: () => void;
+  onProgress: (step: number) => void;
 }) {
   const [control, setControl] = useState<ControllerState | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -14,7 +14,6 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
   const [limitText, setLimitText] = useState("20");
   const limit = Number(limitText);
   const [revision, setRevision] = useState(0);
-  const previousStep = useRef<number | null>(null);
   const initializedLimit = useRef(false);
   const actionGeneration = useRef(0);
   const retry = useRef<{ mode: ControlMode; epoch: number; limit: number; key: string } | null>(null);
@@ -35,8 +34,7 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
         }
         setControl(current); setLoaded(true); setError("");
         onModeChange(current?.mode ?? "HUMAN", current?.epoch);
-        if (previousStep.current !== null && previousStep.current !== (current?.step ?? 0)) onProgress();
-        previousStep.current = current?.step ?? 0;
+        onProgress(current?.step ?? 0);
       } catch (failure) {
         if (!active) return;
         setError(failure instanceof Error ? failure.message : "Could not read character control.");
@@ -72,7 +70,7 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
 
   const mode = control?.mode ?? "HUMAN";
   return <Panel title="Character control" meta={<span role="status">{loaded ? mode === "HUMAN" ? "You are playing" : mode === "AUTONOMOUS" ? "Character is acting" : "Autonomy paused" : "Loading control…"}</span>}>
-    <p>Your character can continue basic movement using comparable human choices and its pinned persona and card. Story, speech, and combat planning are still being built. Closing the page keeps your selected control mode.</p>
+    <p>Your character can move, reply with a speech intent and volume, or respond to a perceived attack using comparable human choices and its pinned persona and card. Open-ended dialogue and full tactical planning are still being built. Closing the page keeps your selected control mode.</p>
     <p>{control ? `${control.step} / ${control.max_steps} autonomous actions` : "Autonomy is off until you enable it."}{control?.last_error ? ` · ${control.last_error === "step_limit" ? "Action limit reached." : "The runner paused or is waiting. Take control or explicitly resume."}` : ""}</p>
     <label>Autonomous action limit<input aria-label="Autonomous action limit" type="number" min={1} max={1000} value={limitText} disabled={!loaded || busy} onChange={(event) => setLimitText(event.target.value)} /></label>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

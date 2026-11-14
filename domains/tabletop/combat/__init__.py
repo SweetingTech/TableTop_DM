@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
+from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
 from kernel.state import BranchState
 
 
@@ -82,6 +83,19 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
     )
 
 
+def attack_emission(
+    proposal: CommandProposal, result: CommandResult, before: BranchState, after: BranchState
+) -> EventEmission:
+    del result, before, after
+    return EventEmission(
+        anchor=SpatialAnchor(entity_id=proposal.embodied_entity_id, phase="BEFORE"),
+        modalities=(SensoryModality.SIGHT, SensoryModality.SOUND),
+        max_range=8,
+        allowed_payload_fields=("attacker_id", "target_id", "hit", "damage"),
+        reason_codes=("combat.melee",),
+    )
+
+
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.combat.attack",
@@ -91,4 +105,5 @@ def command_definition() -> CommandDefinition:
         request_model=AttackRequest,
         result_model=AttackResult,
         requires_controlled_entity=True,
+        emission_builder=attack_emission,
     )

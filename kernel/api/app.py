@@ -17,7 +17,7 @@ from flask import Flask, g, jsonify, make_response, request, send_from_directory
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from cognition.behavior import DIRECTIONS, HumanMovementEvidence, behavior_profile, movement_frame
-from cognition.behavior_store import PostgresBehaviorEvidence, persist_human_evidence
+from cognition.behavior_store import PostgresBehaviorEvidence
 from cognition.character_decisions import (
     CharacterContextPending,
     CharacterProposalRepository,
@@ -27,6 +27,9 @@ from cognition.character_decisions import (
     require_character_proposal_authority,
     require_projected_character_experience,
 )
+from cognition.choice_state import choice_frame
+from cognition.choice_store import PostgresChoiceEvidence, persist_choice_bundle
+from cognition.choices import HumanChoiceEvidence, choice_profile, describe_options, option_key
 from cognition.control import ControlConflict, HandoffRequest, InMemoryControllers
 from cognition.engine import (
     DecisionAction,
@@ -617,6 +620,7 @@ def create_app(
         )
     )
     evidence_reader = PostgresBehaviorEvidence(database_dsn) if database_dsn else None
+    choice_evidence_reader = PostgresChoiceEvidence(database_dsn) if database_dsn else None
 
     def read_behavior(source, scope, actor_id, context, binding, profile):
         player = source.entities[(scope.branch_id, scope.entity_id)].controller_actor_id
@@ -626,9 +630,25 @@ def create_app(
             evidence_reader.read(scope, actor_id)
             if evidence_reader
             else tuple(
-                (event, HumanMovementEvidence.model_validate(row))
+                (event, HumanMovementEvidence.model_validate(row.get("movement", row)))
                 for event, row in tuple(simulation.human_decision_evidence.items())
                 if event in simulation.events
+                and row.get("movement", row) is not None
+                and (
+                    "movement" not in row
+                    or all(
+                        row.get(name) == row["movement"].get(name)
+                        for name in (
+                            "world_id",
+                            "branch_id",
+                            "run_id",
+                            "entity_id",
+                            "player_actor_id",
+                            "character_id",
+                            "binding_id",
+                        )
+                    )
+                )
                 and tuple(
                     row.get(name) for name in ("world_id", "branch_id", "run_id", "entity_id")
                 )
@@ -645,9 +665,51 @@ def create_app(
             evidence=evidence,
         )
 
+    def read_choices(source, scope, actor_id, context, binding, profile):
+        player = (
+            source.entities[(scope.branch_id, scope.entity_id)].controller_actor_id
+            or binding.recorded_by
+        )
+        evidence = (
+            choice_evidence_reader.read(scope, actor_id)
+            if choice_evidence_reader
+            else tuple(
+                (event, HumanChoiceEvidence.model_validate(row["choices"]))
+                for event, row in tuple(simulation.human_decision_evidence.items())
+                if event in simulation.events
+                and row.get("choices") is not None
+                and all(
+                    row.get(name) == row["choices"].get(name)
+                    for name in (
+                        "world_id",
+                        "branch_id",
+                        "run_id",
+                        "entity_id",
+                        "player_actor_id",
+                        "character_id",
+                        "binding_id",
+                    )
+                )
+                and tuple(
+                    row.get(name) for name in ("world_id", "branch_id", "run_id", "entity_id")
+                )
+                == tuple(map(str, scope.key))
+            )[-256:]
+        )
+        return choice_profile(
+            context,
+            profile,
+            run_id=scope.run_id,
+            player_actor_id=player,
+            character_id=binding.character_id,
+            binding_id=binding.binding_id,
+            evidence=evidence,
+        )
+
     def capture_human_movement(proposal, before):
         if (
-            proposal.command_type != "tabletop.spatial.move"
+            proposal.command_type
+            not in {"tabletop.spatial.move", "tabletop.dialogue.speak", "tabletop.combat.attack"}
             or proposal.input_origin != "HUMAN_INPUT"
             or proposal.decision_authorship != "HUMAN"
             or proposal.decision_trace_id is not None
@@ -656,8 +718,6 @@ def create_app(
         ):
             return None
         direction = DIRECTIONS.get((proposal.parameters.get("dx"), proposal.parameters.get("dy")))
-        if direction is None:
-            return None
         source = controller_snapshot()
         actor = source.actors[proposal.actor_id]
         entity = source.entities[(proposal.branch_id, proposal.embodied_entity_id)]
@@ -680,9 +740,16 @@ def create_app(
         snapshot = copy.copy(source)
         snapshot.states = InMemoryStateStore()
         snapshot.states.add(before.working_copy())
+        control_scope = ControlScope(
+            world_id=proposal.world_id,
+            branch_id=proposal.branch_id,
+            run_id=proposal.run_id,
+            entity_id=proposal.embodied_entity_id,
+        )
+        observed = controller_minds(control_scope, proposal.actor_id)
         scene = build_perceived_scene(
             snapshot,
-            MindStore(),
+            observed,
             world_id=proposal.world_id,
             branch_id=proposal.branch_id,
             observer_entity_id=proposal.embodied_entity_id,
@@ -691,23 +758,73 @@ def create_app(
         frame = movement_frame(scene)
         if frame is None:
             return None
-        return HumanMovementEvidence(
-            world_id=proposal.world_id,
-            branch_id=proposal.branch_id,
+        movement = (
+            HumanMovementEvidence(
+                world_id=proposal.world_id,
+                branch_id=proposal.branch_id,
+                run_id=proposal.run_id,
+                entity_id=proposal.embodied_entity_id,
+                player_actor_id=proposal.actor_id,
+                character_id=binding.character_id,
+                binding_id=binding.binding_id,
+                projection_version=before.version,
+                frame=frame,
+                chosen=direction,
+            ).model_dump(mode="json")
+            if direction is not None and proposal.command_type == "tabletop.spatial.move"
+            else None
+        )
+        resolved = resolve_character_context(
+            simulation=snapshot,
+            scene=scene,
+            minds=observed,
+            actor_id=proposal.actor_id,
             run_id=proposal.run_id,
-            entity_id=proposal.embodied_entity_id,
-            player_actor_id=proposal.actor_id,
-            character_id=binding.character_id,
-            binding_id=binding.binding_id,
-            projection_version=before.version,
-            frame=frame,
-            chosen=direction,
-        ).model_dump(mode="json")
+            bindings=character_bindings,
+            cards=portal.repository,
+            profile_reader=lambda persona, version, compiler: (
+                persona_repository.get_compiled(persona, version, compiler)
+                if persona_repository
+                else bound_profiles.get((persona, version, compiler))
+            ),
+        )
+        choice = None
+        state = choice_frame(scene, resolved.context.observations)
+        selected = option_key(proposal.command_type, proposal.parameters)
+        if state and (state.threats or state.speech_ready):
+            options = describe_options(resolved.context, state)
+            if selected in {option.key for option in options}:
+                choice = HumanChoiceEvidence(
+                    world_id=proposal.world_id,
+                    branch_id=proposal.branch_id,
+                    run_id=proposal.run_id,
+                    entity_id=proposal.embodied_entity_id,
+                    player_actor_id=proposal.actor_id,
+                    character_id=binding.character_id,
+                    binding_id=binding.binding_id,
+                    projection_version=before.version,
+                    frame=state,
+                    options=options,
+                    chosen_key=selected,
+                ).model_dump(mode="json")
+        if movement is None and choice is None:
+            return None
+        return {
+            "world_id": str(proposal.world_id),
+            "branch_id": str(proposal.branch_id),
+            "run_id": str(proposal.run_id),
+            "entity_id": str(proposal.embodied_entity_id),
+            "player_actor_id": str(proposal.actor_id),
+            "character_id": str(binding.character_id),
+            "binding_id": str(binding.binding_id),
+            "movement": movement,
+            "choices": choice,
+        }
 
     simulation.bus.evidence_builder = capture_human_movement
     if simulation.durable_repository is not None:
         simulation.durable_repository.evidence_builder = capture_human_movement
-        simulation.durable_repository.evidence_persister = persist_human_evidence
+        simulation.durable_repository.evidence_persister = persist_choice_bundle
 
     live_decisions = CharacterDecisionService(
         snapshot=controller_snapshot,
@@ -722,6 +839,7 @@ def create_app(
         proposals=character_proposals,
         reference=simulation if database_dsn is None else None,
         behavior_reader=read_behavior,
+        choice_reader=read_choices,
     )
     app.extensions["controllers"] = controllers
     app.extensions["character_decisions"] = live_decisions
@@ -1702,7 +1820,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "008_player_behavior_evidence.sql",
+                    "ok": version == "009_speech_combat_evidence.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -2080,6 +2198,9 @@ def create_app(
                 behavior=read_behavior(
                     source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
                 ),
+                choices=read_choices(
+                    source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
+                ),
             )
 
         def reference_proposal():
@@ -2123,6 +2244,36 @@ def create_app(
         if resolved.binding is None or resolved.profile is None:
             raise ValueError("a pinned character binding is required")
         result = read_behavior(
+            source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
+        )
+        response = jsonify(result.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>/entities/<uuid:entity_id>/choice-profile"
+    )
+    def character_choice_profile(world_id: uuid.UUID, branch_id: uuid.UUID, entity_id: uuid.UUID):
+        require_world_access(world_id)
+        source = controller_snapshot()
+        actor_id = current_actor_id()
+        scope = ControlScope(
+            world_id=world_id,
+            branch_id=branch_id,
+            entity_id=entity_id,
+            run_id=uuid.UUID(request.args["run_id"]),
+        )
+        authority = source.authority(world_id, actor_id)
+        if (
+            entity_id not in authority.controlled_entity_ids
+            and "mind.read.all" not in authority.capabilities
+        ):
+            raise PermissionError("actor cannot read this character choice profile")
+        scene, observed = read_scene(world_id, branch_id, entity_id, source)
+        resolved = resolve_frame(source, scene, observed, scope.run_id)
+        if resolved.binding is None or resolved.profile is None:
+            raise ValueError("a pinned character binding is required")
+        result = read_choices(
             source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
         )
         response = jsonify(result.model_dump(mode="json"))

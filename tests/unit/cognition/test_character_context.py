@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from cognition.choice_state import choice_frame
 from cognition.context import build_character_context
 from cognition.engine import DecisionAction
 from cognition.models import Belief, Memory, MindState, Observation
@@ -87,6 +88,58 @@ def assemble(scene, actor, events, observations, grants, mind=None, **options):
         grant_reader=lambda event_id, entity_id: grants.get((event_id, entity_id)),
         **options,
     )
+
+
+def test_canonical_order_precedes_windowing_for_long_equal_timestamp_conversation():
+    scene, actor, event, observation, grant = fixture_context()
+    other = uuid.uuid4()
+    scene = scene.model_copy(
+        update={
+            "perceived_entities": (
+                *scene.perceived_entities,
+                scene.perceived_entities[0].model_copy(
+                    update={"entity_id": other, "position": SceneCoordinate(x=2, y=2)}
+                ),
+            )
+        }
+    )
+    events, grants, observations = {}, {}, []
+    for index in range(90):
+        source = event.model_copy(
+            update={
+                "event_id": uuid.UUID(int=index + 1),
+                "payload": {
+                    "text": "Hello.",
+                    "speaker_entity_id": str(scene.observer_entity_id if index == 89 else other),
+                },
+            }
+        )
+        item = observation.model_copy(
+            update={
+                "observation_id": uuid.UUID(int=1000 - index),
+                "source_event_id": source.event_id,
+                "perceived_payload": source.payload,
+            }
+        )
+        events[source.event_id] = source
+        grants[(source.event_id, scene.observer_entity_id)] = grant.model_copy(
+            update={
+                "event_id": source.event_id,
+                "allowed_payload_fields": ("text", "speaker_entity_id"),
+            }
+        )
+        observations.append(item)
+    context = assemble(
+        scene,
+        actor,
+        events,
+        observations,
+        grants,
+        event_order={event: index for index, event in enumerate(events)},
+    )
+    assert len(context.observations) == 80
+    assert context.observations[-1].source_event_id == uuid.UUID(int=90)
+    assert not choice_frame(scene, context.observations).speech_ready
 
 
 def test_context_uses_masked_same_branch_evidence_and_sanitizes_memory_overrides():

@@ -86,7 +86,7 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.1.0"
+    context_version: str = "character-context-1.1.2"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
@@ -181,6 +181,7 @@ def build_character_context(
     grant_reader: GrantReader,
     action_provider: ActionProvider | None = None,
     identity: CharacterCardContent | None = None,
+    event_order: dict[uuid.UUID, int] | None = None,
 ) -> CharacterContext:
     """Read-only context assembly; all readers/providers are trusted server dependencies."""
     entity_id = scene.observer_entity_id
@@ -195,6 +196,8 @@ def build_character_context(
         event_reader=event_reader,
         grant_reader=grant_reader,
     )
+    if event_order is not None:
+        eligible = tuple(sorted(eligible, key=lambda row: event_order[row.source_event_id]))
     by_id = {item.observation_id: item for item in eligible}
     beliefs: list[Belief] = []
     for belief in mind.beliefs:

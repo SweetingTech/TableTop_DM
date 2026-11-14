@@ -1,5 +1,19 @@
 # Testing
 
+Speech/combat tests demonstrate learned reply intent/volume, basic melee and withdrawal choices
+through the actual runner, history-free persona/card differences, no unprovoked/hidden targets,
+and no self-reply loop. Durable tests cover equal-timestamp canonical ordering across restart,
+009 clean/008-upgrade/repeat apply, evidence rollback, idempotency, stale queued attacks after
+takeover, forced RLS, append-only privileges/triggers, source/option/payload/composite-FK guards,
+and synthetic exclusion. Legacy movement tests verify unchanged profile hash compatibility.
+The isolated speech/combat browser journey records four demonstrations through the built console,
+hands control to the real runner, and verifies matching autonomous replies or attacks and takeover.
+The scene refresh regression also covers a controller advancing while a reload unmounts its panel.
+Review regressions cover sound-only witnesses, independently invisible combat participants, frozen
+masks after visibility changes, and 90 equal-timestamp turns with a reply below the old UUID cutoff.
+Durable authorization also forces a one-world actor ahead of the established bootstrap identity,
+verifying synchronization preserves that identity, rejects its revocation and retains scoped RLS.
+
 Movement behavior tests demonstrate manual choices changing actual runner movement, persona and
 authored-card fallback, comparable-layout filtering, foreign scope exclusion, and rejection of
 automation/advice as human evidence. Durable tests cover migration 007→008, atomic evidence/action

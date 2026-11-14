@@ -452,7 +452,7 @@ world/viewpoint authorization as the perceived scene. It returns a versioned evi
 projection version, and a model-facing `situation`. Frozen event-time grants and source events
 must match the observer/world/branch; operator-tagged events, unbacked beliefs, and memory-summary
 overrides cannot add facts. The model-facing situation excludes controller, ledger, and timeline
-metadata. Context version `character-context-1.1.0` includes the pinned self-authored identity only
+metadata. Context version `character-context-1.1.2` includes the pinned self-authored identity only
 when the caller controls the body or holds `mind.read.all`; broad scene inspection alone does not
 grant private identity access. `binding` is operational response metadata outside `situation`.
 The situation's `identity` contains fiction and explicitly labeled `starting_knowledge_claims`;
@@ -463,13 +463,14 @@ This endpoint is read-only. `action_candidates` currently contains four typed ca
 movement attempts when the caller controls this body, holds the command's world-scoped capabilities
 (including canonical commit authority), and the perceived self has a position and no known
 incapacity. Inspect-only viewpoints return no executable choices. `action_catalog_version` is
-`tabletop-character-actions-1.0.0`. Candidates carry typed command parameters outside `situation`;
+`tabletop-character-actions-1.1.0`. Candidates carry typed command parameters outside `situation`;
 their action labels contain fiction only. There are no class/species/protagonist restrictions.
 
 These choices are attempts, not guaranteed outcomes. The provider never reads hidden obstacles
 or hidden entities to remove choices; otherwise the catalog itself would reveal unknown facts.
 The kernel must revalidate authority, lineage, and rules on submission. No model or read request
-commits an action. Speech/combat/activity catalogs and learned lore remain planned. Durable reads
+commits an action. Contextual speech/basic melee are now included as described below; spells,
+broader activity catalogs and learned lore remain planned. Durable reads
 hydrate fresh canonical and subjective projections. The context read itself does not wait for
 dependent observations; trusted proposal generation and the runner enforce that barrier before
 choosing an action.
@@ -494,7 +495,7 @@ New decisions require an active run and an exact version-pinned CHARACTER bindin
 The server assembles the same trusted context as the context read, then uses the pinned compiled
 persona and versioned basic movement catalog with local deterministic utility policy. This initial
 policy uses the movement behavior profile described below; it has no narrative planner or
-speech/combat imitation. No provider/model calls occur.
+open-ended speech or full tactical planning. No provider/model calls occur.
 Before generation, every sensory event with a frozen grant for this body must have its dependent
 observation persisted. Otherwise the response is `409 character_context_pending`; retry the same
 key after projection catches up. Operator records are outside this barrier and character fiction.
@@ -606,8 +607,48 @@ movement creates a private conflict notice for card/history review. All four act
 attempts; every chosen action still passes the kernel's current authorization and collision checks.
 
 Other branches, runs, players, bodies and characters are excluded. Full rewind/promotion evidence
-restoration, negative/rejected-choice learning, dialogue, relationships, tactical styles and broad
+restoration, negative/rejected-choice learning, unrestricted dialogue, relationships, tactical plans and broad
 backstory interpretation remain checklist work. No new provider credential is required.
+
+## Speech and combat choice profiles
+
+The trusted catalog adds fact-free GREET, ASK, DEESCALATE and ASSERT templates at WHISPER, NORMAL,
+LOUD or SHOUT volume when a perceived conversational turn or attack has not yet been answered.
+After the character replies, it cannot answer itself indefinitely. This is intent/volume selection,
+not free-form dialogue generation or verbatim imitation. The default language is common.
+
+A validated observation of an attack against this body identifies known threats. Only currently
+visible, apparently capable threats within one grid step become basic melee candidates (up to
+eight). Four movement attempts remain available for advance, maneuver or withdrawal; the normal
+kernel checks reach, health, authority and current controller epoch on submission. Hidden armor,
+unseen targets and private state never rank candidates. No spell or damage build is inferred.
+Known threats currently persist while visible/capable; richer ceasefire/relationship/goal policies
+remain planned. Normal dialogue or mere presence does not authorize an autonomous attack.
+
+`GET /api/v2/worlds/{world}/branches/{branch}/entities/{body}/choice-profile?run_id={run}` is a
+private no-store inspection with the same body/mind authorization as behavior-profile. It returns
+version `speech-combat-behavior-1.0.0`, confidence, matching source IDs, per-candidate scores and
+conflicts. Receipts freeze this profile separately under `choices`; legacy `behavior` hashes and
+receipts stay readable. Speech/combat matching includes perceived layout, injury, company, threat
+count and conversation readiness. Calm movement keeps its existing policy; active conversation
+and combat use contextual choice scores instead of unrelated calm-direction habits.
+
+Migration 009 records new accepted human replies, known-threat basic attacks and contextual
+movement choices atomically with their canonical source event. Speech preferences store only
+classified intent and volume, never utterance text or claims. An explicit bounded English classifier
+recognizes greeting/question/de-escalation/assertion cues. Compiled risk/conflict/social/directness
+traits and pinned peaceful/aggressive card tendencies provide fallbacks; repeated demonstrated
+choices gain influence with confidence. These are reproducible rules, not general language
+understanding. Historical unknown/pre-catalog context is not reconstructed or backfilled.
+
+Combat commands now emit physical sight/sound observations. Event-time subject visibility masks
+participant IDs; hit/damage require inspected sight of both participants. Sound-only witnesses
+receive an anonymous disturbance, including behind walls or when participants are invisible.
+Character context validates their frozen grants before using them. Eligible observations follow
+canonical source-event order before taking the bounded window, even when timestamps tie.
+Operator/profile/handoff metadata is kept
+outside sensory fiction, character prompts and speech. Full tactical plans, learned arbitrary
+phrasing, spell selection, narrative planning and complete timeline restoration remain open.
 
 ## Error contract
 

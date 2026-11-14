@@ -115,10 +115,14 @@ automation and test clients.
 `GET /healthz` checks only that the HTTP process can respond. `GET /readyz` verifies configured
 dependencies and returns `503` if any required check fails.
 
+The durable control plane retains its established bootstrap actor across metadata synchronization
+and hydration. It never selects a different world's actor merely because authority rows reorder;
+losing the bootstrap authority fails closed without widening grants.
+
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `008_player_behavior_evidence.sql`;
+- migration history through `009_speech_combat_evidence.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -222,7 +226,7 @@ and serialized successor checks. Runtime can read permitted revisions but cannot
 them directly. The migration does not auto-create personas for old characters; retry their roster
 assignment to create a missing initial binding. Existing bindings are never silently replaced.
 
-Apply migrations through 008 before starting this application version. Back up PostgreSQL and artifacts and verify
+Apply migrations through 009 before starting this application version. Back up PostgreSQL and artifacts and verify
 the upgrade in an isolated restore first, using the normal schema-change procedure below.
 Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
 are retained; retire the saved card instead of deleting evidence beneath a running identity.
@@ -269,6 +273,13 @@ and support export, selective delete, and retention purge. This repository does 
 telemetry to a third party.
 
 ## Backup and restore
+
+Migration `009_speech_combat_evidence.sql` adds a separate private forced-RLS append-only choice
+evidence table with source, option and composite binding guards. It supports clean install and
+upgrade from 008, preserving 008 rows and profile hashes. Back it up with canonical events, bindings
+and proposal receipts. It adds no service, port or provider. New speech evidence stores classified
+intent/volume and perceived options rather than utterance text. Apply with the migration owner;
+the runtime retains SELECT/INSERT only. This change does not auto-enable any controller.
 
 Migration `008_player_behavior_evidence.sql` adds private, forced-RLS, append-only human movement
 evidence and independent command input origin. It supports clean install and upgrade from 007.

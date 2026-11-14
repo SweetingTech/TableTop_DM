@@ -21,7 +21,7 @@ from .models import SpatialOccluder, SpatialPortal, SpatialPosition, SpatialZone
 class GridSpatialPerceptionResolver:
     """Deterministic grid sight/sound resolver over event-time projections."""
 
-    VERSION = "grid-spatial-perception-1.0.1"
+    VERSION = "grid-spatial-perception-1.1.0"
 
     def visible_entities(
         self,
@@ -135,6 +135,29 @@ class GridSpatialPerceptionResolver:
                 and proposal.decision_authorship == "HUMAN"
             ):
                 controller = proposal.actor_id
+            allowed_fields = emission.allowed_payload_fields
+            overrides = emission.payload_overrides
+            if proposal.command_type == "tabletop.combat.attack":
+                # A sound grants awareness of fighting, not hidden identities or damage.
+                # Freeze each subject's visibility against the same event-time state.
+                visible = (
+                    self.visible_entities(anchor_state, entity_id, max_range=emission.max_range)
+                    if SensoryModality.SIGHT in perceived
+                    else {}
+                )
+                attacker = proposal.embodied_entity_id
+                target = uuid.UUID(str(proposal.parameters["target_id"]))
+                fields = []
+                if attacker in visible:
+                    fields.append("attacker_id")
+                if target in visible:
+                    fields.append("target_id")
+                if min(visible.get(attacker, 0) if attacker else 0, visible.get(target, 0)) >= 0.8:
+                    fields.extend(("hit", "damage"))
+                allowed_fields = tuple(
+                    field for field in fields if allowed_fields is None or field in allowed_fields
+                )
+                overrides = {"summary": "Sounds of nearby fighting."} if not fields else {}
             grants.append(
                 PerceptionGrant(
                     event_id=event_id,
@@ -149,9 +172,9 @@ class GridSpatialPerceptionResolver:
                         else PerceptionOutcome.PARTIAL
                     ),
                     confidence=confidence,
-                    allowed_payload_fields=emission.allowed_payload_fields,
+                    allowed_payload_fields=allowed_fields,
                     hidden_payload_fields=emission.hidden_payload_fields,
-                    payload_overrides=emission.payload_overrides,
+                    payload_overrides=overrides,
                     reason_codes=tuple(sorted(set(reasons))),
                     resolver_version=self.VERSION,
                     spatial_context_hash=context_hash,

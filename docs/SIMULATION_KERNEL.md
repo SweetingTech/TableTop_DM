@@ -101,6 +101,14 @@ returns the original committed receipt.
 
 ## Acceptance properties
 
+Speech/combat training records only accepted untraced human actions whose selected action existed
+in the locked pre-command perceived catalog. Operator, stand-in and submitted-policy actions are
+excluded. Attack evidence has physical event-time perception grants. Hidden or unprovoked bodies
+are not autonomous melee targets; no candidate reads hidden armor, hit probability or health.
+Basic attack parameters come from the server contract, never copied damage modifiers from history.
+Context `character-context-1.1.1` orders known observations by canonical event sequence; provenance
+remains private even when timestamps tie. Existing movement-profile versions remain readable.
+
 Private human movement evidence commits atomically with its accepted source command, event and
 outbox. Retries add neither another action nor another sample. Its input-origin field is independent
 of controller authority; traced advice, autonomous executors, automation, rejected commands and

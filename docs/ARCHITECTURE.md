@@ -54,6 +54,18 @@ entities; PostgreSQL repeats protected-state checks with forced RLS.
 
 ## State, commands, and events
 
+Speech/combat choice profiles are separate from the immutable movement-profile schema. They
+freeze their own content-addressed version and private human source IDs inside proposal receipts.
+New choice evidence and legacy movement evidence commit in one kernel transaction through an
+injected bundle sink. Raw historical utterances are not preference payloads or generated replies.
+The trusted context orders eligible observations by canonical source-event sequence, so equal
+wall-clock timestamps cannot reverse a conversation across restart.
+
+Only a validated perceived attack against this body marks a currently visible body as a threat.
+The catalog offers basic melee attempts, directional movement and fact-free speech intents. A
+fresh conversational/attack turn permits one reply; the character's own reply cannot keep itself
+talking. Combat emits frozen physical observations; controller and profile metadata never do.
+
 Human movement preferences are operational evidence, separate from character memory and canonical
 truth. An injected builder captures only perception-scoped pre-command features while the kernel
 holds its mutation lock. The durable adapter commits private append-only evidence with its source

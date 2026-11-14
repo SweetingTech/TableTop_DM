@@ -153,7 +153,7 @@ def test_clean_runtime_boots_with_non_owner_database(integration_stack, tmp_path
         readiness = _get_json(f"{base_url}/readyz")
         assert readiness["storage_mode"] == "postgres"
         assert readiness["checks"]["postgres"] == {
-            "migration": "008_player_behavior_evidence.sql",
+            "migration": "009_speech_combat_evidence.sql",
             "ok": True,
         }
         with urllib.request.urlopen(f"{base_url}/v2", timeout=3) as response:
