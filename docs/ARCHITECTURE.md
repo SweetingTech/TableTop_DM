@@ -54,6 +54,18 @@ entities; PostgreSQL repeats protected-state checks with forced RLS.
 
 ## State, commands, and events
 
+World time and initial offscreen activities use existing canonical branch projections and the
+same atomic command/event/outbox transaction. Typed clock configuration pins an explicitly granted
+AGENT and an epoch; ticks compare epoch/step while the branch is locked. All workers use one logical
+retry key per step and fresh durable snapshots. Clock pause fences unattended character actions at
+commit. Operational UTC/downtime policy stays separate from integer simulated seconds.
+
+Scheduled weather splits elapsed activity work at deterministic boundaries. Initial WEED/REST
+rows own progress; canonical bodies alone own resulting work/fatigue. Viewer presence has no effect.
+Scenes expose inspected current activity only. Configuration/ticks/pending work are operational
+records with no sensory emission. Population lifecycle coupling and a generic leased queue remain
+separate; see [the workflow](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
+
 Generated dialogue is an optional expression layer after deterministic intent selection. An
 injected provider receives sanitized identity and sourced subjective experience, never simulation
 authority or profile/controller metadata. Its typed text/source response replaces only speech

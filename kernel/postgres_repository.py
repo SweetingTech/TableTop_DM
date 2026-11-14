@@ -19,7 +19,7 @@ from kernel.contracts import (
 )
 from kernel.control import advanced, load_controller, persist_controller, validate_controller
 from kernel.database import transaction
-from kernel.errors import AuthorizationDenied, BranchIsolationError
+from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.event_factory import EventFactory
 from kernel.perception_contracts import PerceptionGrant
 from kernel.state import BranchState
@@ -130,16 +130,45 @@ class PostgresCommandRepository:
                     if cursor.fetchone() is not None:
                         raise AuthorizationDenied("executor is not assigned to this run and body")
                 validate_controller(proposal, controller)
-                if proposal.decision_authorship == "CHARACTER_POLICY":
+                if (
+                    proposal.decision_authorship == "CHARACTER_POLICY"
+                    or proposal.command_type == "tabletop.clock.tick"
+                ):
                     cursor.execute(
                         "SELECT 1 FROM sim.runs WHERE "
-                        "(world_id,branch_id,id)=(%s,%s,%s) AND status IN ('ACTIVE','RUNNING')",
+                        "(world_id,branch_id,id)=(%s,%s,%s) AND status IN ('ACTIVE','RUNNING')"
+                        + (
+                            " AND run_kind='LIVE'"
+                            if proposal.command_type == "tabletop.clock.tick"
+                            else ""
+                        ),
                         tuple(map(str, (proposal.world_id, proposal.branch_id, proposal.run_id))),
                     )
                     if cursor.fetchone() is None:
                         raise AuthorizationDenied("autonomous run is not active")
 
                 kind = BranchKind(str(branch["branch_kind"]))
+                if proposal.command_type == "tabletop.clock.configure":
+                    cursor.execute(
+                        "SELECT count(DISTINCT c.capability) AS n FROM sim.actor_capabilities c "
+                        "JOIN sim.actors a ON a.id=c.actor_id "
+                        "WHERE c.world_id=%s AND c.actor_id=%s "
+                        "AND a.actor_kind='AGENT' AND a.is_active "
+                        "AND c.capability IN ('world.read','action.propose','action.commit')",
+                        (str(proposal.world_id), str(proposal.parameters["executor_actor_id"])),
+                    )
+                    executor = cursor.fetchone()
+                    if executor is None or executor["n"] != 3:
+                        raise AuthorizationDenied(
+                            "clock executor requires an explicitly granted world agent"
+                        )
+                if proposal.command_type == "tabletop.clock.tick":
+                    cursor.execute(
+                        "SELECT 1 FROM sim.actors WHERE id=%s AND actor_kind='AGENT' AND is_active",
+                        (str(proposal.actor_id),),
+                    )
+                    if cursor.fetchone() is None:
+                        raise AuthorizationDenied("world runner requires an active agent executor")
                 if kind not in definition.allowed_branch_kinds:
                     raise AuthorizationDenied(
                         f"{proposal.command_type} is not allowed on {kind.value} branches"
@@ -207,6 +236,13 @@ class PostgresCommandRepository:
                     version=int(projection["version"]),
                 )
                 before = state.working_copy()
+                clock = state.projections.get("tabletop.clock", {}).get("singleton")
+                if (
+                    proposal.decision_authorship == "CHARACTER_POLICY"
+                    and clock is not None
+                    and clock["paused"]
+                ):
+                    raise WorldClockPaused("world clock is paused")
                 evidence = (
                     self.evidence_builder(proposal, before) if self.evidence_builder else None
                 )

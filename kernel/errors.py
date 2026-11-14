@@ -6,6 +6,10 @@ class AuthorizationDenied(KernelError):
     pass
 
 
+class WorldClockPaused(AuthorizationDenied):
+    """Expected suspension; runners must preserve the character controller's budget."""
+
+
 class DuplicateCommand(KernelError):
     pass
 

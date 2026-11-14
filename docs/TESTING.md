@@ -1,5 +1,14 @@
 # Testing
 
+World-time tests cover epoch/step/executor fencing, pause/resume and manual boundaries, FREEZE and
+bounded CATCH_UP, deterministic ordering/replay, trial/world isolation, empty-viewer progression,
+rain boundaries and partial work, rest/cancel/movement/incapacity, and inspected activity privacy.
+Durable tests run two actual `main.py world-runner` processes, restart without browser presence,
+race stale applications, revoke runtime grants, exercise RLS and roll back clock/effects/weather
+after ledger insertion fails. Character/world runners are tested on one branch. The built-SPA
+journey shows partial waiting work and resumed work on return at desktop/mobile sizes. Browser
+plugin is not available; the repository's regular Playwright/Chromium lane is used.
+
 Generated-dialogue tests use a local OpenAI-compatible HTTP fixture, never a real provider/key.
 They exercise the actual API/runner, multiple turns, sanitized subjective input, unknown sources,
 metafiction/extra-field rejection, outage fallback, immutable retries and separate-worker/restart

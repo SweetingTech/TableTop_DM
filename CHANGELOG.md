@@ -1,5 +1,11 @@
 # Changelog
 
+- Add opt-in persistent branch clocks and a world-runner CLI/Compose service, explicit FREEZE or
+  bounded CATCH_UP, pause/stop boundaries and executor epoch/step fencing through atomic commands.
+- Add persistent offscreen WEED/REST work, ordered scheduled rain, partial progress/cancellation
+  and physical interruptions. Show only inspected current activity in scenes and console rows.
+  Reuse existing RLS projections/ledger without a new migration; full population/routines remain open.
+
 - Add optional configurable OpenAI-compatible generated character dialogue after history/persona
   intent selection, with sourced subjective input, typed output, private immutable provenance and
   bounded outage fallback. Leave provider/model/key selection and activation to the operator.

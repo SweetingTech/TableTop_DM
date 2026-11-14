@@ -705,6 +705,101 @@ The endpoint must support the selected options; see the [official Chat Completio
 Model outputs are not promised bitwise deterministic even with seeds; saved proposals/events retain
 the accepted utterance for replay. Spontaneous conversations and narrative/world planning remain open.
 
+## World time and offscreen activities
+
+World time is an integer number of simulated seconds per branch. New worlds have no running
+clock. Configure one explicitly, initially paused. Clock state, pending weather and current
+activities live in the existing canonical projection: the normal kernel transaction commits
+progress, physical effects, receipt, event and outbox together. No new SQL migration is required.
+
+Setup uses the existing authenticated JSON APIs:
+
+1. An administrator creates an actor with `POST /api/v2/actors`: `kind: AGENT`, an explicit
+   `world_id`, and only `world.read`, `action.propose`, `action.commit` capabilities. No browser
+   account or cookie is reused by the worker. The executor must have these grants in this world.
+2. Submit `tabletop.clock.configure` through `POST /api/v2/commands`, with world/branch/run IDs,
+   a new `idempotency_key` and these parameters:
+
+   ```json
+   {
+     "expected_epoch": 0,
+     "executor_actor_id": "the-agent-uuid",
+     "paused": true,
+     "seconds_per_tick": 1,
+     "offline_policy": "FREEZE",
+     "max_catch_up_ticks": 10,
+     "until_seconds": null,
+     "wall_time": "current-time-in-UTC-with-offset"
+   }
+   ```
+
+3. Submit `tabletop.activity.start` with `entity_id`, `kind: WEED` or `REST`, and
+   `duration_seconds` (1–86,400; default 3,600). The body must exist and be capable. One current
+   activity per body prevents parallel duplicate output. Replacement requires completion/cancel.
+4. Optionally submit `tabletop.weather.schedule` with `zone_id`, `due_seconds` and `raining`.
+   The zone must exist (`world` is the default zone); past scheduling is rejected. Equal-time
+   schedules follow insertion order, with a stable identifier tie-break. `tabletop.weather.cancel`
+   takes `schedule_id` while it is pending.
+5. Reconfigure using `expected_epoch: 1`, the same executor, current UTC and `paused: false`.
+   Every reconfiguration increments the epoch, preserves simulated time/work and resets the next
+   operational tick. Optional `until_seconds` stops exactly at a future simulated boundary.
+6. Start `uv run tabletop-dm world-runner`; managed Compose startup includes that service.
+   It only drives explicitly enabled canonical LIVE clocks. Multiple processes can share the
+   assigned executor; the branch lock, epoch/step and one logical retry key commit each step once.
+
+Clock/activity/weather management requires world `entity.control` authority plus normal command
+capabilities. Players cannot advance time, schedule rain, or inspect pending offscreen work.
+`GET /api/v2/worlds/{world_id}/branches/{branch_id}/clock` returns current clock, activities,
+weather and pending weather to authorized world managers from a fresh durable snapshot. It does
+not claim worker liveness. All new commands are discoverable in `/api/v2/commands/contracts`.
+Whole-branch replay also requires `world.read.all`; a Player world role alone cannot read raw
+projections, pending work or clock control metadata through that inspection route.
+Clock inspection and replay use fresh durable snapshots and `Cache-Control: no-store`, including
+when another worker advanced the branch after this API process started.
+
+One operational UTC second makes a tick due. `seconds_per_tick` (1–3,600) controls how many
+simulated seconds that tick advances. FREEZE discards missed operational ticks, including downtime;
+it advances once and schedules the next tick after the supplied current UTC. CATCH_UP processes
+missed ticks in order, at most `max_catch_up_ticks` (1–60) per command; subsequent polls continue
+catch-up. Wall-clock UTC is recorded operational input, never substituted for simulated time.
+Reconfiguration resets that operational boundary, so paused time is not later caught up.
+
+Pause using a new configure command with the current epoch and `paused: true`. A configured clock
+pause also suspends unattended character runners without spending their failure budget. The kernel
+fences captured character proposals at commit. Worlds without clocks retain their previous behavior.
+The typed `WorldClockPaused` rejection is an expected suspension, including pauses during model
+generation; it preserves controller mode, step and failure budget so resume needs no new handoff.
+Human/operator commands remain explicit instantaneous actions. Action duration, initiative and
+scaling character cooldowns with simulated speed remain C3 work. The character observation barrier
+continues to apply; clock/configuration events emit no fictional observations.
+
+For deterministic stepping, `tabletop.clock.advance` requires a paused clock, `expected_epoch`,
+`expected_seconds` and `to_seconds`; it moves forward at most one simulated day. Clock and weather
+boundaries are processed in stable order. Advance is available on isolated trial branches after
+explicit configuration for that trial run; the background worker never drives trials.
+
+WEED accrues one abstract `weeded_units` counter per working simulated second on the canonical
+body. REST reduces its existing `fatigue` by one per second, capped at zero. Work stops at its
+duration. Rain pauses WEED only; incapacity or moving away pauses either activity. Waiting work
+resumes when its physical conditions clear. `tabletop.activity.cancel` requires both `entity_id`
+and the current `activity_id`, protecting a replacement job from stale cancellation. Current rows
+are replaced only by a new authorized start; prior transitions remain in the append-only ledger.
+The initial limits are 256 activity bodies and 128 pending weather changes per branch.
+
+Progress depends on elapsed simulated time, never camera visibility. Rain starting and stopping
+inside a large advance splits work at those exact boundaries. Returning players receive only an
+inspected body's current kind/status/progress and visible work output through the existing scene;
+hidden bodies and pending schedules stay hidden. The console renders that activity on entity rows.
+Refresh/return or a normal post-action scene refresh loads it; continuous cross-client updates
+remain A5. Context is now `character-context-1.3.0`; operator clock epochs, UTC, executor IDs,
+schedule/activity IDs and control metadata stay outside character fiction.
+
+This is a bounded activity/time foundation. General leased arbitrary due-work queues, population
+activation/deactivation reconciliation, persistent hunger/routines, travel/sleep/consumption,
+automatic detailed activity selection, weather narration and complete timeline restoration remain
+open checklist work. Existing `PopulationLifecycle` records do not create a second worker/resource
+balance and are not automatically attached to this first activity vocabulary.
+
 ## Error contract
 
 Errors use a JSON body with a stable `error` code and, where safe, a human-readable detail.

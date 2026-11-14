@@ -12,6 +12,7 @@ from domains.tabletop.spatial.scene import (
     PerceivedEntity,
     PerceivedScene,
     SceneCoordinate,
+    VisibleActivity,
 )
 from kernel.application import SimulationApplication
 
@@ -90,6 +91,7 @@ def build_perceived_scene(
         identified = detail in {"IDENTIFIED", "INSPECTED"} or entity_id == observer_entity_id
         classified = detail != "PRESENCE" or entity_id == observer_entity_id
         inspected = detail == "INSPECTED" or entity_id == observer_entity_id
+        activity = state.projections.get("tabletop.activities", {}).get(str(entity_id))
         entities.append(
             PerceivedEntity(
                 entity_id=entity_id,
@@ -117,6 +119,19 @@ def build_perceived_scene(
                 guarded=bool(current.get("guarded")) if inspected else None,
                 attack_reach=max(1, int(current.get("reach", 1)))
                 if entity_id == observer_entity_id
+                else None,
+                activity=VisibleActivity(
+                    kind=activity["kind"],
+                    status=activity["status"],
+                    progress_percent=min(
+                        100,
+                        int(activity["progress_seconds"])
+                        * 100
+                        // int(activity["duration_seconds"]),
+                    ),
+                    weeded_units=max(0, int(current.get("weeded_units", 0))),
+                )
+                if inspected and activity
                 else None,
             )
         )

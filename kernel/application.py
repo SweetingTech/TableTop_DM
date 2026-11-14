@@ -15,7 +15,7 @@ from kernel.branching import BranchManager, promotion_definition
 from kernel.command_bus import CommandBus, CommandReceipt
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
 from kernel.control import ControllerState, advanced, validate_controller
-from kernel.errors import AuthorizationDenied, BranchIsolationError
+from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayEngine, ReplayRecord
 from kernel.snapshots import SnapshotManifest, SnapshotStore
@@ -339,6 +339,24 @@ class SimulationApplication:
         return self._submit(proposal)
 
     def validate_control(self, proposal: CommandProposal) -> None:
+        if proposal.decision_authorship == "CHARACTER_POLICY":
+            clock = (
+                self.states.get(proposal.branch_id)
+                .projections.get("tabletop.clock", {})
+                .get("singleton")
+            )
+            if clock is not None and clock["paused"]:
+                raise WorldClockPaused("world clock is paused")
+        if proposal.command_type == "tabletop.clock.configure":
+            executor = self.authority(
+                proposal.world_id, uuid.UUID(str(proposal.parameters["executor_actor_id"]))
+            )
+            if executor.kind != ActorKind.AGENT or not executor.has_capabilities(
+                frozenset({"world.read", "action.propose", "action.commit"})
+            ):
+                raise AuthorizationDenied(
+                    "clock executor requires an explicitly granted world agent"
+                )
         scope = (
             proposal.world_id,
             proposal.branch_id,
@@ -350,10 +368,21 @@ class SimulationApplication:
             for row in tuple(self.controller_states.values())
         ):
             raise AuthorizationDenied("executor is not assigned to this run and body")
-        if proposal.decision_authorship == "CHARACTER_POLICY" and (
-            self.runs[proposal.run_id].status not in {"ACTIVE", "RUNNING"}
-        ):
+        if (
+            proposal.decision_authorship == "CHARACTER_POLICY"
+            or proposal.command_type == "tabletop.clock.tick"
+        ) and (self.runs[proposal.run_id].status not in {"ACTIVE", "RUNNING"}):
             raise AuthorizationDenied("autonomous run is not active")
+        if (
+            proposal.command_type == "tabletop.clock.tick"
+            and self.runs[proposal.run_id].kind != RunKind.LIVE
+        ):
+            raise AuthorizationDenied("world runner requires a live run")
+        if (
+            proposal.command_type == "tabletop.clock.tick"
+            and self.actors[proposal.actor_id].kind != ActorKind.AGENT
+        ):
+            raise AuthorizationDenied("world runner requires an agent executor")
         if proposal.embodied_entity_id is not None:
             validate_controller(
                 proposal,

@@ -194,7 +194,7 @@ def start(args: argparse.Namespace) -> None:
     up = ["up", "-d"]
     if not args.no_build:
         up.append("--build")
-    up.extend(("app", "worker", "projector", "runner"))
+    up.extend(("app", "worker", "projector", "runner", "world-runner"))
     compose(*up)
     payload = wait_ready(args.ready_url, args.timeout)
     print(json.dumps(payload, indent=2, sort_keys=True))

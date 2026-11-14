@@ -84,6 +84,7 @@ export async function loadGameState(worldId: string, requestedViewpoint = "", cu
         health: entity.health ?? undefined,
         max_health: entity.max_health ?? undefined,
         status: entity.status ?? undefined,
+        activity: entity.activity,
         public_state: entity.position ?? undefined,
         knowledge_state: entity.knowledge_state,
         detail_level: entity.detail_level,

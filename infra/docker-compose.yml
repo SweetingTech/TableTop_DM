@@ -152,6 +152,26 @@ services:
         condition: service_healthy
     command: ["python", "main.py", "runner"]
 
+  world-runner:
+    image: *app-image
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      <<: *runtime-environment
+    volumes:
+      - artifacts_data:/app/artifacts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    command: ["python", "main.py", "world-runner"]
+
   projector:
     image: *app-image
     restart: unless-stopped
