@@ -124,11 +124,14 @@ class PostgresControlPlane:
                             """,
                             (str(world_id), str(actor_id), capability),
                         )
+                # Hydration reorders world-scoped authorities. Preserve the established
+                # service identity rather than borrowing another world's actor on resync.
                 bootstrap_actor = next(
                     (
                         actor
                         for actor in simulation.world_authorities.values()
                         if {"action.commit", "action.propose"}.issubset(actor.capabilities)
+                        and (self.actor_id is None or actor.actor_id == self.actor_id)
                     ),
                     None,
                 )

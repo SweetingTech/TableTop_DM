@@ -1,5 +1,8 @@
 # Changelog
 
+- Retain the durable control plane's bootstrap identity after authority reordering; fail closed
+  on its loss instead of selecting an unrelated world's actor during synchronization.
+
 - Mask combat details by event-time modality and participant visibility; order validated experience
   before truncating long equal-timestamp conversations to prevent repeated autonomous replies.
 

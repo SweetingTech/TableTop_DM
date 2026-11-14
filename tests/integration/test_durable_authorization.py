@@ -19,10 +19,59 @@ from psycopg2 import sql
 
 from infra.migrate import migrate
 from kernel.api.app import create_app
+from kernel.application import SimulationApplication
+from kernel.contracts import ActorKind
+from kernel.database import transaction
+from kernel.postgres_control_plane import PostgresControlPlane
 
 pytestmark = pytest.mark.integration
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "infra" / "sql" / "migrations"
+
+
+def test_sync_preserves_bootstrap_identity_after_world_authority_reordering(
+    integration_stack, tmp_path
+):
+    simulation = SimulationApplication(tmp_path)
+    first = simulation.create_world("Bootstrap identity first")
+    second = simulation.create_world("Bootstrap identity second")
+    capabilities = {"world.read", "action.propose", "action.commit"}
+    bootstrap = simulation.create_actor(
+        "Bootstrap", ActorKind.HUMAN, {"DM"}, capabilities, world_id=first.world_id
+    )
+    simulation.grant_authority(
+        second.world_id, bootstrap.actor_id, roles={"DM"}, capabilities=capabilities
+    )
+    narrow = simulation.create_actor(
+        "One-world actor", ActorKind.HUMAN, {"DM"}, capabilities, world_id=first.world_id
+    )
+    control = PostgresControlPlane(integration_stack.database_url)
+    control.sync(simulation)
+    assert control.actor_id == bootstrap.actor_id
+    control.hydrate(simulation)
+    key = (first.world_id, narrow.actor_id)
+    simulation.world_authorities = {
+        key: simulation.world_authorities[key],
+        **{scope: actor for scope, actor in simulation.world_authorities.items() if scope != key},
+    }
+    control.sync(simulation)
+    assert control.actor_id == bootstrap.actor_id
+    with transaction(actor_id=narrow.actor_id, dsn=integration_stack.database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT count(*) FROM sim.branch_projections WHERE world_id=%s",
+                (str(second.world_id),),
+            )
+            assert cursor.fetchone()[0] == 0
+    simulation.world_authorities = {
+        scope: actor
+        for scope, actor in simulation.world_authorities.items()
+        if actor.actor_id != bootstrap.actor_id
+    }
+    with pytest.raises(RuntimeError, match="bootstrap"):
+        control.sync(simulation)
+    assert control.actor_id == bootstrap.actor_id
+
 
 ADMIN_PASSWORD = "Durable-Administrator-2026!"
 PLAYER_PASSWORD = "Durable-Player-2026!"

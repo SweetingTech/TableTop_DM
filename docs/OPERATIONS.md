@@ -115,6 +115,10 @@ automation and test clients.
 `GET /healthz` checks only that the HTTP process can respond. `GET /readyz` verifies configured
 dependencies and returns `503` if any required check fails.
 
+The durable control plane retains its established bootstrap actor across metadata synchronization
+and hydration. It never selects a different world's actor merely because authority rows reorder;
+losing the bootstrap authority fails closed without widening grants.
+
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
