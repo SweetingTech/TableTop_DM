@@ -144,7 +144,9 @@ recorded mask and the original physical grant; beliefs need matching visible cla
 summaries are grounded again in the same observation. Operator-tagged and other-branch evidence
 is excluded. The model-facing situation omits account/control and timeline/ledger metadata.
 Context reads do not mutate minds or the world. Legal action providers are a server injection
-point; the HTTP context route supplies no action catalog yet. The existing caller-authored
+point; the HTTP route injects the [tabletop basic action provider](../domains/tabletop/character_actions.py).
+It uses only the authorized perceived scene and world-scoped actor authority, offering typed
+movement attempts without probing hidden truth. Kernel validation still decides outcomes. The existing caller-authored
 decision API is now restricted to privileged playtester evaluation and refuses character personas
 until the live identity/context/candidate path is connected.
 

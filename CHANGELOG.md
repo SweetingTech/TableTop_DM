@@ -24,6 +24,12 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Added a versioned server-owned basic movement-attempt catalog to authorized character context.
+  Choices use perceived self state and world-scoped capabilities/body control, without class or
+  protagonist restrictions or hidden-obstacle filtering. Kernel validation remains authoritative;
+  inspect-only reads offer no executable choices. Full character decisions and the campaign runner
+  remain unavailable pending identity, history, knowledge, and controller wiring.
+
 - Fixed automatic scene refresh after accepted Game Console actions, including delayed external
   observation projection. The feed renders each perceived source event once; world/viewpoint
   switches clear local state and discard late responses. Accepted actions remain visibly accepted
@@ -42,7 +48,7 @@ This file records the current TableTop DM product line.
   history; model-facing beliefs use consistent local subject references instead of kernel IDs.
 - Restricted caller-authored cognition to privileged simulated-playtester evaluation and rejected
   live character requests until identity/context/action wiring is complete. Context reads currently
-  expose no autonomous action catalog; authored backstories and the runner remain unfinished.
+  expose only the basic movement-attempt catalog; authored backstories and the runner remain unfinished.
 - Rejected non-finite/overflowing persona distribution weights and totals with the intended
   feasibility error before seeded sampling.
 

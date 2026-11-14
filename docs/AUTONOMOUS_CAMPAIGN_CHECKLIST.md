@@ -108,8 +108,11 @@ as composition glue; reusable execution services must also work from workers and
   Reuse [scene](../domains/tabletop/spatial/scene.py), perception contracts, and mind repositories.
   Foundation implemented: shared scene service, read-only [context builder](../cognition/context.py),
   same-branch event/frozen-grant validation, grounded memories/beliefs, and authorized context reads.
-  This item remains open: authored identity, known-lore retrieval, legal action catalog, and worker
-  projection/decision barriers still need wiring; HTTP context reads currently return no candidates.
+  The HTTP context now supplies a versioned basic movement-attempt catalog through a trusted
+  domain provider, gated by world capabilities/body control and perceived self state. Hidden
+  obstacles never filter choices; submission still passes kernel validation. This item remains
+  open: authored identity, known lore, broader speech/combat/activity actions, and dependent-decision
+  projection barriers still need wiring. This catalog alone does not activate autonomous decisions.
 - [ ] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
   evaluation situations confined to explicit privileged/testing flows rather than trusting them for live minds.
   The caller-authored endpoint is now privileged playtester evaluation only and rejects CHARACTER
