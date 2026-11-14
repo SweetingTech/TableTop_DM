@@ -88,7 +88,7 @@ Sight uses same-zone range plus deterministic grid supercover line-of-sight. Sou
 ambient noise, portal transmission, and occluder attenuation. There are no random perception rolls
 in this slice. Future stealth or concealment checks must be seeded and versioned.
 
-Resolver `grid-spatial-perception-1.1.0` admits a sensory modality only after acuity produces
+Resolver `grid-spatial-perception-1.2.0` admits a sensory modality only after acuity produces
 positive finite confidence at the stored six-decimal precision. Zero or invalid sight/hearing
 cannot create a grant or reveal its payload. Mixed emissions retain only the sensed modalities.
 Sound propagation selects the strongest complete portal path, independent of portal ordering.
@@ -99,6 +99,12 @@ Combat grants freeze each participant's sight visibility before the attack. Soun
 only an anonymous fighting disturbance. A participant ID requires sight of that subject, and
 precise hit/damage fields require inspected sight (confidence at least 0.8) of both participants.
 An invisible attacker or target remains masked even if the other participant is visible.
+
+Fixed spell invocation applies the same event-time masking to caster/target, effect and power.
+Sound-only witnesses hear an anonymous spellcasting disturbance. Invisible emission origins do
+not grant sight; a guard posture is a sight-only event. Scenes expose mana/attack reach only to
+the embodied self and guard stance only with inspected sight. These facts do not expose inventory
+or another body's resources. Generated speech uses the normal frozen sound grants and empty claims.
 
 The resolver implements a kernel protocol. A browser, Unreal, or Unity adapter may later provide
 richer spatial facts while preserving the same event, grant, cognition, and scene contracts.

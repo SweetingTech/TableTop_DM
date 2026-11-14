@@ -202,6 +202,18 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
         seed: stableSeed(`${state.run?.run_id ?? "run"}:${text}`),
       };
     }
+    case "guard": {
+      if (parts.length) throw new Error("Use /guard with no parameters");
+      return { commandType: "tabletop.combat.guard", parameters: {} };
+    }
+    case "invoke": {
+      const spellId = (parts.shift() ?? "").toUpperCase();
+      if (!["ARCANE_BOLT", "MEND"].includes(spellId) || !parts.length) {
+        throw new Error("Use /invoke ARCANE_BOLT|MEND <perceived target name or id>");
+      }
+      return { commandType: "tabletop.magic.invoke", parameters: {
+        spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
+    }
     case "cast": {
       if (parts.length < 5) {
         throw new Error("Use /cast <target> <damage|heal|condition> <power> <mana> <spell>");

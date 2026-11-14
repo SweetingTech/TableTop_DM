@@ -4,6 +4,13 @@ import { parseCommand } from "../features/game-console/api";
 import { entityMapPosition } from "../features/game-console/mapPosition";
 
 describe("typed game command parser", () => {
+  it("uses server-owned guard and spell invocation contracts", () => {
+    expect(parseCommand("/guard", demoGameState)).toEqual({ commandType: "tabletop.combat.guard", parameters: {} });
+    expect(parseCommand("/invoke ARCANE_BOLT Dockmaster Vale", demoGameState)).toEqual({
+      commandType: "tabletop.magic.invoke", parameters: { spell_id: "ARCANE_BOLT", target_id: demoGameState.entities[1].entity_id } });
+    expect(() => parseCommand("/guard 999", demoGameState)).toThrow();
+    expect(() => parseCommand("/invoke UNKNOWN Dockmaster Vale", demoGameState)).toThrow();
+  });
   it("maps movement and attacks to typed deterministic proposals", () => {
     expect(parseCommand("/move north", demoGameState)).toEqual({
       commandType: "tabletop.spatial.move",

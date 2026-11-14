@@ -299,7 +299,7 @@ def test_upgrade_from_007_preserves_old_commands_as_unknown(integration_stack, t
         for path in sorted(migrations.glob("*.sql"))[:7]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 7
-        assert migrate(url, migrations) == 2
+        assert migrate(url, migrations) == 3
         assert migrate(url, migrations) == 0
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute(

@@ -101,12 +101,21 @@ returns the original committed receipt.
 
 ## Acceptance properties
 
+Optional dialogue generation proposes text only after policy action selection. Bounded network
+and schema failures use deterministic fallback. Accepted text/model/prompt/source metadata freeze
+in the existing private receipt before submission. Retries reuse that receipt. Speech carries
+empty claims and cannot apply another action or world delta. No provider is active by default.
+
+Guard consumes its defensive benefit once. Fixed spell invocation rechecks resource sufficiency,
+range, sight, zone and capable targets inside the kernel transaction; rejection consumes no mana
+or health. Migration 010 expands human choice kinds while preserving source/origin/RLS rules.
+
 Speech/combat training records only accepted untraced human actions whose selected action existed
 in the locked pre-command perceived catalog. Operator, stand-in and submitted-policy actions are
 excluded. Attack evidence has physical event-time perception grants. Hidden or unprovoked bodies
 are not autonomous melee targets; no candidate reads hidden armor, hit probability or health.
 Basic attack parameters come from the server contract, never copied damage modifiers from history.
-Context `character-context-1.1.1` orders known observations by canonical event sequence; provenance
+Context `character-context-1.2.0` orders known observations by canonical event sequence; provenance
 remains private even when timestamps tie. Existing movement-profile versions remain readable.
 
 Private human movement evidence commits atomically with its accepted source command, event and

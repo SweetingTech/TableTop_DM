@@ -8,11 +8,12 @@ from cognition.models import Observation
 from domains.tabletop.combat import AttackRequest
 from domains.tabletop.combat import command_definition as attack_definition
 from domains.tabletop.dialogue import SpeechRequest
+from domains.tabletop.magic.tactical import InvokeRequest
 from domains.tabletop.spatial import MoveRequest, command_definition
 from domains.tabletop.spatial.scene import PerceivedScene
 from kernel.contracts import Actor, BranchKind
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.1.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.2.0"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
 
 
@@ -77,6 +78,37 @@ def character_action_candidates(
                 parameters=AttackRequest(target_id=threat.entity_id).model_dump(mode="json"),
             )
             for index, threat in enumerate(frame.threats)
-            if threat.distance <= 1
+            if threat.distance <= (body.attack_reach or 1)
         )
+    if frame is not None and frame.threats:
+        if not frame.guarded:
+            actions += (
+                DecisionAction(
+                    action="Take a defensive guard",
+                    command_type="tabletop.combat.guard",
+                    parameters={},
+                ),
+            )
+        if frame.mana >= 2:
+            actions += tuple(
+                DecisionAction(
+                    action=f"Try an arcane bolt at perceived threat {index + 1}",
+                    command_type="tabletop.magic.invoke",
+                    parameters=InvokeRequest(
+                        spell_id="ARCANE_BOLT", target_id=threat.entity_id
+                    ).model_dump(mode="json"),
+                )
+                for index, threat in enumerate(frame.threats)
+                if threat.distance <= 6
+            )
+            if body.health is not None and body.max_health and body.health < body.max_health:
+                actions += (
+                    DecisionAction(
+                        action="Try to mend my wounds",
+                        command_type="tabletop.magic.invoke",
+                        parameters=InvokeRequest(
+                            spell_id="MEND", target_id=body.entity_id
+                        ).model_dump(mode="json"),
+                    ),
+                )
     return actions

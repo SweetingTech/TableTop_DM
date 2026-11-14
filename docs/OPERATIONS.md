@@ -122,7 +122,7 @@ losing the bootstrap authority fails closed without widening grants.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `009_speech_combat_evidence.sql`;
+- migration history through `010_tactical_choice_evidence.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -226,7 +226,7 @@ and serialized successor checks. Runtime can read permitted revisions but cannot
 them directly. The migration does not auto-create personas for old characters; retry their roster
 assignment to create a missing initial binding. Existing bindings are never silently replaced.
 
-Apply migrations through 009 before starting this application version. Back up PostgreSQL and artifacts and verify
+Apply migrations through 010 before starting this application version. Back up PostgreSQL and artifacts and verify
 the upgrade in an isolated restore first, using the normal schema-change procedure below.
 Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
 are retained; retire the saved card instead of deleting evidence beneath a running identity.
@@ -273,6 +273,21 @@ and support export, selective delete, and retention purge. This repository does 
 telemetry to a third party.
 
 ## Backup and restore
+
+Migration `010_tactical_choice_evidence.sql` extends the existing private evidence constraint and
+source trigger for guard/fixed spells and the new choice version. It retains old evidence and
+append-only/RLS/privilege rules. Apply it through the owner before upgrading API/runner processes.
+
+Generated dialogue is off by default. To activate it, choose the endpoint/model and compatibility
+settings in [.env.example](../.env.example); see [the workflow](API_AND_WORKFLOWS.md#generated-dialogue-and-tactical-choices).
+API and runner must share configuration. The provider key remains server-only; there is no implicit
+reuse of OPENAI_API_KEY, no model discovery and no startup network probe. No real provider/model
+was selected by the feature. Bounded HTTP failures produce a private FALLBACK receipt without raw
+provider errors or credential-bearing URLs. In-process retries are disabled. Proposal locks can
+be held up to the configured provider timeout (maximum 30 seconds).
+The main decision also enforces a total deadline. Late transport responses are discarded; at most
+two transport workers can remain in flight per process. They have no kernel/storage authority.
+An already-sent provider request may still complete after fallback and incur its bounded token cost.
 
 Migration `009_speech_combat_evidence.sql` adds a separate private forced-RLS append-only choice
 evidence table with source, option and composite binding guards. It supports clean install and

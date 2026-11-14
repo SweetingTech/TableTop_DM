@@ -255,7 +255,7 @@ def test_upgrade_from008_is_repeatable(integration_stack, tmp_path):
         for path in sorted(migrations.glob("*.sql"))[:8]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 8
-        assert migrate(url, migrations) == 1
+        assert migrate(url, migrations) == 2
         assert migrate(url, migrations) == 0
     finally:
         with maintenance.cursor() as cursor:
