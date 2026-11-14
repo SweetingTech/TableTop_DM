@@ -9,6 +9,8 @@ and synthetic exclusion. Legacy movement tests verify unchanged profile hash com
 The isolated speech/combat browser journey records four demonstrations through the built console,
 hands control to the real runner, and verifies matching autonomous replies or attacks and takeover.
 The scene refresh regression also covers a controller advancing while a reload unmounts its panel.
+Review regressions cover sound-only witnesses, independently invisible combat participants, frozen
+masks after visibility changes, and 90 equal-timestamp turns with a reply below the old UUID cutoff.
 
 Movement behavior tests demonstrate manual choices changing actual runner movement, persona and
 authored-card fallback, comparable-layout filtering, foreign scope exclusion, and rejection of

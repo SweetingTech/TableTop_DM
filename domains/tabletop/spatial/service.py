@@ -124,6 +124,8 @@ def build_perceived_scene(
         event_reader=simulation.events.get,
         grant_reader=lambda event_id, entity_id: simulation.perceptions.get((event_id, entity_id)),
     )
+    event_order = {event: index for index, event in enumerate(simulation.events)}
+    observations = tuple(sorted(observations, key=lambda row: event_order[row.source_event_id]))
     for observation_model in observations[-80:]:
         observation = observation_model.model_dump(mode="json")
         source_event = simulation.events.get(uuid.UUID(str(observation["source_event_id"])))

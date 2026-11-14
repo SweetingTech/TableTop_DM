@@ -452,7 +452,7 @@ world/viewpoint authorization as the perceived scene. It returns a versioned evi
 projection version, and a model-facing `situation`. Frozen event-time grants and source events
 must match the observer/world/branch; operator-tagged events, unbacked beliefs, and memory-summary
 overrides cannot add facts. The model-facing situation excludes controller, ledger, and timeline
-metadata. Context version `character-context-1.1.1` includes the pinned self-authored identity only
+metadata. Context version `character-context-1.1.2` includes the pinned self-authored identity only
 when the caller controls the body or holds `mind.read.all`; broad scene inspection alone does not
 grant private identity access. `binding` is operational response metadata outside `situation`.
 The situation's `identity` contains fiction and explicitly labeled `starting_knowledge_claims`;
@@ -641,9 +641,12 @@ traits and pinned peaceful/aggressive card tendencies provide fallbacks; repeate
 choices gain influence with confidence. These are reproducible rules, not general language
 understanding. Historical unknown/pre-catalog context is not reconstructed or backfilled.
 
-Combat commands now emit physical sight/sound observations with attacker, target, hit and damage;
-character context validates their frozen grants before using them. Eligible observations follow
-canonical source-event order even when timestamps tie. Operator/profile/handoff metadata is kept
+Combat commands now emit physical sight/sound observations. Event-time subject visibility masks
+participant IDs; hit/damage require inspected sight of both participants. Sound-only witnesses
+receive an anonymous disturbance, including behind walls or when participants are invisible.
+Character context validates their frozen grants before using them. Eligible observations follow
+canonical source-event order before taking the bounded window, even when timestamps tie.
+Operator/profile/handoff metadata is kept
 outside sensory fiction, character prompts and speech. Full tactical plans, learned arbitrary
 phrasing, spell selection, narrative planning and complete timeline restoration remain open.
 

@@ -1,5 +1,8 @@
 # Changelog
 
+- Mask combat details by event-time modality and participant visibility; order validated experience
+  before truncating long equal-timestamp conversations to prevent repeated autonomous replies.
+
 - Fixed autonomous scene refresh losing a step when the controller panel remounted during loading.
 
 - Extend trusted character choices to contextual speech intent/volume, known-threat basic melee

@@ -8,6 +8,7 @@ from cognition.choices import choice_profile, weighted_choices
 from cognition.context import CharacterContext
 from cognition.engine import DecisionAction, DecisionRequest, LayeredDecisionEngine
 from cognition.models import Observation
+from cognition.perception import PerceptionEngine, PerceptionProfile
 from domains.tabletop.character_history import CharacterCardContent
 from domains.tabletop.spatial.scene import PerceivedScene
 from persona.models import CompiledPersona, PersonaPurpose
@@ -187,6 +188,74 @@ def test_unseen_attacker_never_becomes_an_executable_target(monkeypatch, tmp_pat
     ] = True
     context = player.get(path + "/context", query_string={"run_id": run}).get_json()
     assert all(row["parameters"].get("target_id") != target for row in context["action_candidates"])
+
+
+@pytest.mark.parametrize("hidden", ["wall", "attacker", "target", "none"])
+def test_combat_grants_freeze_modality_and_subject_visibility(monkeypatch, tmp_path, hidden):
+    app = _app(monkeypatch, tmp_path)
+    admin, _, card, _, _, target, base = setup_scene(app)
+    source = app.extensions["simulation"]
+    actor = app.extensions["demo_ids"]["actor_id"]
+    response = admin.post(
+        f"/api/v2/worlds/{base['world_id']}/entities",
+        json={
+            "world_id": base["world_id"],
+            "branch_id": base["branch_id"],
+            "name": "Witness",
+            "entity_type": "NPC",
+            "controller_actor_id": str(actor),
+            "public_state": {"x": -2 if hidden == "wall" else 0, "y": 0 if hidden == "wall" else 1},
+        },
+    )
+    witness = uuid.UUID(response.get_json()["entity_id"])
+    state = source.states.get(uuid.UUID(base["branch_id"]))
+    if hidden == "wall":
+        state.projections["tabletop.spatial.occluders"] = {
+            "wall": {
+                "zone_id": "world",
+                "x": -1,
+                "y": 0,
+                "sight_opacity": 1,
+                "sound_attenuation": 1,
+            }
+        }
+    elif hidden != "none":
+        subject = target if hidden == "attacker" else card["entity_id"]
+        state.projections.setdefault("tabletop.sensory_profiles", {}).setdefault(subject, {})[
+            "invisible"
+        ] = True
+    provoke(admin, base, target, card, "masked-combat")
+    event = list(source.events.values())[-1]
+    grant = source.perceptions[(event.event_id, witness)]
+    observed = PerceptionEngine().observe(
+        event, PerceptionProfile(observer_entity_id=witness, observer_actor_id=actor), grant=grant
+    )
+    if hidden == "wall":
+        assert observed.perceived_payload == {"summary": "Sounds of nearby fighting."}
+        assert tuple(map(str, grant.modalities)) == ("SOUND",)
+    elif hidden in {"attacker", "target"}:
+        assert hidden + "_id" not in observed.perceived_payload
+        assert not {"hit", "damage"}.intersection(observed.perceived_payload)
+    else:
+        assert set(observed.perceived_payload) == {"attacker_id", "target_id", "hit", "damage"}
+    state.projections["tabletop.spatial.occluders"] = {}
+    state.projections["tabletop.sensory_profiles"] = {}
+    assert (
+        PerceptionEngine().observe(
+            event,
+            PerceptionProfile(observer_entity_id=witness, observer_actor_id=actor),
+            grant=grant,
+        )
+        == observed
+    )
+    stored = next(
+        row
+        for row in app.extensions["minds"].inspect(witness, branch_id=event.branch_id)[
+            "observations"
+        ]
+        if str(row["source_event_id"]) == str(event.event_id)
+    )
+    assert stored["perceived_payload"] == observed.perceived_payload
 
 
 def test_demonstrated_retreat_drives_actual_autonomous_movement(monkeypatch, tmp_path):
