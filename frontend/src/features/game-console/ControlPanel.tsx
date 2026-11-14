@@ -72,7 +72,7 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
 
   const mode = control?.mode ?? "HUMAN";
   return <Panel title="Character control" meta={<span role="status">{loaded ? mode === "HUMAN" ? "You are playing" : mode === "AUTONOMOUS" ? "Character is acting" : "Autonomy paused" : "Loading control…"}</span>}>
-    <p>Your character can continue basic movement while you are away. This is not yet a story or player-history policy. Closing the page keeps your selected control mode.</p>
+    <p>Your character can continue basic movement using comparable human choices and its pinned persona and card. Story, speech, and combat planning are still being built. Closing the page keeps your selected control mode.</p>
     <p>{control ? `${control.step} / ${control.max_steps} autonomous actions` : "Autonomy is off until you enable it."}{control?.last_error ? ` · ${control.last_error === "step_limit" ? "Action limit reached." : "The runner paused or is waiting. Take control or explicitly resume."}` : ""}</p>
     <label>Autonomous action limit<input aria-label="Autonomous action limit" type="number" min={1} max={1000} value={limitText} disabled={!loaded || busy} onChange={(event) => setLimitText(event.target.value)} /></label>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

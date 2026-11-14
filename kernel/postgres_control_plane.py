@@ -491,6 +491,7 @@ class PostgresControlPlane:
                         control_epoch=row["control_epoch"],
                         control_step=row["control_step"],
                         decision_authorship=row["decision_authorship"],
+                        input_origin=row["input_origin"],
                         world_id=_uuid(row["world_id"]),
                         branch_id=branch_id,
                         run_id=_uuid(row["run_id"]),

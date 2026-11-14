@@ -65,7 +65,8 @@ Read-only character-context assembly now validates stored experience against the
 source events and frozen physical grants. It cannot promote operator summaries into sensory
 facts. The model-facing situation excludes ledger/controller/timeline metadata. Caller-authored
 decision requests are restricted to privileged playtester evaluation; character requests fail
-closed until authored identity binding and a server-owned action catalog are wired.
+closed to caller-authored live situations; trusted proposals resolve pinned authored identity and
+the server-owned movement catalog before deciding.
 
 ## Constitutional order
 
@@ -99,6 +100,14 @@ A rejected proposal leaves no partial state. Retrying the same actor/run/idempot
 returns the original committed receipt.
 
 ## Acceptance properties
+
+Private human movement evidence commits atomically with its accepted source command, event and
+outbox. Retries add neither another action nor another sample. Its input-origin field is independent
+of controller authority; traced advice, autonomous executors, automation, rejected commands and
+legacy unknown-origin records are excluded from human preference learning. Behavior provenance,
+confidence and contradictions remain outside sensory payloads and model-facing situation text.
+Profile reconstruction uses only the exact current world/branch/run/body/player/character. Complete
+rewind of this evidence alongside all campaign state remains part of timeline revision work.
 
 - Schema version + seed + fixed dimensions always produces the same valid persona.
 - The same persona, policy, state, seed, and runtime assignment produces the same deterministic

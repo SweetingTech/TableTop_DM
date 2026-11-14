@@ -24,6 +24,7 @@ REQUIRED_MEMBERS = (
     "infra/sql/migrations/005_character_history_and_bindings.sql",
     "infra/sql/migrations/006_character_proposal_receipts.sql",
     "infra/sql/migrations/007_controller_handoff_runner.sql",
+    "infra/sql/migrations/008_player_behavior_evidence.sql",
     "static/v2/index.html",
 )
 
@@ -70,6 +71,7 @@ assert [item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "005_character_history_and_bindings.sql",
     "006_character_proposal_receipts.sql",
     "007_controller_handoff_runner.sql",
+    "008_player_behavior_evidence.sql",
 ]
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

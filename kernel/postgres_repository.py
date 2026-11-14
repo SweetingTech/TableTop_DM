@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 import psycopg2.errors
@@ -30,6 +31,8 @@ class PostgresCommandRepository:
     def __init__(self, dsn: str | None = None, event_factory: EventFactory | None = None) -> None:
         self.dsn = dsn
         self.event_factory = event_factory or EventFactory()
+        self.evidence_builder: Callable[[CommandProposal, BranchState], dict | None] | None = None
+        self.evidence_persister: Callable[[Any, uuid.UUID, dict], None] | None = None
 
     def execute(
         self,
@@ -204,6 +207,9 @@ class PostgresCommandRepository:
                     version=int(projection["version"]),
                 )
                 before = state.working_copy()
+                evidence = (
+                    self.evidence_builder(proposal, before) if self.evidence_builder else None
+                )
                 result = definition.handler(proposal, state)
                 if definition.result_model is not None:
                     definition.result_model.model_validate(result.result)
@@ -251,10 +257,10 @@ class PostgresCommandRepository:
                       branch_id, run_id, interaction_id, actor_id,
                       embodied_entity_id, parameters, result, seed,
                       idempotency_key, correlation_id, causation_id,
-                      resulting_state_hash,control_epoch,control_step,decision_authorship
+                      resulting_state_hash,control_epoch,control_step,decision_authorship,input_origin
                     ) VALUES (
                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,
-                      %s,%s,%s,%s,%s,%s,%s
+                      %s,%s,%s,%s,%s,%s,%s,%s
                     )
                     """,
                     (
@@ -277,11 +283,14 @@ class PostgresCommandRepository:
                         proposal.control_epoch,
                         proposal.control_step,
                         proposal.decision_authorship,
+                        proposal.input_origin,
                     ),
                 )
                 if controller is not None and proposal.decision_authorship == "CHARACTER_POLICY":
                     persist_controller(cursor, advanced(controller))
                 self._insert_event(cursor, event)
+                if evidence is not None and result.accepted and self.evidence_persister is not None:
+                    self.evidence_persister(cursor, event.event_id, evidence)
                 self._insert_perceptions(cursor, materialized.perceptions)
                 cursor.execute(
                     """

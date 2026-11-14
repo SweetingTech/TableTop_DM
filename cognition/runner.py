@@ -6,6 +6,7 @@ import time
 import uuid
 from collections.abc import Callable
 
+from cognition.behavior import BehaviorProfile
 from cognition.character_decisions import (
     CharacterContextPending,
     CharacterProposalReceipt,
@@ -15,15 +16,17 @@ from cognition.character_decisions import (
     require_character_proposal_authority,
     require_projected_character_experience,
 )
+from cognition.context import CharacterContext
 from cognition.control import ControllerRepository
 from cognition.store import MindStore
-from domains.tabletop.character_bindings import CharacterBindingRepository
+from domains.tabletop.character_bindings import CharacterBinding, CharacterBindingRepository
 from domains.tabletop.character_context import ProfileReader, resolve_character_context
 from domains.tabletop.portal import PortalRepository
 from domains.tabletop.spatial.service import build_perceived_scene
 from kernel.application import SimulationApplication
 from kernel.control import ControllerState, ControlScope
 from kernel.errors import KernelError
+from persona.models import CompiledPersona
 
 
 class CharacterDecisionService:
@@ -37,10 +40,23 @@ class CharacterDecisionService:
         profiles: ProfileReader,
         proposals: CharacterProposalRepository,
         reference: SimulationApplication | None,
+        behavior_reader: Callable[
+            [
+                SimulationApplication,
+                ControlScope,
+                uuid.UUID,
+                CharacterContext,
+                CharacterBinding,
+                CompiledPersona,
+            ],
+            BehaviorProfile,
+        ]
+        | None = None,
     ) -> None:
         self.snapshot, self.read_minds = snapshot, read_minds
         self.bindings, self.cards, self.profiles = bindings, cards, profiles
         self.proposals, self.reference = proposals, reference
+        self.behavior_reader = behavior_reader
 
     def decide(
         self,
@@ -89,6 +105,11 @@ class CharacterDecisionService:
                 controller=controller,
                 human_epoch=source.controller_states[scope.key].epoch
                 if scope.key in source.controller_states
+                else None,
+                behavior=self.behavior_reader(
+                    source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
+                )
+                if self.behavior_reader
                 else None,
             )
 

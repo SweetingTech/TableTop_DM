@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hmac
 import ipaddress
 import json
@@ -15,6 +16,8 @@ from urllib.request import urlopen
 from flask import Flask, g, jsonify, make_response, request, send_from_directory
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from cognition.behavior import DIRECTIONS, HumanMovementEvidence, behavior_profile, movement_frame
+from cognition.behavior_store import PostgresBehaviorEvidence, persist_human_evidence
 from cognition.character_decisions import (
     CharacterContextPending,
     CharacterProposalRepository,
@@ -98,6 +101,7 @@ from kernel.database import execute_one
 from kernel.errors import KernelError
 from kernel.postgres_control_plane import PostgresControlPlane
 from kernel.postgres_repository import PostgresCommandRepository
+from kernel.state import InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
 from persona.compilation import PersonaCompiler
 from persona.generation import PersonaGenerator
@@ -612,6 +616,99 @@ def create_app(
             store_controller_runtime,
         )
     )
+    evidence_reader = PostgresBehaviorEvidence(database_dsn) if database_dsn else None
+
+    def read_behavior(source, scope, actor_id, context, binding, profile):
+        player = source.entities[(scope.branch_id, scope.entity_id)].controller_actor_id
+        if player is None:
+            player = binding.recorded_by
+        evidence = (
+            evidence_reader.read(scope, actor_id)
+            if evidence_reader
+            else tuple(
+                (event, HumanMovementEvidence.model_validate(row))
+                for event, row in tuple(simulation.human_decision_evidence.items())
+                if event in simulation.events
+                and tuple(
+                    row.get(name) for name in ("world_id", "branch_id", "run_id", "entity_id")
+                )
+                == tuple(map(str, scope.key))
+            )[-256:]
+        )
+        return behavior_profile(
+            context,
+            profile,
+            character_id=binding.character_id,
+            binding_id=binding.binding_id,
+            run_id=scope.run_id,
+            player_actor_id=player,
+            evidence=evidence,
+        )
+
+    def capture_human_movement(proposal, before):
+        if (
+            proposal.command_type != "tabletop.spatial.move"
+            or proposal.input_origin != "HUMAN_INPUT"
+            or proposal.decision_authorship != "HUMAN"
+            or proposal.decision_trace_id is not None
+            or proposal.embodied_entity_id is None
+            or before.kind is not BranchKind.CANONICAL
+        ):
+            return None
+        direction = DIRECTIONS.get((proposal.parameters.get("dx"), proposal.parameters.get("dy")))
+        if direction is None:
+            return None
+        source = controller_snapshot()
+        actor = source.actors[proposal.actor_id]
+        entity = source.entities[(proposal.branch_id, proposal.embodied_entity_id)]
+        if (
+            actor.kind is not ActorKind.HUMAN
+            or entity.controller_actor_id != proposal.actor_id
+            or source.runs[proposal.run_id].kind is not RunKind.LIVE
+        ):
+            return None
+        scope = (
+            proposal.world_id,
+            proposal.branch_id,
+            proposal.run_id,
+            proposal.embodied_entity_id,
+        )
+        binding = character_bindings.latest(scope, actor_id=proposal.actor_id)
+        if binding is None:
+            return None
+        # Use the kernel's locked pre-command state, never a possibly stale API projection.
+        snapshot = copy.copy(source)
+        snapshot.states = InMemoryStateStore()
+        snapshot.states.add(before.working_copy())
+        scene = build_perceived_scene(
+            snapshot,
+            MindStore(),
+            world_id=proposal.world_id,
+            branch_id=proposal.branch_id,
+            observer_entity_id=proposal.embodied_entity_id,
+            actor_id=proposal.actor_id,
+        )
+        frame = movement_frame(scene)
+        if frame is None:
+            return None
+        return HumanMovementEvidence(
+            world_id=proposal.world_id,
+            branch_id=proposal.branch_id,
+            run_id=proposal.run_id,
+            entity_id=proposal.embodied_entity_id,
+            player_actor_id=proposal.actor_id,
+            character_id=binding.character_id,
+            binding_id=binding.binding_id,
+            projection_version=before.version,
+            frame=frame,
+            chosen=direction,
+        ).model_dump(mode="json")
+
+    simulation.bus.evidence_builder = capture_human_movement
+    if simulation.durable_repository is not None:
+        simulation.durable_repository.evidence_builder = capture_human_movement
+        simulation.durable_repository.evidence_persister = persist_human_evidence
+
     live_decisions = CharacterDecisionService(
         snapshot=controller_snapshot,
         read_minds=controller_minds,
@@ -624,6 +721,7 @@ def create_app(
         ),
         proposals=character_proposals,
         reference=simulation if database_dsn is None else None,
+        behavior_reader=read_behavior,
     )
     app.extensions["controllers"] = controllers
     app.extensions["character_decisions"] = live_decisions
@@ -1604,7 +1702,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "007_controller_handoff_runner.sql",
+                    "ok": version == "008_player_behavior_evidence.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -1979,6 +2077,9 @@ def create_app(
                 human_epoch=source.controller_states[scope.key].epoch
                 if scope.key in source.controller_states
                 else None,
+                behavior=read_behavior(
+                    source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
+                ),
             )
 
         def reference_proposal():
@@ -1995,6 +2096,36 @@ def create_app(
         )
         minds.record_decision(receipt.outcome)
         response = jsonify(receipt.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>/entities/<uuid:entity_id>/behavior-profile"
+    )
+    def character_behavior(world_id: uuid.UUID, branch_id: uuid.UUID, entity_id: uuid.UUID):
+        require_world_access(world_id)
+        source = controller_snapshot()
+        actor_id = current_actor_id()
+        scope = ControlScope(
+            world_id=world_id,
+            branch_id=branch_id,
+            entity_id=entity_id,
+            run_id=uuid.UUID(request.args["run_id"]),
+        )
+        authority = source.authority(world_id, actor_id)
+        if (
+            entity_id not in authority.controlled_entity_ids
+            and "mind.read.all" not in authority.capabilities
+        ):
+            raise PermissionError("actor cannot read this character behavior")
+        scene, observed = read_scene(world_id, branch_id, entity_id, source)
+        resolved = resolve_frame(source, scene, observed, scope.run_id)
+        if resolved.binding is None or resolved.profile is None:
+            raise ValueError("a pinned character binding is required")
+        result = read_behavior(
+            source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
+        )
+        response = jsonify(result.model_dump(mode="json"))
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -2127,6 +2258,14 @@ def create_app(
         if supplied is not None and not automation_boundary() and supplied != current_actor_id():
             raise PermissionError("a session may only submit commands as its own actor")
         payload["actor_id"] = str(requested_actor_id(supplied))
+        # Execution authority and input authorship are independent. Never trust a client label.
+        payload["input_origin"] = (
+            "OPERATOR"
+            if automation_boundary()
+            else "POLICY_ADVICE"
+            if payload.get("decision_trace_id")
+            else "HUMAN_INPUT"
+        )
         proposal = CommandProposal.model_validate(payload)
         require_world_access(proposal.world_id)
         receipt = simulation.submit(proposal)

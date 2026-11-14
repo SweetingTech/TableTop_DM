@@ -1,5 +1,11 @@
 # Changelog
 
+- Wire comparable human movement history and pinned persona/card tendencies into character advice
+  and the unattended runner. Add private content-addressed behavior profiles and conflict notices.
+- Migration 008 records perception-scoped human movement evidence atomically with canonical actions;
+  distinguish server-derived input origin from execution authority and exclude policy/operator
+  actions from learning. Speech/combat imitation and complete timeline restoration remain planned.
+
 ## Spatial epistemics
 
 - Added explicit `entity.act` authority and controlled-body requirements for embodied commands.
