@@ -1,16 +1,35 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer, field_validator
 
 from domains.tabletop.character_identity import CharacterIdentity
 from kernel.state import stable_hash
 
 if TYPE_CHECKING:
     from domains.tabletop.portal import CharacterRecord
+
+
+@dataclass(frozen=True)
+class FrozenScores(Mapping[str, int]):
+    entries: tuple[tuple[str, int], ...]
+
+    def __getitem__(self, key: str) -> int:
+        for name, value in self.entries:
+            if name == key:
+                return value
+        raise KeyError(key)
+
+    def __iter__(self) -> Iterator[str]:
+        return (key for key, _ in self.entries)
+
+    def __len__(self) -> int:
+        return len(self.entries)
 
 
 class CharacterCardContent(BaseModel):
@@ -25,8 +44,17 @@ class CharacterCardContent(BaseModel):
     class_name: str
     background: str
     level: int
-    ability_scores: dict[str, int]
+    ability_scores: Mapping[str, int]
     authored_identity: CharacterIdentity = Field(default_factory=CharacterIdentity)
+
+    @field_validator("ability_scores", mode="after")
+    @classmethod
+    def freeze_scores(cls, value: Mapping[str, int]) -> Mapping[str, int]:
+        return FrozenScores(tuple(sorted(value.items())))
+
+    @field_serializer("ability_scores")
+    def serialize_scores(self, value: Mapping[str, int]) -> dict[str, int]:
+        return dict(value)
 
     @classmethod
     def from_record(cls, record: CharacterRecord) -> CharacterCardContent:

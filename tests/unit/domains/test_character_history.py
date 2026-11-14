@@ -57,7 +57,15 @@ def test_authored_history_isolated_from_runtime_changes_and_return_to_old_conten
     assert [row.revision_number for row in revisions] == [1, 2, 3]
     assert revisions[0].card_version == revisions[2].card_version == original_hash
     assert revisions[0].revision_id != revisions[2].revision_id
-    revisions[0].content.ability_scores["wisdom"] = 99
+    with pytest.raises(TypeError):
+        revisions[0].content.ability_scores["wisdom"] = 99
+    loaded = repository.get_character(card.character_id)
+    loaded.ability_scores["wisdom"] = 99
+    loaded.sheet["private"] = "unpersisted"
+    listed = repository.list_characters()[0]
+    assert listed.ability_scores["wisdom"] == 14 and "private" not in listed.sheet
+    listed.ability_scores["wisdom"] = 88
+    assert repository.get_character(card.character_id).card_version == original_hash
     assert (
         repository.character_revisions(card.character_id, actor_id=uuid.uuid4())[
             0

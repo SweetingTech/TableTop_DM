@@ -169,11 +169,14 @@ class InMemoryPortalRepository:
     ) -> tuple[CharacterRecord, ...]:
         rows = self.characters.values()
         return tuple(
-            row for row in rows if owner_user_id is None or row.owner_user_id == owner_user_id
+            row.model_copy(deep=True)
+            for row in rows
+            if owner_user_id is None or row.owner_user_id == owner_user_id
         )
 
     def get_character(self, character_id: uuid.UUID) -> CharacterRecord | None:
-        return self.characters.get(character_id)
+        row = self.characters.get(character_id)
+        return row.model_copy(deep=True) if row else None
 
     def save_character(
         self, character: CharacterRecord, *, actor_id: uuid.UUID | None = None
@@ -773,7 +776,7 @@ class TabletopPortalService:
             membership_role=membership_role,
             status=str(payload.get("status", "INVITED")).upper(),
             joined_at=datetime.now().astimezone()
-            if payload.get("status") in {"JOINED", "READY"}
+            if str(payload.get("status", "INVITED")).upper() in {"JOINED", "READY"}
             else None,
         )
         self.repository.set_member(game_id, member)

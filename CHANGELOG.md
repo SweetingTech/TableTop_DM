@@ -24,6 +24,10 @@ This file records the current TableTop DM product line.
 
 ### Gameplay
 
+- Hardened pre-run foundations: card revision ability scores are immutable and saved-character
+  reads are defensive copies; spawning retries reach the kernel receipt lookup; snapshot trials
+  exclude bodies created after their snapshot. Membership join timestamps honor normalized status.
+
 - Added trusted CHARACTER proposal advice from pinned identity and perception-scoped experience.
   Server-owned seeds/actions and a sensory projection barrier feed local deterministic policy;
   migration 006 stores immutable private retry receipts and decision traces atomically. Advice
