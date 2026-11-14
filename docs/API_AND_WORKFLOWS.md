@@ -866,6 +866,8 @@ Bound legacy transitions reject replacement state, use simulated time rather tha
 
 Automatic relevance uses capable same-zone bodies within the configured 3D radius. Explicit
 anchors may be any existing body; empty anchors use other physically embodied controllers.
+Relevance changes are reconciled at the start of elapsed time, using the current simulated instant;
+tick size and unrelated weather boundaries do not move their transition timestamps.
 Human connection and camera state are absent from the calculation. ACTIVE/MATERIALIZED changes
 use `PopulationLifecycle`, preserve mental metadata, and never recreate a body or reset its job.
 Both representations run the same coarse physical routine. Characters only see inspected physical

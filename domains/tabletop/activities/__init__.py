@@ -242,8 +242,9 @@ def progress(state: BranchState, until: int) -> None:
 
 
 def advance_activities(state: BranchState, until: int) -> None:
-    from population.routines import advance_routines
+    from population.routines import advance_routines, reconcile_relevance
 
+    reconcile_relevance(state, seconds(state))
     pending = state.projections.get(SCHEDULE, {})
     for key, row in sorted(
         tuple(pending.items()), key=lambda item: (item[1]["due_seconds"], item[1]["order"], item[0])

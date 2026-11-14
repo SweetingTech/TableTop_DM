@@ -391,6 +391,8 @@ def test_two_actual_world_workers_and_restart_do_not_reset_or_double_award_routi
     assert third["activities"][target]["progress_seconds"] == 75
     assert admin.get(member_path).get_json()["level"] == "ACTIVE"
     scene = player.get(path + "/scene").get_json()
+    history = admin.get(root + "/transitions").get_json()
+    assert [item["world_step"] for item in history] == [17, 17, 17, 77, 107]
     visible = next(row for row in scene["perceived_entities"] if row["entity_id"] == target)
     assert visible["position"]["x"] == 1 and visible["position"]["y"] == 0
     assert (

@@ -202,6 +202,10 @@ def advance_routines(state: BranchState, until: int) -> None:
     for key, routine in sorted(state.projections.get(ROUTINES, {}).items()):
         if routine["enabled"]:
             advance_body(state, key, routine, until)
+
+
+def reconcile_relevance(state: BranchState, now: int) -> None:
+    """Physical commands change state at the current simulated instant, before elapsed work."""
     # Relevance is physical proximity, never a browser, camera, or human login.
     bodies = state.projections.get("tabletop.entities", {})
     sensory = state.projections.get("tabletop.sensory_profiles", {})
@@ -230,7 +234,7 @@ def advance_routines(state: BranchState, until: int) -> None:
             level = (
                 "ACTIVE" if nearby and int(bodies.get(key, {}).get("hp", 0)) > 0 else "MATERIALIZED"
             )
-        transition(state, uuid.UUID(persona), PopulationLevel(level), until, "physical_relevance")
+        transition(state, uuid.UUID(persona), PopulationLevel(level), now, "physical_relevance")
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:

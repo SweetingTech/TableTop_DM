@@ -371,3 +371,59 @@ def test_promotion_can_carry_trial_lifecycle_without_rebinding_source():
     member = lifecycle_for(state(app, ids), persona).get(persona)
     assert member.level == PopulationLevel.ACTIVE
     assert member.branch_id == ids["branch_id"] and member.entity_id == uuid.UUID(body)
+
+
+def test_nearby_anchor_transitions_use_physical_boundary_for_coarse_split_and_weather_ticks():
+    outcomes = []
+    for mode in ("coarse", "split", "unrelated-weather"):
+        app, ids, body, persona, _, _ = runtime()
+        anchor = uuid.uuid5(uuid.UUID(body), "nearby-anchor")
+        send(
+            app,
+            ids,
+            "tabletop.entity.spawn",
+            {
+                "entity_id": str(anchor),
+                "name": "Traveller",
+                "entity_type": "any_party_body",
+                "public_state": {"hp": 10, "x": 55},
+            },
+            "nearby-anchor",
+        )
+        send(
+            app,
+            ids,
+            "tabletop.routine.configure",
+            {"entity_id": body, "expected_version": 1, "relevance_anchors": [str(anchor)]},
+            "nearby-routine",
+        )
+        if mode == "unrelated-weather":
+            send(
+                app,
+                ids,
+                "tabletop.weather.schedule",
+                {"due_seconds": 30, "zone_id": "world", "raining": False},
+                "unrelated-weather",
+            )
+        for until in [30, 60] if mode == "split" else [60]:
+            advance(app, ids, until)
+        assert lifecycle_for(state(app, ids), persona).get(persona).world_step == 17
+        # An instantaneous physical relocation occurs at simulated time 60, between advances.
+        state(app, ids).projections["tabletop.spatial.positions"][str(anchor)]["x"] = 100
+        for until in [90, 120] if mode == "split" else [120]:
+            advance(app, ids, until)
+        current = state(app, ids)
+        history = lifecycle_for(current, persona).history
+        assert [item.world_step for item in history] == [17, 17, 77]
+        assert [item.to_level for item in history] == [
+            PopulationLevel.MATERIALIZED,
+            PopulationLevel.ACTIVE,
+            PopulationLevel.MATERIALIZED,
+        ]
+        outcomes.append(
+            {
+                key: current.projections.get(key)
+                for key in (MEMBERS, HISTORY, ROUTINES, ACTIVITIES, "tabletop.entities")
+            }
+        )
+    assert outcomes[0] == outcomes[1] == outcomes[2]
