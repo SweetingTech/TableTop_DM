@@ -334,3 +334,23 @@ The broader workspace concept used to guide the role-specific surfaces is availa
 11. World-scoped roles and capabilities never leak across worlds.
 12. Secrets, credentials, private notes, and secret entity state never enter public projections or
     client-visible logs.
+
+### Embodied population and routines
+
+`population/runtime.py` connects the existing `PopulationLifecycle` to typed canonical commands.
+Each embodied member refers to exactly one existing body. Private branch-local member/history
+projections hold identity, lifecycle and selected mental metadata; the body's canonical projection
+alone owns health, inventory, hunger, fatigue and work output. Binding preserves the independently
+pinned character card/persona/mind. Archived source finances are never imported.
+
+Migration 011 adds source binding evidence, scoped foreign keys and freeze guards. The command
+transaction locks and hashes the materialized source, commits the binding with projection/event/
+outbox, then prevents legacy state or transition writers from changing that source. Reference
+execution validates the same source under its command lock. Live API reads overlay the canonical
+member rather than treating the frozen source's activation state as current.
+
+`population/routines.py` advances persisted WEED/REST/EAT phases at completion, need and weather
+boundaries inside the existing clock transaction. Deterministic phase IDs and a recorded policy
+version support replay. Physical proximity determines automatic lifecycle relevance; connection
+or camera presence is never an input. Trial copies resolve identity scope from their own branch
+and cannot bind another source. Whole-population planning and richer occupations remain separate.

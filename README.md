@@ -267,6 +267,18 @@ download, install, or run MatrAIx to build or use TableTop DM.
 Synthetic people and simulated player cohorts are tools for exploration, stress testing, and
 hypothesis generation. They are not substitutes for evidence from real people.
 
+## NPC population routines
+
+Materialized population members can now be bound to existing world bodies and assigned recurring
+gardening, rest and meal routines. The configured world clock advances these routines while the
+party is elsewhere, including rain interruptions, fatigue and food shortages. Opening a browser
+does not start or stop work. A returning character sees physically perceptible activity and work.
+
+This is opt-in setup through the typed API. Apply migration 011 with the migration owner, configure
+the existing world clock/executor, then bind members and enable their routines. See
+[population routines](docs/API_AND_WORKFLOWS.md#population-binding-and-npc-routines) for the workflow.
+Travel, social obligations, general occupations and autonomous story direction remain checklist work.
+
 ## License
 
 See [LICENSE](LICENSE).

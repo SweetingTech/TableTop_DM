@@ -18,7 +18,7 @@ class SceneCoordinate(BaseModel):
 
 class VisibleActivity(BaseModel):
     model_config = ConfigDict(frozen=True)
-    kind: Literal["WEED", "REST"]
+    kind: Literal["WEED", "REST", "EAT"]
     status: Literal["RUNNING", "WAITING", "COMPLETED", "CANCELLED"]
     progress_percent: int = Field(ge=0, le=100)
     weeded_units: int = Field(ge=0)

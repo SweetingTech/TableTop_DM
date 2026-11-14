@@ -325,6 +325,12 @@ class PostgresCommandRepository:
                 if controller is not None and proposal.decision_authorship == "CHARACTER_POLICY":
                     persist_controller(cursor, advanced(controller))
                 self._insert_event(cursor, event)
+                if result.population_bindings:
+                    from population.postgres import PostgresPopulationRepository
+
+                    PostgresPopulationRepository.apply_bindings(
+                        cursor, proposal, result, event.event_id
+                    )
                 if evidence is not None and result.accepted and self.evidence_persister is not None:
                     self.evidence_persister(cursor, event.event_id, evidence)
                 self._insert_perceptions(cursor, materialized.perceptions)

@@ -122,6 +122,26 @@ class PopulationLifecycle:
         )
         return self._commit(before, after, world_step, reason)
 
+    def embody(
+        self, persona_id: uuid.UUID, entity_id: uuid.UUID, *, world_step: int
+    ) -> PopulationMember:
+        """Bind identity once; physical state remains exclusively on the canonical body."""
+        before = self.get(persona_id)
+        if before.level is PopulationLevel.STATISTICAL or before.entity_id is not None:
+            raise ValueError("embodiment requires an unbound materialized member")
+        after = before.model_copy(
+            update={"entity_id": entity_id, "version": before.version + 1, "world_step": world_step}
+        )
+        return self._commit(before, after, world_step, "canonical_body_binding")
+
+    def record_relevance_override(
+        self, persona_id: uuid.UUID, *, world_step: int
+    ) -> PopulationMember:
+        """Version a canonical relevance change even when the detail level stays the same."""
+        before = self.get(persona_id)
+        after = before.model_copy(update={"version": before.version + 1, "world_step": world_step})
+        return self._commit(before, after, world_step, "operator_relevance_override")
+
     def activate(
         self,
         persona_id: uuid.UUID,

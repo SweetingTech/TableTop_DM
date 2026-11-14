@@ -30,6 +30,9 @@ def promote_consequences(proposal: CommandProposal, state: BranchState) -> Comma
         raise ValueError("consequences can only be promoted to canonical branches")
     if state.state_hash != package.expected_canonical_hash:
         raise ValueError("canonical state changed after the trial snapshot")
+    from population.runtime import validate_promoted_members
+
+    validate_promoted_members(state, package.deltas)
     return CommandResult(
         result={
             "source_branch_id": str(package.source_branch_id),

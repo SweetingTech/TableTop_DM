@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from domains.tabletop import register_tabletop
 from kernel.branching import BranchManager, promotion_definition
 from kernel.command_bus import CommandBus, CommandReceipt
-from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
+from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, CommandResult, RunKind
 from kernel.control import ControllerState, advanced, validate_controller
 from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.perception_contracts import PerceptionGrant
@@ -21,6 +21,7 @@ from kernel.replay import ReplayEngine, ReplayRecord
 from kernel.snapshots import SnapshotManifest, SnapshotStore
 from kernel.state import BranchState, InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
+from population.models import PopulationMember
 
 ReadResult = TypeVar("ReadResult")
 
@@ -83,6 +84,10 @@ class SimulationApplication:
         self.bus = register_tabletop(CommandBus(self.states))
         self.bus.control_validator = self.validate_control
         self.bus.control_committer = self.advance_control
+        self.bus.result_validator = self.validate_population_bindings
+        self.population_source_reader: Callable[[uuid.UUID, uuid.UUID], PopulationMember] | None = (
+            None
+        )
         self.bus.register(promotion_definition())
         self.worlds: dict[uuid.UUID, WorldRecord] = {}
         self.runs: dict[uuid.UUID, RunRecord] = {}
@@ -337,6 +342,23 @@ class SimulationApplication:
             with self._reference_command_lock:
                 return self._submit(proposal)
         return self._submit(proposal)
+
+    def validate_population_bindings(
+        self, proposal: CommandProposal, result: CommandResult
+    ) -> None:
+        from population.runtime import source_hash
+
+        for binding in result.population_bindings:
+            if self.population_source_reader is None:
+                raise ValueError("population source reader is not configured")
+            member = self.population_source_reader(binding.population_id, binding.persona_id)
+            if (member.world_id, member.branch_id, member.version, source_hash(member)) != (
+                proposal.world_id,
+                proposal.branch_id,
+                binding.source_version,
+                binding.source_hash,
+            ):
+                raise ValueError("population source changed before binding")
 
     def validate_control(self, proposal: CommandProposal) -> None:
         if proposal.decision_authorship == "CHARACTER_POLICY":

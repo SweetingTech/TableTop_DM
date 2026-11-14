@@ -59,6 +59,7 @@ class CommandBus:
         self._receipts: dict[tuple[uuid.UUID, uuid.UUID, str], CommandReceipt] = {}
         self.control_validator: Callable[[CommandProposal], None] | None = None
         self.control_committer: Callable[[CommandProposal], None] | None = None
+        self.result_validator: Callable[[CommandProposal, CommandResult], None] | None = None
         self.evidence_builder: Callable[[CommandProposal, BranchState], dict | None] | None = None
 
     def register(self, definition: CommandDefinition) -> None:
@@ -119,6 +120,8 @@ class CommandBus:
             result = definition.handler(proposal, state)
             if definition.result_model is not None:
                 definition.result_model.model_validate(result.result)
+            if self.result_validator is not None:
+                self.result_validator(proposal, result)
             for delta in result.deltas:
                 state.apply(delta)
             materialized = self.event_factory.materialize(

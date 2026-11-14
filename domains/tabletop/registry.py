@@ -17,12 +17,16 @@ from domains.tabletop.spatial import command_definition as spatial
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.world_time import command_definitions as world_time
 from kernel.command_bus import CommandBus, CommandDefinition
+from population.routines import command_definitions as routines
+from population.runtime import command_definitions as population
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:
     return (
         *world_time(),
         *activities(),
+        *population(),
+        *routines(),
         *battlefield(),
         onboarding(),
         *dialogue(),

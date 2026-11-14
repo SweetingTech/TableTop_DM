@@ -47,7 +47,7 @@ export type EntitySummary = {
   knowledge_state?: "VISIBLE" | "LAST_KNOWN" | "RUMORED";
   detail_level?: "PRESENCE" | "CLASSIFIED" | "IDENTIFIED" | "INSPECTED";
   position_confidence?: number;
-  activity?: { kind: "WEED" | "REST"; status: string; progress_percent: number; weeded_units: number } | null;
+  activity?: { kind: "WEED" | "REST" | "EAT"; status: string; progress_percent: number; weeded_units: number } | null;
 };
 
 export type ViewpointSummary = Pick<

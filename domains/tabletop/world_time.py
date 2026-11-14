@@ -97,7 +97,15 @@ def advance_result(state: BranchState, clock: Clock, until: int, **updates) -> C
     advance_activities(working, until)
     updated = clock.model_copy(update={"seconds": until, "step": clock.step + 1, **updates})
     deltas = [StateDelta(projection=CLOCK, operation="SET", values=updated.model_dump(mode="json"))]
-    for projection in (ACTIVITIES, WEATHER, SCHEDULE, "tabletop.entities"):
+    for projection in (
+        ACTIVITIES,
+        WEATHER,
+        SCHEDULE,
+        "tabletop.entities",
+        "tabletop.population",
+        "tabletop.population_transitions",
+        "tabletop.routines",
+    ):
         before, after = (
             state.projections.get(projection, {}),
             working.projections.get(projection, {}),
