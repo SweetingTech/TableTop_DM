@@ -338,9 +338,7 @@ class SimulationApplication:
             raise ValueError("proposal run does not belong to world branch")
         actor = self.authority(proposal.world_id, proposal.actor_id)
         if proposal.command_type == "tabletop.entity.spawn":
-            entity_id = uuid.UUID(str(proposal.parameters.get("entity_id")))
-            if (proposal.branch_id, entity_id) in self.entities:
-                raise ValueError("entity already exists in this branch")
+            # The typed handler checks duplicates after the idempotency lookup.
             controller_id = proposal.parameters.get("controller_actor_id")
             if controller_id is not None:
                 self.authority(proposal.world_id, uuid.UUID(str(controller_id)))
@@ -477,11 +475,10 @@ class SimulationApplication:
             entity
             for (entity_branch_id, _), entity in self.entities.items()
             if entity_branch_id == world.canonical_branch_id
+            and str(entity.entity_id) in branch.projections.get("tabletop.entities", {})
         ]
         for entity in canonical_entities:
-            projected = branch.projections.get("tabletop.entities", {}).get(
-                str(entity.entity_id), entity.public_state
-            )
+            projected = branch.projections["tabletop.entities"][str(entity.entity_id)]
             self.entities.setdefault(
                 (branch_id, entity.entity_id),
                 entity.model_copy(
