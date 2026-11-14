@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -15,12 +15,12 @@ from infra.migrate import migrate
 
 @dataclass(frozen=True)
 class IntegrationStack:
-    admin_url: str
-    database_url: str
-    redis_url: str
+    admin_url: str = field(repr=False)
+    database_url: str = field(repr=False)
+    redis_url: str = field(repr=False)
     database_name: str
     runtime_user: str
-    runtime_password: str
+    runtime_password: str = field(repr=False)
 
 
 def _with_database(
