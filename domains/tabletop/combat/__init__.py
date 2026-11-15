@@ -10,6 +10,7 @@ from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
+from kernel.randomness import ActionRandomness
 from kernel.state import BranchState
 
 
@@ -28,6 +29,7 @@ class AttackResult(BaseModel):
     damage: int = Field(ge=0)
     hp_before: int = Field(ge=0)
     hp_after: int = Field(ge=0)
+    randomness: ActionRandomness | None = None
 
 
 def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
@@ -126,7 +128,7 @@ def attack_emission(
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.combat.attack",
-        version="2.0.0",
+        version="2.1.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=attack,
@@ -134,4 +136,5 @@ def command_definition() -> CommandDefinition:
         result_model=AttackResult,
         requires_controlled_entity=True,
         emission_builder=attack_emission,
+        uses_randomness=True,
     )

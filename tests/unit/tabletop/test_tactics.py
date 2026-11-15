@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cognition.perception import PerceptionEngine, PerceptionProfile
-from kernel.contracts import CommandProposal
+from kernel.contracts import BranchKind, CommandProposal
 from tests.unit.tabletop.test_spatial_epistemics import _world
 
 pytestmark = pytest.mark.unit
@@ -38,6 +38,9 @@ def execute(fixture, command, parameters, key, *, listener=False):
 
 def prepared():
     fixture = _world()
+    # Isolated mechanics fixtures inject explicit rolls; application-backed runs
+    # allocate physical-action seeds from trusted run state instead.
+    fixture["state"].kind = BranchKind.TRIAL
     for body in fixture["state"].projections["tabletop.entities"].values():
         body.update({"hp": 12, "max_hp": 12, "armor": 10, "mana": 4, "attack_bonus": 5})
     return fixture

@@ -160,8 +160,13 @@ as composition glue; reusable execution services must also work from workers and
   task acceptance are separate gates; section C and campaign milestones remain incomplete.
 - [ ] C3 — Define action duration, movement budget, initiative/concurrent conflicts, resource consumption,
   condition/blessing expiry, incapacity, defeat, death, healing, rest, and recovery on the shared clock.
-- [ ] C4 — Allocate seeds by distinct logical action from a recorded run seed/sequence. Retries reuse
+- [x] C4 — Allocate seeds by distinct logical action from a recorded run seed/sequence. Retries reuse
   the original seed/receipt; two successive identical attacks must not reuse rolls merely because text matches.
+  Both commit adapters derive physical seeds under the branch lock
+  from run seed and next branch sequence, separate from policy seeds. Private typed proofs support
+  replay; legacy null run seeds use zero. Reference concurrency, durable parity/restart/retry,
+  actual concurrent transactions, privileged replay and pre-proof receipt upgrade regressions pass.
+  Current-head CI, independent review/integration and whole-section C acceptance remain separate.
 - [ ] C5 — Reconcile portal sheet HP/status/equipment with kernel state; define one canonical owner for
   each value and projections for other views. Avoid stale character cards overwriting live outcomes.
 - [ ] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;

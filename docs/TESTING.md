@@ -1,5 +1,12 @@
 # Testing
 
+Action-randomness regressions cover caller-seed independence, logical sequence allocation,
+failure rollback, concurrent commits, original retry receipts and private physical masks. Durable
+tests compare reference outcomes, restart retries, real concurrent repository transactions and
+ledger replay. Run `uv run python -m pytest tests/unit/kernel/test_action_randomness.py` and, with
+the configured disposable integration stack, `uv run python -m pytest -m integration
+tests/integration/test_action_randomness.py tests/integration/test_action_rules.py`.
+
 Action-rule tests reject caller-selected dice/bonuses/power/cost without projection, command,
 event or outbox writes. They cover owned weapon reach, hidden/walled targets, conditions,
 learned spell privacy/candidates, initial card validation and stale-card resource preservation.

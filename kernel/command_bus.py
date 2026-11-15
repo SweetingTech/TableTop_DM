@@ -17,6 +17,7 @@ from kernel.contracts import (
 from kernel.errors import AuthorizationDenied, UnknownCommand
 from kernel.event_factory import EmissionBuilder, EventFactory
 from kernel.perception_contracts import PerceptionGrant
+from kernel.randomness import allocate_randomness
 from kernel.state import BranchState, InMemoryStateStore
 
 CommandHandler = Callable[[CommandProposal, BranchState], CommandResult]
@@ -34,6 +35,7 @@ class CommandDefinition:
     sensitive_parameters: frozenset[str] = frozenset()
     requires_controlled_entity: bool = False
     emission_builder: EmissionBuilder | None = None
+    uses_randomness: bool = False
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,24 @@ def normalized_proposal(
     return proposal.model_copy(update={"parameters": parameters})
 
 
+def resolve_command(
+    definition: CommandDefinition,
+    proposal: CommandProposal,
+    state: BranchState,
+    *,
+    run_seed: int | None,
+) -> CommandResult:
+    if not definition.uses_randomness:
+        return definition.handler(proposal, state)
+    proof = allocate_randomness(run_seed, state.version + 1, proposal.command_type)
+    # Keep the original policy/decision seed on its proposal and trace. Only the
+    # mechanics handler receives the independently allocated physical-action seed.
+    result = definition.handler(proposal.model_copy(update={"seed": proof.action_seed}), state)
+    return result.model_copy(
+        update={"result": {**result.result, "randomness": proof.model_dump(mode="json")}}
+    )
+
+
 class CommandBus:
     """Deny-by-default command authority and deterministic mutation boundary."""
 
@@ -75,6 +95,7 @@ class CommandBus:
         self.control_committer: Callable[[CommandProposal], None] | None = None
         self.result_validator: Callable[[CommandProposal, CommandResult], None] | None = None
         self.evidence_builder: Callable[[CommandProposal, BranchState], dict | None] | None = None
+        self.run_seed_reader: Callable[[CommandProposal], int | None] | None = None
 
     def register(self, definition: CommandDefinition) -> None:
         if definition.command_type in self._definitions:
@@ -126,7 +147,22 @@ class CommandBus:
                 raise AuthorizationDenied(f"Missing capabilities: ['{branch_capability}']")
             before = state.working_copy()
             evidence = self.evidence_builder(command, before) if self.evidence_builder else None
-            result = definition.handler(command, state)
+            if definition.uses_randomness and self.run_seed_reader is None:
+                if state.kind is BranchKind.CANONICAL:
+                    raise ValueError("canonical action randomness requires a trusted run reader")
+                # Low-level isolated trial fixtures may explicitly inject a seed.
+                result = definition.handler(command, state)
+            else:
+                result = resolve_command(
+                    definition,
+                    command,
+                    state,
+                    run_seed=(
+                        self.run_seed_reader(command)
+                        if definition.uses_randomness and self.run_seed_reader
+                        else None
+                    ),
+                )
             if definition.result_model is not None:
                 definition.result_model.model_validate(result.result)
             if self.result_validator is not None:
@@ -161,6 +197,7 @@ class CommandBus:
                 {
                     "command_type": command_type,
                     "version": definition.version,
+                    "uses_randomness": definition.uses_randomness,
                     "required_capabilities": sorted(definition.required_capabilities),
                     "allowed_branch_kinds": sorted(
                         item.value for item in definition.allowed_branch_kinds

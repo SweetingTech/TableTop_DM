@@ -2,6 +2,11 @@
 
 ## System shape
 
+Physical-action RNG is allocated by the commit boundary from recorded run seed and next branch
+projection version, after original-receipt lookup and under the same transaction/lock as mutation.
+The private result records `logical-action-rng-1.0.0` provenance. Policy-selection seeds and traces
+remain separate; event-time physical masks exclude RNG provenance from character observations.
+
 The system separates human identity, simulation authority, canonical state, subjective minds,
 large populations, and experimental evidence.
 
