@@ -1,5 +1,15 @@
 # Changelog
 
+- Keep battlefield camera/control-mode changes outside physical readiness, incapacity and wakeup
+  checks while retaining entity-control authorization. Changing presentation never spends or
+  resets action time, wakes a sleeping body, or changes body resources.
+
+- Reserve per-body action readiness atomically on configured world clocks, with server-owned
+  durations and movement speed costs shared by human and autonomous commands. Expire timed guards
+  through clock ticks/advances; preserve retry/restart/replay and suspend waiting stand-ins without
+  spending controller budgets. Expose readiness only in the body's own scene. Full initiative,
+  condition/blessing expiry and death/recovery remain open C3 work.
+
 - Wire the Player Dashboard to canonical character state with visible-tab polling, manual refresh,
   cancelled obsolete requests and explicit loading/error states. Display live resources read-only
   for bound bodies; retain starting-resource edits for unbound cards and preserve identity drafts

@@ -21,6 +21,7 @@ from cognition.context import CharacterContext
 from cognition.control import ControllerRepository
 from cognition.dialogue_generation import DialogueProvider
 from cognition.store import MindStore
+from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.character_bindings import CharacterBinding, CharacterBindingRepository
 from domains.tabletop.character_context import ProfileReader, resolve_character_context
 from domains.tabletop.portal import PortalRepository
@@ -28,7 +29,13 @@ from domains.tabletop.rules import incapacitated
 from domains.tabletop.spatial.service import build_perceived_scene
 from kernel.application import SimulationApplication
 from kernel.control import ControllerState, ControlScope
-from kernel.errors import BodyIncapacitated, BodySleeping, KernelError, WorldClockPaused
+from kernel.errors import (
+    BodyActionPending,
+    BodyIncapacitated,
+    BodySleeping,
+    KernelError,
+    WorldClockPaused,
+)
 from persona.models import CompiledPersona
 
 
@@ -108,6 +115,8 @@ class CharacterDecisionService:
             )
             if incapacitated(body):
                 raise BodyIncapacitated("body is incapacitated")
+            if wait_seconds(source.states.get(scope.branch_id), scope.entity_id):
+                raise BodyActionPending("body is still completing its previous action")
             return propose_for_character(
                 scope=proposal_scope,
                 actor_id=actor_id,
@@ -169,6 +178,8 @@ class CharacterRunner:
                 )
                 if body.get("asleep") or incapacitated(body):
                     continue
+                if wait_seconds(source.states.get(controller.branch_id), controller.entity_id):
+                    continue
                 receipt = self.decisions.decide(
                     controller.scope,
                     controller.executor_actor_id,
@@ -177,7 +188,7 @@ class CharacterRunner:
                 )
                 self.snapshot().submit(receipt.outcome.proposal)
                 committed += 1
-            except (WorldClockPaused, BodySleeping, BodyIncapacitated):
+            except (WorldClockPaused, BodySleeping, BodyIncapacitated, BodyActionPending):
                 # Pause may win after the initial check, including during model generation.
                 # Keep epoch/step, mode and failure budget intact for clock resume.
                 continue

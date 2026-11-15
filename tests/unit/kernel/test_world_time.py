@@ -295,6 +295,8 @@ def test_character_and_world_runners_share_a_branch_without_stalling_offscreen_w
     assert current["clock"]["seconds"] == 6
     assert current["activities"][target]["progress_seconds"] == 6
     assert player.get(path + "/control?run_id=" + run).get_json()["control"]["step"] == 3
+    assert app.extensions["character_runner"].run_once() == 0
+    assert app.extensions["world_runner"].run_once(NOW + timedelta(seconds=4)) == 1
     controller = app.extensions["controllers"].due()[0]
     pending = app.extensions["character_decisions"].decide(
         controller.scope, controller.executor_actor_id, "captured-before-pause", controller

@@ -71,6 +71,11 @@ def test_durable_handoff_unattended_commit_restart_and_takeover(
     before_scene = player.get(path + "/scene").get_json()
     # The runner is a separate application and never uses the player's cookie.
     worker = create_app(artifact_root=tmp_path)
+    controllers = worker.extensions["controllers"]
+    due_for_board = controllers.due
+    monkeypatch.setattr(
+        controllers, "due", lambda: tuple(row for row in due_for_board() if str(row.run_id) == run)
+    )
     due = worker.extensions["controllers"].due()
     assert len(due) == 1
     planned = worker.extensions["character_decisions"].decide(

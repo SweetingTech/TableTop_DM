@@ -6,6 +6,7 @@ from datetime import datetime
 from cognition.context import validated_observations
 from cognition.models import Observation
 from cognition.store import MindStore
+from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.rules import available_melee_reach, dead, incapacitated, known_spells
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.spatial.scene import (
@@ -130,6 +131,9 @@ def build_perceived_scene(
                 if entity_id == observer_entity_id
                 else None,
                 known_spell_ids=known_spells(current) if entity_id == observer_entity_id else None,
+                action_wait_seconds=wait_seconds(state, entity_id)
+                if entity_id == observer_entity_id
+                else None,
                 activity=VisibleActivity(
                     kind=activity["kind"],
                     status=activity["status"],

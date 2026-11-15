@@ -2,6 +2,16 @@
 
 ## System shape
 
+Configured branch clocks govern controlled-action readiness through the domain wrapper
+`action-time.1`. Successful effects and the `tabletop.action_time` reservation share one kernel
+transaction. The wrapper reads body speed and versioned rules, never client duration values.
+No action advances global time; the existing clock runner/authorized advance does so, preserving
+offscreen work. Branch locking serializes competing commands for one body; unrelated bodies can
+act at the same simulated instant. Failed attempts leave neither effects nor reservations.
+Readiness is physical branch state across run reconfiguration, snapshots, trials and restart;
+new actions require the clock to belong to their current run. Only the observer's own readiness
+is included in its scene. This is a sequential action-time model, not a full initiative system.
+
 An embodied character's physical resources are owned by its canonical body. Portal card updates
 cannot change HP/status/max HP/armor/speed or retarget that bound card's world. This applies to
 owners and administrators alike; card ownership does not grant an alternate canonical write path.

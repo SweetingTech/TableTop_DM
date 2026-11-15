@@ -14,7 +14,7 @@ from domains.tabletop.spatial import MoveRequest, command_definition
 from domains.tabletop.spatial.scene import PerceivedScene
 from kernel.contracts import Actor, BranchKind
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.3.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.4.0"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
 
 
@@ -50,6 +50,7 @@ def character_action_candidates(
         or body.position is None
         or (body.health is not None and body.health <= 0)
         or body.status in {"DEAD", "DEFEATED", "UNCONSCIOUS", "INCAPACITATED"}
+        or bool(body.action_wait_seconds)
     ):
         return ()
     actions = tuple(

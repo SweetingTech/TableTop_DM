@@ -122,6 +122,9 @@ Example squad order parameters:
 
 The mode command changes only `tabletop.control_modes`. The order command changes only
 `tabletop.squad_orders`. Neither creates a new commander, squad, weapon, or enemy projection.
+Camera changes do not wait for or reserve physical action time, wake a sleeping commander, or
+require physical capacity. Entity-control authorization remains enforced. A camera change cannot
+reset a pending physical reservation or enable movement/attacks while the body is unavailable.
 
 ## Renderer bridge
 

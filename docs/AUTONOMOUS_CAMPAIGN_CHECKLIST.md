@@ -167,8 +167,12 @@ as composition glue; reusable execution services must also work from workers and
   condition/blessing expiry, incapacity, defeat, death, healing, rest, and recovery on the shared clock.
   Partial: shared voluntary-action incapacity and transactional human wakeup are wired, sleeping
   stand-ins suspend, and ordinary healing cannot resurrect dead-marked bodies. Own scene status
-  prevents impossible stand-in choices without revealing others' private conditions. Full durations,
-  movement/initiative budgets, timed expiry, death policy and recovery rules remain open.
+  prevents impossible stand-in choices without revealing others' private conditions. Configured
+  clocks now reserve body readiness atomically: six-second physical actions and speed-owned
+  grid-step costs; guards expire through clock advance. Speech remains free. Retries preserve costs;
+  competing commands serialize; waiting/racing stand-ins preserve controller budgets. Clockless
+  legacy branches remain untimed. Full initiative, general timed conditions/blessings, death
+  policy and recovery rules remain open; C3 is not complete.
 - [x] C4 — Allocate seeds by distinct logical action from a recorded run seed/sequence. Retries reuse
   the original seed/receipt; two successive identical attacks must not reuse rolls merely because text matches.
   Both commit adapters derive physical seeds under the branch lock

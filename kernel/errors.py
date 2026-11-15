@@ -18,6 +18,10 @@ class BodyIncapacitated(ValueError):
     """Expected voluntary-action suspension, not a stand-in policy failure."""
 
 
+class BodyActionPending(ValueError):
+    """Expected shared-clock readiness wait, preserving the controller's budgets."""
+
+
 class DuplicateCommand(KernelError):
     pass
 
