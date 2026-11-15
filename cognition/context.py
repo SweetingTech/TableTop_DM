@@ -2,26 +2,60 @@ from __future__ import annotations
 
 import copy
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from cognition.beliefs import BeliefClaim
 from cognition.engine import DecisionAction
+from cognition.knowledge import KnownLore, knowledge_from_validated, search_known_lore
 from cognition.models import Belief, Memory, MindState, Observation
 from cognition.perception import PerceptionEngine, PerceptionProfile
 from domains.tabletop.character_history import CharacterCardContent
 from domains.tabletop.spatial.scene import PerceivedScene
 from kernel.contracts import EventEnvelopeV2
-from kernel.perception_contracts import PerceptionGrant
+from kernel.perception_contracts import NON_SENSORY_TAGS, PerceptionGrant
 from kernel.state import stable_hash
 
 EventReader = Callable[[uuid.UUID], EventEnvelopeV2 | None]
 GrantReader = Callable[[uuid.UUID, uuid.UUID], PerceptionGrant | None]
 ActionProvider = Callable[[PerceivedScene], tuple[DecisionAction, ...]]
-NON_SENSORY_TAGS = frozenset(
-    {"operator", "director", "timeline_revision", "checkpoint", "protection_policy", "evaluation"}
-)
+
+
+class CharacterContextPending(ValueError):
+    """Retry a dependent character read after physical evidence has projected."""
+
+
+def require_projected_experience(
+    *,
+    world_id: uuid.UUID,
+    branch_id: uuid.UUID,
+    entity_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    grants: Iterable[PerceptionGrant],
+    event_reader: EventReader,
+    observation_exists: Callable[[uuid.UUID], bool],
+) -> None:
+    profile = PerceptionProfile(observer_entity_id=entity_id, observer_actor_id=actor_id)
+    for grant in grants:
+        if (grant.world_id, grant.branch_id, grant.observer_entity_id) != (
+            world_id,
+            branch_id,
+            entity_id,
+        ):
+            continue
+        event = event_reader(grant.event_id)
+        if event is None or (event.world_id, event.branch_id) != (world_id, branch_id):
+            raise CharacterContextPending(
+                "character observations are still updating; retry this request"
+            )
+        if not grant.modalities or NON_SENSORY_TAGS.intersection(event.domain_tags):
+            continue
+        expected = PerceptionEngine().observe(event, profile, grant=grant)
+        if expected is not None and not observation_exists(expected.observation_id):
+            raise CharacterContextPending(
+                "character observations are still updating; retry this request"
+            )
 
 
 def validated_observations(
@@ -86,13 +120,14 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.3.0"
+    context_version: str = "character-context-1.4.0"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
     memories: tuple[Memory, ...]
     actions: tuple[DecisionAction, ...] = ()
     identity: CharacterCardContent | None = None
+    known_lore: tuple[KnownLore, ...] = ()
 
     @property
     def evidence_hash(self) -> str:
@@ -168,6 +203,7 @@ class CharacterContext(BaseModel):
                 for belief in self.beliefs
             ],
             "memories": [memory.summary for memory in self.memories],
+            "known_lore": [item.fiction() for item in search_known_lore(self.known_lore, limit=12)],
         }
 
 
@@ -234,6 +270,7 @@ def build_character_context(
         observations=eligible[-80:],
         beliefs=tuple(sorted(beliefs, key=lambda item: str(item.belief_id))),
         memories=tuple(memories[-80:]),
+        known_lore=knowledge_from_validated(eligible, identity),
         actions=tuple(action.model_copy(deep=True) for action in action_provider(scene))
         if action_provider is not None
         else (),

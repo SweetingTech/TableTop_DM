@@ -12,10 +12,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cognition.behavior import BehaviorProfile, weighted_actions
 from cognition.choices import ChoiceProfile, weighted_choices
-from cognition.context import NON_SENSORY_TAGS, CharacterContext
+from cognition.context import CharacterContext, require_projected_experience
+from cognition.context import CharacterContextPending as CharacterContextPending
 from cognition.dialogue_generation import DialogueProvider, DialogueReceipt, generate_dialogue
 from cognition.engine import DecisionOutcome, DecisionRequest, LayeredDecisionEngine
-from cognition.perception import PerceptionEngine, PerceptionProfile
 from cognition.store import MindStore
 from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import CharacterBinding
@@ -25,7 +25,7 @@ from kernel.control import ControllerState
 from kernel.state import stable_hash
 from persona.models import CompiledPersona, PersonaPurpose
 
-PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.3.0"
+PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.4.0"
 
 
 class CharacterProposalScope(BaseModel):
@@ -124,10 +124,6 @@ class CharacterProposalReceipt(BaseModel):
         return self
 
 
-class CharacterContextPending(ValueError):
-    """Retry advice generation after the dependent subjective projection catches up."""
-
-
 def require_character_proposal_authority(
     simulation: SimulationApplication, scope: CharacterProposalScope, actor_id: uuid.UUID
 ) -> None:
@@ -160,28 +156,15 @@ def require_projected_character_experience(
     scope: CharacterProposalScope,
     actor_id: uuid.UUID,
 ) -> None:
-    profile = PerceptionProfile(observer_entity_id=scope.entity_id, observer_actor_id=actor_id)
-    for grant in simulation.perceptions.values():
-        if (grant.world_id, grant.branch_id, grant.observer_entity_id) != (
-            scope.world_id,
-            scope.branch_id,
-            scope.entity_id,
-        ):
-            continue
-        event = simulation.events.get(grant.event_id)
-        if event is None or (event.world_id, event.branch_id) != (scope.world_id, scope.branch_id):
-            raise CharacterContextPending(
-                "character observations are still updating; retry this proposal request"
-            )
-        if NON_SENSORY_TAGS.intersection(event.domain_tags):
-            continue
-        expected = PerceptionEngine().observe(event, profile, grant=grant)
-        if expected is not None and not minds.has_observation(
-            expected.observation_id, branch_id=scope.branch_id
-        ):
-            raise CharacterContextPending(
-                "character observations are still updating; retry this proposal request"
-            )
+    require_projected_experience(
+        world_id=scope.world_id,
+        branch_id=scope.branch_id,
+        entity_id=scope.entity_id,
+        actor_id=actor_id,
+        grants=simulation.perceptions.values(),
+        event_reader=simulation.events.get,
+        observation_exists=lambda item: minds.has_observation(item, branch_id=scope.branch_id),
+    )
 
 
 def propose_for_character(

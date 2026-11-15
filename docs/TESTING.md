@@ -1,5 +1,13 @@
 # Testing
 
+Knowledge-boundary regressions cover old learned facts beyond the recent experience window,
+masked/hidden/operator/other-world/other-branch sources, pinned starting claims after card edits,
+scene inspection without mind access, deity/operator knowledge separation, pending projection
+and idempotent recovery. Provider fixtures retrieve older grounded testimony without kernel IDs;
+durable cases exercise restart, actor-scoped reads and trial testimony isolation. Kernel tests
+ensure non-sensory records never invoke a physical emission builder or audience resolver. These
+tests do not establish a complete campaign rewind or a model's general semantic truthfulness.
+
 Relationship/snapshot repair tests cover frozen physical classification, rejected fabricated
 promise/rescue reactions, masked raw-event RLS, immutable retries after later updates, current
 vectors across independent API processes, nested trial-only bodies and historical secrets,

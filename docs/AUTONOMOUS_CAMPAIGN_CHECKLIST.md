@@ -106,16 +106,14 @@ as composition glue; reusable execution services must also work from workers and
   Pinned self fiction enters trusted context; initial knowledge remains a separate authored claim.
   Baseline persona traits are card-seeded, not semantic inference or learned player imitation.
   Actual live decision execution remains B4/F and is not activated by this foundation.
-- [ ] B3 — Introduce a trusted character-context builder under `cognition/`. Resolve current scene,
+- [x] B3 — Introduce a trusted character-context builder under `cognition/`. Resolve current scene,
   mind, remembered testimony, known lore, and legal action candidates for one world/branch/entity.
   Reuse [scene](../domains/tabletop/spatial/scene.py), perception contracts, and mind repositories.
-  Foundation implemented: shared scene service, read-only [context builder](../cognition/context.py),
-  same-branch event/frozen-grant validation, grounded memories/beliefs, and authorized context reads.
-  The HTTP context now supplies a versioned basic movement-attempt catalog through a trusted
-  domain provider, gated by world capabilities/body control and perceived self state. Hidden
-  obstacles never filter choices; submission still passes kernel validation. This item remains
-  open: known lore, broader speech/combat/activity actions, and dependent-decision
-  projection barriers still need wiring. This catalog alone does not activate autonomous decisions.
+  The shared scene service and read-only [context builder](../cognition/context.py) validate frozen
+  same-branch evidence, memories, beliefs and learned lore. Context, retrieval and proposals share
+  a projection barrier. The current movement/speech/fixed tactical catalog uses world/body authority
+  and perceived self state; hidden obstacles never filter attempts. Richer activity/planning
+  catalogs extend this seam under later action/runner work. Kernel submission still decides outcomes.
 - [x] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
   evaluation situations confined to explicit privileged/testing flows rather than trusting them for live minds.
   The caller-authored endpoint is now privileged playtester evaluation only and rejects CHARACTER
@@ -125,16 +123,28 @@ as composition glue; reusable execution services must also work from workers and
     returns PROPOSAL_ONLY. A separate bounded runner now consumes that builder and submits fenced
     kernel commands after explicit controller handoff (007), with atomic step/budget accounting,
     observation readiness, concurrent retry/restart recovery, and player takeover. Caller-authored
-    evaluation remains privileged playtester-only. Execution currently uses local basic movement
-    utility; richer actions, narrative goals, the world clock, and history imitation remain F/G/D.
-- [ ] B5 — Route lore retrieval, summaries, and model conversations through the same knowledge and
+    evaluation remains privileged playtester-only. The runner now uses history/persona-guided
+    movement, speech and fixed tactical choices. Longer planning and story goals remain F/G/D.
+- [x] B5 — Route lore retrieval, summaries, and model conversations through the same knowledge and
   timeline boundary. Public availability must not automatically mean a character has learned a fact.
-- [ ] B6 — Label operator/director records outside the sensory event stream. Audit [event finalization](../kernel/event_factory.py),
+  Added [character knowledge](API_AND_WORKFLOWS.md#character-knowledge) from validated physical
+  testimony and pinned starting claims, including older facts beyond recent conversation. Retrieval
+  never fills gaps from public/global lore; dialogue shares the same source view and private provenance.
+- [x] B6 — Label operator/director records outside the sensory event stream. Audit [event finalization](../kernel/event_factory.py),
   observations, prompts, receipts, and retrieval so revision notes/protection rules never become character evidence.
-- [ ] B7 — Acceptance: seed hidden plot facts and abandoned-timeline facts; verify they cannot enter
+  Kernel finalization suppresses non-sensory physical builders/resolvers. Context, memories,
+  retrieval and dialogue preserve that boundary; broad scene inspection grants no private mind access.
+- [x] B7 — Acceptance: seed hidden plot facts and abandoned-timeline facts; verify they cannot enter
   character context, speech, memory, or retrieval. Test god knowledge limits and human-player/character separation.
   Causal relationship hardening derives controlled reactions from frozen physical evidence and
-  rejects arbitrary promise/rescue labels; broader knowledge and abandoned-timeline acceptance remains open.
+  rejects arbitrary promise/rescue labels. Current branch-lineage knowledge acceptance is verified;
+  complete revised-canonical continuation and discarded-state restoration remain section I.
+  Knowledge regressions cover hidden masks/operator sources, deity versus operator knowledge,
+  pinned card edits, other worlds, trial-only testimony after restart and provider inputs without
+  source/controller metadata. Final Python439/type136/frontend44/browser4/wheel/link gates passed.
+  The broad durable run passed117/118; its immediate-context assumption was updated to assert409,
+  real projection, then200, and all13focusedcontroller/knowledge/dialoguecases passed afterward.
+  Current-head GitHub CI and independent Orderly acceptance remain separate pending requirements.
 
 ## C. Make action outcomes authoritative
 

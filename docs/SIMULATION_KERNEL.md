@@ -147,6 +147,11 @@ rewind of this evidence alongside all campaign state remains part of timeline re
   that frozen source, and metadata changes alter snapshot identity without altering replay hashes.
 - Controlled relationship changes derive their classification from the source entity's frozen
   physical mask. Raw event access alone does not establish a perceived promise, rescue or insult.
+- Learned-lore retrieval and conversation use the same validated body/branch evidence and pinned
+  starting claims. Global public lore, operator knowledge and broad scene authority confer no
+  character memory. Recollections stay subjective; they do not alter canonical truth.
+- Event finalization suppresses physical emission and audience resolution for non-sensory
+  operator/director/evaluation/checkpoint records, regardless of a supplied emission builder.
 - Generic scenario jobs retain checkpoints, trial event envelopes, verifier facts, normalized
   metrics, and reports after restart.
 - Calibration review and deployment promotion are separate actions.

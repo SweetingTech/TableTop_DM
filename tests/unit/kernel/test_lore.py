@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from kernel.lore import LocalLoreIndex, LoreDocument
+from kernel.lore import LocalLoreIndex, LoreDocument, QdrantLoreIndex
 
 pytestmark = pytest.mark.unit
 
@@ -41,3 +41,32 @@ def test_lore_retrieval_is_world_scoped_visible_and_deterministic():
         hit.document.document_id
         for hit in index.search(world, "gatekeeper ash", visibility=frozenset({"PUBLIC", "GM"}))
     } == {secret.document_id}
+
+
+def test_vector_index_filters_visibility_and_revalidates_returned_scope(monkeypatch):
+    world = uuid.uuid4()
+    public = LoreDocument(document_id=uuid.uuid4(), world_id=world, title="Gate", text="Moonrise")
+    secret = public.model_copy(update={"document_id": uuid.uuid4(), "visibility": "GM"})
+    foreign = public.model_copy(update={"document_id": uuid.uuid4(), "world_id": uuid.uuid4()})
+    sent = []
+
+    def request(self, method, path, body):
+        sent.append(body)
+        return {
+            "result": [
+                {"payload": row.model_dump(mode="json"), "score": 1}
+                for row in (public, secret, foreign)
+            ]
+        }
+
+    monkeypatch.setattr(QdrantLoreIndex, "_request", request)
+    index = QdrantLoreIndex("http://fixture.invalid", "lore", lambda text: [1.0], 1)
+    assert [hit.document for hit in index.search(world, "moonrise")] == [public]
+    assert sent[-1]["filter"]["must"] == [
+        {"key": "world_id", "match": {"value": str(world)}},
+        {"key": "visibility", "match": {"any": ["PUBLIC"]}},
+    ]
+    assert {
+        hit.document.document_id
+        for hit in index.search(world, "moonrise", visibility=frozenset({"GM", "PUBLIC"}))
+    } == {public.document_id, secret.document_id}

@@ -3,6 +3,12 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
+Character retrieval reads existing PostgreSQL mind/binding records under actor scope and builds a
+local learned-claim view. It does not send searches to the world's public/vector lore catalog.
+Configured dialogue providers receive only scoped fiction and anonymous grounding references.
+Global Qdrant lore search defaults to PUBLIC and validates returned world/visibility; it is not a
+character learning channel. This change adds no port, service, migration or provider configuration.
+
 This API version requires migrations through 012, including frozen snapshot artifact identity,
 character history/bindings,
 private proposal receipts, controller ownership and human choice evidence. Revision, binding, and proposal
