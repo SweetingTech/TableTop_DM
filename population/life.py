@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position, seconds
+from domains.tabletop.rules import incapacitated
 from domains.tabletop.spatial import MoveRequest, move_entity
 from kernel.command_bus import CommandDefinition, CommandHandler
 from kernel.contracts import BranchKind, CommandProposal, CommandResult
@@ -237,11 +238,19 @@ def wake_after_action(
 ) -> CommandResult:
     """A human can wake by acting; captured autonomous proposals must wait for wakeup."""
     key = str(proposal.embodied_entity_id)
-    body = state.projections.get("tabletop.entities", {}).get(key, {})
+    body = state.projections.get("tabletop.entities", {}).get(key)
+    if body is None or incapacitated(body):
+        raise ValueError("a capable body is required for a voluntary action")
     asleep = bool(body.get("asleep"))
     if asleep and proposal.decision_authorship == "CHARACTER_POLICY":
         raise BodySleeping("body is sleeping")
-    result = handler(proposal, state)
+    evaluation = state
+    if asleep:
+        # Wake only in the isolated evaluation view. Failed actions leave the
+        # original state asleep; successful actions append the canonical wake delta.
+        evaluation = state.working_copy()
+        evaluation.projections["tabletop.entities"][key]["asleep"] = False
+    result = handler(proposal, evaluation)
     if not result.accepted:
         return result
     from kernel.contracts import StateDelta

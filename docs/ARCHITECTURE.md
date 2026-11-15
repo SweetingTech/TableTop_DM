@@ -2,6 +2,11 @@
 
 ## System shape
 
+Registered controlled commands share the `voluntary-body.1` capability/wakeup policy. Human
+wakeup is evaluated in an isolated awake copy and committed only with a successful result.
+Incapacity rejects before handler execution; private conditions are not inferred for other bodies
+through scene status. The own-body scene can suppress impossible stand-in action candidates.
+
 Physical-action RNG is allocated by the commit boundary from recorded run seed and next branch
 projection version, after original-receipt lookup and under the same transaction/lock as mutation.
 The private result records `logical-action-rng-1.0.0` provenance. Policy-selection seeds and traces

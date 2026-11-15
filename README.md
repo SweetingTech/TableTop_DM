@@ -31,6 +31,10 @@ Melee rolls use a recorded run seed and the next committed branch sequence. New 
 attacks get independent seeds; retries return the original receipt. The full combat clock remains
 checklist work.
 
+Voluntary actions share incapacity checks. A human-controlled sleeper can wake by a valid
+action, including combat or magic; failed attempts leave sleep and resources unchanged. Sleeping
+stand-ins wait for wakeup. Ordinary healing cannot resurrect a body marked dead.
+
 Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
 and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
 perception-scoped movement, speech and tactical catalog. The proposal endpoint itself

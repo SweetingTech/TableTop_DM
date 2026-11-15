@@ -5,7 +5,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from domains.tabletop.rules import RULES_VERSION, attack_profile, capable
+from domains.tabletop.rules import RULES_VERSION, attack_profile, capable, dead
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
@@ -61,7 +61,7 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
         not in GridSpatialPerceptionResolver().visible_entities(state, attacker_id)
     ):
         raise ValueError("target is not in visible melee reach")
-    if not capable(attacker) or int(target.get("hp", 0)) <= 0:
+    if not capable(attacker) or dead(target) or int(target.get("hp", 0)) <= 0:
         raise ValueError("incapacitated entities cannot attack or be attacked")
     rng = random.Random(proposal.seed)
     attack_roll = rng.randint(1, 20)

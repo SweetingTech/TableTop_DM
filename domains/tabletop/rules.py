@@ -43,13 +43,29 @@ def conditions(body: dict) -> frozenset[str]:
 
 
 def capable(body: dict) -> bool:
-    return (
-        int(body.get("hp", 0)) > 0
-        and not body.get("defeated")
-        and not body.get("asleep")
-        and not conditions(body).intersection(
-            {"incapacitated", "stunned", "unconscious", "paralyzed", "dead"}
-        )
+    return int(body.get("hp", 0)) > 0 and not body.get("asleep") and not incapacitated(body)
+
+
+def dead(body: dict) -> bool:
+    return bool(
+        body.get("dead")
+        or str(body.get("status", "")).upper() == "DEAD"
+        or "dead" in conditions(body)
+    )
+
+
+def incapacitated(body: dict) -> bool:
+    """Voluntary-action boundary; legacy bodies without an HP field are not presumed dead.
+
+    Sleep is handled separately: a human may wake by acting, but cannot wake out of
+    unconsciousness, paralysis or death. Combat still requires explicit positive HP.
+    """
+    return bool(
+        dead(body)
+        or ("hp" in body and int(body["hp"]) <= 0)
+        or body.get("defeated")
+        or str(body.get("status", "")).upper() in {"DEFEATED", "UNCONSCIOUS", "INCAPACITATED"}
+        or conditions(body).intersection({"incapacitated", "stunned", "unconscious", "paralyzed"})
     )
 
 

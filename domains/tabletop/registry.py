@@ -49,7 +49,11 @@ def command_definitions(
         quests(),
     )
     return tuple(
-        replace(definition, handler=with_wakeup(definition.handler))
+        replace(
+            definition,
+            version=f"{definition.version}+voluntary-body.1",
+            handler=with_wakeup(definition.handler),
+        )
         if definition.requires_controlled_entity
         else replace(definition, handler=with_motivation(definition.handler, motivation_reader))
         if definition.command_type

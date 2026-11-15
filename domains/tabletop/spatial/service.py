@@ -6,7 +6,7 @@ from datetime import datetime
 from cognition.context import validated_observations
 from cognition.models import Observation
 from cognition.store import MindStore
-from domains.tabletop.rules import available_melee_reach, known_spells
+from domains.tabletop.rules import available_melee_reach, dead, incapacitated, known_spells
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.spatial.scene import (
     ObservationPresentation,
@@ -113,7 +113,15 @@ def build_perceived_scene(
                 detail_level=detail,
                 health=int(current["hp"]) if inspected and "hp" in current else None,
                 max_health=(int(current["max_hp"]) if inspected and "max_hp" in current else None),
-                status=("DEFEATED" if current.get("defeated") else "ACTIVE") if inspected else None,
+                status=(
+                    "DEAD"
+                    if dead(current)
+                    else "INCAPACITATED"
+                    if incapacitated(current)
+                    else "ACTIVE"
+                )
+                if entity_id == observer_entity_id
+                else (("DEFEATED" if current.get("defeated") else "ACTIVE") if inspected else None),
                 mana=max(0, int(current.get("mana", 0)))
                 if entity_id == observer_entity_id
                 else None,

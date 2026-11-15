@@ -1,5 +1,13 @@
 # Simulation-kernel contract
 
+The registered voluntary-action wrapper rejects zero-HP, defeated, dead, stunned, unconscious
+and paralyzed bodies. Ordinary sleep is distinct: captured CHARACTER_POLICY actions suspend
+without a control step; a human action may wake only if its handler succeeds. The handler sees
+an isolated awake evaluation view, and an appended delta commits wakeup atomically with effects.
+Legacy bodies lacking an HP field remain eligible for non-combat voluntary actions; combat/spells
+still require explicit positive HP. Dead markers remain authoritative even with stale positive HP;
+ordinary healing does not clear them. This is not death saving throws or a resurrection policy.
+
 Random mechanics declare `uses_randomness` in their command definition. Both commit adapters
 derive a 63-bit action seed from the RNG policy version, recorded run seed, next committed branch
 sequence and command type. Failed commands publish no sequence advancement; concurrent commands

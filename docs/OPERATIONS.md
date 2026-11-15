@@ -1,5 +1,10 @@
 # Operations, storage, migrations, and security
 
+The shared voluntary-action policy is recorded in command versions as `+voluntary-body.1`.
+No migration, worker, environment variable or frontend source update is required. Historical
+committed receipts still precede validation; retry them normally after upgrade. New invalid
+incapacitated actions leave no writes. A failed wake attempt does not change sleep state.
+
 Attack handler 2.1.0 uses recorded per-action RNG proofs with schema 012 unchanged. New omitted
 run seeds persist as zero; existing null seeds retain storage identity and resolve to zero for
 mechanics. Previously committed receipts are returned unchanged, including receipts without RNG

@@ -1,5 +1,11 @@
 # API and user workflows
 
+Voluntary controlled commands reject incapacitated bodies consistently. A valid human command
+can wake ordinary sleep, including attack/cast/invoke; an invalid attempt does not wake or spend
+resources. Autonomous sleepers retain the existing suspension behavior. Own scene status reports
+`INCAPACITATED` or `DEAD` for the action catalog; other bodies' private condition lists are not
+exposed through this mapping. MEND cannot resurrect a dead body with stale positive HP.
+
 The Flask application serves the React client and a JSON API from the same origin. Browser pages
 live under `/v2/*`; API resources live under `/api/v2/*`. UUIDs are serialized as strings and
 timestamps use ISO 8601.
