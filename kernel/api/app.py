@@ -262,6 +262,7 @@ class TelemetryImportRequest(BaseModel):
 
 
 class CognitionDecisionApiRequest(BaseModel):
+    mode: Literal["EVALUATION"] = "EVALUATION"
     persona_id: uuid.UUID
     seed: int
     actions: tuple[DecisionAction, ...] = Field(min_length=1)
@@ -280,6 +281,16 @@ class CognitionDecisionApiRequest(BaseModel):
     planning_actions: tuple[GoapAction, ...] = ()
     planner_max_depth: int = Field(default=6, ge=0, le=32)
     planner_max_nodes: int = Field(default=256, ge=1, le=10_000)
+
+
+class CharacterCognitionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["CHARACTER"]
+    world_id: uuid.UUID
+    branch_id: uuid.UUID
+    run_id: uuid.UUID
+    embodied_entity_id: uuid.UUID
+    idempotency_key: str = Field(min_length=1, max_length=200)
 
 
 class RuntimeScopeRequest(BaseModel):
@@ -2188,6 +2199,14 @@ def create_app(
         world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID
     ):
         body = CharacterProposalRequest.model_validate(request.get_json(silent=True) or {})
+        return character_proposal_response(world_id, branch_id, observer_entity_id, body)
+
+    def character_proposal_response(
+        world_id: uuid.UUID,
+        branch_id: uuid.UUID,
+        observer_entity_id: uuid.UUID,
+        body: CharacterProposalRequest,
+    ):
         actor_id = current_actor_id()
         scope = CharacterProposalScope(
             world_id=world_id, branch_id=branch_id, run_id=body.run_id, entity_id=observer_entity_id
@@ -2524,11 +2543,23 @@ def create_app(
 
     @app.post("/api/v2/cognition/decide")
     def cognition_decide():
+        payload = request.get_json(silent=True) or {}
+        if isinstance(payload, dict) and payload.get("mode") == "CHARACTER":
+            character = CharacterCognitionRequest.model_validate(payload)
+            return character_proposal_response(
+                character.world_id,
+                character.branch_id,
+                character.embodied_entity_id,
+                CharacterProposalRequest(
+                    run_id=character.run_id,
+                    idempotency_key=character.idempotency_key,
+                ),
+            )
         if not automation_boundary() and not current_user().is_admin:
             raise PermissionError(
                 "caller-authored cognition is restricted to privileged evaluation"
             )
-        body = CognitionDecisionApiRequest.model_validate(request.get_json(silent=True) or {})
+        body = CognitionDecisionApiRequest.model_validate(payload)
         evaluation_persona = compiled_persona(body.persona_id)
         if evaluation_persona.purpose != PersonaPurpose.SIMULATED_PLAYTESTER:
             raise PermissionError(

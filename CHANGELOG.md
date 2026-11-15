@@ -1,5 +1,10 @@
 # Changelog
 
+- Wire explicit CHARACTER mode on cognition/decide through the existing trusted scoped proposal
+  response and receipt repository. Accept only scope/idempotency, resolve persona/history/actions
+  on the server, preserve no-store/retry semantics and leave canonical mutation to submission.
+  Keep legacy caller-authored situations/actions confined to privileged EVALUATION mode.
+
 - Allocate physical-action randomness under the branch commit lock from the recorded run seed
   and logical command sequence. Ignore caller roll seeds, preserve policy trace seeds separately,
   and retain private versioned RNG proof for retries/replay. Legacy unseeded runs use zero;

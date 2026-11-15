@@ -1,5 +1,11 @@
 # Simulation-kernel contract
 
+`cognition/decide` CHARACTER mode is proposal-only and shares the entity-scoped trusted builder,
+authorization, projection barrier and receipt identity. It cannot accept caller situations, actions,
+personas, seeds or planner/provider overrides. Its authenticated actor remains subject to exact
+world/branch/run/body authority. Legacy EVALUATION mode retains privileged caller-authored input
+for SIMULATED_PLAYTESTER personas; it does not provide live character knowledge.
+
 Random mechanics declare `uses_randomness` in their command definition. Both commit adapters
 derive a 63-bit action seed from the RNG policy version, recorded run seed, next committed branch
 sequence and command type. Failed commands publish no sequence advancement; concurrent commands
