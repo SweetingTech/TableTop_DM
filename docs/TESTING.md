@@ -1,5 +1,14 @@
 # Testing
 
+Body-capability regressions exercise zero HP, defeat, mixed-case conditions, dead flags/status,
+movement/speech/guard parity, sleeping policy suspension, successful and failed human combat wakeup,
+dead-target healing and self-only scene status. Durable tests verify no-write rejection, mana/wake
+atomicity, retry/restart and ledger replay. Use `uv run python -m pytest
+tests/unit/tabletop/test_body_capability.py` and the integration lane for
+`tests/integration/test_body_capability.py`.
+Actual stand-in regressions repeat incapacitated polls, inject a proposal-to-commit stun race,
+verify unchanged failure/step budgets and resume successfully after recovery.
+
 Generic cognition CHARACTER-mode regressions verify shared scoped-route receipts, no canonical
 mutation, strict rejection of caller context/actions/seeds/identity/provider overrides, exact
 control/run-lineage authorization and privileged evaluation separation. Durable tests repeat the

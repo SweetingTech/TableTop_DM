@@ -1,5 +1,15 @@
 # Simulation-kernel contract
 
+The registered voluntary-action wrapper rejects zero-HP, defeated, dead, stunned, unconscious
+and paralyzed bodies. Ordinary sleep is distinct: captured CHARACTER_POLICY actions suspend
+without a control step; a human action may wake only if its handler succeeds. The handler sees
+an isolated awake evaluation view, and an appended delta commits wakeup atomically with effects.
+Legacy bodies lacking an HP field remain eligible for non-combat voluntary actions; combat/spells
+still require explicit positive HP. Dead markers remain authoritative even with stale positive HP;
+ordinary healing does not clear them. This is not death saving throws or a resurrection policy.
+`BodyIncapacitated` is expected runner suspension, including a condition acquired during model
+generation before commit. Waiting does not spend controller steps/failures or disable autonomy.
+
 `cognition/decide` CHARACTER mode is proposal-only and shares the entity-scoped trusted builder,
 authorization, projection barrier and receipt identity. It cannot accept caller situations, actions,
 personas, seeds or planner/provider overrides. Its authenticated actor remains subject to exact

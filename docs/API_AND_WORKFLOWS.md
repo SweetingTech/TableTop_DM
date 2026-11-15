@@ -1,5 +1,11 @@
 # API and user workflows
 
+Voluntary controlled commands reject incapacitated bodies consistently. A valid human command
+can wake ordinary sleep, including attack/cast/invoke; an invalid attempt does not wake or spend
+resources. Autonomous sleepers retain the existing suspension behavior. Own scene status reports
+`INCAPACITATED` or `DEAD` for the action catalog; other bodies' private condition lists are not
+exposed through this mapping. MEND cannot resurrect a dead body with stale positive HP.
+
 `POST /api/v2/cognition/decide` supports `mode: "CHARACTER"` with required `world_id`, `branch_id`,
 `run_id`, `embodied_entity_id` and `idempotency_key`. No other fields are accepted. The response
 is the existing character receipt (`execution_mode: "PROPOSAL_ONLY"`, `committed: false`) with

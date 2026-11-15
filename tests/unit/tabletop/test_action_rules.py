@@ -153,9 +153,7 @@ def test_weapon_stats_come_from_owned_equipment_and_body(domain):
     assert receipt.result.result["rules_version"] == "tabletop-action-rules-1.0.0"
 
 
-@pytest.mark.parametrize(
-    "fault", ["not_owned", "cross_zone", "wall", "invisible", "asleep", "stunned"]
-)
+@pytest.mark.parametrize("fault", ["not_owned", "cross_zone", "wall", "invisible", "stunned"])
 def test_impossible_attack_has_no_effect(domain, fault):
     bodies = domain["state"].projections["tabletop.entities"]
     attacker, target = bodies[str(domain["hero"])], bodies[str(domain["enemy"])]
@@ -167,8 +165,6 @@ def test_impossible_attack_has_no_effect(domain, fault):
         attacker.update({"equipped_weapon": "SPEAR", "inventory": {"SPEAR": 1}})
         target["x"] = 3
         domain["state"].projections["tabletop.obstacles"]["wall"] = {"x": 2, "y": 1}
-    elif fault == "asleep":
-        attacker["asleep"] = True
     elif fault == "invisible":
         domain["state"].projections["tabletop.sensory_profiles"] = {
             str(domain["enemy"]): {"invisible": True}

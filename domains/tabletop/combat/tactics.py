@@ -6,6 +6,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict
 
+from domains.tabletop.rules import capable
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
@@ -23,7 +24,7 @@ class GuardResult(BaseModel):
 
 def guard(proposal: CommandProposal, state: BranchState) -> CommandResult:
     body = state.projections.get("tabletop.entities", {}).get(str(proposal.embodied_entity_id))
-    if body is None or int(body.get("hp", 0)) <= 0 or body.get("guarded"):
+    if body is None or not capable(body) or body.get("guarded"):
         raise ValueError("a capable unguarded body is required")
     return CommandResult(
         result={"entity_id": str(proposal.embodied_entity_id), "guarded": True},

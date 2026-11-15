@@ -7,7 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from domains.tabletop.rules import DEFAULT_SPELLS, RULES_VERSION, SPELLS, capable, known_spells
+from domains.tabletop.rules import (
+    DEFAULT_SPELLS,
+    RULES_VERSION,
+    SPELLS,
+    capable,
+    dead,
+    known_spells,
+)
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
@@ -47,7 +54,13 @@ def invoke(proposal: CommandProposal, state: BranchState) -> CommandResult:
         bodies.get(str(proposal.embodied_entity_id)),
         bodies.get(str(request.target_id)),
     )
-    if caster is None or target is None or not capable(caster) or int(target.get("hp", 0)) <= 0:
+    if (
+        caster is None
+        or target is None
+        or not capable(caster)
+        or dead(target)
+        or int(target.get("hp", 0)) <= 0
+    ):
         raise ValueError("capable caster and target are required")
     if request.spell_id not in known_spells(caster):
         raise ValueError("this body has not learned the requested spell")

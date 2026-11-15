@@ -2,6 +2,11 @@
 
 ## System shape
 
+Registered controlled commands share the `voluntary-body.1` capability/wakeup policy. Human
+wakeup is evaluated in an isolated awake copy and committed only with a successful result.
+Incapacity rejects before handler execution; private conditions are not inferred for other bodies
+through scene status. The own-body scene can suppress impossible stand-in action candidates.
+
 The generic cognition API dispatches explicit CHARACTER requests to the same trusted response
 builder and append-only proposal receipts as the entity-scoped character endpoint. It accepts
 scope/idempotency only, so identity, scene, learned knowledge and action candidates remain

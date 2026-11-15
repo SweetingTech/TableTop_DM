@@ -14,6 +14,10 @@ class BodySleeping(AuthorizationDenied):
     """Expected bodily suspension; autonomous actions wait without spending a control step."""
 
 
+class BodyIncapacitated(ValueError):
+    """Expected voluntary-action suspension, not a stand-in policy failure."""
+
+
 class DuplicateCommand(KernelError):
     pass
 

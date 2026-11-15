@@ -1,5 +1,10 @@
 # Operations, storage, migrations, and security
 
+The shared voluntary-action policy is recorded in command versions as `+voluntary-body.1`.
+No migration, worker, environment variable or frontend source update is required. Historical
+committed receipts still precede validation; retry them normally after upgrade. New invalid
+incapacitated actions leave no writes. A failed wake attempt does not change sleep state.
+
 Explicit CHARACTER cognition requests reuse schema006 proposal receipts and current schema012;
 no backfill, migration, credential or model configuration change is needed. Scope/actor/key are
 shared with the existing character-proposals route, including durable restart retries. This route

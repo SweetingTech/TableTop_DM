@@ -1,5 +1,13 @@
 # Changelog
 
+- Enforce common voluntary-action incapacity checks for movement, speech, defense and other
+  controlled commands. Make human wake-by-action transactional for attacks/spells, preserve
+  sleeping stand-in suspension, reject healing of dead bodies with stale positive HP, and expose
+  incapacity only in the body's own scene to suppress impossible autonomous candidates.
+  Registered controlled-command versions carry `+voluntary-body.1`. Full combat time remains open.
+  Incapacitated stand-ins wait without spending failure/control budgets, including races during
+  proposal generation, and can resume after recovery.
+
 - Wire explicit CHARACTER mode on cognition/decide through the existing trusted scoped proposal
   response and receipt repository. Accept only scope/idempotency, resolve persona/history/actions
   on the server, preserve no-store/retry semantics and leave canonical mutation to submission.
