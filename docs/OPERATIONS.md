@@ -5,6 +5,11 @@ No migration, worker, environment variable or frontend source update is required
 committed receipts still precede validation; retry them normally after upgrade. New invalid
 incapacitated actions leave no writes. A failed wake attempt does not change sleep state.
 
+Explicit CHARACTER cognition requests reuse schema006 proposal receipts and current schema012;
+no backfill, migration, credential or model configuration change is needed. Scope/actor/key are
+shared with the existing character-proposals route, including durable restart retries. This route
+does not activate a runner or grant control. Caller-authored evaluation remains privileged.
+
 Attack handler 2.1.0 uses recorded per-action RNG proofs with schema 012 unchanged. New omitted
 run seeds persist as zero; existing null seeds retain storage identity and resolve to zero for
 mechanics. Previously committed receipts are returned unchanged, including receipts without RNG

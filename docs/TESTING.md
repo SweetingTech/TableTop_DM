@@ -9,6 +9,13 @@ tests/unit/tabletop/test_body_capability.py` and the integration lane for
 Actual stand-in regressions repeat incapacitated polls, inject a proposal-to-commit stun race,
 verify unchanged failure/step budgets and resume successfully after recovery.
 
+Generic cognition CHARACTER-mode regressions verify shared scoped-route receipts, no canonical
+mutation, strict rejection of caller context/actions/seeds/identity/provider overrides, exact
+control/run-lineage authorization and privileged evaluation separation. Durable tests repeat the
+same receipt through both routes after restart. Run `uv run python -m pytest
+tests/unit/kernel/test_cognition_character_entrypoint.py` and the integration lane for
+`tests/integration/test_cognition_character_entrypoint.py`.
+
 Action-randomness regressions cover caller-seed independence, logical sequence allocation,
 failure rollback, concurrent commits, original retry receipts and private physical masks. Durable
 tests compare reference outcomes, restart retries, real concurrent repository transactions and
