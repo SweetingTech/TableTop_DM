@@ -1,0 +1,18 @@
+{
+  "schema": "ttdm-github-job-report-excerpt-1.0.0",
+  "lane": "image",
+  "job_id": 132779895445,
+  "run_id": 43703626738,
+  "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+  "conclusion": "success",
+  "started_at": "2026-11-15T10:20:51Z",
+  "completed_at": "2026-11-15T10:21:40Z",
+  "url": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43703626738/job/132779895445",
+  "full_log_uri": "https://api.github.com/repos/SweetingTech/TableTop_DM/actions/jobs/132779895445/logs",
+  "full_log_sha256": "04af8deb041933d45ae48742d327dc2634723846ea1eb5bc6e4f667949a905e9",
+  "selection": "Actual log lines matching test/gate/build result and command patterns; not the full job log. Configured-string matches are redacted."
+}
+
+2026-11-15T10:21:25.8056311Z #13 25.98 npm notice To update run: npm install -g npm@12.2.2
+2026-11-15T10:21:26.2840117Z #19 [frontend-build 6/6] RUN npm run build
+2026-11-15T10:21:30.0555117Z #19 3.877 ✓ built in 193ms

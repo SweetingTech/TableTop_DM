@@ -1,0 +1,28 @@
+{
+  "schema": "ttdm-github-job-report-excerpt-1.0.0",
+  "lane": "quality",
+  "job_id": 132779895686,
+  "run_id": 43703626738,
+  "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+  "conclusion": "success",
+  "started_at": "2026-11-15T10:20:51Z",
+  "completed_at": "2026-11-15T10:22:27Z",
+  "url": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43703626738/job/132779895686",
+  "full_log_uri": "https://api.github.com/repos/SweetingTech/TableTop_DM/actions/jobs/132779895686/logs",
+  "full_log_sha256": "4c75bf927cdf2de096d20c10d90aaa870ef5fc2a4dfe04fb6f860ec368abecd1",
+  "selection": "Actual log lines matching test/gate/build result and command patterns; not the full job log. Configured-string matches are redacted."
+}
+
+2026-11-15T10:21:03.2651254Z All checks passed!
+2026-11-15T10:21:03.3239714Z ##[group]Run uv run mypy kernel persona cognition population experiments domains main.py
+2026-11-15T10:21:03.3240230Z uv run mypy kernel persona cognition population experiments domains main.py
+2026-11-15T10:21:08.5477011Z Success: no issues found in 131 source files
+2026-11-15T10:22:08.1442792Z 503 passed, 164 deselected in 58.85s
+2026-11-15T10:22:08.3724766Z uv run python scripts/verify_wheel.py dist/*.whl
+2026-11-15T10:22:10.1524871Z ##[group]Run npm --prefix frontend run lint
+2026-11-15T10:22:10.1525209Z npm --prefix frontend run lint
+2026-11-15T10:22:10.1525449Z npm --prefix frontend run test
+2026-11-15T10:22:10.1525690Z npm --prefix frontend run build
+2026-11-15T10:22:21.8662718Z  Test Files  11 passed (11)
+2026-11-15T10:22:21.8663492Z       Tests  44 passed (44)
+2026-11-15T10:22:25.8493107Z ✓ built in 215ms
