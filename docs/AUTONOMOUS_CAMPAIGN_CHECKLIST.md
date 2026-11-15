@@ -136,7 +136,7 @@ as composition glue; reusable execution services must also work from workers and
   observations, prompts, receipts, and retrieval so revision notes/protection rules never become character evidence.
   Kernel finalization suppresses non-sensory physical builders/resolvers. Context, memories,
   retrieval and dialogue preserve that boundary; broad scene inspection grants no private mind access.
-- [ ] B7 — Acceptance: seed hidden plot facts and abandoned-timeline facts; verify they cannot enter
+- [x] B7 — Acceptance: seed hidden plot facts and abandoned-timeline facts; verify they cannot enter
   character context, speech, memory, or retrieval. Test god knowledge limits and human-player/character separation.
   Causal relationship hardening derives controlled reactions from frozen physical evidence and
   rejects arbitrary promise/rescue labels. Current branch-lineage knowledge acceptance is verified;
@@ -147,9 +147,9 @@ as composition glue; reusable execution services must also work from workers and
   The broad durable run passed117/118; its immediate-context assumption was updated to assert409,
   real projection, then200, and all13focusedcontroller/knowledge/dialoguecases passed afterward.
   Current-head GitHub CI and independent Orderly acceptance remain separate pending requirements.
-  Native review passed B3/B5 but required direct B4 dispatch and additional admitted B1/B2/B6/B7
-  source/actual verification proof. Direct dispatch regressions now pass locally; this box stays
-  open until the full evidence and independent acceptance requirements are satisfied.
+  Native review subsequently accepted all original B1–B7 criteria (verdict4c0e329e,
+  events2129367/2129368); task3 is independently COMPLETED. Runtime90 and actual verification91
+  are merged. The reports pin their tested revisions; full campaign milestones remain unaccepted.
 
 ## C. Make action outcomes authoritative
 
@@ -178,6 +178,10 @@ as composition glue; reusable execution services must also work from workers and
   Current-head CI, independent review/integration and whole-section C acceptance remain separate.
 - [ ] C5 — Reconcile portal sheet HP/status/equipment with kernel state; define one canonical owner for
   each value and projections for other views. Avoid stale character cards overwriting live outcomes.
+  Backend read foundation: owner/world/body-authorized live-state endpoint projects only the
+  canonical body's current physical resources with branch/version and no-store responses. Reads
+  never sync values into authored cards or fall back for missing bodies. Dashboard wiring and
+  bound-card resource-write ownership remain the next slice; C5 is not yet complete.
 - [ ] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;
   current quest requests supply their own amount and target. Extend economy/inventory/trade as needed for activities.
 - [ ] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible

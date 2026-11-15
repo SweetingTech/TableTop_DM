@@ -2,6 +2,11 @@
 
 ## System shape
 
+Character live-state reads project the canonical branch's physical body into a typed allowlist;
+they do not synchronize wounds/resources back into authored cards. HTTP composition checks card
+ownership, current world access and body inspection authority, then freezes the reference read
+or uses a fresh durable snapshot. Card identity/version and body projection/version remain distinct.
+
 Registered controlled commands share the `voluntary-body.1` capability/wakeup policy. Human
 wakeup is evaluated in an isolated awake copy and committed only with a successful result.
 Incapacity rejects before handler execution; private conditions are not inferred for other bodies

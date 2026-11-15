@@ -1,5 +1,10 @@
 # Changelog
 
+- Add an owner/world/body-authorized canonical character-state read, with typed allowlisted
+  resources, branch/version provenance and no-store success/error responses. Keep the authored
+  card unchanged; distinguish unbound cards from unavailable bound bodies. Player-sheet wiring
+  and bound-card resource-edit protection remain the next C5 slice.
+
 - Enforce common voluntary-action incapacity checks for movement, speech, defense and other
   controlled commands. Make human wake-by-action transactional for attacks/spells, preserve
   sleeping stand-in suspension, reject healing of dead bodies with stale positive HP, and expose

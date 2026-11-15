@@ -61,6 +61,7 @@ from domains.tabletop.character_bindings import (
 )
 from domains.tabletop.character_context import resolve_character_context
 from domains.tabletop.character_identity import CharacterIdentity
+from domains.tabletop.character_state import CharacterBodyUnavailable, project_character_state
 from domains.tabletop.magic.tactical import StartingResources
 from domains.tabletop.portal import (
     InMemoryPortalRepository,
@@ -1336,6 +1337,10 @@ def create_app(
     def character_context_pending(exc: CharacterContextPending):
         return jsonify({"error": "character_context_pending", "details": str(exc)}), 409
 
+    @app.errorhandler(CharacterBodyUnavailable)
+    def character_body_unavailable(exc: CharacterBodyUnavailable):
+        return jsonify({"error": "character_body_unavailable", "details": str(exc)}), 409
+
     @app.errorhandler(ControlConflict)
     def control_conflict(exc: ControlConflict):
         return jsonify({"error": "controller_changed", "details": str(exc)}), 409
@@ -1474,6 +1479,54 @@ def create_app(
                 ]
             }
         )
+
+    @app.get("/api/v2/player/characters/<uuid:character_id>/live-state")
+    def player_character_live_state(character_id: uuid.UUID):
+        character = portal.repository.get_character(character_id)
+        if character is None:
+            raise KeyError(character_id)
+        account = current_user()
+        if not account.is_admin and character.owner_user_id != account.user_id:
+            raise PermissionError("only the character owner can inspect its live state")
+        if character.entity_id is None:
+            view = project_character_state(character, None)
+        else:
+            source = controller_snapshot()
+            entity_id = character.entity_id
+            world_id = character.world_id
+            if world_id is None:
+                raise CharacterBodyUnavailable("the bound canonical body is unavailable")
+            world = source.worlds.get(world_id)
+            if world is None:
+                raise CharacterBodyUnavailable("the bound canonical body is unavailable")
+            require_world_access(world.world_id, source)
+            actor_id = current_actor_id()
+
+            def read():
+                entity = source.entities.get((world.canonical_branch_id, entity_id))
+                if entity is None or entity.world_id != world.world_id:
+                    raise CharacterBodyUnavailable("the bound canonical body is unavailable")
+                require_scene_access(
+                    source,
+                    world_id=world.world_id,
+                    branch_id=world.canonical_branch_id,
+                    observer_entity_id=entity_id,
+                    actor_id=actor_id,
+                )
+                return project_character_state(
+                    character, source.states.get(world.canonical_branch_id)
+                )
+
+            view = source.read_reference(read)
+        response = jsonify(view.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.after_request
+    def private_character_state_cache(response):
+        if request.endpoint == "player_character_live_state":
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/api/v2/player/characters/<uuid:character_id>/history")
     def player_character_history(character_id: uuid.UUID):

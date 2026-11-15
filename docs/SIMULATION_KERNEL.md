@@ -1,5 +1,11 @@
 # Simulation-kernel contract
 
+The character live-state endpoint is read-only. Its pure projection accepts only a matching
+canonical world/body, exposes an allowlist of physical resource fields and never copies arbitrary
+public-state keys, entity secrets or card backstory. No command, ledger event, outbox record or
+portal resource synchronization is produced. An unbound card is explicit AUTHORED; a missing bound
+body is unavailable rather than a stale-card fallback. Kernel commands continue owning live effects.
+
 The registered voluntary-action wrapper rejects zero-HP, defeated, dead, stunned, unconscious
 and paralyzed bodies. Ordinary sleep is distinct: captured CHARACTER_POLICY actions suspend
 without a control step; a human action may wake only if its handler succeeds. The handler sees
