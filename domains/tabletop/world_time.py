@@ -105,6 +105,8 @@ def advance_result(state: BranchState, clock: Clock, until: int, **updates) -> C
         "tabletop.population",
         "tabletop.population_transitions",
         "tabletop.routines",
+        "tabletop.obligations",
+        "tabletop.spatial.positions",
     ):
         before, after = (
             state.projections.get(projection, {}),

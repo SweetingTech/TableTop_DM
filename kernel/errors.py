@@ -10,6 +10,10 @@ class WorldClockPaused(AuthorizationDenied):
     """Expected suspension; runners must preserve the character controller's budget."""
 
 
+class BodySleeping(AuthorizationDenied):
+    """Expected bodily suspension; autonomous actions wait without spending a control step."""
+
+
 class DuplicateCommand(KernelError):
     pass
 

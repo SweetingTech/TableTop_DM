@@ -20,14 +20,28 @@ class Activity(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     activity_id: uuid.UUID
     entity_id: uuid.UUID
-    kind: Literal["WEED", "REST", "EAT"]
+    kind: Literal["WEED", "REST", "EAT", "TRAVEL", "SLEEP", "SOCIAL"]
+    task_key: str | None = None
+    details: dict = Field(default_factory=dict)
     routine_id: uuid.UUID | None = None
     duration_seconds: int = Field(ge=1, le=86400)
     started_seconds: int = Field(ge=0)
     updated_seconds: int = Field(ge=0)
     progress_seconds: int = Field(default=0, ge=0)
     status: Literal["RUNNING", "WAITING", "COMPLETED", "CANCELLED"] = "RUNNING"
-    reason: Literal["RAIN", "INCAPACITATED", "MOVED", "NO_FOOD"] | None = None
+    reason: (
+        Literal[
+            "RAIN",
+            "INCAPACITATED",
+            "MOVED",
+            "NO_FOOD",
+            "PATH_BLOCKED",
+            "PARTNER_UNAVAILABLE",
+            "NOT_STARTED",
+            "DANGER",
+        ]
+        | None
+    ) = None
     origin: dict
 
 
@@ -245,6 +259,7 @@ def advance_activities(state: BranchState, until: int) -> None:
     from population.routines import advance_routines, reconcile_relevance
 
     reconcile_relevance(state, seconds(state))
+    cursor = seconds(state)
     pending = state.projections.get(SCHEDULE, {})
     for key, row in sorted(
         tuple(pending.items()), key=lambda item: (item[1]["due_seconds"], item[1]["order"], item[0])
@@ -252,13 +267,14 @@ def advance_activities(state: BranchState, until: int) -> None:
         if row["due_seconds"] > until:
             continue
         progress(state, row["due_seconds"])
-        advance_routines(state, row["due_seconds"])
+        advance_routines(state, row["due_seconds"], cursor)
+        cursor = row["due_seconds"]
         state.projections.setdefault(WEATHER, {}).setdefault("singleton", {})[row["zone_id"]] = row[
             "raining"
         ]
         del pending[key]
     progress(state, until)
-    advance_routines(state, until)
+    advance_routines(state, until, cursor)
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:

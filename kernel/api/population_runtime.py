@@ -156,6 +156,7 @@ def register_population_runtime(app: Flask, bridge: PopulationRuntime, populatio
             {
                 "members": state.projections.get(MEMBERS, {}),
                 "routines": state.projections.get(ROUTINES, {}),
+                "obligations": state.projections.get("tabletop.obligations", {}),
                 "transitions": state.projections.get(HISTORY, {}),
             }
         )

@@ -244,3 +244,8 @@ they add no listener or provider endpoint. Deploy migration 011 before the new a
 The readiness check expects `011_population_body_binding.sql`. Routine execution is opt-in and
 follows the clock's explicit pause/downtime policy. This change does not enable a model provider or
 alter operator credentials. See the [setup workflow](API_AND_WORKFLOWS.md#population-binding-and-npc-routines).
+
+Opt-in travel/sleep/social schedules share this same worker and projection transaction. Schema 011
+remains current. Clock retries cover location, rest, food and joint attendance together; separate
+processes do not each award their own effects. Private routes and appointment schedules are manager
+inspection only. These features add no port, database table or model-provider connection.

@@ -270,14 +270,19 @@ hypothesis generation. They are not substitutes for evidence from real people.
 ## NPC population routines
 
 Materialized population members can now be bound to existing world bodies and assigned recurring
-gardening, rest and meal routines. The configured world clock advances these routines while the
+gardening, rest, meals, home/work commutes, daily sleep and social commitments. The world clock
+advances them while the
 party is elsewhere, including rain interruptions, fatigue and food shortages. Opening a browser
 does not start or stop work. A returning character sees physically perceptible activity and work.
 
 This is opt-in setup through the typed API. Apply migration 011 with the migration owner, configure
 the existing world clock/executor, then bind members and enable their routines. See
 [population routines](docs/API_AND_WORKFLOWS.md#population-binding-and-npc-routines) for the workflow.
-Travel, social obligations, general occupations and autonomous story direction remain checklist work.
+Home/work travel stays within one zone and elevation. Appointments can repeat, wait for participants,
+or be missed; they do not invent dialogue or relationships. See
+[travel, sleep and obligations](docs/API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations).
+General occupations, cross-zone routing, detailed activity planning and autonomous story direction
+remain checklist work.
 
 ## License
 

@@ -1,5 +1,11 @@
 # Changelog
 
+- Add opt-in home/work travel, daily sleep windows and joint recurring social obligations to the
+  existing world clock. Preserve partial work and actual positions across interruptions and restart;
+  blocked routes, injuries, absent partners and food shortages produce causal waits or missed meetings.
+- Suspend sleeping character policies without consuming control steps; human actions can wake them.
+  Show only inspected physical activity, with future routes, schedules and attendance records private.
+
 - Bind materialized population identities to one canonical body through a typed command with
   transactional source validation. Migration 011 freezes embodied source rows and rejects stale
   legacy transitions; the branch projection owns live lifecycle metadata.

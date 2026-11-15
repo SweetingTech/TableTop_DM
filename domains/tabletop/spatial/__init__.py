@@ -43,6 +43,11 @@ def move(proposal: CommandProposal, state: BranchState) -> CommandResult:
     if entity_id is None:
         raise ValueError("movement requires an embodied entity")
     request = MoveRequest.model_validate(proposal.parameters)
+    return move_entity(state, entity_id, request)
+
+
+def move_entity(state: BranchState, entity_id: uuid.UUID, request: MoveRequest) -> CommandResult:
+    """Shared physical step rules for authorized commands and clock-owned NPC travel."""
     if request.dx == 0 and request.dy == 0:
         raise ValueError("movement must change at least one coordinate")
     entities = state.projections.get("tabletop.entities", {})

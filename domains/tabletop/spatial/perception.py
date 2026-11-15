@@ -21,7 +21,7 @@ from .models import SpatialOccluder, SpatialPortal, SpatialPosition, SpatialZone
 class GridSpatialPerceptionResolver:
     """Deterministic grid sight/sound resolver over event-time projections."""
 
-    VERSION = "grid-spatial-perception-1.2.0"
+    VERSION = "grid-spatial-perception-1.3.0"
 
     def visible_entities(
         self,
@@ -44,7 +44,14 @@ class GridSpatialPerceptionResolver:
             acuity = float(profile.get("sight_acuity", 1.0))
         except (TypeError, ValueError, OverflowError):
             return visible
-        if profile.get("blinded") or not math.isfinite(acuity) or acuity <= 0:
+        if (
+            state.projections.get("tabletop.entities", {})
+            .get(str(observer_entity_id), {})
+            .get("asleep")
+            or profile.get("blinded")
+            or not math.isfinite(acuity)
+            or acuity <= 0
+        ):
             return visible
         for target_id, target in sorted(positions.items(), key=lambda item: str(item[0])):
             if target_id == observer_entity_id or profiles.get(str(target_id), {}).get("invisible"):
@@ -103,6 +110,22 @@ class GridSpatialPerceptionResolver:
         )
         grants: list[PerceptionGrant] = []
         for entity_id, observer in sorted(positions.items(), key=lambda item: str(item[0])):
+            perception_state = anchor_state
+            if (
+                anchor_state.projections.get("tabletop.entities", {})
+                .get(str(entity_id), {})
+                .get("asleep")
+            ):
+                if (
+                    after.projections.get("tabletop.entities", {})
+                    .get(str(entity_id), {})
+                    .get("asleep")
+                ):
+                    continue
+                # A waking action may open this observer's senses in the same transaction.
+                # Freeze against that event's post-state, never a later/current position.
+                perception_state = after
+                observer = self._positions(after).get(entity_id, observer)
             profile = sensor_profiles.get(str(entity_id), {})
             perceived: list[SensoryModality] = []
             confidences: list[float] = []
@@ -145,7 +168,7 @@ class GridSpatialPerceptionResolver:
                 # A sound grants awareness of fighting, not hidden identities or damage.
                 # Freeze each subject's visibility against the same event-time state.
                 visible = (
-                    self.visible_entities(anchor_state, entity_id, max_range=emission.max_range)
+                    self.visible_entities(perception_state, entity_id, max_range=emission.max_range)
                     if SensoryModality.SIGHT in perceived
                     else {}
                 )

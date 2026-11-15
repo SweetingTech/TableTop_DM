@@ -873,9 +873,90 @@ use `PopulationLifecycle`, preserve mental metadata, and never recreate a body o
 Both representations run the same coarse physical routine. Characters only see inspected physical
 activity; pool IDs, lifecycle levels, schedules and private source cognition stay operator-side.
 
-The initial vocabulary is gardening/rest/food consumption. Travel, sleep cycles, wages, social
-obligations, tactical danger responses and a general activity planner remain incomplete. Health
-at or below zero stops work; hunger currently drives meals without applying starvation damage.
+The initial vocabulary now includes gardening, rest, meals, local travel, daily sleep and social
+attendance. Wages, tactical danger responses and a general activity planner remain incomplete.
+Health at or below zero stops work; hunger drives meals without applying starvation damage.
+
+## Travel, sleep and social obligations
+
+Add an optional `life` field to `tabletop.routine.configure`, using its current `expected_version`:
+
+```json
+{
+  "entity_id": "<bound body UUID>",
+  "expected_version": 1,
+  "life": {
+    "home": {"x": 3, "y": 0, "z": 0, "zone_id": "world"},
+    "workplace": {"x": 1, "y": 0, "z": 0, "zone_id": "world"},
+    "step_seconds": 60,
+    "sleep_start_seconds": 79200,
+    "sleep_seconds": 28800,
+    "danger_quiet_seconds": 300
+  }
+}
+```
+
+This replaces the configured routine; omitted fields use the normal routine defaults. Omit `life`
+or set it to `null` to return to work/rest/meals. The day is 86400 simulated seconds; the example
+sleeps from 22:00 until 06:00, including across midnight. At initial simulated time zero it is
+already the previous night's sleep window. A sleeper first travels home, so late arrival reduces
+actual sleep before the fixed wake time. Sleep removes two fatigue per actual sleeping second.
+
+Travel takes 1–300 seconds per cardinal grid step, stays in the body's current zone/elevation and
+uses the same collision rules as manual movement. Home/work destinations must be unblocked at
+configuration. Routing searches at most 4096 nodes and 256 steps; it waits with `PATH_BLOCKED`
+when no route fits that bound and can reroute unfinished travel if obstacles change. Actual
+position and traversed steps persist. Manual displacement pauses with `MOVED`, preserving work;
+return to the expected location or explicitly reconfigure. This does not implement portals or
+general cross-zone navigation. Hunger still uses the body's finite inventory.
+
+Sleep normally takes priority over appointments; hunger takes priority during waking time. A
+drop in the body's health wakes/interrupts it until the configured quiet interval passes. Zero
+health stops progress. An accepted human action can wake its own sleeping body; rejected actions
+do not. Actual damaging attacks also wake sleepers immediately. Sleepers receive no ordinary
+sight/sound observations; waking actions freeze perception against their event-time post-state,
+and waking later never reveals old events. The character runner and captured policy submissions
+wait without spending controller steps while asleep, then may resume when awake. No class, faction
+or protagonist restriction applies.
+
+Schedule a commitment with `tabletop.obligation.schedule` through the normal command endpoint:
+
+```json
+{
+  "participants": ["<body UUID>", "<other body UUID>"],
+  "place": {"x": 3, "y": 0, "z": 0, "zone_id": "world"},
+  "starts_seconds": 43200,
+  "duration_seconds": 300,
+  "grace_seconds": 300,
+  "lead_seconds": 300,
+  "repeat_seconds": 86400,
+  "wake_for_obligation": false,
+  "radius": 1
+}
+```
+
+Participants are 2–8 unique existing bodies. Life-plan participants depart at start minus lead time;
+others can attend if already present, without being moved or having their activities replaced.
+Everyone must be capable, awake and within the physical radius in the same zone/elevation. Progress
+only accrues jointly after the scheduled start. A meeting can start through start plus grace, but
+must complete by start plus grace plus duration; an unavailable partner or competing need can
+interrupt it or cause a miss. Sleep wins unless `wake_for_obligation` is explicitly true. Attendance
+does not fabricate speech, memories or relationship changes.
+
+Starts must be within seven simulated days. Optional repetition is 600–604800 seconds, with enough
+space for the entire attendance/lead window; overlapping participant commitments are rejected,
+including future repeating conflicts. Up to 128 obligation records are supported per branch.
+Each recurring record retains occurrence, progress, completion/miss counters and its latest outcome.
+`tabletop.obligation.cancel` accepts `obligation_id` and `expected_occurrence`; it stops future
+attendance/recurrence and lets the body resume its previous work or commute.
+
+The privileged population inspection now includes `obligations`. Character scenes/context only
+show inspected physical activity and actual positions; destination, route, appointment IDs, sleep
+schedule, and private phase/attendance state are excluded. New activity progress is qualitative,
+so the console does not reveal how far an NPC is from a private future goal. The existing worker,
+pause/downtime policy, atomicity, idempotency and trial isolation remain in force. No SQL migration
+after 011 or additional service/provider is required. Detailed travel observations, tactical
+responses, motive-driven planning and full timeline correction remain separate checklist work.
 
 ## Error contract
 

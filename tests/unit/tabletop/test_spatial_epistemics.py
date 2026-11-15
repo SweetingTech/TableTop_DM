@@ -208,7 +208,7 @@ def test_hearing_uses_strongest_portal_path_independent_of_order(reverse):
     receipt = _speak(fixture, "strongest-portal")
     grant = next(g for g in receipt.perceptions if g.observer_entity_id == fixture["back_room"])
     assert grant.confidence == round(1 - 4 / (8 * 0.81), 6)
-    assert grant.resolver_version == "grid-spatial-perception-1.2.0"
+    assert grant.resolver_version == "grid-spatial-perception-1.3.0"
 
 
 def test_open_door_or_shout_changes_hearing_deterministically():
@@ -323,3 +323,37 @@ def test_player_role_can_act_only_through_an_explicitly_assigned_body():
             ),
             other,
         )
+
+
+def test_sleeping_observer_receives_no_ambient_sight_or_sound_and_old_audience_stays_frozen():
+    fixture = _world()
+    state = fixture["state"]
+    state.projections["tabletop.entities"][str(fixture["listener"])]["asleep"] = True
+    resolver = GridSpatialPerceptionResolver()
+    assert resolver.visible_entities(state, fixture["listener"]) == {fixture["listener"]: 1.0}
+    quiet = _speak(fixture, "sleeping-listener")
+    assert fixture["listener"] not in {grant.observer_entity_id for grant in quiet.perceptions}
+    state.projections["tabletop.entities"][str(fixture["listener"])]["asleep"] = False
+    awake = _speak(fixture, "awake-listener")
+    assert fixture["listener"] in {grant.observer_entity_id for grant in awake.perceptions}
+    assert fixture["listener"] not in {grant.observer_entity_id for grant in quiet.perceptions}
+
+
+def test_waking_human_movement_preserves_own_event_time_perception():
+    fixture = _world()
+    fixture["state"].projections["tabletop.entities"][str(fixture["speaker"])]["asleep"] = True
+    receipt = fixture["bus"].execute(
+        CommandProposal(
+            command_type="tabletop.spatial.move",
+            world_id=fixture["world"],
+            branch_id=fixture["branch"],
+            run_id=fixture["run"],
+            actor_id=fixture["source_actor"],
+            embodied_entity_id=fixture["speaker"],
+            parameters={"dx": 0, "dy": 1},
+            idempotency_key="wake-by-moving",
+        ),
+        fixture["actor"],
+    )
+    assert fixture["speaker"] in {grant.observer_entity_id for grant in receipt.perceptions}
+    assert not fixture["state"].projections["tabletop.entities"][str(fixture["speaker"])]["asleep"]

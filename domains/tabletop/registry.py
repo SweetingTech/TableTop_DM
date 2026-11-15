@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from domains.tabletop.activities import command_definitions as activities
 from domains.tabletop.battlefield import command_definitions as battlefield
 from domains.tabletop.combat import command_definition as combat
@@ -16,17 +18,19 @@ from domains.tabletop.quests import command_definition as quests
 from domains.tabletop.spatial import command_definition as spatial
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.world_time import command_definitions as world_time
-from kernel.command_bus import CommandBus, CommandDefinition
+from kernel.command_bus import CommandBus, CommandDefinition, CommandHandler
+from population.life import command_definitions as life
 from population.routines import command_definitions as routines
 from population.runtime import command_definitions as population
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:
-    return (
+    definitions = (
         *world_time(),
         *activities(),
         *population(),
         *routines(),
+        *life(),
         *battlefield(),
         onboarding(),
         *dialogue(),
@@ -41,6 +45,21 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
         divine(),
         quests(),
     )
+    return tuple(
+        replace(definition, handler=with_wakeup(definition.handler))
+        if definition.requires_controlled_entity
+        else definition
+        for definition in definitions
+    )
+
+
+def with_wakeup(handler: CommandHandler) -> CommandHandler:
+    from population.life import wake_after_action
+
+    def execute(proposal, state):
+        return wake_after_action(proposal, state, handler)
+
+    return execute
 
 
 def register_tabletop(bus: CommandBus) -> CommandBus:

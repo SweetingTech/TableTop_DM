@@ -199,3 +199,17 @@ Food is spent once when a meal completes. Zero food, rain, displacement and inca
 awarding unavailable work. Routine ownership excludes simultaneous manual activity ownership.
 Reconfiguration is an explicit replacement; disabling cancels managed work. There is no new worker
 or wall-clock progression path outside the existing fenced world clock.
+
+The opt-in life plan extends this policy to `npc-routines-1.1.0`. Shared physical event boundaries
+cover travel steps/arrival, daily sleep/wake, hunger/fatigue and social deadlines/completion.
+Each clock command atomically commits positions, needs, suspended work, routine phase, obligation
+progress and relevance. Retrying a clock receipt cannot move a body, spend food or award attendance
+again. Travel uses the manual movement helper, a stable bounded A* route and current collision checks.
+Relevance is reconciled at actual movement boundaries even within coarse clock advances.
+
+`tabletop.obligation.schedule` and `.cancel` use normal world management capabilities and lineage
+validation on both canonical and trial branches. Cancellation checks occurrence. Plans and obligation
+records remain private; they do not grant character knowledge or fabricate dialogue/relationships.
+Sleeping is canonical bodily state. Action handlers recheck it at execution: a stale character policy
+is suspended with `BodySleeping`, while an accepted human action wakes its own controlled body in the
+same receipt. Sleep does not change actor/persona/card identity or controller epoch/step.
