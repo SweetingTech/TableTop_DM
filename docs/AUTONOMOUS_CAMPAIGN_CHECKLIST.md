@@ -176,14 +176,16 @@ as composition glue; reusable execution services must also work from workers and
   replay; legacy null run seeds use zero. Reference concurrency, durable parity/restart/retry,
   actual concurrent transactions, privileged replay and pre-proof receipt upgrade regressions pass.
   Current-head CI, independent review/integration and whole-section C acceptance remain separate.
-- [ ] C5 — Reconcile portal sheet HP/status/equipment with kernel state; define one canonical owner for
+- [x] C5 — Reconcile portal sheet HP/status/equipment with kernel state; define one canonical owner for
   each value and projections for other views. Avoid stale character cards overwriting live outcomes.
   Backend read foundation: owner/world/body-authorized live-state endpoint projects only the
   canonical body's current physical resources with branch/version and no-store responses. Reads
   never sync values into authored cards or fall back for missing bodies. Bound-card editing now
   rejects HP/status/maxHP/armor/speed and world retargeting, with owner/admin parity and atomic
-  mixed-request rejection. Identity/unbound edits remain available. Dashboard wiring is the next
-  slice; C5 is not yet complete.
+  mixed-request rejection. The Dashboard consumes live resources read-only, with serial visible-tab
+  polling, cancellation, manual refresh and loading/error states without stale card fallback.
+  Identity drafts survive polling; unbound cards retain starting-resource controls. Unit, durable
+  and real-browser verification cover this ownership boundary. Whole-section C acceptance remains open.
 - [ ] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;
   current quest requests supply their own amount and target. Extend economy/inventory/trade as needed for activities.
 - [ ] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible

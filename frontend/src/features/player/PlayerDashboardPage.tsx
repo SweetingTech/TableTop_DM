@@ -15,6 +15,7 @@ import { PageHeader, Status } from "../../components/ui/Primitives";
 import * as api from "./api";
 import type { CharacterRecord, HostedGame } from "./api";
 import { CharacterIdentityFields } from "./CharacterIdentityFields";
+import { CharacterStatePanel } from "./CharacterStatePanel";
 import { identityDraft, identityPayload } from "./characterIdentity";
 
 const abilities = [
@@ -92,6 +93,7 @@ export default function PlayerDashboardPage() {
         description="Your characters, adventuring status, active games, and character creation tools."
         actions={
           <div className="page-actions">
+            <button className="button" type="button" onClick={() => void reload()}>Refresh characters</button>
             <button
               className="button"
               type="button"
@@ -178,7 +180,7 @@ export default function PlayerDashboardPage() {
                     <span className="character-monogram">
                       {character.name.slice(0, 1)}
                     </span>
-                    <Status value={character.status} />
+                    <Status value={character.entity_id ? "CAMPAIGN" : character.status} />
                   </div>
                   <strong>{character.name}</strong>
                   <small>
@@ -186,8 +188,10 @@ export default function PlayerDashboardPage() {
                     {character.class_name}
                   </small>
                   <div className="character-vitals">
+                    {character.entity_id ? <span>View live health and equipment</span> : <>
                     <span>
                       <HeartPulse size={13} />
+                      Card HP{" "}
                       {character.current_hit_points}/
                       {character.maximum_hit_points}
                     </span>
@@ -195,6 +199,7 @@ export default function PlayerDashboardPage() {
                       <Shield size={13} />
                       AC {character.armor_class}
                     </span>
+                    </>}
                   </div>
                 </button>
               ))}
@@ -278,8 +283,6 @@ function CharacterSheet({
   onUpdate: (payload: Record<string, unknown>) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
-  const [status, setStatus] = useState(character.status);
-  const [hp, setHp] = useState(character.current_hit_points);
   const [identity, setIdentity] = useState(() => identityDraft(character.authored_identity));
   const [savingIdentity, setSavingIdentity] = useState(false);
   return (
@@ -292,28 +295,8 @@ function CharacterSheet({
             {character.background} · {character.creation_method.toLowerCase()}
           </p>
         </div>
-        <Status value={character.status} />
       </div>
-      <div className="sheet-hero">
-        <div>
-          <span>Level</span>
-          <strong>{character.level}</strong>
-        </div>
-        <div>
-          <span>Armor class</span>
-          <strong>{character.armor_class}</strong>
-        </div>
-        <div>
-          <span>Speed</span>
-          <strong>{character.speed}</strong>
-        </div>
-        <div>
-          <span>Hit points</span>
-          <strong>
-            {character.current_hit_points}/{character.maximum_hit_points}
-          </strong>
-        </div>
-      </div>
+      <CharacterStatePanel character={character} onUpdate={onUpdate} />
       <div className="ability-grid">
         {abilities.map((ability) => (
           <div key={ability}>
@@ -329,39 +312,6 @@ function CharacterSheet({
             </small>
           </div>
         ))}
-      </div>
-      <div className="sheet-controls">
-        <label>
-          Status
-          <select
-            value={status}
-            onChange={(event) =>
-              setStatus(event.target.value as CharacterRecord["status"])
-            }
-          >
-            <option>ALIVE</option>
-            <option>DEAD</option>
-            <option>MISSING</option>
-            <option>RETIRED</option>
-          </select>
-        </label>
-        <label>
-          Current hit points
-          <input
-            type="number"
-            min={0}
-            max={character.maximum_hit_points}
-            value={hp}
-            onChange={(event) => setHp(Number(event.target.value))}
-          />
-        </label>
-        <button
-          className="button"
-          type="button"
-          onClick={() => void onUpdate({ status, current_hit_points: hp })}
-        >
-          Save status
-        </button>
       </div>
       <form onSubmit={async (event) => {
         event.preventDefault();

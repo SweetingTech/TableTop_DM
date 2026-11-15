@@ -1,5 +1,12 @@
 # Testing
 
+Live-sheet frontend tests cover canonical values, denied refresh without authored fallback,
+cancelled out-of-order reads, explicit unbound editing, in-flight deduplication and invalid typed
+responses. Run `npm --prefix frontend run test -- --run src/test/CharacterLiveState.test.tsx`.
+The built-SPA journey `tests/e2e/test_character_live_sheet_isolated.py` exercises actual healing,
+automatic resource refresh, unchanged card/draft, bound edit rejection, unbound setup, real role
+revocation, focus retention and desktop/mobile overflow against its own ready reference app.
+
 Bound-resource ownership tests reject all five physical fields and world retargeting for owners
 and administrators, including mixed identity requests, without card or canonical writes. They
 preserve identity/unbound edits and PATCH-null behavior. Durable tests repeat after restart and

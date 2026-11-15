@@ -18,8 +18,15 @@ DEFEATED and DEAD. Reading neither changes card data nor commits a simulation ac
 The caller must own the card or be an administrator, retain world access, and control/inspect the
 bound body under the existing scene authority rules. Other owners and revoked roles receive403.
 Unbound cards return AUTHORED/body:null; missing bound metadata/projection returns
-`character_body_unavailable`409. Success and errors use Cache-Control:no-store. Dashboard display
-and bound-card editing controls are not yet wired by this backend-only slice.
+`character_body_unavailable`409. Success and errors use Cache-Control:no-store.
+
+The Player Dashboard reads this endpoint for the selected sheet. Bound resources are read-only;
+unbound cards retain starting HP/status controls after an explicit AUTHORED response. A visible
+tab polls serially every five seconds; visibility changes and Refresh request fresh state.
+Changing character or leaving the sheet aborts and discards obsolete reads. Errors clear displayed
+resources rather than falling back to card values; 401/403 stop automatic polling until manual
+Refresh. Background reads preserve unsaved identity edits. Refresh characters separately reloads
+the card library and membership list.
 
 Voluntary controlled commands reject incapacitated bodies consistently. A valid human command
 can wake ordinary sleep, including attack/cast/invoke; an invalid attempt does not wake or spend

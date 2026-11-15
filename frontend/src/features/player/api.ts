@@ -13,6 +13,7 @@ export type CharacterRecord = {
   character_id: string;
   owner_user_id: string;
   world_id?: string | null;
+  entity_id?: string | null;
   name: string;
   species: string;
   class_name: string;
@@ -57,6 +58,28 @@ export type HostedGame = {
 
 export async function listCharacters(): Promise<CharacterRecord[]> {
   return unpackItems(await apiRequest<CharacterRecord[] | { items?: CharacterRecord[] }>("/player/characters"));
+}
+
+export type CharacterState = {
+  character_id: string;
+  card_version: string;
+  source: "AUTHORED" | "KERNEL";
+  body: null | {
+    world_id: string; branch_id: string; entity_id: string; projection_version: number;
+    status: "ALIVE" | "ASLEEP" | "INCAPACITATED" | "DEFEATED" | "DEAD";
+    hp: number; max_hp: number; armor: number; speed: number; mana: number;
+    inventory: Record<string, number>; equipped_weapon: string;
+    known_spells: string[]; conditions: string[];
+  };
+};
+
+export async function getCharacterState(characterId: string, signal?: AbortSignal): Promise<CharacterState> {
+  const view = await apiRequest<CharacterState>(`/player/characters/${characterId}/live-state`, { signal, cache: "no-store" });
+  if (view.character_id !== characterId || !["AUTHORED", "KERNEL"].includes(view.source)
+      || (view.source === "KERNEL" ? !view.body : view.body !== null)) {
+    throw new Error("Invalid character state response");
+  }
+  return view;
 }
 
 export async function createCharacter(input: Record<string, unknown>): Promise<CharacterRecord> {

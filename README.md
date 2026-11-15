@@ -32,7 +32,10 @@ inventory and equipment with the canonical branch/version, separately from the a
 Unbound cards report an authored source; missing or unauthorized bound bodies do not fall back
 to old card values. Once a card has a body, card edits cannot change its HP, status, max HP,
 armor or speed, or retarget its world. Use authorized world actions for live changes. Identity
-editing and unbound-card setup remain available; Player Dashboard wiring is the next C5 slice.
+editing and unbound-card setup remain available. The Player Dashboard shows live health, status,
+mana, inventory, equipment, learned spells and conditions. It refreshes the selected sheet every
+five seconds while visible, with a manual Refresh control. Loading and failed reads never show
+old card resources as live state. Polling preserves unsaved character identity edits.
 
 Melee proposals choose a target; the kernel resolves owned equipment, body bonuses, reach,
 visibility and conditions. Both spell entry points use registered ARCANE_BOLT/MEND definitions

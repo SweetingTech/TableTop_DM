@@ -1,5 +1,10 @@
 # Changelog
 
+- Wire the Player Dashboard to canonical character state with visible-tab polling, manual refresh,
+  cancelled obsolete requests and explicit loading/error states. Display live resources read-only
+  for bound bodies; retain starting-resource edits for unbound cards and preserve identity drafts
+  across polling. Stop denied polling until refresh and clear unavailable resource values.
+
 - Reject HP/status/max-HP/armor/speed changes through authored-card editing after embodiment,
   including administrator requests, and prevent world retargeting through that path. Reject mixed
   resource/identity updates atomically; preserve identity edits, unbound-card setup and existing
@@ -7,8 +12,8 @@
 
 - Add an owner/world/body-authorized canonical character-state read, with typed allowlisted
   resources, branch/version provenance and no-store success/error responses. Keep the authored
-  card unchanged; distinguish unbound cards from unavailable bound bodies. Player-sheet wiring
-  and bound-card resource-edit protection remain the next C5 slice.
+  card unchanged; distinguish unbound cards from unavailable bound bodies. The player sheet now
+  consumes this projection and bound-card resource-edit protection enforces canonical ownership.
 
 - Enforce common voluntary-action incapacity checks for movement, speech, defense and other
   controlled commands. Make human wake-by-action transactional for attacks/spells, preserve
