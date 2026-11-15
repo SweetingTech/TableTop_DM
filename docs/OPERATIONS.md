@@ -1,8 +1,8 @@
 # Operations, storage, migrations, and security
 
 Combat/cast/invoke request contracts are now 2.0.0: use target-only melee and registered spell ID
-plus target. Merge and deploy the paired console follow-up and its compiled bundle together with
-this backend change; the preceding console's `/cast` adapter is incompatible. Committed historical keys
+plus target. Merge and deploy the paired backend and console changes with their current compiled
+bundle together; the preceding console's `/cast` adapter is incompatible. Committed historical keys
 retain their original receipts; regenerate uncommitted advice containing retired dice/bonus or
 power/cost fields. Initial spell knowledge comes from the validated card sheet; live body state
 owns subsequent resources/knowledge. This change reuses schema 012 and existing workers/stores.

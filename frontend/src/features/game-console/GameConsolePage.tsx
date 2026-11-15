@@ -147,7 +147,7 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
         <Panel title="Command composer" meta={<span>Embodied proposal</span>} className="command-panel">
           <form className="command-form" onSubmit={submitCommand}>
             <label>Embodied viewpoint<select value={selectedViewpointId} onChange={(event) => onViewpointChange(event.target.value)}>{(game.viewpoints ?? []).map((entity) => <option key={entity.entity_id} value={entity.entity_id}>{entity.name}{entity.can_act === false ? " · inspect only" : ""}</option>)}</select></label>
-            <label>Command or dialogue<textarea ref={commandInput} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="/move north, /attack Dockmaster Vale, /cast …, or speak naturally" rows={4} /></label>
+            <label>Command or dialogue<textarea aria-label="Command or dialogue" ref={commandInput} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="/move north, /attack Dockmaster Vale, /cast MEND Aster Vale, or speak naturally" rows={4} /></label>
             {!canAct ? <p className="field-error" role="status">{!game.run ? "Start a live run before acting." : controlMode !== "HUMAN" ? "Take control before submitting a command." : "This viewpoint is available for inspection only. Select a body assigned to you to act."}</p> : null}
             {commandError ? <p className="field-error" role="alert">{commandError}</p> : null}
             <button className="button primary" type="submit" disabled={sending || !command.trim() || !canAct}><Send size={15} />{sending ? "Proposing…" : "Send proposal"}</button>

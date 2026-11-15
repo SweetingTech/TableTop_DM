@@ -1,5 +1,9 @@
 # Changelog
 
+- Wire the console's cast alias to registered spell IDs, retain its accessible composer name
+  after invalid input, and ship the current production bundle. Pair with the authoritative
+  backend contract update; browser tests cover both aliases, health refresh and mobile layout.
+
 - Clear the equipped weapon atomically when its final copy is sold. Keep legacy unavailable
   loadouts readable and omit impossible melee choices while retaining execution validation.
 
