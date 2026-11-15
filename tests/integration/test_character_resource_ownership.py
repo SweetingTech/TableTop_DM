@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import psycopg2
 import pytest
 
@@ -45,3 +47,9 @@ def test_bound_card_rejects_resource_edits_atomically_after_restart(
         assert cursor.fetchone() == (card["current_hit_points"], card["status"], card["name"])
     live = client.get(endpoint + "/live-state").get_json()
     assert live["body"]["hp"] == 3 and live["body"]["mana"] == 4
+    for world in (card["world_id"].upper(), uuid.UUID(card["world_id"]).hex):
+        edited = client.patch(endpoint, json={"world_id": world, "name": "Same durable world"})
+        assert edited.status_code == 200, edited.get_json()
+        assert edited.get_json()["world_id"] == card["world_id"]
+        assert edited.get_json()["entity_id"] == card["entity_id"]
+        assert durable_mark(integration_stack, base) == before

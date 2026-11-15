@@ -77,3 +77,23 @@ def test_explicit_null_patch_does_not_detach_bound_body(monkeypatch, tmp_path):
     assert result.status_code == 200
     assert result.get_json()["world_id"] == card["world_id"]
     assert result.get_json()["entity_id"] == card["entity_id"]
+
+
+@pytest.mark.parametrize("representation", ["uppercase", "compact"])
+def test_equivalent_bound_world_uuid_allows_identity_edits(monkeypatch, tmp_path, representation):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, *_ = setup_scene(app)
+    world = (
+        card["world_id"].upper()
+        if representation == "uppercase"
+        else uuid.UUID(card["world_id"]).hex
+    )
+    for client in (player, admin):
+        result = client.patch(
+            f"/api/v2/player/characters/{card['character_id']}",
+            json={"world_id": world, "name": "Same world identity edit"},
+        )
+        assert result.status_code == 200, result.get_json()
+        assert result.get_json()["world_id"] == card["world_id"]
+        assert result.get_json()["entity_id"] == card["entity_id"]
+        assert result.get_json()["name"] == "Same world identity edit"

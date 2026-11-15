@@ -734,7 +734,7 @@ class TabletopPortalService:
                 "speed",
             }.intersection(payload):
                 raise ValueError("bound character resources must change through world actions")
-            if "world_id" in payload and str(payload["world_id"]) != str(existing.world_id):
+            if "world_id" in payload and uuid.UUID(str(payload["world_id"])) != existing.world_id:
                 raise ValueError(
                     "a bound character cannot be moved to another world by card editing"
                 )
