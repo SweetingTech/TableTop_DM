@@ -10,7 +10,7 @@ import pytest
 
 from kernel.application import SimulationApplication
 from kernel.contracts import CommandProposal
-from kernel.snapshots import SnapshotStore
+from kernel.snapshots import SnapshotStore, artifact_path
 
 pytestmark = pytest.mark.unit
 
@@ -119,3 +119,23 @@ def test_corrupt_metadata_cannot_partially_publish_a_trial(tmp_path):
     with pytest.raises(ValueError, match="identity"):
         app.create_trial(ids["world_id"], snapshot.snapshot_id, 55)
     assert (len(app.states.all()), len(app.entities), len(app.runs)) == before
+
+
+@pytest.mark.parametrize("name", ["folder with spaces", "literal %20 directory", "café 雪"])
+def test_local_artifact_uri_roundtrips_exactly_once_and_restores_trials(tmp_path, name):
+    app = SimulationApplication(tmp_path / name)
+    ids = app.bootstrap_demo()
+    current = app.create_snapshot(ids["world_id"])
+    state = app.states.get(ids["branch_id"])
+    legacy = app.snapshot_store.create(ids["world_id"], ids["branch_id"], 0, state.projections)
+    assert SnapshotStore.load(legacy)["projections"] == state.projections
+    branch, run = app.create_trial(ids["world_id"], current.snapshot_id, 510)
+    assert app.entities[(branch.branch_id, ids["hero_id"])].name == "Aster Vale"
+
+
+@pytest.mark.parametrize(
+    "uri", ["https://example.invalid/data", "file://remote/data", "file:relative", "/plain/path"]
+)
+def test_artifacts_do_not_follow_remote_or_relative_uri_targets(uri):
+    with pytest.raises(ValueError):
+        artifact_path(uri)

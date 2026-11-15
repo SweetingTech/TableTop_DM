@@ -8,10 +8,22 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from kernel.state import stable_hash
+
+
+def artifact_path(uri: str) -> Path:
+    parsed = urlsplit(uri)
+    if parsed.scheme != "file" or parsed.netloc:
+        raise ValueError("snapshot artifacts require a local file URI")
+    path = Path(url2pathname(parsed.path))
+    if not path.is_absolute():
+        raise ValueError("snapshot artifacts require an absolute local path")
+    return path
 
 
 class SnapshotEntity(BaseModel):
@@ -126,9 +138,7 @@ class SnapshotStore:
 
     @staticmethod
     def load(manifest: SnapshotManifest) -> dict[str, Any]:
-        path = Path(manifest.artifact_uri.removeprefix("file:///"))
-        if not path.exists() and manifest.artifact_uri.startswith("file:///"):
-            path = Path("/" + manifest.artifact_uri.removeprefix("file:///"))
+        path = artifact_path(manifest.artifact_uri)
         compressed = path.read_bytes()
         if hashlib.sha256(compressed).hexdigest() != manifest.artifact_hash:
             raise ValueError("Snapshot artifact hash mismatch")

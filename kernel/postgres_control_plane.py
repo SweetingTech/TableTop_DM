@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from pathlib import Path
 
 import psycopg2.extras
 
@@ -26,7 +25,7 @@ from kernel.database import transaction
 from kernel.errors import BranchIsolationError
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayRecord
-from kernel.snapshots import SnapshotEntity, SnapshotManifest
+from kernel.snapshots import SnapshotEntity, SnapshotManifest, artifact_path
 from kernel.state import BranchState
 
 
@@ -204,7 +203,7 @@ class PostgresControlPlane:
         artifact_id = uuid.uuid5(
             uuid.NAMESPACE_URL, f"tabletop-dm:snapshot-artifact:{manifest.artifact_hash}"
         )
-        path = Path(manifest.artifact_uri.removeprefix("file:///"))
+        path = artifact_path(manifest.artifact_uri)
         byte_size = path.stat().st_size if path.exists() else None
         if self.actor_id is None:
             raise RuntimeError("control plane must be synchronized before loading state")
