@@ -967,14 +967,7 @@ def create_app(
         }
 
     def branch_payload(state: Any) -> dict[str, Any]:
-        base = next(
-            (
-                item
-                for item in simulation.snapshots.values()
-                if item.state_hash == state.base_snapshot_hash
-            ),
-            None,
-        )
+        base_snapshot_id = simulation.branch_snapshot_ids.get(state.branch_id)
         return {
             "branch_id": str(state.branch_id),
             "world_id": str(state.world_id),
@@ -985,7 +978,7 @@ def create_app(
             ),
             "kind": state.kind.value,
             "status": "ACTIVE",
-            "base_snapshot_id": str(base.snapshot_id) if base is not None else None,
+            "base_snapshot_id": str(base_snapshot_id) if base_snapshot_id is not None else None,
             "state_hash": state.state_hash,
             "projection_version": state.version,
         }

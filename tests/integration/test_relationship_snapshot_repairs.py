@@ -131,10 +131,14 @@ def test_nested_trial_freezes_metadata_and_exact_snapshot_lineage(
     _, restored = fresh_client(tmp_path)
     before, after = trial(restored, frozen, 202), trial(restored, later, 203)
     again, reader = fresh_client(tmp_path)
+    listed = reader.get("/api/v2/branches", query_string={"world_id": world})
+    assert listed.status_code == 200
+    origins = {row["branch_id"]: row["base_snapshot_id"] for row in listed.get_json()}
     for branch, expected, manifest in [
         (before, "PAST_IDENTITY", frozen),
         (after, "FUTURE_IDENTITY", later),
     ]:
+        assert origins[branch["branch_id"]] == manifest["snapshot_id"]
         record = again.extensions["simulation"].entities[
             (uuid.UUID(branch["branch_id"]), uuid.UUID(child))
         ]
