@@ -11,6 +11,10 @@
   metadata, and atomically persist scoped trial creation without resynchronizing world grants.
   Add migration 012 for metadata-distinct snapshot identity; legacy 2.0 artifacts remain readable
   but require a new capture for new trial restoration. Complete campaign checkpoints remain planned.
+- Restore frozen entity metadata and exact snapshot identity for generic scenario cohorts before
+  their first command, preserving distinct trial/run IDs and durable replay across restart.
+  Make terminal trial upserts satisfy timestamp constraints before conflict handling, preserving
+  original failure diagnostics. Enforce wheel smoke checks even with Python optimization enabled.
 
 - Require source-card authority before NPC association, including locked-record validation and
   retries, and preserve active motivational belief evidence beyond the recent-experience window.

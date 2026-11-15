@@ -13,16 +13,14 @@ from experiments.models import (
     TrialBranchReference,
     TrialExecution,
 )
-from kernel.application import RunRecord, SimulationApplication
+from kernel.application import SimulationApplication
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import (
     BranchKind,
     CommandProposal,
     CommandResult,
-    RunKind,
     StateDelta,
 )
-from kernel.errors import BranchIsolationError
 from kernel.state import BranchState
 
 
@@ -240,6 +238,7 @@ class ApplicationBranchExecutor:
             manifest.world_id != snapshot.world_id
             or manifest.branch_id != snapshot.canonical_branch_id
             or manifest.state_hash != snapshot.state_hash
+            or manifest.contract_version != snapshot.contract_version
         ):
             raise ValueError("Snapshot reference does not match immutable manifest")
         canonical = self.simulation.states.get(snapshot.canonical_branch_id)
@@ -256,9 +255,7 @@ class ApplicationBranchExecutor:
         authority = self.simulation.authority(snapshot.world_id, self.actor_id)
         if "run.branch" not in authority.capabilities:
             raise PermissionError("actor cannot create scenario trial branches in this world")
-        manifest = self.simulation.snapshots[snapshot.snapshot_id]
-        if manifest.state_hash != snapshot.state_hash:
-            raise ValueError("Snapshot reference state hash differs from manifest")
+        self.canonical_hash(snapshot)
         branch_id = uuid.uuid5(
             uuid.NAMESPACE_URL,
             f"tabletop-dm:trial-branch:{snapshot.snapshot_id}:{trial_id}:{seed}",
@@ -267,41 +264,13 @@ class ApplicationBranchExecutor:
             uuid.NAMESPACE_URL,
             f"tabletop-dm:trial-run:{snapshot.snapshot_id}:{trial_id}:{seed}",
         )
-        try:
-            branch = self.simulation.states.get(branch_id)
-        except BranchIsolationError:
-            snapshot_payload = self.simulation.snapshot_store.load(manifest)
-            branch = BranchState(
-                world_id=snapshot.world_id,
-                branch_id=branch_id,
-                kind=BranchKind.TRIAL,
-                projections=copy.deepcopy(snapshot_payload["projections"]),
-                base_snapshot_hash=snapshot.state_hash,
-            )
-            self.simulation.states.add(branch)
-        else:
-            if (
-                branch.world_id != snapshot.world_id
-                or branch.kind is not BranchKind.TRIAL
-                or branch.base_snapshot_hash != snapshot.state_hash
-            ):
-                raise ValueError("Existing trial branch has a different snapshot origin")
-        existing_run = self.simulation.runs.get(run_id)
-        if existing_run is None:
-            self.simulation.runs[run_id] = RunRecord(
-                run_id=run_id,
-                world_id=snapshot.world_id,
-                branch_id=branch_id,
-                kind=RunKind.EVALUATION,
-                seed=seed,
-            )
-        elif (
-            existing_run.world_id != snapshot.world_id
-            or existing_run.branch_id != branch_id
-            or existing_run.kind is not RunKind.EVALUATION
-            or existing_run.seed != seed
-        ):
-            raise ValueError("Existing trial run has a different identity")
+        self.simulation.create_trial(
+            snapshot.world_id,
+            snapshot.snapshot_id,
+            seed,
+            branch_id=branch_id,
+            run_id=run_id,
+        )
         if self.persist is not None:
             self.persist()
         return TrialBranchReference(

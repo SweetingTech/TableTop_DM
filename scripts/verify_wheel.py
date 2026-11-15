@@ -66,8 +66,13 @@ from infra.migrate import DEFAULT_MIGRATIONS_DIR, discover
 from kernel.api.app import create_app
 from persona.registry import PersonaSchemaRegistry
 
-assert len(PersonaSchemaRegistry.load_default().dimensions) == 80
-assert [item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+require(len(PersonaSchemaRegistry.load_default().dimensions) == 80,
+        "wheel persona dimensions differ from the runtime contract")
+require([item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "001_simulation_kernel.sql",
     "002_identity_and_tabletop_workspaces.sql",
     "003_spatial_epistemics.sql",
@@ -80,16 +85,16 @@ assert [item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "010_tactical_choice_evidence.sql",
     "011_population_body_binding.sql",
     "012_snapshot_entity_identity.sql",
-]
+], "wheel migration discovery differs from the runtime contract")
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()
 index = client.get("/v2/game")
-assert index.status_code == 200
+require(index.status_code == 200, "wheel SPA route failed")
 entry = re.search(rb'src="(/static/v2/assets/index-[^"]+\\.js)"', index.data)
-assert entry is not None
+require(entry is not None, "wheel SPA entry module was not referenced")
 asset = client.get(entry.group(1).decode())
-assert asset.status_code == 200
-assert "javascript" in asset.content_type
+require(asset.status_code == 200, "wheel SPA entry module failed")
+require("javascript" in asset.content_type, "wheel SPA entry content type differs")
 """
         subprocess.run(
             [sys.executable, "-c", smoke],

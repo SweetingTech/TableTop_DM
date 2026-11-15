@@ -162,7 +162,8 @@ class PostgresExperimentRepository:
                       failure_code, started_at, completed_at
                     ) VALUES (
                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                      CASE WHEN %s = 'RUNNING' THEN now() ELSE NULL END,
+                      CASE WHEN %s IN ('RUNNING','COMPLETED','FAILED','CANCELLED')
+                           THEN now() ELSE NULL END,
                       CASE WHEN %s THEN now() ELSE NULL END
                     )
                     ON CONFLICT (id) DO UPDATE SET
