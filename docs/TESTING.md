@@ -4,7 +4,7 @@ Action-rule tests reject caller-selected dice/bonuses/power/cost without project
 event or outbox writes. They cover owned weapon reach, hidden/walled targets, conditions,
 learned spell privacy/candidates, initial card validation and stale-card resource preservation.
 Durable regressions compare human and separate-runner fixed spell effects, restart retries and
-committed legacy-schema receipts. Built-SPA journeys in the paired console change cover both spell aliases, rejected legacy
+committed legacy-schema receipts. Built-SPA journeys cover both spell aliases, rejected legacy
 syntax, current health after an action and mobile overflow. Logical action-seed allocation and
 full combat lifecycle acceptance remain separate checklist items.
 

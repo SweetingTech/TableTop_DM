@@ -724,8 +724,8 @@ guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
   and guard in threat situations. Injury favors healing/withdrawal; range, wounds, demonstrated
   choices and persona/card tendencies influence priority. All execution rechecks live state.
 
-The paired console release accepts `/guard`, `/invoke ARCANE_BOLT|MEND <perceived target name or id>`
-and the same `/cast` syntax. Merge and deploy its compiled bundle together with the 2.0.0 API;
+The console accepts `/guard`, `/invoke ARCANE_BOLT|MEND <perceived target name or id>`
+and the same `/cast` syntax. Merge and deploy this compiled bundle together with the 2.0.0 API;
 the preceding console's arbitrary `/cast` syntax is rejected by the new API. New roster-spawned
 bodies validate optional nonnegative `character.sheet.mana` (default zero) and registered
 `character.sheet.known_spells` before roster mutation. Later card edits and roster retries do not

@@ -1,5 +1,9 @@
 # Changelog
 
+- Wire the console's cast alias to registered spell IDs, retain its accessible composer name
+  after invalid input, and ship the current production bundle. Pair with the authoritative
+  backend contract update; browser tests cover both aliases, health refresh and mobile layout.
+
 - Make new melee requests target-only and resolve registered owned weapons, body bonuses,
   visibility/reach and conditions inside the kernel. Unify cast/invoke under fixed versioned
   learned-spell rules; validate initial card knowledge/resources without overwriting live bodies.
