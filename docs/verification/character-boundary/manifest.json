@@ -1,0 +1,393 @@
+{
+  "schema": "ttdm-character-boundary-verification-1.0.0",
+  "reports": [
+    {
+      "path": "unit.xml",
+      "sha256": "cea4403ab95289245672f012946e2a8054c320f1ddd0478fd19cb5684782db90",
+      "original_sha256": "544b103ac3576f9a7dbd331396867559853b116b9d75c88b120587674f9b3d2b",
+      "configured_string_redactions": 1,
+      "tested_commit": "3f4e548bb5cd8321928454fdb7af5ce629041a69",
+      "command": "uv run python -m pytest -m \"unit or contracts\" --junitxml=<temporary report>",
+      "tests": 499,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "path": "durable.xml",
+      "sha256": "f09808468faee1140f9c4859f6655ccb8c8ce8ce103e875e14d2ca0499f70746",
+      "original_sha256": "f09808468faee1140f9c4859f6655ccb8c8ce8ce103e875e14d2ca0499f70746",
+      "configured_string_redactions": 0,
+      "tested_commit": "3f4e548bb5cd8321928454fdb7af5ce629041a69",
+      "command": "uv run python -m pytest tests/integration/test_persona_repository.py tests/integration/test_character_bindings.py tests/integration/test_character_decisions.py tests/integration/test_controller_runner.py tests/integration/test_character_knowledge.py tests/integration/test_cognition_character_entrypoint.py --junitxml=<temporary report>",
+      "tests": 33,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "path": "browser.xml",
+      "sha256": "8d69a9cfb72dc440452ba05b06c64906098362cef7e74359b1901f956777aabf",
+      "original_sha256": "8d69a9cfb72dc440452ba05b06c64906098362cef7e74359b1901f956777aabf",
+      "configured_string_redactions": 0,
+      "tested_commit": "3f4e548bb5cd8321928454fdb7af5ce629041a69",
+      "command": "uv run python -m pytest -m e2e tests/e2e/test_character_identity_isolated.py tests/e2e/test_character_binding_isolated.py tests/e2e/test_character_proposal_isolated.py tests/e2e/test_controller_runner_isolated.py tests/e2e/test_generated_dialogue_isolated.py --junitxml=<temporary report>",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "path": "boundary-flow.xml",
+      "sha256": "174b20a727bdb98accda6cbeabb5988fa4c823fc9b5629b11af17be9e81e7718",
+      "original_sha256": "174b20a727bdb98accda6cbeabb5988fa4c823fc9b5629b11af17be9e81e7718",
+      "configured_string_redactions": 0,
+      "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "command": "uv run python -m pytest tests/unit/cognition/test_character_boundary_flow.py --junitxml=<temporary report>",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "note": "Actual generated JUnit reports, not summaries. Configured-string matches are redacted even in test names; original and committed byte digests are recorded. These certify only their listed source revisions. Current-head CI and independent native acceptance remain separate.",
+  "environment": {
+    "unit": "local Windows uv Python environment",
+    "durable": "disposable PostgreSQL runtime/RLS database and Redis15; no live database changes",
+    "browser": "real Chromium against a ready isolated reference-mode Flask server; fake local dialogue fixture, no external model call"
+  },
+  "source_files": [
+    {
+      "path": "persona/models.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "86b21e1b71c10c962786187e1eeaa389193f558c798949c42956391d3a986be7",
+      "size": 3840,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/persona/models.py"
+    },
+    {
+      "path": "persona/compilation/compiler.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "e86cd5a1edf9aa3029957818cc84c084b36f2372709364231a5d73196c0e2031",
+      "size": 8312,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/persona/compilation/compiler.py"
+    },
+    {
+      "path": "domains/tabletop/character_identity.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "805a31bc37fdddc7c4a6b85925f8935aed048e293c5d32128896a778c278077c",
+      "size": 961,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/domains/tabletop/character_identity.py"
+    },
+    {
+      "path": "domains/tabletop/character_history.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "be6539421edfb98edd6fbae0310f3c564d9137cfce9f58db6cde6563d1c992b9",
+      "size": 2765,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/domains/tabletop/character_history.py"
+    },
+    {
+      "path": "domains/tabletop/character_bindings.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "de08ad1c699e2b3b257fc31dfd1b0d688dad42a0bc371eaba2cf413aa4a86027",
+      "size": 7535,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/domains/tabletop/character_bindings.py"
+    },
+    {
+      "path": "domains/tabletop/portal.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "f1da74533e094a47afd8e6890ffcb95be6ad841cd848a3af5b2c37ed0df0fff5",
+      "size": 43613,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/domains/tabletop/portal.py"
+    },
+    {
+      "path": "frontend/src/features/player/PlayerDashboardPage.tsx",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "5193c82ab49866b15fd7bb6463c7bf2a5120fb435fb7b1c719a9a5ac10922b6a",
+      "size": 18593,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/frontend/src/features/player/PlayerDashboardPage.tsx"
+    },
+    {
+      "path": "frontend/src/features/player/CharacterIdentityFields.tsx",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "47a4141a634ca7730a0d2718e88c7fbfbcc3b3c3acaeb6b4cab164dc97797d7b",
+      "size": 1469,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/frontend/src/features/player/CharacterIdentityFields.tsx"
+    },
+    {
+      "path": "frontend/src/features/player/characterIdentity.ts",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "df7a44bdfa38c61ec68de7c9aa5502404094b3fc767afb42268ceaa6c9071c0c",
+      "size": 923,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/frontend/src/features/player/characterIdentity.ts"
+    },
+    {
+      "path": "frontend/src/features/player/api.ts",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "4cda0e09b19efca57e86c4ae9971e8ed8e23b24ba54847f5c54b3de14cab2f0e",
+      "size": 2261,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/frontend/src/features/player/api.ts"
+    },
+    {
+      "path": "cognition/context.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "a7af6c45edc3a7d8746bd858fc1e0308a8250bbec6da4d58cc4879344f85c776",
+      "size": 11194,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/cognition/context.py"
+    },
+    {
+      "path": "cognition/knowledge.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "8a03281d95539053b4135492feea0972738a19246975ca7de29445465ba56cf7",
+      "size": 3367,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/cognition/knowledge.py"
+    },
+    {
+      "path": "cognition/dialogue_generation.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "9db90a2334909fa86154447ef2569f2b6b7d6d152749239bb24ff29cce05a6f2",
+      "size": 6806,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/cognition/dialogue_generation.py"
+    },
+    {
+      "path": "cognition/runner.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "8a0e41137c235258f1f970af7c71760203273297566e8c4c8f1137d05d61e97d",
+      "size": 7510,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/cognition/runner.py"
+    },
+    {
+      "path": "cognition/character_decisions.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "412b64c1b6e99fd03ca0203427cb238a5c856a2bb0ffd523014e8208bcdcac96",
+      "size": 13108,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/cognition/character_decisions.py"
+    },
+    {
+      "path": "domains/tabletop/character_context.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "0c58adca8fb4c116abb26193c75ae4a1c8138bf16769fa97e68f01594b0fb2c3",
+      "size": 4728,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/domains/tabletop/character_context.py"
+    },
+    {
+      "path": "kernel/api/app.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "164733615c1acd90dde4f5f400726800369b61d2f74664b37fe6ac8c65eb15bf",
+      "size": 168066,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/kernel/api/app.py"
+    },
+    {
+      "path": "kernel/event_factory.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "1abe9e6d040aafd706171d752cab939b04a641c923eb58f4c697de06c80dd9a5",
+      "size": 3071,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/kernel/event_factory.py"
+    },
+    {
+      "path": "kernel/perception_contracts.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "26d1ae92872a5061d4692622ef9bcd0d716d5cbdbd12348e5f01eba5c4eeb551",
+      "size": 3474,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/kernel/perception_contracts.py"
+    },
+    {
+      "path": "domains/tabletop/world_time.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "c09acca86bf47ba913db54387a055d4a00509a5fa375be08df61a7055fea09b2",
+      "size": 7585,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/domains/tabletop/world_time.py"
+    },
+    {
+      "path": "domains/tabletop/activities/__init__.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "cf81c680374590db46b09936e46d3641135e19d65166d6184d20d141c2b8e3b5",
+      "size": 10671,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/domains/tabletop/activities/__init__.py"
+    },
+    {
+      "path": "population/runtime.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "ec2176cde982a42cc5544f6f6aa5d5fa72705f97d1972d4e20cfb816486693a1",
+      "size": 11343,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/population/runtime.py"
+    },
+    {
+      "path": "population/routines.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "ec5222fa6094fa03e9c9e8e3c20f66f12579c15a3aa8d831946946f8589f1f27",
+      "size": 11868,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/population/routines.py"
+    },
+    {
+      "path": "population/life.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "fe18334d053219c9078a9d737235845f217026af76df9d3038dad437671dd6b1",
+      "size": 29891,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/population/life.py"
+    },
+    {
+      "path": "tests/unit/tabletop/test_activities.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "9d9897be644e16ddd27e1f3d054c2d1ce899492021ea722323b2d342af138155",
+      "size": 7250,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/unit/tabletop/test_activities.py"
+    },
+    {
+      "path": "tests/unit/cognition/test_character_context.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "40b2c449170bee44c89859fa876d8d93456bc7ad0bd35d8a8c58d438251a13e0",
+      "size": 11373,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/unit/cognition/test_character_context.py"
+    },
+    {
+      "path": "tests/unit/cognition/test_character_knowledge.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "304427ad7f0ce2770c95df5a81a246e811c08c55d819006fd13c3fed28f4a977",
+      "size": 3914,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/unit/cognition/test_character_knowledge.py"
+    },
+    {
+      "path": "tests/unit/cognition/test_dialogue_generation.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "c1e4cd9aa2fe7df4d78cd8fd2b37b6c39d0ffcb270ff7e6ea4373c2596afe51b",
+      "size": 11978,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/unit/cognition/test_dialogue_generation.py"
+    },
+    {
+      "path": "tests/unit/cognition/test_character_boundary_flow.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "5bd2178ad1d90f812218ebe136ecb48f33d823eee1afd5d1589e619825b3aa44",
+      "size": 3667,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/unit/cognition/test_character_boundary_flow.py"
+    },
+    {
+      "path": "tests/unit/kernel/test_character_context_api.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "69a1ab8144d0d730f52bc3a8a40338f9cc0f1099870f17573d294bf3def71504",
+      "size": 11759,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/unit/kernel/test_character_context_api.py"
+    },
+    {
+      "path": "tests/unit/kernel/test_cognition_character_entrypoint.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "ac0f3ce447e98e0aae6d4c76d730f867a44bcb814e7ced9d04acd3ee84c4cf55",
+      "size": 3313,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/unit/kernel/test_cognition_character_entrypoint.py"
+    },
+    {
+      "path": "tests/integration/test_character_knowledge.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "320f44c30c268e4c97a565a175afdf1f8bea801a1e76101ec3abaa3413f6cc26",
+      "size": 7160,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/integration/test_character_knowledge.py"
+    },
+    {
+      "path": "tests/integration/test_cognition_character_entrypoint.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "03decae7a9cef9daffba92e6744041794e3ab89361ad69936441ce784a8a9281",
+      "size": 1901,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/integration/test_cognition_character_entrypoint.py"
+    },
+    {
+      "path": "tests/e2e/test_character_identity_isolated.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "6063eb5602b2b42fdbb3ad3751a3ee5eff142b627f7fe72a1fc58b9db3aad42e",
+      "size": 6281,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/e2e/test_character_identity_isolated.py"
+    },
+    {
+      "path": "tests/e2e/test_character_binding_isolated.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "17a9bad2568993548f1ba3d20415692344e543c38cb03cefaec1770bc840706f",
+      "size": 5210,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/e2e/test_character_binding_isolated.py"
+    },
+    {
+      "path": "tests/e2e/test_character_proposal_isolated.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "f2e9cfcf1fa98947ae2edc7656a9d37dabb4600317fe70c5092a1650eef309d4",
+      "size": 3303,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/e2e/test_character_proposal_isolated.py"
+    },
+    {
+      "path": "tests/e2e/test_controller_runner_isolated.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "ea1208ef523a561f599380e83fae02c86d458f83856f8f1b31cbd8972c5e5f16",
+      "size": 4274,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/e2e/test_controller_runner_isolated.py"
+    },
+    {
+      "path": "tests/e2e/test_generated_dialogue_isolated.py",
+      "revision": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "sha256": "a94d3bb27fb078131e12f3d357c53b49e9d73ce0ea0be146cf419b7771586694",
+      "size": 2712,
+      "uri": "https://raw.githubusercontent.com/SweetingTech/TableTop_DM/f9b6f8e0c419fb86e83c0e070a45e06004d98341/tests/e2e/test_generated_dialogue_isolated.py"
+    }
+  ],
+  "github_ci_reports": [
+    {
+      "schema": "ttdm-github-job-report-excerpt-1.0.0",
+      "lane": "browser",
+      "job_id": 132779895482,
+      "run_id": 43703626762,
+      "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "conclusion": "success",
+      "started_at": "2026-11-15T10:20:52Z",
+      "completed_at": "2026-11-15T10:24:27Z",
+      "url": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43703626762/job/132779895482",
+      "full_log_uri": "https://api.github.com/repos/SweetingTech/TableTop_DM/actions/jobs/132779895482/logs",
+      "full_log_sha256": "83f81041a3bd045bf1909c5070c7a5d20c247018429ab7052410f982fd2cbf22",
+      "selection": "Actual log lines matching test/gate/build result and command patterns; not the full job log. Configured-string matches are redacted.",
+      "path": "ci-browser.txt",
+      "sha256": "baf06108eed8700419ff624b5a888b0a3afb9af070f908d75a4fc85be54c155c"
+    },
+    {
+      "schema": "ttdm-github-job-report-excerpt-1.0.0",
+      "lane": "image",
+      "job_id": 132779895445,
+      "run_id": 43703626738,
+      "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "conclusion": "success",
+      "started_at": "2026-11-15T10:20:51Z",
+      "completed_at": "2026-11-15T10:21:40Z",
+      "url": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43703626738/job/132779895445",
+      "full_log_uri": "https://api.github.com/repos/SweetingTech/TableTop_DM/actions/jobs/132779895445/logs",
+      "full_log_sha256": "04af8deb041933d45ae48742d327dc2634723846ea1eb5bc6e4f667949a905e9",
+      "selection": "Actual log lines matching test/gate/build result and command patterns; not the full job log. Configured-string matches are redacted.",
+      "path": "ci-image.txt",
+      "sha256": "9c8dad645aac80224cd9737ece20df3c99264d20e6e32f033d36ddee384afe20"
+    },
+    {
+      "schema": "ttdm-github-job-report-excerpt-1.0.0",
+      "lane": "integration",
+      "job_id": 132779895615,
+      "run_id": 43703626738,
+      "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "conclusion": "success",
+      "started_at": "2026-11-15T10:20:51Z",
+      "completed_at": "2026-11-15T10:31:20Z",
+      "url": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43703626738/job/132779895615",
+      "full_log_uri": "https://api.github.com/repos/SweetingTech/TableTop_DM/actions/jobs/132779895615/logs",
+      "full_log_sha256": "bb23b38063f76c4575e521727099f8bc1894fca9e9d96b8708b1157ef7d217d6",
+      "selection": "Actual passing test/result and pytest command log lines; configured-string matches redacted.",
+      "path": "ci-integration.txt",
+      "sha256": "73815a5465de7dcaa1b1ac1756279115c4766452d6151b136716be001442c9dd"
+    },
+    {
+      "schema": "ttdm-github-job-report-excerpt-1.0.0",
+      "lane": "quality",
+      "job_id": 132779895686,
+      "run_id": 43703626738,
+      "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+      "conclusion": "success",
+      "started_at": "2026-11-15T10:20:51Z",
+      "completed_at": "2026-11-15T10:22:27Z",
+      "url": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43703626738/job/132779895686",
+      "full_log_uri": "https://api.github.com/repos/SweetingTech/TableTop_DM/actions/jobs/132779895686/logs",
+      "full_log_sha256": "4c75bf927cdf2de096d20c10d90aaa870ef5fc2a4dfe04fb6f860ec368abecd1",
+      "selection": "Actual log lines matching test/gate/build result and command patterns; not the full job log. Configured-string matches are redacted.",
+      "path": "ci-quality.txt",
+      "sha256": "2af9aefb42205fe0a9f361884bf2d21595451e1ab067cd45d0cd9544b2774769"
+    }
+  ]
+}

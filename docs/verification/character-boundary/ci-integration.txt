@@ -1,0 +1,18 @@
+{
+  "schema": "ttdm-github-job-report-excerpt-1.0.0",
+  "lane": "integration",
+  "job_id": 132779895615,
+  "run_id": 43703626738,
+  "tested_commit": "f9b6f8e0c419fb86e83c0e070a45e06004d98341",
+  "conclusion": "success",
+  "started_at": "2026-11-15T10:20:51Z",
+  "completed_at": "2026-11-15T10:31:20Z",
+  "url": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43703626738/job/132779895615",
+  "full_log_uri": "https://api.github.com/repos/SweetingTech/TableTop_DM/actions/jobs/132779895615/logs",
+  "full_log_sha256": "bb23b38063f76c4575e521727099f8bc1894fca9e9d96b8708b1157ef7d217d6",
+  "selection": "Actual passing test/result and pytest command log lines; configured-string matches redacted."
+}
+
+2026-11-15T10:21:12.5433483Z ##[group]Run uv run pytest -m integration -v
+2026-11-15T10:21:12.5433787Z uv run pytest -m integration -v
+2026-11-15T10:31:18.2791209Z ========== 125 passed, 542 deselected, 1 warning in 604.83s (0:10:04) ==========
