@@ -111,9 +111,8 @@ def test_corrupt_metadata_cannot_partially_publish_a_trial(tmp_path):
     body = SnapshotStore.load(snapshot)
     body["entities"][str(child)]["secret_state"] = {"identity": "FORGED"}
     data = gzip.compress(json.dumps(body).encode(), mtime=0)
-    from pathlib import Path
-
-    Path(snapshot.artifact_uri.removeprefix("file:///")).write_bytes(data)
+    artifact = app.snapshot_store.root / str(snapshot.world_id) / f"{snapshot.snapshot_id}.json.gz"
+    artifact.write_bytes(data)
     changed = snapshot.model_copy(update={"artifact_hash": hashlib.sha256(data).hexdigest()})
     app.snapshots[snapshot.snapshot_id] = changed
     before = (len(app.states.all()), len(app.entities), len(app.runs))
