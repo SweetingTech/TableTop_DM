@@ -70,7 +70,7 @@ def test_durable_stand_in_stun_and_generation_race_preserve_budget_after_restart
                 "run_id": run,
                 "mode": "AUTONOMOUS",
                 "expected_epoch": 0,
-                "max_steps": 3,
+                "max_steps": 1,
                 "idempotency_key": "leave",
             },
         ).status_code
@@ -104,6 +104,7 @@ def test_durable_stand_in_stun_and_generation_race_preserve_budget_after_restart
     WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
     assert restored.run_once() == 1
     assert control()["failures"] == 0 and control()["step"] == 1
+    assert all(row.entity_id != uuid.UUID(card["entity_id"]) for row in restored.controllers.due())
 
 
 def test_incapacity_and_human_combat_wakeup_are_atomic_and_survive_restart(
