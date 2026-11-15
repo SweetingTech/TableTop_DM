@@ -1,5 +1,9 @@
 # Testing
 
+The complete PostgreSQL/RLS/worker integration CI job has a 35-minute limit to accommodate
+the full suite under runner load. Every integration test still runs; a timeout is incomplete
+verification and must not be reported as a pass.
+
 Roster recovery tests cover missing/finished runs, preparation/final-publication failures,
 retry deduplication, reassignment, shared seats, removal, epoch fencing and rejoining without
 losing the body or pinned binding. The durable lane verifies seat/control rollback, restarted
