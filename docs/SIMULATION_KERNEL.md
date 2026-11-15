@@ -7,6 +7,8 @@ an isolated awake evaluation view, and an appended delta commits wakeup atomical
 Legacy bodies lacking an HP field remain eligible for non-combat voluntary actions; combat/spells
 still require explicit positive HP. Dead markers remain authoritative even with stale positive HP;
 ordinary healing does not clear them. This is not death saving throws or a resurrection policy.
+`BodyIncapacitated` is expected runner suspension, including a condition acquired during model
+generation before commit. Waiting does not spend controller steps/failures or disable autonomy.
 
 Random mechanics declare `uses_randomness` in their command definition. Both commit adapters
 derive a 63-bit action seed from the RNG policy version, recorded run seed, next committed branch

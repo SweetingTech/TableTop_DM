@@ -24,10 +24,11 @@ from cognition.store import MindStore
 from domains.tabletop.character_bindings import CharacterBinding, CharacterBindingRepository
 from domains.tabletop.character_context import ProfileReader, resolve_character_context
 from domains.tabletop.portal import PortalRepository
+from domains.tabletop.rules import incapacitated
 from domains.tabletop.spatial.service import build_perceived_scene
 from kernel.application import SimulationApplication
 from kernel.control import ControllerState, ControlScope
-from kernel.errors import BodySleeping, KernelError, WorldClockPaused
+from kernel.errors import BodyIncapacitated, BodySleeping, KernelError, WorldClockPaused
 from persona.models import CompiledPersona
 
 
@@ -100,6 +101,13 @@ class CharacterDecisionService:
             )
             if resolved.binding is None or resolved.profile is None:
                 raise ValueError("a pinned character binding is required")
+            body = (
+                source.states.get(scope.branch_id)
+                .projections.get("tabletop.entities", {})
+                .get(str(scope.entity_id), {})
+            )
+            if incapacitated(body):
+                raise BodyIncapacitated("body is incapacitated")
             return propose_for_character(
                 scope=proposal_scope,
                 actor_id=actor_id,
@@ -154,12 +162,12 @@ class CharacterRunner:
                 )
                 if clock is not None and clock["paused"]:
                     continue
-                if (
+                body = (
                     source.states.get(controller.branch_id)
                     .projections.get("tabletop.entities", {})
                     .get(str(controller.entity_id), {})
-                    .get("asleep")
-                ):
+                )
+                if body.get("asleep") or incapacitated(body):
                     continue
                 receipt = self.decisions.decide(
                     controller.scope,
@@ -169,7 +177,7 @@ class CharacterRunner:
                 )
                 self.snapshot().submit(receipt.outcome.proposal)
                 committed += 1
-            except (WorldClockPaused, BodySleeping):
+            except (WorldClockPaused, BodySleeping, BodyIncapacitated):
                 # Pause may win after the initial check, including during model generation.
                 # Keep epoch/step, mode and failure budget intact for clock resume.
                 continue

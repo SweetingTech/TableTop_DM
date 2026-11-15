@@ -14,7 +14,7 @@ from domains.tabletop.rules import incapacitated
 from domains.tabletop.spatial import MoveRequest, move_entity
 from kernel.command_bus import CommandDefinition, CommandHandler
 from kernel.contracts import BranchKind, CommandProposal, CommandResult
-from kernel.errors import BodySleeping
+from kernel.errors import BodyIncapacitated, BodySleeping
 from kernel.state import BranchState
 from population.runtime import projection_deltas
 
@@ -239,8 +239,10 @@ def wake_after_action(
     """A human can wake by acting; captured autonomous proposals must wait for wakeup."""
     key = str(proposal.embodied_entity_id)
     body = state.projections.get("tabletop.entities", {}).get(key)
-    if body is None or incapacitated(body):
+    if body is None:
         raise ValueError("a capable body is required for a voluntary action")
+    if incapacitated(body):
+        raise BodyIncapacitated("a capable body is required for a voluntary action")
     asleep = bool(body.get("asleep"))
     if asleep and proposal.decision_authorship == "CHARACTER_POLICY":
         raise BodySleeping("body is sleeping")

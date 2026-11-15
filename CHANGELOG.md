@@ -5,6 +5,8 @@
   sleeping stand-in suspension, reject healing of dead bodies with stale positive HP, and expose
   incapacity only in the body's own scene to suppress impossible autonomous candidates.
   Registered controlled-command versions carry `+voluntary-body.1`. Full combat time remains open.
+  Incapacitated stand-ins wait without spending failure/control budgets, including races during
+  proposal generation, and can resume after recovery.
 
 - Allocate physical-action randomness under the branch commit lock from the recorded run seed
   and logical command sequence. Ignore caller roll seeds, preserve policy trace seeds separately,

@@ -9,8 +9,56 @@ from domains.tabletop.character_actions import character_action_candidates
 from domains.tabletop.spatial.service import build_perceived_scene
 from kernel.errors import BodySleeping
 from tests.unit.kernel.test_action_randomness import arena
+from tests.unit.kernel.test_character_binding_api import _app
+from tests.unit.kernel.test_speech_combat_behavior import setup_scene
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize("race", [False, True])
+def test_stand_in_preserves_budget_while_incapacitated_including_commit_race(
+    monkeypatch, tmp_path, race
+):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = setup_scene(app)
+    assert (
+        player.post(
+            path + "/control",
+            json={
+                "run_id": run,
+                "mode": "AUTONOMOUS",
+                "expected_epoch": 0,
+                "max_steps": 2,
+                "idempotency_key": "leave",
+            },
+        ).status_code
+        == 200
+    )
+    sim, runner = app.extensions["simulation"], app.extensions["character_runner"]
+
+    def body():
+        return sim.states.get(uuid.UUID(base["branch_id"])).projections["tabletop.entities"][
+            card["entity_id"]
+        ]
+
+    original = runner.decisions.decide
+    if race:
+
+        def become_stunned(*args, **kwargs):
+            receipt = original(*args, **kwargs)
+            body()["conditions"] = ["stunned"]
+            return receipt
+
+        monkeypatch.setattr(runner.decisions, "decide", become_stunned)
+    else:
+        body()["conditions"] = ["stunned"]
+    for _ in range(5):
+        assert runner.run_once() == 0
+    control = player.get(path + "/control", query_string={"run_id": run}).get_json()["control"]
+    assert control["mode"] == "AUTONOMOUS" and control["step"] == control["failures"] == 0
+    monkeypatch.setattr(runner.decisions, "decide", original)
+    body()["conditions"] = []
+    assert runner.run_once() == 1
 
 
 def test_self_scene_suppresses_incapacitated_choices_without_revealing_other_conditions(tmp_path):

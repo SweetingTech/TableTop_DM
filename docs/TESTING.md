@@ -6,6 +6,8 @@ dead-target healing and self-only scene status. Durable tests verify no-write re
 atomicity, retry/restart and ledger replay. Use `uv run python -m pytest
 tests/unit/tabletop/test_body_capability.py` and the integration lane for
 `tests/integration/test_body_capability.py`.
+Actual stand-in regressions repeat incapacitated polls, inject a proposal-to-commit stun race,
+verify unchanged failure/step budgets and resume successfully after recovery.
 
 Action-randomness regressions cover caller-seed independence, logical sequence allocation,
 failure rollback, concurrent commits, original retry receipts and private physical masks. Durable
