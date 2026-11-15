@@ -2,6 +2,11 @@
 
 ## System shape
 
+The generic cognition API dispatches explicit CHARACTER requests to the same trusted response
+builder and append-only proposal receipts as the entity-scoped character endpoint. It accepts
+scope/idempotency only, so identity, scene, learned knowledge and action candidates remain
+server-derived. Caller-authored evaluation is an explicit privileged playtester path.
+
 Physical-action RNG is allocated by the commit boundary from recorded run seed and next branch
 projection version, after original-receipt lookup and under the same transaction/lock as mutation.
 The private result records `logical-action-rng-1.0.0` provenance. Policy-selection seeds and traces

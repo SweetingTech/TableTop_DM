@@ -1,5 +1,13 @@
 # API and user workflows
 
+`POST /api/v2/cognition/decide` supports `mode: "CHARACTER"` with required `world_id`, `branch_id`,
+`run_id`, `embodied_entity_id` and `idempotency_key`. No other fields are accepted. The response
+is the existing character receipt (`execution_mode: "PROPOSAL_ONLY"`, `committed: false`) with
+`Cache-Control: no-store`. The same key/scope/actor on the entity-scoped `/character-proposals`
+route returns the same receipt. Identity, scene, history and actions are server-derived; kernel
+submission is a separate authorized step. Omitted mode preserves the privileged legacy
+EVALUATION request/201 response; explicit `mode: "EVALUATION"` is also accepted.
+
 The Flask application serves the React client and a JSON API from the same origin. Browser pages
 live under `/v2/*`; API resources live under `/api/v2/*`. UUIDs are serialized as strings and
 timestamps use ISO 8601.

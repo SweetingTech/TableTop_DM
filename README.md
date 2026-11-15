@@ -21,6 +21,11 @@ scrolls out of view. Operator directions cannot emit sensory evidence, and broad
 does not grant access to another body's memories. Generated replies use the same scoped sources.
 See [character knowledge](docs/API_AND_WORKFLOWS.md#character-knowledge).
 
+`POST /api/v2/cognition/decide` accepts an explicit `mode: "CHARACTER"` request with world,
+branch, run, embodied entity and idempotency key. It uses the trusted pinned context/proposal
+path, returns a proposal without committing, and rejects caller-authored context or action lists.
+Legacy caller-authored evaluation remains restricted to privileged playtester flows.
+
 Melee proposals choose a target; the kernel resolves owned equipment, body bonuses, reach,
 visibility and conditions. Both spell entry points use registered ARCANE_BOLT/MEND definitions
 and the body's learned spells. Cast/invoke share fixed power, cost and eligibility. New requests

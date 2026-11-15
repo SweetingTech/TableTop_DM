@@ -116,7 +116,9 @@ as composition glue; reusable execution services must also work from workers and
   catalogs extend this seam under later action/runner work. Kernel submission still decides outcomes.
 - [x] B4 — Wire `cognition_decide` and the autonomous runner to that builder. Keep externally supplied
   evaluation situations confined to explicit privileged/testing flows rather than trusting them for live minds.
-  The caller-authored endpoint is now privileged playtester evaluation only and rejects CHARACTER
+  Explicit CHARACTER mode on `cognition_decide` now shares the trusted scoped proposal builder
+  and receipts; it accepts only world/branch/run/entity/key and rejects caller context/actions/seeds.
+  The legacy caller-authored endpoint remains privileged playtester evaluation only and rejects CHARACTER
     personas. A trusted CHARACTER proposal endpoint now resolves pinned identity/context/actions,
     derives scoped server seeds, waits for sensory projection, and stores private append-only
     idempotent receipts plus traces atomically (006). It uses local basic movement utility policy,
@@ -134,7 +136,7 @@ as composition glue; reusable execution services must also work from workers and
   observations, prompts, receipts, and retrieval so revision notes/protection rules never become character evidence.
   Kernel finalization suppresses non-sensory physical builders/resolvers. Context, memories,
   retrieval and dialogue preserve that boundary; broad scene inspection grants no private mind access.
-- [x] B7 — Acceptance: seed hidden plot facts and abandoned-timeline facts; verify they cannot enter
+- [ ] B7 — Acceptance: seed hidden plot facts and abandoned-timeline facts; verify they cannot enter
   character context, speech, memory, or retrieval. Test god knowledge limits and human-player/character separation.
   Causal relationship hardening derives controlled reactions from frozen physical evidence and
   rejects arbitrary promise/rescue labels. Current branch-lineage knowledge acceptance is verified;
@@ -145,6 +147,9 @@ as composition glue; reusable execution services must also work from workers and
   The broad durable run passed117/118; its immediate-context assumption was updated to assert409,
   real projection, then200, and all13focusedcontroller/knowledge/dialoguecases passed afterward.
   Current-head GitHub CI and independent Orderly acceptance remain separate pending requirements.
+  Native review passed B3/B5 but required direct B4 dispatch and additional admitted B1/B2/B6/B7
+  source/actual verification proof. Direct dispatch regressions now pass locally; this box stays
+  open until the full evidence and independent acceptance requirements are satisfied.
 
 ## C. Make action outcomes authoritative
 
