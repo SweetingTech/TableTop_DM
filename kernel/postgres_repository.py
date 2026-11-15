@@ -7,9 +7,8 @@ from typing import Any
 
 import psycopg2.errors
 import psycopg2.extras
-from pydantic import ValidationError
 
-from kernel.command_bus import CommandDefinition, CommandReceipt
+from kernel.command_bus import CommandDefinition, CommandReceipt, normalized_proposal
 from kernel.contracts import (
     Actor,
     BranchKind,
@@ -44,14 +43,6 @@ class PostgresCommandRepository:
             raise AuthorizationDenied("Proposal actor does not match authenticated actor")
         if definition.command_type != proposal.command_type:
             raise ValueError("Command definition does not match proposal")
-        if definition.request_model is not None:
-            try:
-                parameters = definition.request_model.model_validate(
-                    proposal.parameters
-                ).model_dump(mode="python")
-            except ValidationError as exc:
-                raise ValueError(f"Invalid {proposal.command_type} parameters") from exc
-            proposal = proposal.model_copy(update={"parameters": parameters})
 
         try:
             return self._execute_once(proposal, actor, definition)
@@ -120,6 +111,7 @@ class PostgresCommandRepository:
                 if existing is not None:
                     return existing
 
+                proposal = normalized_proposal(proposal, definition)
                 controller = load_controller(cursor, proposal)
                 if controller is None:
                     cursor.execute(

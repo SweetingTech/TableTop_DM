@@ -5,6 +5,12 @@
 The system separates human identity, simulation authority, canonical state, subjective minds,
 large populations, and experimental evidence.
 
+Versioned tabletop action rules resolve melee statistics from the current body and its owned
+weapon, and spell effects from registered definitions plus body-owned learned spells/resources.
+Human and autonomous proposals use the same typed handlers. Scope-checked committed receipts
+are loaded before current request normalization so a contract upgrade preserves old retries;
+new keys must satisfy the current strict schema. Replay consumes recorded outcomes.
+
 ```mermaid
 flowchart TD
     UI[React workspaces] --> AUTH[Identity and session boundary]

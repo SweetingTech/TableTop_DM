@@ -41,6 +41,7 @@ class PerceivedEntity(BaseModel):
     mana: int | None = None
     guarded: bool | None = None
     attack_reach: int | None = None
+    known_spell_ids: tuple[str, ...] | None = None
     activity: VisibleActivity | None = None
 
 

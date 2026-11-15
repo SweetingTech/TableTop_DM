@@ -9,11 +9,12 @@ from domains.tabletop.combat import AttackRequest
 from domains.tabletop.combat import command_definition as attack_definition
 from domains.tabletop.dialogue import SpeechRequest
 from domains.tabletop.magic.tactical import InvokeRequest
+from domains.tabletop.rules import DEFAULT_SPELLS
 from domains.tabletop.spatial import MoveRequest, command_definition
 from domains.tabletop.spatial.scene import PerceivedScene
 from kernel.contracts import Actor, BranchKind
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.2.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.3.0"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
 
 
@@ -78,7 +79,7 @@ def character_action_candidates(
                 parameters=AttackRequest(target_id=threat.entity_id).model_dump(mode="json"),
             )
             for index, threat in enumerate(frame.threats)
-            if threat.distance <= (body.attack_reach or 1)
+            if body.attack_reach != 0 and threat.distance <= (body.attack_reach or 1)
         )
     if frame is not None and frame.threats:
         if not frame.guarded:
@@ -89,6 +90,7 @@ def character_action_candidates(
                     parameters={},
                 ),
             )
+        spells = body.known_spell_ids if body.known_spell_ids is not None else DEFAULT_SPELLS
         if frame.mana >= 2:
             actions += tuple(
                 DecisionAction(
@@ -99,9 +101,14 @@ def character_action_candidates(
                     ).model_dump(mode="json"),
                 )
                 for index, threat in enumerate(frame.threats)
-                if threat.distance <= 6
+                if threat.distance <= 6 and "ARCANE_BOLT" in spells
             )
-            if body.health is not None and body.max_health and body.health < body.max_health:
+            if (
+                "MEND" in spells
+                and body.health is not None
+                and body.max_health
+                and body.health < body.max_health
+            ):
                 actions += (
                     DecisionAction(
                         action="Try to mend my wounds",

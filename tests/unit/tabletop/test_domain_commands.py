@@ -103,7 +103,7 @@ def test_seeded_attack_is_deterministic_and_committed(domain):
         proposal(
             domain,
             "tabletop.combat.attack",
-            {"target_id": str(domain["enemy"]), "damage_dice": 1, "damage_sides": 6},
+            {"target_id": str(domain["enemy"])},
             "attack",
             seed=41,
         ),
@@ -239,34 +239,31 @@ def test_entity_spawn_keeps_private_metadata_out_of_public_receipts(domain):
 
 
 @pytest.mark.parametrize(
-    ("effect", "power", "condition", "expected"),
+    ("spell_id", "effect", "expected"),
     (
-        ("DAMAGE", 4, None, {"hp": 8}),
-        ("HEAL", 7, None, {"hp": 12}),
-        ("CONDITION", 0, "frightened", {"conditions": ["frightened"]}),
+        ("ARCANE_BOLT", "DAMAGE", {"hp": 9}),
+        ("MEND", "HEAL", {"hp": 12}),
     ),
 )
-def test_magic_effects_are_deterministic_and_spend_mana(domain, effect, power, condition, expected):
+def test_magic_effects_are_deterministic_and_spend_mana(domain, spell_id, effect, expected):
+    if effect == "HEAL":
+        domain["state"].projections["tabletop.entities"][str(domain["enemy"])]["hp"] = 8
     parameters = {
         "target_id": str(domain["enemy"]),
-        "spell": "Test spell",
-        "mana_cost": 3,
-        "effect": effect,
-        "power": power,
+        "spell_id": spell_id,
     }
-    if condition is not None:
-        parameters["condition"] = condition
     receipt = domain["bus"].execute(
         proposal(domain, "tabletop.magic.cast", parameters, f"magic-{effect}"),
         domain["actor"],
     )
     entities = domain["state"].projections["tabletop.entities"]
-    assert entities[str(domain["hero"])]["mana"] == 7
+    assert entities[str(domain["hero"])]["mana"] == 8
     assert {key: entities[str(domain["enemy"])][key] for key in expected} == expected
     assert receipt.result.result["effect"] == effect
 
 
 def test_failed_magic_rolls_back_mana_and_target(domain):
+    domain["state"].projections["tabletop.entities"][str(domain["hero"])]["mana"] = 1
     before = domain["state"].state_hash
     with pytest.raises(ValueError, match="insufficient mana"):
         domain["bus"].execute(
@@ -275,10 +272,7 @@ def test_failed_magic_rolls_back_mana_and_target(domain):
                 "tabletop.magic.cast",
                 {
                     "target_id": str(domain["enemy"]),
-                    "spell": "Impossible",
-                    "mana_cost": 11,
-                    "effect": "DAMAGE",
-                    "power": 100,
+                    "spell_id": "ARCANE_BOLT",
                 },
                 "magic-fail",
             ),

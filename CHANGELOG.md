@@ -1,5 +1,15 @@
 # Changelog
 
+- Clear the equipped weapon atomically when its final copy is sold. Keep legacy unavailable
+  loadouts readable and omit impossible melee choices while retaining execution validation.
+
+- Make new melee requests target-only and resolve registered owned weapons, body bonuses,
+  visibility/reach and conditions inside the kernel. Unify cast/invoke under fixed versioned
+  learned-spell rules; validate initial card knowledge/resources without overwriting live bodies.
+  Preserve committed old-contract retries across upgrades. Merge/deploy the paired console
+  adapter and compiled bundle together with this backend contract change.
+  Shared combat time, action-seed allocation, sheet reconciliation and quest evidence remain open.
+
 - Add character-scoped learned-lore retrieval and older-testimony grounding in generated dialogue,
   with pinned starting claims and a shared sensory projection barrier. Keep broad scene inspection
   separate from private mind access in reference and durable modes. Centralize non-sensory event

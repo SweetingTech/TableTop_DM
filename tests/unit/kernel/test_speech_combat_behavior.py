@@ -29,7 +29,15 @@ def setup_scene(app, *, scope=None):
             "name": "Nearby speaker",
             "entity_type": "NPC",
             "controller_actor_id": str(actor),
-            "public_state": {"x": 1, "y": 0, "hp": 100, "max_hp": 100, "armor": 100, "reach": 1},
+            "public_state": {
+                "x": 1,
+                "y": 0,
+                "hp": 100,
+                "max_hp": 100,
+                "armor": 100,
+                "reach": 1,
+                "damage_bonus": -10,
+            },
         },
     )
     assert response.status_code == 201, response.get_json()
@@ -59,7 +67,7 @@ def provoke(admin, base, target, card, key):
             **base,
             "embodied_entity_id": target,
             "command_type": "tabletop.combat.attack",
-            "parameters": {"target_id": card["entity_id"], "damage_bonus": -10},
+            "parameters": {"target_id": card["entity_id"]},
             "seed": 2,
             "idempotency_key": key,
         },
@@ -157,7 +165,7 @@ def test_human_attack_preference_drives_runner_and_uses_only_known_threat(monkey
         proposal["command_type"] == "tabletop.combat.attack"
         and proposal["parameters"]["target_id"] == target
     )
-    assert proposal["parameters"]["damage_bonus"] == 0
+    assert proposal["parameters"] == {"target_id": target}
     assert (
         player.post(
             path + "/control",
@@ -204,7 +212,10 @@ def test_combat_grants_freeze_modality_and_subject_visibility(monkeypatch, tmp_p
             "name": "Witness",
             "entity_type": "NPC",
             "controller_actor_id": str(actor),
-            "public_state": {"x": -2 if hidden == "wall" else 0, "y": 0 if hidden == "wall" else 1},
+            "public_state": {
+                "x": -2 if hidden == "wall" else 0,
+                "y": 0 if hidden == "wall" else 3 if hidden == "target" else 1,
+            },
         },
     )
     witness = uuid.UUID(response.get_json()["entity_id"])
@@ -219,9 +230,13 @@ def test_combat_grants_freeze_modality_and_subject_visibility(monkeypatch, tmp_p
                 "sound_attenuation": 1,
             }
         }
-    elif hidden != "none":
-        subject = target if hidden == "attacker" else card["entity_id"]
-        state.projections.setdefault("tabletop.sensory_profiles", {}).setdefault(subject, {})[
+    elif hidden == "target":
+        # The attacker sees its victim; only the witness's line of sight is blocked.
+        state.projections["tabletop.spatial.occluders"] = {
+            "screen": {"zone_id": "world", "x": 0, "y": 1, "sight_opacity": 1}
+        }
+    elif hidden == "attacker":
+        state.projections.setdefault("tabletop.sensory_profiles", {}).setdefault(target, {})[
             "invisible"
         ] = True
     provoke(admin, base, target, card, "masked-combat")
@@ -236,6 +251,8 @@ def test_combat_grants_freeze_modality_and_subject_visibility(monkeypatch, tmp_p
     elif hidden in {"attacker", "target"}:
         assert hidden + "_id" not in observed.perceived_payload
         assert not {"hit", "damage"}.intersection(observed.perceived_payload)
+        if hidden == "target":
+            assert observed.perceived_payload["attacker_id"] == target
     else:
         assert set(observed.perceived_payload) == {"attacker_id", "target_id", "hit", "damage"}
     state.projections["tabletop.spatial.occluders"] = {}

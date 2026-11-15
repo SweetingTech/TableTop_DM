@@ -96,11 +96,14 @@ def test_physical_changes_interrupt_pending_work(interruption):
     else:
         attacker = stable_id("demo:entity:wolf")
         app.assign_control(ids["world_id"], ids["actor_id"], attacker)
+        app.states.get(ids["branch_id"]).projections["tabletop.entities"][str(attacker)].update(
+            {"attack_bonus": 30, "damage_bonus": 100}
+        )
         send(
             app,
             ids,
             "tabletop.combat.attack",
-            {"target_id": str(body), "attack_bonus": 30, "damage_bonus": 100},
+            {"target_id": str(body)},
             "kill",
             embodied_entity_id=attacker,
             seed=2,

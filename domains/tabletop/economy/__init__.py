@@ -52,6 +52,12 @@ def trade(proposal: CommandProposal, state: BranchState) -> CommandResult:
         raise ValueError("seller has insufficient inventory")
     buyer_inventory[request.item] = int(buyer_inventory.get(request.item, 0)) + request.quantity
     seller_inventory[request.item] = int(seller_inventory[request.item]) - request.quantity
+    equipment = (
+        {"equipped_weapon": "UNARMED"}
+        if str(seller.get("equipped_weapon", "UNARMED")).upper() == request.item.upper()
+        and seller_inventory[request.item] == 0
+        else {}
+    )
     return CommandResult(
         result={
             "buyer_id": str(buyer_id),
@@ -71,7 +77,11 @@ def trade(proposal: CommandProposal, state: BranchState) -> CommandResult:
                 projection="tabletop.entities",
                 operation="MERGE",
                 entity_id=seller_id,
-                values={"gold": int(seller.get("gold", 0)) + price, "inventory": seller_inventory},
+                values={
+                    "gold": int(seller.get("gold", 0)) + price,
+                    "inventory": seller_inventory,
+                    **equipment,
+                },
             ),
         ),
         domain_tags=("tabletop", "economy", "trade"),
@@ -81,6 +91,7 @@ def trade(proposal: CommandProposal, state: BranchState) -> CommandResult:
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.economy.trade",
+        version="1.1.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=trade,

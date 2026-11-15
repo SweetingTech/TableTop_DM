@@ -1,5 +1,15 @@
 # Testing
 
+Action-rule tests reject caller-selected dice/bonuses/power/cost without projection, command,
+event or outbox writes. They cover owned weapon reach, hidden/walled targets, conditions,
+learned spell privacy/candidates, initial card validation and stale-card resource preservation.
+Equipment regressions cover final-versus-retained copies, atomic trade unequip, legacy stale
+loadouts, and scene/context/retry/replay after durable restart.
+Durable regressions compare human and separate-runner fixed spell effects, restart retries and
+committed legacy-schema receipts. Built-SPA journeys in the paired console change cover both spell aliases, rejected legacy
+syntax, current health after an action and mobile overflow. Logical action-seed allocation and
+full combat lifecycle acceptance remain separate checklist items.
+
 Knowledge-boundary regressions cover old learned facts beyond the recent experience window,
 masked/hidden/operator/other-world/other-branch sources, pinned starting claims after card edits,
 scene inspection without mind access, deity/operator knowledge separation, pending projection

@@ -7,17 +7,17 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from domains.tabletop.rules import DEFAULT_SPELLS, RULES_VERSION, SPELLS, capable, known_spells
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
 from kernel.state import BranchState
 
-SPELLS = {"ARCANE_BOLT": ("DAMAGE", 3, 2, 6), "MEND": ("HEAL", 4, 2, 2)}
-
 
 class StartingResources(BaseModel):
     mana: int = Field(default=0, ge=0)
+    known_spells: tuple[Literal["ARCANE_BOLT", "MEND"], ...] = DEFAULT_SPELLS
 
 
 class InvokeRequest(BaseModel):
@@ -27,6 +27,7 @@ class InvokeRequest(BaseModel):
 
 
 class InvokeResult(BaseModel):
+    rules_version: str = RULES_VERSION
     caster_id: uuid.UUID
     target_id: uuid.UUID
     spell_id: str
@@ -39,18 +40,17 @@ def invoke(proposal: CommandProposal, state: BranchState) -> CommandResult:
     if proposal.embodied_entity_id is None:
         raise ValueError("an embodied caster is required")
     request = InvokeRequest.model_validate(proposal.parameters)
-    effect, power, cost, reach = SPELLS[request.spell_id]
+    rule = SPELLS[request.spell_id]
+    effect, power, cost, reach = rule.effect, rule.power, rule.mana_cost, rule.reach
     bodies = state.projections.get("tabletop.entities", {})
     caster, target = (
         bodies.get(str(proposal.embodied_entity_id)),
         bodies.get(str(request.target_id)),
     )
-    if (
-        caster is None
-        or target is None
-        or min(int(caster.get("hp", 0)), int(target.get("hp", 0))) <= 0
-    ):
+    if caster is None or target is None or not capable(caster) or int(target.get("hp", 0)) <= 0:
         raise ValueError("capable caster and target are required")
+    if request.spell_id not in known_spells(caster):
+        raise ValueError("this body has not learned the requested spell")
     if effect == "DAMAGE" and request.target_id == proposal.embodied_entity_id:
         raise ValueError("damaging invocation requires another target")
     if int(caster.get("mana", 0)) < cost:
@@ -78,6 +78,7 @@ def invoke(proposal: CommandProposal, state: BranchState) -> CommandResult:
         raise ValueError("target does not need healing")
     return CommandResult(
         result={
+            "rules_version": RULES_VERSION,
             "caster_id": str(proposal.embodied_entity_id),
             "target_id": str(request.target_id),
             "spell_id": request.spell_id,
@@ -116,6 +117,7 @@ def invoke_emission(proposal, result, before, after):
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.magic.invoke",
+        version="2.0.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=invoke,

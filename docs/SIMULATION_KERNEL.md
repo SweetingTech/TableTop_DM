@@ -113,9 +113,14 @@ and schema failures use deterministic fallback. Accepted text/model/prompt/sourc
 in the existing private receipt before submission. Retries reuse that receipt. Speech carries
 empty claims and cannot apply another action or world delta. No provider is active by default.
 
-Guard consumes its defensive benefit once. Fixed spell invocation rechecks resource sufficiency,
-range, sight, zone and capable targets inside the kernel transaction; rejection consumes no mana
-or health. Migration 010 expands human choice kinds while preserving source/origin/RLS rules.
+Guard consumes its defensive benefit once. Melee resolves registered owned equipment, body
+bonuses, poison/fear disadvantage, reach, current sight/zone and incapacity inside the mutation
+transaction. Both spell aliases resolve learned registered definitions and recheck mana,
+range, sight, zone and eligible living targets; rejection consumes no mana or health. Rule version
+is recorded privately with the canonical result, outside physical perception masks. A retry reads
+its original scoped receipt before current schema normalization, preserving committed old-contract
+requests. Migration 010 retains human choice source/origin/RLS rules; these stricter rules require
+no additional migration. Logical action seed allocation and full combat time/lifecycle remain open.
 
 Speech/combat training records only accepted untraced human actions whose selected action existed
 in the locked pre-command perceived catalog. Operator, stand-in and submitted-policy actions are

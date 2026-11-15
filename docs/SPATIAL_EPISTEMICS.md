@@ -88,7 +88,9 @@ Sight uses same-zone range plus deterministic grid supercover line-of-sight. Sou
 ambient noise, portal transmission, and occluder attenuation. There are no random perception rolls
 in this slice. Future stealth or concealment checks must be seeded and versioned.
 
-Resolver `grid-spatial-perception-1.3.0` admits a sensory modality only after acuity produces
+Resolver `grid-spatial-perception-1.3.1` applies identical participant/effect masks to both cast
+and invoke spell aliases. Sound-only witnesses receive an anonymous spellcasting summary;
+frozen historical grants retain their recorded version. It admits a sensory modality only after acuity produces
 positive finite confidence at the stored six-decimal precision. Zero or invalid sight/hearing
 cannot create a grant or reveal its payload. Mixed emissions retain only the sensed modalities.
 Sound propagation selects the strongest complete portal path, independent of portal ordering.

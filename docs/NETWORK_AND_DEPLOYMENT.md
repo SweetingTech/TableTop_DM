@@ -3,6 +3,10 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
+Authoritative melee/spell rules execute locally in the kernel with existing PostgreSQL state and
+ledger transactions. They add no provider, service, port or migration. Deploy current frontend
+assets together with API request contract 2.0.0 so console spell proposals use registered IDs.
+
 Character retrieval reads existing PostgreSQL mind/binding records under actor scope and builds a
 local learned-claim view. It does not send searches to the world's public/vector lore catalog.
 Configured dialogue providers receive only scoped fiction and anonymous grounding references.
