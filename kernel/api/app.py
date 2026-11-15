@@ -1850,7 +1850,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "011_population_body_binding.sql",
+                    "ok": version == "012_snapshot_entity_identity.sql",
                     "migration": version,
                 }
             except Exception as exc:
