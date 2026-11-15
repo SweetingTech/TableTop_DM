@@ -36,12 +36,15 @@ describe("typed game command parser", () => {
   });
 
   it("maps tokens from canonical public grid coordinates", () => {
-    expect(entityMapPosition({ public_state: { x: 2, y: 3 } })).toEqual({
-      left: "42%",
-      top: "57%",
+    const bounds = { min_x: -2, max_x: 7, min_y: 0, max_y: 9 };
+    expect(entityMapPosition({ public_state: { x: 2, y: 3 } }, bounds)).toEqual({
+      left: "45%",
+      top: "35%",
     });
-    expect(entityMapPosition({ public_state: { x: 4, y: 1 } })).not.toEqual(
-      entityMapPosition({ public_state: { x: 2, y: 3 } }),
+    expect(entityMapPosition({ public_state: { x: 4, y: 1 } }, bounds)).not.toEqual(
+      entityMapPosition({ public_state: { x: 2, y: 3 } }, bounds),
     );
+    expect(entityMapPosition({ public_state: {} }, bounds)).toBeNull();
+    expect(entityMapPosition({ public_state: { x: 50, y: 3 } }, bounds)).toBeNull();
   });
 });

@@ -89,6 +89,14 @@ class EntityMutation(BaseModel):
     controller_actor_id: uuid.UUID | None = None
 
 
+class EntityControllerMutation(BaseModel):
+    """Private control metadata change, committed with its authorized command."""
+
+    model_config = ConfigDict(frozen=True)
+    entity_id: uuid.UUID
+    controller_actor_id: uuid.UUID | None
+
+
 class PopulationBindingMutation(BaseModel):
     """Internal instruction validated against the locked source in the commit transaction."""
 
@@ -110,6 +118,9 @@ class CommandResult(BaseModel):
     # receipts and ledger result JSON; projections/events expose only public
     # command facts while the transaction persists private entity metadata.
     entity_mutations: tuple[EntityMutation, ...] = Field(default=(), exclude=True, repr=False)
+    controller_mutations: tuple[EntityControllerMutation, ...] = Field(
+        default=(), exclude=True, repr=False
+    )
     population_bindings: tuple[PopulationBindingMutation, ...] = Field(
         default=(), exclude=True, repr=False
     )

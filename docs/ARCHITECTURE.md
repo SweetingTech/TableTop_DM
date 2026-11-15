@@ -2,6 +2,20 @@
 
 ## System shape
 
+Roster preparation creates an uncontrolled canonical body and pins its card/persona without
+publishing a seat. Finalization composes the portal seat with a typed controller mutation in
+one actor-scoped PostgreSQL transaction. Reference mode enlists seat publication before atomic
+command publication. Neither path grants a model or client direct canonical write access.
+Controller identity/history stay immutable; removing a seat pauses the runtime, advances its
+epoch and revokes body/runtime-owner access. Shared seats retain their existing grant.
+
+Console synchronization polls only authorized scenes, fences obsolete requests and rejects older
+projection versions. Observations may advance at the same version. Map configuration is a
+separate typed presentation command/projection; only perceived-zone maps and experience readiness
+are added to HTTP interface responses. Character scene contracts and cognition never receive
+these interface fields. Durable readiness accepts complete same-event/body/mask/time evidence at
+the database's stored confidence precision, retaining original IDs and frozen visibility.
+
 Configured branch clocks govern controlled-action readiness through the domain wrapper
 `action-time.1`. Successful effects and the `tabletop.action_time` reservation share one kernel
 transaction. The wrapper reads body speed and versioned rules, never client duration values.

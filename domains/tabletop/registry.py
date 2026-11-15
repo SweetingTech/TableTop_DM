@@ -11,6 +11,7 @@ from domains.tabletop.dialogue import command_definitions as dialogue
 from domains.tabletop.divine import command_definition as divine
 from domains.tabletop.economy import command_definition as economy
 from domains.tabletop.entities import command_definition as entities
+from domains.tabletop.entities.control import command_definition as entity_controllers
 from domains.tabletop.factions import command_definition as factions
 from domains.tabletop.magic import command_definition as magic
 from domains.tabletop.magic.tactical import command_definition as invoke
@@ -18,6 +19,7 @@ from domains.tabletop.onboarding import command_definition as onboarding
 from domains.tabletop.quests import command_definition as quests
 from domains.tabletop.spatial import command_definition as spatial
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
+from domains.tabletop.spatial.presentation import command_definition as map_presentation
 from domains.tabletop.world_time import command_definitions as world_time
 from kernel.command_bus import CommandBus, CommandDefinition, CommandHandler
 from population.life import command_definitions as life
@@ -39,7 +41,9 @@ def command_definitions(
         onboarding(),
         *dialogue(),
         entities(),
+        entity_controllers(),
         spatial(),
+        map_presentation(),
         combat(),
         guard(),
         magic(),

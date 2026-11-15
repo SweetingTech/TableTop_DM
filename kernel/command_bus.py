@@ -108,7 +108,12 @@ class CommandBus:
         except KeyError as exc:
             raise UnknownCommand(command_type) from exc
 
-    def execute(self, proposal: CommandProposal, actor: Actor) -> CommandReceipt:
+    def execute(
+        self,
+        proposal: CommandProposal,
+        actor: Actor,
+        before_commit: Callable[[], None] | None = None,
+    ) -> CommandReceipt:
         if proposal.actor_id != actor.actor_id:
             raise AuthorizationDenied("Proposal actor does not match authenticated actor")
         definition = self._definitions.get(proposal.command_type)
@@ -176,6 +181,8 @@ class CommandBus:
                 after=state,
                 emission_builder=definition.emission_builder,
             )
+            if before_commit is not None:
+                before_commit()
             if self.control_committer is not None:
                 self.control_committer(command)
             return CommandReceipt(

@@ -1,5 +1,4 @@
-import { apiRequest, unpackItems } from "../../core/api/client";
-import { withDemoFallback } from "../../core/api/fallback";
+import { ApiError, apiRequest, unpackItems } from "../../core/api/client";
 import type { BranchSummary, EntitySummary, EventRecord, GameState, PerceivedScene, RunSummary, Sourced, ViewpointSummary } from "../../core/api/types";
 import { DEMO_BRANCH_ID, DEMO_RUN_ID, demoGameState } from "../../core/demo/fixtures";
 import { waitForScene, type SceneRefreshCursor } from "./sceneRefresh";
@@ -44,19 +43,24 @@ export async function loadGameState(worldId: string, requestedViewpoint = "", cu
   if (!worldId) return { data: demoGameState, source: "demo", reason: "No live world is selected; deterministic demo data is shown." };
   const load = async (): Promise<GameState> => {
       const [viewpointsPayload, runsPayload, branchesPayload] = await Promise.all([
-        apiRequest<{ items?: ViewpointSummary[] }>(`/worlds/${worldId}/viewpoints`, { signal }),
-        apiRequest<RunSummary[] | { items?: RunSummary[] }>(`/runs?world_id=${encodeURIComponent(worldId)}`, { signal }),
-        apiRequest<BranchSummary[] | { items?: BranchSummary[] }>(`/branches?world_id=${encodeURIComponent(worldId)}`, { signal }),
+        apiRequest<{ items?: ViewpointSummary[] }>(`/worlds/${worldId}/viewpoints`, { signal, cache: "no-store" }),
+        apiRequest<RunSummary[] | { items?: RunSummary[] }>(`/runs?world_id=${encodeURIComponent(worldId)}`, { signal, cache: "no-store" }),
+        apiRequest<BranchSummary[] | { items?: BranchSummary[] }>(`/branches?world_id=${encodeURIComponent(worldId)}`, { signal, cache: "no-store" }),
       ]);
       const runs = unpackItems(runsPayload);
       const branches = unpackItems(branchesPayload);
       const viewpoints = unpackItems(viewpointsPayload);
-      const branch = branches.find((item) => item.kind === "CANONICAL") ?? branches[0] ?? null;
+      const branch = branches.find((item) => item.kind === "CANONICAL") ?? null;
+      const run = runs.find((item) => item.kind === "LIVE" && item.branch_id === branch?.branch_id
+        && ["RUNNING", "ACTIVE", "PAUSED", "QUEUED"].includes(item.status)) ?? null;
+      if (requestedViewpoint && !viewpoints.some((item) => item.entity_id === requestedViewpoint)) {
+        throw new Error("This character is no longer available. Refresh or ask your DM to restore its assignment.");
+      }
       const observer = viewpoints.find((item) => item.entity_id === requestedViewpoint) ?? viewpoints[0];
       if (!branch || !observer) {
         if (cursor) throw new Error("The assigned character or branch is no longer available.");
         return {
-          run: runs.find((run) => run.status === "RUNNING" || run.status === "ACTIVE") ?? runs[0] ?? null,
+          run,
           branch,
           entities: [],
           events: [],
@@ -91,7 +95,7 @@ export async function loadGameState(worldId: string, requestedViewpoint = "", cu
         position_confidence: entity.position_confidence,
       }));
       return {
-        run: runs.find((run) => run.status === "RUNNING" || run.status === "ACTIVE") ?? runs[0] ?? null,
+        run,
         branch,
         entities,
         events: scene.recent_observations.map((observation) => normalizeEvent({
@@ -104,16 +108,13 @@ export async function loadGameState(worldId: string, requestedViewpoint = "", cu
         viewpoints,
         observer_entity_id: observer.entity_id,
         projection_version: scene.projection_version,
+        experience_ready: scene.experience_ready,
+        map_presentations: scene.map_presentations ?? [],
         turn: 0,
         interaction_status: "ACTIVE",
       };
     };
-  // An accepted live command must never become a demo receipt or a demo scene on failure.
-  if (cursor) return { data: await load(), source: "live" };
-  return withDemoFallback(load, () => {
-    if (signal?.aborted) throw new DOMException("Scene refresh cancelled", "AbortError");
-    return demoGameState;
-  }, "Game console");
+  return { data: await load(), source: "live" };
 }
 
 export type CommandAcknowledgement = { event_id: string; scene_refresh: SceneRefreshCursor | null };
@@ -125,6 +126,9 @@ export async function proposeCommand(
   embodiedEntityId: string | undefined,
   controlEpoch?: number,
 ): Promise<Sourced<CommandAcknowledgement>> {
+  if (!state.run || !state.branch || !embodiedEntityId) {
+    throw new Error("Select an assigned character and start a live run before acting.");
+  }
   const parsed = parseCommand(command, state);
   const result = await apiRequest<{
     result: { accepted: boolean }; event: { event_id: string }; scene_refresh?: SceneRefreshCursor | null;
@@ -141,6 +145,21 @@ export async function proposeCommand(
           idempotency_key: `console:${crypto.randomUUID()}`,
           control_epoch: controlEpoch,
         }),
+      }).catch((error: unknown) => {
+        if (error instanceof ApiError && error.payload && typeof error.payload === "object" && "error" in error.payload) {
+          const code = String(error.payload.error);
+          if (code === "character_context_pending") throw new Error("Your character's observations are updating. Wait for synchronization, then try again.");
+          if (code === "BodyActionPending") throw new Error("This character is still finishing an action. Wait for the world clock to advance, then refresh before acting.");
+          if (code === "BodyIncapacitated") throw new Error("This character cannot act in its current physical state. Refresh the scene and check its health and conditions.");
+          if (code === "WorldClockPaused") throw new Error("The world clock is paused. Ask your DM to resume it before continuing autonomous actions.");
+        }
+        if (error instanceof ApiError && [403, 409].includes(error.status)) {
+          throw new Error("Control or scene access changed. Refresh the scene and take control before trying again; ask your DM if the assignment was removed.");
+        }
+        if (error instanceof ApiError && error.status === 400) {
+          throw new Error("The action was rejected. Refresh and check your character's position, resources and target before trying again.");
+        }
+        throw error;
       });
   if (!result.result.accepted) throw new Error("The action was not accepted.");
   return { data: { event_id: result.event.event_id, scene_refresh: result.scene_refresh ?? null }, source: "live" };

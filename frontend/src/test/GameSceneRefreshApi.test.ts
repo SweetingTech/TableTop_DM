@@ -59,6 +59,29 @@ describe("scene projection barrier", () => {
 });
 
 describe("live scene API", () => {
+  it("never turns an initial live read failure into a demo scene", async () => {
+    vi.mocked(fetch).mockImplementation(async input => metadata(input) ?? ok({ error: "unavailable" }, 503));
+    await expect(loadGameState("world", "hero")).rejects.toThrow("unavailable");
+  });
+
+  it("does not silently replace a removed viewpoint", async () => {
+    vi.mocked(fetch).mockImplementation(async input => metadata(input) ?? ok(scene(true)));
+    await expect(loadGameState("world", "removed-body")).rejects.toThrow(/no longer available/);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/scene"))).toBe(false);
+  });
+
+  it("rejects commands without a run/body before making a write", async () => {
+    await expect(proposeCommand("world", "/move east", { ...demoGameState, run: null }, "hero")).rejects.toThrow(/live run/);
+    await expect(proposeCommand("world", "/move east", demoGameState, undefined)).rejects.toThrow(/assigned character/);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("gives actionable stale-control and busy-body errors", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(ok({ error: "AuthorizationDenied" }, 403))
+      .mockResolvedValueOnce(ok({ error: "BodyActionPending" }, 403));
+    await expect(proposeCommand("world", "/move east", demoGameState, "hero")).rejects.toThrow(/take control/);
+    await expect(proposeCommand("world", "/move east", demoGameState, "hero")).rejects.toThrow(/world clock to advance/);
+  });
   it("uses the command cursor and retains observation source identity", async () => {
     vi.mocked(fetch).mockImplementation(async (input) => metadata(input) ?? ok({ ...scene(true), recent_observations: [{ observation_id: "observation", source_event_id: "event", event_type: "tabletop.spatial.move", summary: "A footstep", observed_at: "2026-11-13T00:00:00Z", confidence: 1, immediate_source_entity_id: null }] }));
     const result = await loadGameState("world", "hero", cursor);

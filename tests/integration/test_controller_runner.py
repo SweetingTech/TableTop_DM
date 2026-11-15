@@ -160,7 +160,8 @@ def test_two_workers_and_takeover_fence_one_logical_action(
         )
         assert cursor.fetchone()[0] == 1
         cursor.execute(
-            "SELECT count(*) FROM sim.events WHERE run_id=%s AND event_type LIKE '%%control%%'",
+            "SELECT count(*) FROM sim.events WHERE run_id=%s AND event_type LIKE '%%control%%' "
+            "AND event_type <> 'tabletop.entity.set_controllers'",
             (run,),
         )
         assert cursor.fetchone()[0] == 0
@@ -306,7 +307,7 @@ def test_upgrade_from_006_is_idempotent(integration_stack, tmp_path):
         for path in sorted(migrations.glob("*.sql"))[:6]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 6
-        assert migrate(url, migrations) == 6
+        assert migrate(url, migrations) == 7
         assert migrate(url, migrations) == 0
     finally:
         with maintenance.cursor() as cursor:

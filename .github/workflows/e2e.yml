@@ -33,6 +33,9 @@ jobs:
       TTDM_BASE_URL: http://127.0.0.1:8000
       TTDM_LLM_MODE: mock
       TTDM_RNG_SEED: "1337"
+      TTDM_INTEGRATION: "1"
+      TTDM_TEST_DATABASE_ADMIN_URL: postgresql://postgres:postgres_dev_only@127.0.0.1:5432/postgres
+      TTDM_TEST_REDIS_URL: redis://:redis_dev_only@127.0.0.1:6379/15
       TTDM_OPERATOR_TOKEN: e2e-operator
       CI: "true"
     steps:

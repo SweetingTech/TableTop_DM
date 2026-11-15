@@ -269,13 +269,13 @@ def test_011_upgrade_preserves_legacy_snapshot_and_allows_metadata_identity(
         control = PostgresControlPlane(url)
         control.actor_id = app.extensions["demo_ids"]["actor_id"]
         control.persist_snapshot(legacy, state.version)
-        assert migrate(url, migrations) == 1
+        assert migrate(url, migrations) == 2
         assert migrate(url, migrations) == 0
         readiness = admin.get("/readyz")
         assert readiness.status_code == 200, readiness.get_json()
         assert (
             readiness.get_json()["checks"]["postgres"]["migration"]
-            == "012_snapshot_entity_identity.sql"
+            == "013_roster_controller_revocation.sql"
         )
         frozen = snapshot(admin, base["world_id"])
         assert frozen["state_hash"] == legacy.state_hash

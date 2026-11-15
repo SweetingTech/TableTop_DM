@@ -16,6 +16,7 @@ from cognition.context import CharacterContext, require_projected_experience
 from cognition.context import CharacterContextPending as CharacterContextPending
 from cognition.dialogue_generation import DialogueProvider, DialogueReceipt, generate_dialogue
 from cognition.engine import DecisionOutcome, DecisionRequest, LayeredDecisionEngine
+from cognition.models import Observation
 from cognition.store import MindStore
 from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import CharacterBinding
@@ -164,6 +165,11 @@ def require_projected_character_experience(
         grants=simulation.perceptions.values(),
         event_reader=simulation.events.get,
         observation_exists=lambda item: minds.has_observation(item, branch_id=scope.branch_id),
+        recorded_observations=(
+            Observation.model_validate(row)
+            for row in minds.inspect(scope.entity_id, branch_id=scope.branch_id)["observations"]
+        ),
+        stored_confidence_precision=simulation.durable_repository is not None,
     )
 
 

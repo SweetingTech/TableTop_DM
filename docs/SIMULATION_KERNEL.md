@@ -1,5 +1,24 @@
 # Simulation-kernel contract
 
+`tabletop.entity.set_controllers` requires world-scoped `entity.control`, `mind.write.all` and
+canonical commit authority. Its typed metadata changes, sensory-controller projection, fenced
+runtime state, ledger and outbox share one commit. The command emits no sensory evidence.
+It can finalize a roster seat inside an explicit same-actor database unit; in-process publication
+waits for the outer commit. Nested failures make the unit rollback-only and cannot switch actors
+or databases. Reference seat publication participates before state/receipt publication.
+
+`tabletop.map.configure` changes presentation only, with world-scoped entity-control and broad
+world-read authority plus branch commit/proposal checks. It emits no sensory evidence and does
+not move bodies, create physics zones or alter visibility. Maps remain branch-scoped and trial
+changes remain isolated. Interface metadata is filtered after ordinary scene authorization;
+models continue receiving the original cognition contract.
+
+Durable experience readiness preserves immutable observation IDs created at six-decimal precision
+when persisted grants/observations have four-decimal confidence. Compatibility requires the same
+source event, body, complete frozen payload mask, event time and equivalent stored confidence.
+Reference mode retains strict ID checks. No audience is recomputed and no evidence is rewritten;
+existing observation validation still clamps confidence to the frozen grant.
+
 The controlled-command action-time wrapper reads the branch clock and body's last readiness,
 then appends a SET delta in `tabletop.action_time` only after an accepted handler result. Effects,
 resource spending, wakeup, readiness, event and outbox persist atomically through both adapters.
