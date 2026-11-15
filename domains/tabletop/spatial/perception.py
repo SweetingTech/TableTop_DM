@@ -21,7 +21,7 @@ from .models import SpatialOccluder, SpatialPortal, SpatialPosition, SpatialZone
 class GridSpatialPerceptionResolver:
     """Deterministic grid sight/sound resolver over event-time projections."""
 
-    VERSION = "grid-spatial-perception-1.3.0"
+    VERSION = "grid-spatial-perception-1.3.1"
 
     def visible_entities(
         self,
@@ -164,7 +164,11 @@ class GridSpatialPerceptionResolver:
                 controller = proposal.actor_id
             allowed_fields = emission.allowed_payload_fields
             overrides = emission.payload_overrides
-            if proposal.command_type in {"tabletop.combat.attack", "tabletop.magic.invoke"}:
+            if proposal.command_type in {
+                "tabletop.combat.attack",
+                "tabletop.magic.invoke",
+                "tabletop.magic.cast",
+            }:
                 # A sound grants awareness of fighting, not hidden identities or damage.
                 # Freeze each subject's visibility against the same event-time state.
                 visible = (
@@ -173,7 +177,7 @@ class GridSpatialPerceptionResolver:
                     else {}
                 )
                 attacker = proposal.embodied_entity_id
-                magic = proposal.command_type == "tabletop.magic.invoke"
+                magic = proposal.command_type in {"tabletop.magic.invoke", "tabletop.magic.cast"}
                 target = uuid.UUID(str(proposal.parameters["target_id"]))
                 fields: list[str] = []
                 if attacker in visible:

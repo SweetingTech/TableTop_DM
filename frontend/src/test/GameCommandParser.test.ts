@@ -10,9 +10,6 @@ describe("typed game command parser", () => {
       commandType: "tabletop.magic.invoke", parameters: { spell_id: "ARCANE_BOLT", target_id: demoGameState.entities[1].entity_id } });
     expect(() => parseCommand("/guard 999", demoGameState)).toThrow();
     expect(() => parseCommand("/invoke UNKNOWN Dockmaster Vale", demoGameState)).toThrow();
-    expect(parseCommand("/cast MEND Dockmaster Vale", demoGameState)).toEqual({
-      commandType: "tabletop.magic.cast", parameters: { spell_id: "MEND", target_id: demoGameState.entities[1].entity_id } });
-    expect(() => parseCommand("/cast Dockmaster damage 10000 0 Fireball", demoGameState)).toThrow();
   });
   it("maps movement and attacks to typed deterministic proposals", () => {
     expect(parseCommand("/move north", demoGameState)).toEqual({

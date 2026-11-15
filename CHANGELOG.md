@@ -3,7 +3,8 @@
 - Make new melee requests target-only and resolve registered owned weapons, body bonuses,
   visibility/reach and conditions inside the kernel. Unify cast/invoke under fixed versioned
   learned-spell rules; validate initial card knowledge/resources without overwriting live bodies.
-  Update console spell syntax and preserve committed old-contract retries across upgrades.
+  Preserve committed old-contract retries across upgrades. Merge/deploy the paired console
+  adapter and compiled bundle together with this backend contract change.
   Shared combat time, action-seed allocation, sheet reconciliation and quest evidence remain open.
 
 - Add character-scoped learned-lore retrieval and older-testimony grounding in generated dialogue,

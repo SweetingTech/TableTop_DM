@@ -103,14 +103,20 @@ def test_spell_revalidates_live_state_and_rejects_without_consuming_mana(failure
     assert state.version == version and caster["mana"] == mana
 
 
-def test_spell_sound_witness_gets_no_participant_power_or_resource_details():
+@pytest.mark.parametrize("command", ["tabletop.magic.invoke", "tabletop.magic.cast"])
+@pytest.mark.parametrize("hide_caster", [False, True])
+def test_spell_sound_witness_gets_no_participant_power_or_resource_details(command, hide_caster):
     fixture = prepared()
     fixture["state"].projections["tabletop.spatial.portals"][str(fixture["portal"])]["state"] = (
         "OPEN"
     )
+    if hide_caster:
+        fixture["state"].projections.setdefault("tabletop.sensory_profiles", {}).setdefault(
+            str(fixture["speaker"]), {}
+        )["invisible"] = True
     receipt = execute(
         fixture,
-        "tabletop.magic.invoke",
+        command,
         {"spell_id": "ARCANE_BOLT", "target_id": str(fixture["listener"])},
         "spell",
     )
@@ -135,5 +141,22 @@ def test_spell_sound_witness_gets_no_participant_power_or_resource_details():
         ),
         grant=visible,
     )
-    assert observed.perceived_payload["power"] == 3
+    if hide_caster:
+        assert observed.perceived_payload == {"summary": "Sounds of nearby spellcasting."}
+    else:
+        assert observed.perceived_payload["power"] == 3
     assert "mana_after" not in observed.perceived_payload
+    fixture["state"].projections["tabletop.sensory_profiles"] = {}
+    fixture["state"].projections["tabletop.spatial.portals"][str(fixture["portal"])]["state"] = (
+        "CLOSED"
+    )
+    assert (
+        PerceptionEngine().observe(
+            receipt.event,
+            PerceptionProfile(
+                observer_entity_id=fixture["listener"], observer_actor_id=fixture["listener_actor"]
+            ),
+            grant=visible,
+        )
+        == observed
+    )

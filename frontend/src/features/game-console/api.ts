@@ -162,6 +162,12 @@ function resolveEntity(reference: string, state: GameState): string {
   return match.entity_id;
 }
 
+function positiveInteger(raw: string | undefined, label: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer`);
+  return value;
+}
+
 function stableSeed(text: string): number {
   let value = 2166136261;
   for (const character of text) {
@@ -210,12 +216,21 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
         spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
     }
     case "cast": {
-      const spellId = (parts.shift() ?? "").toUpperCase();
-      if (!["ARCANE_BOLT", "MEND"].includes(spellId) || !parts.length) {
-        throw new Error("Use /cast ARCANE_BOLT|MEND <perceived target name or id>");
+      if (parts.length < 5) {
+        throw new Error("Use /cast <target> <damage|heal|condition> <power> <mana> <spell>");
       }
-      return { commandType: "tabletop.magic.cast", parameters: {
-        spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
+      const [target, effect, power, mana, ...spell] = parts;
+      const normalizedEffect = effect.toUpperCase();
+      if (!["DAMAGE", "HEAL", "CONDITION"].includes(normalizedEffect)) {
+        throw new Error("Cast effect must be damage, heal, or condition");
+      }
+      const parameters: Record<string, unknown> = {
+        target_id: resolveEntity(target, state), spell: spell.join(" "),
+        effect: normalizedEffect, power: positiveInteger(power, "Power"),
+        mana_cost: positiveInteger(mana, "Mana"),
+      };
+      if (normalizedEffect === "CONDITION") parameters.condition = spell.join(" ");
+      return { commandType: "tabletop.magic.cast", parameters };
     }
     default:
       return { commandType: "tabletop.console.submit", parameters: { text } };
