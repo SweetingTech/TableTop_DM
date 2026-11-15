@@ -577,6 +577,7 @@ def create_app(
             durable_control.load_projection,
             durable_control.persist_snapshot,
         )
+        fresh.goal_input_reader = simulation.goal_input_reader
         return fresh
 
     def controller_minds(scope: ControlScope, actor_id: uuid.UUID) -> MindStore:
@@ -3788,10 +3789,52 @@ def create_app(
             {"status": "frontend_not_built", "hint": "run npm --prefix frontend run build"}
         ), 503
 
+    from kernel.api.npc_goals import make_goal_reader, register_npc_card_binding
     from kernel.api.world_time import register_world_time
     from kernel.world_runner import WorldRunner
 
+    def goal_profile(persona, version, compiler_version):
+        from persona.compilation.compiler import character_trait_names
+
+        profile = (
+            persona_repository.get_compiled(persona, version, compiler_version)
+            if persona_repository
+            else bound_profiles.get((persona, version, compiler_version))
+        )
+        record = persona_versions.get(version)
+        if record is None and persona_repository:
+            record = next(
+                (row for row in persona_repository.list_versions() if row.version_id == version),
+                None,
+            )
+        if (
+            profile is None
+            or record is None
+            or record.blueprint.persona_id != persona
+            or record.blueprint.purpose is not PersonaPurpose.CHARACTER
+        ):
+            return None
+        allowed = character_trait_names()
+        return profile.model_copy(
+            update={
+                "deep_traits": {
+                    name: value
+                    for name, value in record.blueprint.dimensions.items()
+                    if name in allowed
+                }
+            }
+        )
+
+    simulation.goal_input_reader = make_goal_reader(
+        controller_snapshot,
+        controller_minds,
+        character_bindings,
+        goal_profile,
+    )
     app.extensions["world_runner"] = WorldRunner(controller_snapshot)
+    register_npc_card_binding(
+        app, controller_snapshot, current_user, current_actor_id, require_world_access, portal
+    )
     register_world_time(app, controller_snapshot, current_actor_id, require_world_access)
     from kernel.api.population_runtime import PopulationRuntime, register_population_runtime
 

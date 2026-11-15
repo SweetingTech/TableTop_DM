@@ -1,5 +1,14 @@
 # Changelog
 
+- Require source-card authority before NPC association, including locked-record validation and
+  retries, and preserve active motivational belief evidence beyond the recent-experience window.
+
+- Add opt-in belief/persona-driven NPC goal selection from pinned CHARACTER traits and validated
+  same-body subjective evidence. Heard importance/danger claims can change priorities or interrupt
+  work without changing canonical truth; private versioned inputs commit with clock effects for replay.
+- Add explicit DM character-card association for existing NPC bodies without a player seat, and
+  serialize competing associations while preserving authored card content. No new schema or provider.
+
 - Reject long one-off commitment windows that overlap the first future recurring occurrence,
   in either scheduling order; retain exact touching-window compatibility and atomic rejection.
 

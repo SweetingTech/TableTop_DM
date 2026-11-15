@@ -39,6 +39,10 @@ Population binding, finite meals, daily sleep, local travel and recurring appoin
 that clock. Optional [daily planning](docs/API_AND_WORKFLOWS.md#daily-goal-planning) lets NPCs choose
 among prioritized work/rest goals with daily limits, seek shelter, recover from displacement or
 injury, and resume unfinished goals. No viewer or additional model provider is required.
+Optional [belief/persona motivation](docs/API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-goals)
+lets bound NPCs weight duty, curiosity, care and recovery differently, reconsider goals after
+perceived claims, and avoid places they believe dangerous. Only their own validated observations
+and pinned CHARACTER persona inform those choices. The initial goal vocabulary remains work/rest.
 
 ## Product workspaces
 

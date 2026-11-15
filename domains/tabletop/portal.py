@@ -139,6 +139,15 @@ class PortalRepository(Protocol):
     def save_character(
         self, character: CharacterRecord, *, actor_id: uuid.UUID | None = None
     ) -> CharacterRecord: ...
+    def associate_character(
+        self,
+        character_id: uuid.UUID,
+        world_id: uuid.UUID,
+        entity_id: uuid.UUID,
+        *,
+        actor_id: uuid.UUID,
+        source_owner_id: uuid.UUID | None = None,
+    ) -> CharacterRecord: ...
     def character_revisions(
         self, character_id: uuid.UUID, *, actor_id: uuid.UUID
     ) -> tuple[CharacterCardRevision, ...]: ...
@@ -177,6 +186,44 @@ class InMemoryPortalRepository:
     def get_character(self, character_id: uuid.UUID) -> CharacterRecord | None:
         row = self.characters.get(character_id)
         return row.model_copy(deep=True) if row else None
+
+    def associate_character(
+        self, character_id, world_id, entity_id, *, actor_id, source_owner_id=None
+    ):
+        with self._card_lock:
+            character = self.get_character(character_id)
+            if character is None:
+                raise KeyError(character_id)
+            if (
+                source_owner_id is not None
+                and character.owner_user_id != source_owner_id
+                and character.world_id != world_id
+            ):
+                raise PermissionError("character owner or existing world assignment required")
+            if character.world_id not in {None, world_id} or character.entity_id not in {
+                None,
+                entity_id,
+            }:
+                raise ValueError("character is already associated with another world or body")
+            if any(
+                row.world_id == world_id
+                and row.entity_id == entity_id
+                and row.character_id != character_id
+                for row in self.characters.values()
+            ):
+                raise ValueError("body already represents another character card")
+            if (character.world_id, character.entity_id) == (world_id, entity_id):
+                return character
+            return self.save_character(
+                character.model_copy(
+                    update={
+                        "world_id": world_id,
+                        "entity_id": entity_id,
+                        "updated_at": datetime.now(UTC),
+                    }
+                ),
+                actor_id=actor_id,
+            )
 
     def save_character(
         self, character: CharacterRecord, *, actor_id: uuid.UUID | None = None
@@ -283,6 +330,50 @@ class PostgresPortalRepository:
                 )
                 row = cursor.fetchone()
                 return self._character(dict(row)) if row else None
+
+    def associate_character(
+        self, character_id, world_id, entity_id, *, actor_id, source_owner_id=None
+    ):
+        with transaction(actor_id=actor_id, dsn=self._dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                    (f"character-body:{world_id}:{entity_id}",),
+                )
+                cursor.execute(
+                    "SELECT * FROM tabletop.characters WHERE id=%s FOR UPDATE", (str(character_id),)
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise KeyError(character_id)
+                character = self._character(dict(row))
+                if (
+                    source_owner_id is not None
+                    and character.owner_user_id != source_owner_id
+                    and character.world_id != world_id
+                ):
+                    raise PermissionError("character owner or existing world assignment required")
+                if character.world_id not in {None, world_id} or character.entity_id not in {
+                    None,
+                    entity_id,
+                }:
+                    raise ValueError("character is already associated with another world or body")
+                cursor.execute(
+                    "SELECT 1 FROM tabletop.characters WHERE world_id=%s AND entity_id=%s AND id<>%s LIMIT 1",
+                    (str(world_id), str(entity_id), str(character_id)),
+                )
+                if cursor.fetchone() is not None:
+                    raise ValueError("body already represents another character card")
+                if (character.world_id, character.entity_id) == (world_id, entity_id):
+                    return character
+                cursor.execute(
+                    "UPDATE tabletop.characters SET world_id=%s,entity_id=%s,updated_at=now() WHERE id=%s RETURNING *",
+                    (str(world_id), str(entity_id), str(character_id)),
+                )
+                updated = cursor.fetchone()
+                if updated is None:
+                    raise RuntimeError("character association was not returned")
+                return self._character(dict(updated))
 
     def save_character(
         self, character: CharacterRecord, *, actor_id: uuid.UUID | None = None
@@ -677,24 +768,17 @@ class TabletopPortalService:
         *,
         world_id: uuid.UUID,
         entity_id: uuid.UUID,
+        require_card_access: bool = False,
     ) -> CharacterRecord:
         """Bind a portal character to its canonical embodied entity as a DM/Admin action."""
         if not actor.is_admin:
             IdentityService.require_world_role(actor, world_id, "DM")
-        character = self._character(character_id)
-        if character.world_id not in {None, world_id}:
-            raise ValueError("character is already assigned to another world")
-        if character.entity_id not in {None, entity_id}:
-            raise ValueError("character is already bound to another embodied entity")
-        return self.repository.save_character(
-            character.model_copy(
-                update={
-                    "world_id": world_id,
-                    "entity_id": entity_id,
-                    "updated_at": datetime.now().astimezone(),
-                }
-            ),
+        return self.repository.associate_character(
+            character_id,
+            world_id,
+            entity_id,
             actor_id=actor.actor_id,
+            source_owner_id=actor.user_id if require_card_access and not actor.is_admin else None,
         )
 
     def list_games(self, actor: UserAccount) -> tuple[HostedGame, ...]:
