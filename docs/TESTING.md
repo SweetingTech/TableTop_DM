@@ -7,6 +7,9 @@ metadata-distinct snapshot IDs with equal projection hashes, tamper rejection, e
 lineage after restart/replay, and transaction rollback without partial in-memory publication.
 Migration 012 is exercised on clean installs and upgrades from 011 with a retained legacy artifact.
 Legacy projection-only artifacts stay readable and fail closed for new entity restoration.
+Generic scenario regressions execute populated cohorts through the durable API, verify frozen
+entity metadata and distinct trial identities, and check replay/retry after restart. Terminal
+trial upserts preserve valid timestamps and record the original scenario failure.
 
 World-time tests cover epoch/step/executor fencing, pause/resume and manual boundaries, FREEZE and
 bounded CATCH_UP, deterministic ordering/replay, trial/world isolation, empty-viewer progression,
@@ -267,8 +270,9 @@ uv run python scripts/verify_wheel.py dist/tabletop_dm-2.0.0-py3-none-any.whl
 ```
 
 The verifier extracts the wheel and checks the 80-dimension schema, ordered migrations,
-SPA index, and current hashed assets. Always remove stale local `build/` output before diagnosing
-a packaging mismatch.
+SPA index, and current hashed assets. These checks remain active with `PYTHONOPTIMIZE` enabled;
+unit regressions run broken package fixtures in optimized subprocesses. Build from a fresh
+temporary source copy when diagnosing a packaging mismatch to avoid stale local `build/` output.
 
 The production image gate builds from a clean context, runs as an unprivileged user, and serves
 JavaScript/CSS assets with their correct MIME types rather than the SPA fallback document.

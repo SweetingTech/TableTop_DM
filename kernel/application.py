@@ -570,16 +570,27 @@ class SimulationApplication:
         return self.read_reference(capture)
 
     def create_trial(
-        self, world_id: uuid.UUID, snapshot_id: uuid.UUID, seed: int
+        self,
+        world_id: uuid.UUID,
+        snapshot_id: uuid.UUID,
+        seed: int,
+        *,
+        branch_id: uuid.UUID | None = None,
+        run_id: uuid.UUID | None = None,
     ) -> tuple[BranchState, RunRecord]:
-        return self.read_reference(lambda: self._create_trial(world_id, snapshot_id, seed))
+        return self.read_reference(
+            lambda: self._create_trial(world_id, snapshot_id, seed, branch_id, run_id)
+        )
 
-    def _create_trial(self, world_id, snapshot_id, seed):
+    def _create_trial(self, world_id, snapshot_id, seed, branch_id=None, run_id=None):
         self.worlds[world_id]
         manifest = self.snapshots[snapshot_id]
         if manifest.world_id != world_id:
             raise ValueError("snapshot does not belong to world")
-        branch_id = stable_id(f"trial:{snapshot_id}:{seed}")
+        branch_id = branch_id or stable_id(f"trial:{snapshot_id}:{seed}")
+        existing_snapshot = self.branch_snapshot_ids.get(branch_id)
+        if existing_snapshot is not None and existing_snapshot != snapshot_id:
+            raise ValueError("existing trial differs from requested snapshot identity")
         try:
             branch = self.states.get(branch_id)
         except BranchIsolationError:
@@ -617,7 +628,7 @@ class SimulationApplication:
         ):
             raise ValueError("existing trial differs from requested snapshot lineage")
         self.branch_snapshot_ids[branch_id] = snapshot_id
-        run_id = stable_id(f"run:{branch_id}:{seed}")
+        run_id = run_id or stable_id(f"run:{branch_id}:{seed}")
         run = self.runs.setdefault(
             run_id,
             RunRecord(
@@ -629,6 +640,13 @@ class SimulationApplication:
                 seed=seed,
             ),
         )
+        if (run.world_id, run.branch_id, run.kind, run.seed) != (
+            world_id,
+            branch_id,
+            RunKind.EVALUATION,
+            seed,
+        ):
+            raise ValueError("existing trial run differs from requested identity")
         return branch, run
 
     def replay(self, branch_id: uuid.UUID) -> BranchState:
