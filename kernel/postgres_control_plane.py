@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from pathlib import Path
 
 import psycopg2.extras
 
@@ -26,7 +25,7 @@ from kernel.database import transaction
 from kernel.errors import BranchIsolationError
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayRecord
-from kernel.snapshots import SnapshotManifest
+from kernel.snapshots import SnapshotEntity, SnapshotManifest, artifact_path
 from kernel.state import BranchState
 
 
@@ -68,7 +67,7 @@ class PostgresControlPlane:
                         ),
                     )
                 for state in simulation.states.all():
-                    base_snapshot_id = next(
+                    base_snapshot_id = simulation.branch_snapshot_ids.get(state.branch_id) or next(
                         (
                             snapshot.snapshot_id
                             for snapshot in simulation.snapshots.values()
@@ -198,50 +197,192 @@ class PostgresControlPlane:
                         ),
                     )
 
-    def persist_snapshot(self, manifest: SnapshotManifest, projection_version: int) -> None:
+    def persist_snapshot(
+        self, manifest: SnapshotManifest, projection_version: int, *, cursor=None
+    ) -> None:
         artifact_id = uuid.uuid5(
             uuid.NAMESPACE_URL, f"tabletop-dm:snapshot-artifact:{manifest.artifact_hash}"
         )
-        path = Path(manifest.artifact_uri.removeprefix("file:///"))
+        path = artifact_path(manifest.artifact_uri)
         byte_size = path.stat().st_size if path.exists() else None
         if self.actor_id is None:
             raise RuntimeError("control plane must be synchronized before loading state")
-        with transaction(actor_id=self.actor_id, dsn=self.dsn) as connection:
+        if cursor is None:
+            with transaction(actor_id=self.actor_id, dsn=self.dsn) as connection:
+                with connection.cursor() as own:
+                    self.persist_snapshot(manifest, projection_version, cursor=own)
+            return
+        cursor.execute(
+            """INSERT INTO artifacts.objects (
+              id,world_id,branch_id,artifact_kind,uri,content_hash,media_type,byte_size,metadata
+            ) VALUES (%s,%s,%s,'SNAPSHOT',%s,%s,'application/gzip',%s,'{}')
+            ON CONFLICT (id) DO NOTHING""",
+            (
+                str(artifact_id),
+                str(manifest.world_id),
+                str(manifest.branch_id),
+                manifest.artifact_uri,
+                manifest.artifact_hash,
+                byte_size,
+            ),
+        )
+        cursor.execute(
+            """INSERT INTO sim.snapshots (
+              id,world_id,source_branch_id,through_event_seq,projection_version,state_hash,
+              artifact_id,contract_version
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING""",
+            (
+                str(manifest.snapshot_id),
+                str(manifest.world_id),
+                str(manifest.branch_id),
+                manifest.through_event_seq,
+                projection_version,
+                manifest.state_hash,
+                str(artifact_id),
+                manifest.contract_version,
+            ),
+        )
+
+    def capture_snapshot(self, simulation, world_id, branch_id, *, actor_id):
+        """Freeze projection and entity metadata behind the command's branch fence."""
+        with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM sim.actor_capabilities c JOIN sim.actors a ON a.id=c.actor_id "
+                    "WHERE c.world_id=%s AND c.actor_id=%s AND c.capability='run.branch' "
+                    "AND a.is_active FOR SHARE OF c,a",
+                    (str(world_id), str(actor_id)),
+                )
+                if cursor.fetchone() is None:
+                    raise PermissionError("snapshot requires current world branch authority")
+                cursor.execute(
+                    "SELECT id FROM sim.branches WHERE world_id=%s AND id=%s FOR UPDATE",
+                    (str(world_id), str(branch_id)),
+                )
+                if cursor.fetchone() is None:
+                    raise ValueError("snapshot branch does not belong to world")
+                cursor.execute(
+                    "SELECT state,version FROM sim.branch_projections WHERE world_id=%s "
+                    "AND branch_id=%s FOR UPDATE",
+                    (str(world_id), str(branch_id)),
+                )
+                projected = cursor.fetchone()
+                if projected is None:
+                    raise ValueError("snapshot projection is unavailable")
+                cursor.execute(
+                    "SELECT id,world_id,branch_id,entity_type,name,"
+                    "controller_actor_id,secret_state "
+                    "FROM sim.entities WHERE world_id=%s AND branch_id=%s ORDER BY id",
+                    (str(world_id), str(branch_id)),
+                )
+                entities = {}
+                for row in cursor.fetchall():
+                    raw = dict(row)
+                    raw["entity_id"] = raw.pop("id")
+                    record = SnapshotEntity.model_validate(raw)
+                    entities[str(record.entity_id)] = record.model_dump(mode="json")
+                cursor.execute(
+                    "SELECT count(*) AS n FROM sim.command_log WHERE world_id=%s AND branch_id=%s",
+                    (str(world_id), str(branch_id)),
+                )
+                count = cursor.fetchone()
+                if count is None:
+                    raise RuntimeError("snapshot event count is unavailable")
+                manifest = simulation.snapshot_store.create(
+                    world_id,
+                    branch_id,
+                    int(count["n"]),
+                    dict(projected["state"]),
+                    entities=entities,
+                )
+                self.persist_snapshot(manifest, int(projected["version"]), cursor=cursor)
+        simulation.snapshots[manifest.snapshot_id] = manifest
+        return manifest
+
+    def persist_trial(self, simulation, branch, run, snapshot_id, *, actor_id):
+        """Insert one isolated trial atomically; never resynchronize world grants."""
+        with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
-                    INSERT INTO artifacts.objects (
-                      id, world_id, branch_id, artifact_kind, uri, content_hash,
-                      media_type, byte_size, metadata
-                    ) VALUES (%s,%s,%s,'SNAPSHOT',%s,%s,'application/gzip',%s,'{}')
-                    ON CONFLICT (id) DO NOTHING
-                    """,
+                    "SELECT 1 FROM sim.actor_capabilities c JOIN sim.actors a ON a.id=c.actor_id "
+                    "WHERE c.world_id=%s AND c.actor_id=%s AND c.capability='run.branch' "
+                    "AND a.is_active FOR SHARE OF c,a",
+                    (str(branch.world_id), str(actor_id)),
+                )
+                if cursor.fetchone() is None:
+                    raise PermissionError("trial creation requires current world branch authority")
+                cursor.execute(
+                    "SELECT 1 FROM sim.snapshots WHERE world_id=%s AND id=%s",
+                    (str(branch.world_id), str(snapshot_id)),
+                )
+                if cursor.fetchone() is None:
+                    raise ValueError("trial snapshot is unavailable in this world")
+                cursor.execute(
+                    "INSERT INTO sim.branches "
+                    "(id,world_id,branch_kind,name,base_snapshot_id,status) "
+                    "VALUES (%s,%s,'TRIAL',%s,%s,'ACTIVE') ON CONFLICT(id) DO NOTHING",
                     (
-                        str(artifact_id),
-                        str(manifest.world_id),
-                        str(manifest.branch_id),
-                        manifest.artifact_uri,
-                        manifest.artifact_hash,
-                        byte_size,
+                        str(branch.branch_id),
+                        str(branch.world_id),
+                        f"Trial {str(branch.branch_id)[:8]}",
+                        str(snapshot_id),
                     ),
                 )
                 cursor.execute(
-                    """
-                    INSERT INTO sim.snapshots (
-                      id, world_id, source_branch_id, through_event_seq,
-                      projection_version, state_hash, artifact_id, contract_version
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                    ON CONFLICT (id) DO NOTHING
-                    """,
+                    "SELECT world_id,base_snapshot_id FROM sim.branches WHERE id=%s",
+                    (str(branch.branch_id),),
+                )
+                existing = cursor.fetchone()
+                if existing is None or (_uuid(existing[0]), _uuid(existing[1])) != (
+                    branch.world_id,
+                    snapshot_id,
+                ):
+                    raise ValueError("trial lineage differs from the requested snapshot")
+                cursor.execute(
+                    "INSERT INTO sim.branch_projections "
+                    "(branch_id,world_id,version,state,state_hash) "
+                    "VALUES (%s,%s,%s,%s::jsonb,%s) ON CONFLICT(branch_id) DO NOTHING",
                     (
-                        str(manifest.snapshot_id),
-                        str(manifest.world_id),
-                        str(manifest.branch_id),
-                        manifest.through_event_seq,
-                        projection_version,
-                        manifest.state_hash,
-                        str(artifact_id),
-                        manifest.contract_version,
+                        str(branch.branch_id),
+                        str(branch.world_id),
+                        branch.version,
+                        json.dumps(branch.projections, default=str),
+                        branch.state_hash,
+                    ),
+                )
+                for (scope, _), entity in sorted(
+                    simulation.entities.items(), key=lambda pair: str(pair[0])
+                ):
+                    if scope != branch.branch_id:
+                        continue
+                    cursor.execute(
+                        "INSERT INTO sim.entities "
+                        "(id,world_id,branch_id,entity_type,name,public_state,"
+                        "secret_state,controller_actor_id) "
+                        "VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s) "
+                        "ON CONFLICT(branch_id,id) DO NOTHING",
+                        (
+                            str(entity.entity_id),
+                            str(entity.world_id),
+                            str(scope),
+                            entity.entity_type,
+                            entity.name,
+                            json.dumps(entity.public_state, default=str),
+                            json.dumps(entity.secret_state, default=str),
+                            str(entity.controller_actor_id) if entity.controller_actor_id else None,
+                        ),
+                    )
+                cursor.execute(
+                    "INSERT INTO sim.runs (id,world_id,branch_id,run_kind,status,seed,started_at) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(id) DO NOTHING",
+                    (
+                        str(run.run_id),
+                        str(run.world_id),
+                        str(run.branch_id),
+                        run.kind.value,
+                        run.status,
+                        run.seed,
+                        run.started_at,
                     ),
                 )
 
@@ -313,6 +454,8 @@ class PostgresControlPlane:
                     state.projections = dict(row["state"])
                     state.version = int(row["version"])
                     state.base_snapshot_hash = row["base_snapshot_hash"]
+                    if row["base_snapshot_id"] is not None:
+                        simulation.branch_snapshot_ids[branch_id] = _uuid(row["base_snapshot_id"])
 
                 cursor.execute(
                     """

@@ -8,6 +8,13 @@ Language models may propose dialogue or actions, but they never write canonical 
 commands, world-scoped authorization, deterministic handlers, atomic transactions, and an
 append-only ledger decide what actually happened.
 
+Controlled relationship reactions now derive from frozen physical evidence: heard speech can
+increase familiarity, and a perceived damaging attack can change trust and fear. Callers cannot
+label unrelated events as promises kept or lives saved. New snapshots freeze entity identity,
+controller and private metadata for nested trials. Apply migration 012 before running this
+version; these snapshots remain foundations for complete campaign rewind, not whole-mind checkpoints.
+See [snapshots and trials](docs/API_AND_WORKFLOWS.md#snapshots-and-trials).
+
 Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
 and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
 perception-scoped movement, speech and tactical catalog. The proposal endpoint itself

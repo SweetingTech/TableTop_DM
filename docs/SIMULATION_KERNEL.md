@@ -143,6 +143,10 @@ rewind of this evidence alongside all campaign state remains part of timeline re
 - Population lifecycle transitions remain bound to their original world and branch after
   restart.
 - Trial branches originate from immutable snapshots and cannot write canonical projections.
+- Snapshot 2.1 freezes entity metadata alongside one projection boundary. Nested restoration uses
+  that frozen source, and metadata changes alter snapshot identity without altering replay hashes.
+- Controlled relationship changes derive their classification from the source entity's frozen
+  physical mask. Raw event access alone does not establish a perceived promise, rescue or insult.
 - Generic scenario jobs retain checkpoints, trial event envelopes, verifier facts, normalized
   metrics, and reports after restart.
 - Calibration review and deployment promotion are separate actions.

@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from cognition.relationship_evidence import classify_relationship
 from kernel.api.app import create_app
 from kernel.contracts import EventEnvelopeV2
 
@@ -204,9 +205,144 @@ def test_controlled_actor_uses_only_visible_registered_relationship_events(
             json={**base, "source_event_id": hidden_event["event_id"]},
         )
 
-    assert mapped.status_code == 201
-    assert mapped.get_json()["after"]["trust"] == 12
+    assert mapped.status_code == 403
     assert explicit_delta.status_code == 403
     assert custom_modifier.status_code == 403
-    assert unknown_mapping.status_code == 400
+    assert unknown_mapping.status_code == 403
     assert hidden.status_code == 403
+
+
+def physical_relationship_game(app, admin=None, scope=None):
+    ids = scope or app.extensions["demo_ids"]
+    client = admin or app.test_client()
+    world, branch, run, actor = (
+        str(ids[k]) for k in ("world_id", "branch_id", "run_id", "actor_id")
+    )
+    controller = client.post(
+        "/api/v2/actors",
+        json={
+            "world_id": world,
+            "display_name": "Relationship witness",
+            "kind": "AGENT",
+            "capabilities": [
+                "world.read",
+                "entity.control",
+                "entity.act",
+                "action.propose",
+                "action.commit",
+            ],
+        },
+    ).get_json()
+    entities = []
+    for name, owner, y in [("Witness", controller["actor_id"], 5), ("Speaker", actor, 6)]:
+        response = client.post(
+            f"/api/v2/worlds/{world}/entities",
+            json={
+                "name": name,
+                "entity_type": "NPC",
+                "controller_actor_id": owner,
+                "public_state": {"x": 5, "y": y, "hp": 20, "max_hp": 20, "armor": 10},
+            },
+        )
+        assert response.status_code == 201, response.get_json()
+        entities.append(response.get_json()["entity_id"])
+    observer, target = entities
+    base = {"world_id": world, "branch_id": branch, "run_id": run, "actor_id": actor}
+
+    def speak(key):
+        response = client.post(
+            "/api/v2/commands",
+            json={
+                **base,
+                "command_type": "tabletop.dialogue.speak",
+                "embodied_entity_id": target,
+                "idempotency_key": key,
+                "parameters": {"text": "Hello, neighbor."},
+            },
+        )
+        assert response.status_code == 200, response.get_json()
+        return response.get_json()["event"]["event_id"]
+
+    return client, base, controller["actor_id"], observer, target, speak
+
+
+def check_grounded_relationships(game):
+    client, base, controller, observer, target, speak = game
+    source = speak("heard-one")
+    endpoint = f"/api/v2/entities/{observer}/relationships"
+    headers = {"X-TTDM-Actor-ID": controller}
+    payload = {"target_entity_id": target, "source_event_id": source}
+    for reaction in ("saved_life", "kept_promise", "public_humiliation"):
+        response = client.post(endpoint, headers=headers, json={**payload, "event_type": reaction})
+        assert response.status_code == 400, response.get_json()
+    first = client.post(endpoint, headers=headers, json=payload)
+    assert first.status_code == 201, first.get_json()
+    assert first.get_json()["event_type"] == "conversation"
+    assert first.get_json()["after"]["familiarity"] == 1
+    assert first.get_json()["after"]["trust"] == 0
+    assert first.get_json()["policy_version"] == "relationship-evidence-1.0.0"
+    second = client.post(
+        endpoint, headers=headers, json={**payload, "source_event_id": speak("heard-two")}
+    )
+    assert second.status_code == 201, second.get_json()
+    assert second.get_json()["after"]["familiarity"] == 2
+    assert client.post(endpoint, headers=headers, json=payload).get_json() == first.get_json()
+    return endpoint, headers, payload, first.get_json()
+
+
+def test_controlled_reactions_follow_frozen_heard_evidence_and_retry_old_history(tmp_path):
+    app = create_app(artifact_root=tmp_path)
+    check_grounded_relationships(physical_relationship_game(app))
+
+
+def test_attack_reaction_requires_the_actual_perceived_attacker_and_victim(tmp_path):
+    app = create_app(artifact_root=tmp_path)
+    client, base, controller, observer, target, speak = physical_relationship_game(app)
+    event = client.post(
+        "/api/v2/commands",
+        json={
+            **base,
+            "command_type": "tabletop.combat.attack",
+            "embodied_entity_id": target,
+            "seed": 1,
+            "idempotency_key": "actual-attack",
+            "parameters": {"target_id": observer, "attack_bonus": 30, "damage_sides": 2},
+        },
+    )
+    assert event.status_code == 200, event.get_json()
+    response = client.post(
+        f"/api/v2/entities/{observer}/relationships",
+        headers={"X-TTDM-Actor-ID": controller},
+        json={"target_entity_id": target, "source_event_id": event.get_json()["event"]["event_id"]},
+    )
+    assert response.status_code == 201, response.get_json()
+    assert response.get_json()["event_type"] == "attacked"
+    assert response.get_json()["after"]["trust"] == -12
+
+
+@pytest.mark.parametrize("mask", ["speaker", "text", "empty", "wrong_observer", "director"])
+def test_relationship_classifier_rejects_missing_masked_or_nonphysical_facts(tmp_path, mask):
+    app = create_app(artifact_root=tmp_path)
+    client, base, controller, observer, target, speak = physical_relationship_game(app)
+    sim = app.extensions["simulation"]
+    event = sim.events[uuid.UUID(speak("masked-source"))]
+    grant = sim.perception_grant(event.event_id, uuid.UUID(observer))
+    assert grant is not None
+    if mask in {"speaker", "text"}:
+        grant = grant.model_copy(
+            update={
+                "hidden_payload_fields": frozenset(
+                    {"speaker_entity_id" if mask == "speaker" else "text"}
+                )
+            }
+        )
+    elif mask == "empty":
+        grant = grant.model_copy(update={"modalities": ()})
+    elif mask == "wrong_observer":
+        grant = grant.model_copy(update={"observer_entity_id": uuid.uuid4()})
+    else:
+        event = event.model_copy(update={"domain_tags": ("operator",)})
+    with pytest.raises((ValueError, PermissionError)):
+        classify_relationship(
+            event, grant, uuid.UUID(observer), uuid.UUID(target), uuid.UUID(controller)
+        )

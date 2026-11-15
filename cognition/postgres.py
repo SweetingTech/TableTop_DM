@@ -351,6 +351,20 @@ class PostgresMindRepository:
                 )
                 source_event = cursor.fetchone()
                 if source_event is None:
+                    # A physical witness receives a mask, never raw canonical event access.
+                    cursor.execute(
+                        "SELECT event_id,world_id,branch_id FROM sim.event_perceptions "
+                        "WHERE event_id=%s AND world_id=%s AND branch_id=%s "
+                        "AND observer_entity_id=%s AND cardinality(modalities)>0",
+                        (
+                            str(record.source_event_id),
+                            str(record.world_id),
+                            str(record.branch_id),
+                            str(record.source_entity_id),
+                        ),
+                    )
+                    source_event = cursor.fetchone()
+                if source_event is None:
                     raise ValueError("relationship source event is unavailable to actor")
                 if (
                     uuid.UUID(str(source_event["world_id"])) != record.world_id

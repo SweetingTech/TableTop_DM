@@ -18,7 +18,7 @@ from kernel.control import ControllerState, advanced, validate_controller
 from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayEngine, ReplayRecord
-from kernel.snapshots import SnapshotManifest, SnapshotStore
+from kernel.snapshots import SnapshotEntity, SnapshotManifest, SnapshotStore
 from kernel.state import BranchState, InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
 from population.models import PopulationMember
@@ -103,6 +103,7 @@ class SimulationApplication:
         self.replay_offsets: dict[uuid.UUID, int] = {}
         self.snapshot_store = SnapshotStore(artifact_root or Path("artifacts") / "snapshots")
         self.snapshots: dict[uuid.UUID, SnapshotManifest] = {}
+        self.branch_snapshot_ids: dict[uuid.UUID, uuid.UUID] = {}
         self.durable_repository: Any | None = None
         self.projection_loader: (
             Callable[[uuid.UUID, uuid.UUID], tuple[int, dict[str, Any]]] | None
@@ -550,24 +551,54 @@ class SimulationApplication:
         return self.create_branch_snapshot(world.canonical_branch_id)
 
     def create_branch_snapshot(self, branch_id: uuid.UUID) -> SnapshotManifest:
-        state = self.states.get(branch_id)
-        through = len(self.command_history.get(branch_id, []))
-        manifest = self.snapshot_store.create(state.world_id, branch_id, through, state.projections)
-        self.snapshots[manifest.snapshot_id] = manifest
-        return manifest
+        def capture():
+            state = self.states.get(branch_id)
+            through = len(self.command_history.get(branch_id, []))
+            metadata = {
+                str(entity_id): SnapshotEntity.model_validate(
+                    row.model_dump(exclude={"public_state"})
+                ).model_dump(mode="json")
+                for (scope, entity_id), row in self.entities.items()
+                if scope == branch_id
+            }
+            manifest = self.snapshot_store.create(
+                state.world_id, branch_id, through, state.projections, entities=metadata
+            )
+            self.snapshots[manifest.snapshot_id] = manifest
+            return manifest
+
+        return self.read_reference(capture)
 
     def create_trial(
-        self, world_id: uuid.UUID, snapshot_id: uuid.UUID, seed: int
+        self,
+        world_id: uuid.UUID,
+        snapshot_id: uuid.UUID,
+        seed: int,
+        *,
+        branch_id: uuid.UUID | None = None,
+        run_id: uuid.UUID | None = None,
     ) -> tuple[BranchState, RunRecord]:
-        world = self.worlds[world_id]
+        return self.read_reference(
+            lambda: self._create_trial(world_id, snapshot_id, seed, branch_id, run_id)
+        )
+
+    def _create_trial(self, world_id, snapshot_id, seed, branch_id=None, run_id=None):
+        self.worlds[world_id]
         manifest = self.snapshots[snapshot_id]
         if manifest.world_id != world_id:
             raise ValueError("snapshot does not belong to world")
-        branch_id = stable_id(f"trial:{snapshot_id}:{seed}")
+        branch_id = branch_id or stable_id(f"trial:{snapshot_id}:{seed}")
+        existing_snapshot = self.branch_snapshot_ids.get(branch_id)
+        if existing_snapshot is not None and existing_snapshot != snapshot_id:
+            raise ValueError("existing trial differs from requested snapshot identity")
         try:
             branch = self.states.get(branch_id)
         except BranchIsolationError:
             payload = self.snapshot_store.load(manifest)
+            if manifest.contract_version != "2.1.0":
+                raise ValueError(
+                    "snapshot lacks frozen entity metadata; create a new snapshot"
+                ) from None
             branch = BranchState(
                 world_id=world_id,
                 branch_id=branch_id,
@@ -575,8 +606,29 @@ class SimulationApplication:
                 projections=payload["projections"],
                 base_snapshot_hash=manifest.state_hash,
             )
+            records = {}
+            for key, raw in payload["entities"].items():
+                metadata = SnapshotEntity.model_validate(raw)
+                projected = branch.projections["tabletop.entities"][key]
+                records[(branch_id, metadata.entity_id)] = EntityRecord(
+                    **metadata.model_dump(exclude={"branch_id", "name", "entity_type"}),
+                    branch_id=branch_id,
+                    name=projected["name"],
+                    entity_type=projected["entity_type"],
+                    public_state={
+                        k: v for k, v in projected.items() if k not in {"name", "entity_type"}
+                    },
+                )
             self.states.add(branch)
-        run_id = stable_id(f"run:{branch_id}:{seed}")
+            self.entities.update(records)
+        if (branch.world_id, branch.kind, branch.base_snapshot_hash) != (
+            world_id,
+            BranchKind.TRIAL,
+            manifest.state_hash,
+        ):
+            raise ValueError("existing trial differs from requested snapshot lineage")
+        self.branch_snapshot_ids[branch_id] = snapshot_id
+        run_id = run_id or stable_id(f"run:{branch_id}:{seed}")
         run = self.runs.setdefault(
             run_id,
             RunRecord(
@@ -584,30 +636,17 @@ class SimulationApplication:
                 world_id=world_id,
                 branch_id=branch_id,
                 kind=RunKind.EVALUATION,
+                status="RUNNING",
                 seed=seed,
             ),
         )
-        canonical_entities = [
-            entity
-            for (entity_branch_id, _), entity in self.entities.items()
-            if entity_branch_id == world.canonical_branch_id
-            and str(entity.entity_id) in branch.projections.get("tabletop.entities", {})
-        ]
-        for entity in canonical_entities:
-            projected = branch.projections["tabletop.entities"][str(entity.entity_id)]
-            self.entities.setdefault(
-                (branch_id, entity.entity_id),
-                entity.model_copy(
-                    update={
-                        "branch_id": branch_id,
-                        "public_state": {
-                            key: value
-                            for key, value in projected.items()
-                            if key not in {"name", "entity_type"}
-                        },
-                    }
-                ),
-            )
+        if (run.world_id, run.branch_id, run.kind, run.seed) != (
+            world_id,
+            branch_id,
+            RunKind.EVALUATION,
+            seed,
+        ):
+            raise ValueError("existing trial run differs from requested identity")
         return branch, run
 
     def replay(self, branch_id: uuid.UUID) -> BranchState:

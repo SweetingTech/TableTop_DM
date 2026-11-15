@@ -137,6 +137,8 @@ class MindState(BaseModel):
 
 
 RELATIONSHIP_EVENT_DELTAS: dict[str, dict[str, float]] = {
+    "conversation": {"familiarity": 1},
+    "attacked": {"trust": -12, "fear": 5, "resentment": 8},
     "kept_promise": {"trust": 12, "respect": 4, "obligation": -2},
     "public_humiliation": {"affection": -8, "respect": -6, "resentment": 15, "fear": 2},
     "saved_life": {"trust": 20, "affection": 10, "obligation": 25},
