@@ -236,6 +236,44 @@ The console polls every 200 ms for at most eight seconds after acceptance, requi
 canonical version and observation boundary. Only authorized observations enter the feed, keyed
 by source event. A timeout or read failure reports that the action was accepted and offers a
 read-only retry. Writes and post-acceptance reads never fall back to successful demo data.
+
+Continuous console updates use serial, cancellable polling every 2.5 seconds while visible,
+plus focus/online resynchronization. Reads remain perception-scoped. Older versions and obsolete
+responses cannot replace newer scenes, while newly projected observations at the same version
+still appear. The chosen body stays pinned; changing an unavailable assignment requires an
+explicit character choice, clearing drafts, accepted-action cursors and observations. Background
+refresh preserves the current draft/focus. Interrupted reads label the last confirmed scene and
+disable actions. Authorization failures clear it and stop polling until an explicit retry.
+The human scene response includes `experience_ready`; actions wait for the body's already
+committed observations to finish projecting. This interface metadata never enters character
+cognition. Missing runs/bodies, inspect-only views, unsupported commands and stale control are
+actionable states. Initial live read failures also never become demo scenes.
+
+DMs configure map presentation through the normal command endpoint:
+
+```json
+{
+  "command_type": "tabletop.map.configure",
+  "world_id": "<world UUID>",
+  "branch_id": "<branch UUID>",
+  "run_id": "<run UUID>",
+  "idempotency_key": "map-world-v1",
+  "parameters": {
+    "zone_id": "world", "name": "Harbor yard",
+    "min_x": -4, "max_x": 4, "min_y": -4, "max_y": 4,
+    "image_path": null
+  }
+}
+```
+
+Bounds are inclusive grid-cell coordinates, with tokens at cell centers. Optional images must
+be local `/static/` assets and are public presentation for viewers of that perceived zone. This
+does not create physics zones or reveal hidden entities. Each branch supports up to 128 maps.
+The human scene response adds only perceived-zone `map_presentations`; these never enter character
+cognition. The console offers known-zone selection and every perceived entity with known
+coordinates. Unpositioned entities stay in the list without an invented location. Without usable
+configured extents it explicitly auto-fits a coordinate grid to known positions rather than
+clamping different coordinates onto an edge.
 World/viewpoint changes cancel pending reads and clear drafts, focus selection, and receipt state;
 late command responses cannot populate the new viewpoint. This is per-action refresh, not yet
 cross-client continuous updates.
@@ -272,6 +310,19 @@ and a target account with Player authority in that world; it returns only charac
 class, level, and status for characters belonging to that player and either this world or no
 world yet. It excludes character sheets and backstory. Assignment rejects missing characters,
 wrong owners, and characters bound to another world. Choosing Co-DM clears the character selection.
+
+Assignment checks for an unfinished canonical LIVE run before any preparation. Body creation and
+card/persona binding are retryable preparation stages: a staged body has no human controller.
+The final seat edit and `tabletop.entity.set_controllers` commit together. A failed final edit
+leaves the prior seat/control intact; retry reuses the prepared body and binding. Existing join
+times survive retries. Switching characters revokes the old body's control unless another game
+still assigns it to the same human.
+
+Deleting a member explicitly removes that human seat. On last-seat removal it keeps the body,
+resources, card, persona and experience, clears human control, pauses any autonomous runtime and
+increments its epoch to fence queued actions. The account's independent world roles remain.
+Reinviting the same character restores its human control and preserves history. Removal is
+different from a player handing off to an autonomous stand-in or disconnecting from a browser.
 
 Changing the selected user or membership role immediately clears old character choices and lookup
 errors, and disables player saves until the new lookup settles. Obsolete responses cannot replace
@@ -920,8 +971,8 @@ Progress depends on elapsed simulated time, never camera visibility. Rain starti
 inside a large advance splits work at those exact boundaries. Returning players receive only an
 inspected body's current kind/status/progress and visible work output through the existing scene;
 hidden bodies and pending schedules stay hidden. The console renders that activity on entity rows.
-Refresh/return or a normal post-action scene refresh loads it; continuous cross-client updates
-remain A5. Context is now `character-context-1.3.0`; operator clock epochs, UTC, executor IDs,
+Visible-tab polling, reconnect and post-action scene refresh load it across clients.
+Context is `character-context-1.3.0`; operator clock epochs, UTC, executor IDs,
 schedule/activity IDs and control metadata stay outside character fiction.
 
 This is a bounded activity/time foundation. General leased arbitrary due-work queues, population

@@ -3,6 +3,13 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
+Roster recovery deploys with migration013 and the matching current frontend bundle. The final
+human seat/control change shares one actor-scoped database commit; last-seat removal revokes
+body/runtime-owner access and fences paused runners. Independent account world roles remain.
+Console polling uses the existing authenticated, perception-scoped scene endpoint. Map assets
+are local `/static/` resources; only perceived-zone configuration and self-experience readiness
+reach the human interface. They do not enter character cognition or grant broader world access.
+
 Authoritative melee/spell rules execute locally in the kernel with existing PostgreSQL state and
 ledger transactions. They add no provider, service, port or migration. Deploy current frontend
 assets together with API request contract 2.0.0 so console spell proposals use registered IDs.

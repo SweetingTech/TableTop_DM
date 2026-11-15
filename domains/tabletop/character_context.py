@@ -71,6 +71,11 @@ def resolve_character_context(
             grants=simulation.perceptions.values(),
             event_reader=simulation.events.get,
             observation_exists=lambda item: minds.has_observation(item, branch_id=branch),
+            recorded_observations=(
+                Observation.model_validate(row)
+                for row in minds.inspect(entity, branch_id=branch)["observations"]
+            ),
+            stored_confidence_precision=simulation.durable_repository is not None,
         )
     binding = (
         bindings.latest((world, branch, run.run_id, entity), actor_id=actor_id)

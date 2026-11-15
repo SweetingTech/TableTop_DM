@@ -30,6 +30,7 @@ from cognition.character_decisions import (
 from cognition.choice_state import choice_frame
 from cognition.choice_store import PostgresChoiceEvidence, persist_choice_bundle
 from cognition.choices import HumanChoiceEvidence, choice_profile, describe_options, option_key
+from cognition.context import require_projected_experience
 from cognition.control import ControlConflict, HandoffRequest, InMemoryControllers
 from cognition.engine import (
     DecisionAction,
@@ -38,7 +39,7 @@ from cognition.engine import (
     SubjectiveStatePipeline,
 )
 from cognition.knowledge import KNOWLEDGE_VERSION, search_known_lore
-from cognition.models import RelationshipVector, RuntimeAssignment, RuntimeKind
+from cognition.models import Observation, RelationshipVector, RuntimeAssignment, RuntimeKind
 from cognition.openai_compatible import configured_dialogue
 from cognition.perception import PerceptionProfile
 from cognition.planning import GoapAction
@@ -68,6 +69,7 @@ from domains.tabletop.portal import (
     PostgresPortalRepository,
     TabletopPortalService,
 )
+from domains.tabletop.spatial.presentation import visible_maps
 from domains.tabletop.spatial.refresh import command_scene_cursor, scene_refresh_status
 from domains.tabletop.spatial.scene import PerceivedScene
 from domains.tabletop.spatial.service import build_perceived_scene, require_scene_access
@@ -100,6 +102,7 @@ from identity.repository import (
     kernel_authority,
 )
 from identity.service import AuthenticationError, IdentityService
+from kernel.api.roster import finalize_member
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
@@ -1770,25 +1773,40 @@ def create_app(
 
     @app.put("/api/v2/dm/games/<uuid:game_id>/members")
     def dm_game_member(game_id: uuid.UUID):
+        return simulation.read_reference(lambda: update_game_member(game_id))
+
+    def update_game_member(game_id: uuid.UUID):
+        if durable_control is not None:
+            durable_control.hydrate(simulation)
         body = GameMemberRequest.model_validate(request.get_json(force=True))
         account_actor = current_user()
+        game, member, character = portal.prepare_member(
+            account_actor, game_id, body.model_dump(mode="json")
+        )
+        entity_id = None
         starting_resources = StartingResources()
-        if body.character_id is not None and body.membership_role == "PLAYER":
-            selected = next(
+        if character is not None:
+            world = simulation.worlds.get(game.world_id)
+            if world is None:
+                raise ValueError("world is unavailable; reload before assigning a character")
+            binding_run = next(
                 (
-                    row
-                    for row in portal.assignable_characters(account_actor, game_id, body.user_id)
-                    if row.character_id == body.character_id
+                    run
+                    for run in simulation.runs.values()
+                    if run.world_id == game.world_id
+                    and run.branch_id == world.canonical_branch_id
+                    and run.kind is RunKind.LIVE
+                    and run.status in {"ACTIVE", "RUNNING", "PAUSED", "QUEUED"}
                 ),
                 None,
             )
-            if selected is not None:
-                starting_resources = StartingResources.model_validate(selected.sheet)
-        game = portal.set_member(account_actor, game_id, body.model_dump(mode="json"))
-        if body.character_id is not None and body.membership_role == "PLAYER":
-            character = portal.repository.get_character(body.character_id)
-            if character is None:
-                raise KeyError(body.character_id)
+            if binding_run is None:
+                raise ValueError("start an unfinished live run before assigning a character")
+            if not portal.repository.character_revisions(
+                character.character_id, actor_id=account_actor.actor_id
+            ):
+                raise ValueError("authored card revision is unavailable")
+            starting_resources = StartingResources.model_validate(character.sheet)
             member_account = identity_repository.get_account(body.user_id)
             if member_account is None:
                 raise KeyError(body.user_id)
@@ -1797,21 +1815,13 @@ def create_app(
                 uuid.NAMESPACE_URL,
                 f"tabletop-dm:character-entity:{game.world_id}:{character.character_id}",
             )
-            world = simulation.worlds[game.world_id]
             if (world.canonical_branch_id, entity_id) not in simulation.entities:
-                live_run = next(
-                    run
-                    for run in simulation.runs.values()
-                    if run.world_id == game.world_id
-                    and run.branch_id == world.canonical_branch_id
-                    and run.kind is RunKind.LIVE
-                )
                 simulation.submit(
                     CommandProposal(
                         command_type="tabletop.entity.spawn",
                         world_id=game.world_id,
                         branch_id=world.canonical_branch_id,
-                        run_id=live_run.run_id,
+                        run_id=binding_run.run_id,
                         actor_id=account_actor.actor_id,
                         parameters={
                             "entity_id": entity_id,
@@ -1828,7 +1838,7 @@ def create_app(
                                 "known_spells": list(starting_resources.known_spells),
                                 "speed": character.speed,
                             },
-                            "controller_actor_id": member_account.actor_id,
+                            "controller_actor_id": None,
                         },
                         idempotency_key=f"character-bind:{character.character_id}",
                     )
@@ -1839,14 +1849,6 @@ def create_app(
                 world_id=game.world_id,
                 entity_id=entity_id,
             )
-            binding_run = next(
-                run
-                for run in simulation.runs.values()
-                if run.world_id == game.world_id
-                and run.branch_id == world.canonical_branch_id
-                and run.kind is RunKind.LIVE
-                and run.status in {"ACTIVE", "RUNNING", "PAUSED", "QUEUED"}
-            )
             bind_character_persona(
                 character.character_id,
                 game.world_id,
@@ -1855,11 +1857,28 @@ def create_app(
                 entity_id,
                 initial_only=True,
             )
+        finalize_member(
+            simulation,
+            portal,
+            account_actor,
+            game_id,
+            body.user_id,
+            member,
+            target_entity_id=entity_id,
+            dsn=database_dsn,
+        )
         return _json(portal.repository.get_game(game_id) or game)
 
     @app.delete("/api/v2/dm/games/<uuid:game_id>/members/<uuid:user_id>")
     def dm_game_member_delete(game_id: uuid.UUID, user_id: uuid.UUID):
-        portal.remove_member(current_user(), game_id, user_id)
+        def remove():
+            if durable_control is not None:
+                durable_control.hydrate(simulation)
+            finalize_member(
+                simulation, portal, current_user(), game_id, user_id, None, dsn=database_dsn
+            )
+
+        simulation.read_reference(remove)
         return "", 204
 
     @app.get("/api/v2/games/<uuid:game_id>/sessions")
@@ -1909,7 +1928,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "012_snapshot_entity_identity.sql",
+                    "ok": version == "013_roster_controller_revocation.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -2125,12 +2144,13 @@ def create_app(
 
     @app.get("/api/v2/worlds/<uuid:world_id>/viewpoints")
     def world_viewpoints(world_id: uuid.UUID):
-        require_world_access(world_id)
-        world = simulation.worlds[world_id]
-        actor = simulation.authority(world_id, current_actor_id())
+        source = controller_snapshot()
+        require_world_access(world_id, source)
+        world = source.worlds[world_id]
+        actor = source.authority(world_id, current_actor_id())
         candidates = tuple(
             entity
-            for (branch_id, _), entity in simulation.entities.items()
+            for (branch_id, _), entity in source.entities.items()
             if branch_id == world.canonical_branch_id
             and (
                 "world.read.all" in actor.capabilities
@@ -2213,6 +2233,31 @@ def create_app(
         source = controller_snapshot()
         scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id, source)
         payload = scene.model_dump(mode="json")
+        try:
+            require_projected_experience(
+                world_id=world_id,
+                branch_id=branch_id,
+                entity_id=observer_entity_id,
+                actor_id=current_actor_id(),
+                grants=source.perceptions.values(),
+                event_reader=source.events.get,
+                observation_exists=lambda observation: observed_minds.has_observation(
+                    observation, branch_id=branch_id
+                ),
+                recorded_observations=(
+                    Observation.model_validate(row)
+                    for row in observed_minds.inspect(observer_entity_id, branch_id=branch_id)[
+                        "observations"
+                    ]
+                ),
+                stored_confidence_precision=source.durable_repository is not None,
+            )
+            payload["experience_ready"] = True
+        except CharacterContextPending:
+            payload["experience_ready"] = False
+        payload["map_presentations"] = [
+            row.model_dump(mode="json") for row in visible_maps(source.states.get(branch_id), scene)
+        ]
         after_event = request.args.get("after_event_id")
         if after_event is not None:
             payload["refresh"] = scene_refresh_status(

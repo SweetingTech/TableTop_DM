@@ -174,7 +174,7 @@ losing the bootstrap authority fails closed without widening grants.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `012_snapshot_entity_identity.sql`;
+- migration history through `013_roster_controller_revocation.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -448,6 +448,14 @@ Only physical activity is public. Motivation uses schema 011; the current applic
 snapshot migration 012. The existing worker/credential setup remains current.
 
 ## Snapshot metadata and migration 012
+
+Migration 013 must also be applied through the normal owner migration lane before running the
+roster recovery/removal changes. It retains the runtime role and forced RLS, but removes stale
+runtime-owner delegation after a body's human seat is revoked. The typed removal command pauses
+the runtime, advances its epoch and records an explicit `seat_removed` fence; the reference and
+RLS authority checks honor that fence while preserving DM control of unowned NPCs. No new worker
+or credentials are required. Failed character preparation may retain an uncontrolled body/card/persona binding;
+retry the same assignment to finish it. Do not delete its canonical ledger or character history.
 
 Run the normal owner migration lane before starting this application version. Migration 012
 replaces projection-only snapshot uniqueness with uniqueness that also includes the artifact ID.

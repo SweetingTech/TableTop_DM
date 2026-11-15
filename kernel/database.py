@@ -9,13 +9,59 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import Any
 
 import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import connection as PgConnection
+
+
+@dataclass
+class _UnitOfWork:
+    connection: PgConnection
+    dsn: str
+    actor_id: uuid.UUID
+    failed: bool = False
+    after_commit: list[Callable[[], object]] = field(default_factory=list)
+
+
+_unit: ContextVar[_UnitOfWork | None] = ContextVar("tabletop_database_unit", default=None)
+
+
+@contextmanager
+def unit_of_work(*, actor_id: uuid.UUID, dsn: str) -> Iterator[PgConnection]:
+    """Explicitly compose same-actor repository writes into one outer commit.
+
+    Ordinary transactions remain independent. A nested failure makes this entire unit
+    rollback-only, even if a repository catches the exception. Actor/DSN switching is
+    forbidden while sharing a connection; no RLS identity can bleed across callers.
+    """
+    if _unit.get() is not None:
+        raise RuntimeError("nested database units are not supported")
+    with transaction(actor_id=actor_id, dsn=dsn) as connection:
+        active = _UnitOfWork(connection, dsn, actor_id)
+        token = _unit.set(active)
+        try:
+            yield connection
+            if active.failed:
+                raise RuntimeError("database unit was rolled back after a nested failure")
+        finally:
+            _unit.reset(token)
+    for callback in active.after_commit:
+        callback()
+
+
+def after_commit(callback: Callable[[], object]) -> bool:
+    """Defer in-process publication until the explicitly composed DB unit commits."""
+    active = _unit.get()
+    if active is None:
+        return False
+    active.after_commit.append(callback)
+    return True
 
 
 def database_url() -> str:
@@ -29,6 +75,16 @@ def database_url() -> str:
 def transaction(
     *, actor_id: uuid.UUID | None = None, dsn: str | None = None
 ) -> Iterator[PgConnection]:
+    active = _unit.get()
+    if active is not None:
+        try:
+            if (dsn or database_url()) != active.dsn or actor_id not in {None, active.actor_id}:
+                raise RuntimeError("database unit cannot switch actor or database")
+            yield active.connection
+        except BaseException:
+            active.failed = True
+            raise
+        return
     connection = psycopg2.connect(dsn or database_url(), application_name="tabletop-dm-kernel")
     connection.autocommit = False
     try:

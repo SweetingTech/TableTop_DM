@@ -87,6 +87,20 @@ def advanced(state: ControllerState) -> ControllerState:
     )
 
 
+def reassigned(state: ControllerState, controller_actor_id: uuid.UUID | None) -> ControllerState:
+    """Fence queued actions without rewriting immutable controller ownership/history."""
+    if controller_actor_id is not None and controller_actor_id != state.owner_actor_id:
+        raise ValueError("body runtime belongs to another character owner")
+    return state.model_copy(
+        update={
+            "epoch": state.epoch + 1,
+            "mode": "HUMAN" if controller_actor_id is not None else "PAUSED",
+            "failures": 0,
+            "last_error": None if controller_actor_id is not None else "seat_removed",
+        }
+    )
+
+
 def load_controller(cursor: Any, proposal: CommandProposal) -> ControllerState | None:
     if proposal.embodied_entity_id is None:
         return None
