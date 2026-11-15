@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -11,8 +12,29 @@ import pytest
 from kernel.application import SimulationApplication
 from kernel.contracts import CommandProposal
 from kernel.snapshots import SnapshotStore, artifact_path
+from tests.unit.kernel.test_character_binding_api import _app
 
 pytestmark = pytest.mark.unit
+
+
+def test_branch_api_reports_exact_snapshot_identity_for_equal_projection_hashes(
+    tmp_path, monkeypatch
+):
+    app = _app(monkeypatch, tmp_path)
+    simulation = app.extensions["simulation"]
+    ids = app.extensions["demo_ids"]
+    first = simulation.create_snapshot(ids["world_id"])
+    simulation.entities[(ids["branch_id"], ids["hero_id"])].secret_state["revision"] = "changed"
+    selected = simulation.create_snapshot(ids["world_id"])
+    assert selected.state_hash == first.state_hash and selected.snapshot_id != first.snapshot_id
+    trial, _ = simulation.create_trial(ids["world_id"], selected.snapshot_id, 761)
+    client = app.test_client()
+    client.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    response = client.get("/api/v2/branches", query_string={"world_id": str(ids["world_id"])})
+    assert response.status_code == 200
+    rows = {row["branch_id"]: row for row in response.get_json()}
+    assert rows[str(trial.branch_id)]["base_snapshot_id"] == str(selected.snapshot_id)
+    assert rows[str(ids["branch_id"])]["base_snapshot_id"] is None
 
 
 def nested_world(tmp_path):
