@@ -1708,7 +1708,7 @@ def create_app(
     def dm_game_member(game_id: uuid.UUID):
         body = GameMemberRequest.model_validate(request.get_json(force=True))
         account_actor = current_user()
-        starting_mana = 0
+        starting_resources = StartingResources()
         if body.character_id is not None and body.membership_role == "PLAYER":
             selected = next(
                 (
@@ -1719,7 +1719,7 @@ def create_app(
                 None,
             )
             if selected is not None:
-                starting_mana = StartingResources(mana=selected.sheet.get("mana", 0)).mana
+                starting_resources = StartingResources.model_validate(selected.sheet)
         game = portal.set_member(account_actor, game_id, body.model_dump(mode="json"))
         if body.character_id is not None and body.membership_role == "PLAYER":
             character = portal.repository.get_character(body.character_id)
@@ -1760,7 +1760,8 @@ def create_app(
                                 "hp": character.current_hit_points,
                                 "max_hp": character.maximum_hit_points,
                                 "armor": character.armor_class,
-                                "mana": starting_mana,
+                                "mana": starting_resources.mana,
+                                "known_spells": list(starting_resources.known_spells),
                                 "speed": character.speed,
                             },
                             "controller_actor_id": member_account.actor_id,

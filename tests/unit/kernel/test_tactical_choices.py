@@ -5,6 +5,7 @@ import uuid
 import pytest
 from pydantic import BaseModel
 
+from domains.tabletop.rules import DEFAULT_SPELLS, SpellId
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandResult, StateDelta
 from tests.unit.kernel.test_character_binding_api import _app
@@ -17,9 +18,10 @@ class Resources(BaseModel):
     entity_id: uuid.UUID
     hp: int = 5
     mana: int = 8
+    known_spells: tuple[SpellId, ...] = DEFAULT_SPELLS
 
 
-def resources(app, admin, base, entity, hp=5, mana=8):
+def resources(app, admin, base, entity, hp=5, mana=8, known_spells=DEFAULT_SPELLS):
     """Test-only typed setup, exercising the real kernel transaction in both stores."""
 
     def change(proposal, state):
@@ -31,7 +33,13 @@ def resources(app, admin, base, entity, hp=5, mana=8):
                     projection="tabletop.entities",
                     operation="MERGE",
                     entity_id=request.entity_id,
-                    values={"hp": request.hp, "max_hp": 12, "mana": request.mana, "armor": 10},
+                    values={
+                        "hp": request.hp,
+                        "max_hp": 12,
+                        "mana": request.mana,
+                        "armor": 10,
+                        "known_spells": list(request.known_spells),
+                    },
                 ),
             ),
         )
@@ -52,7 +60,12 @@ def resources(app, admin, base, entity, hp=5, mana=8):
         json={
             **base,
             "command_type": "test.resources",
-            "parameters": {"entity_id": entity, "hp": hp, "mana": mana},
+            "parameters": {
+                "entity_id": entity,
+                "hp": hp,
+                "mana": mana,
+                "known_spells": list(known_spells),
+            },
             "idempotency_key": "resources-" + uuid.uuid4().hex,
         },
     )
@@ -212,6 +225,97 @@ def test_explicit_card_mana_is_validated_before_roster_mutation(monkeypatch, tmp
         )
         state = app.extensions["simulation"].states.get(uuid.UUID(base["branch_id"]))
         assert state.projections["tabletop.entities"][saved["entity_id"]]["mana"] == mana
+    else:
+        games = admin.get("/api/v2/games").get_json()["items"]
+        assert not next(row for row in games if row["game_id"] == game["game_id"])["members"]
+
+
+@pytest.mark.parametrize("learned", [(), ("MEND",)])
+def test_body_spell_knowledge_limits_choices_and_is_private_to_self(monkeypatch, tmp_path, learned):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = setup_scene(app)
+    resources(app, admin, base, card["entity_id"], known_spells=learned)
+    provoke(admin, base, target, card, "spell-knowledge-threat")
+    context = player.get(path + "/context", query_string={"run_id": run}).get_json()
+    spell_ids = {
+        row["parameters"]["spell_id"]
+        for row in context["action_candidates"]
+        if row["command_type"] == "tabletop.magic.invoke"
+    }
+    assert spell_ids == set(learned)
+    scene = player.get(path + "/scene").get_json()
+    for row in scene["perceived_entities"]:
+        assert row["known_spell_ids"] == (
+            list(learned) if row["entity_id"] == card["entity_id"] else None
+        )
+
+
+@pytest.mark.parametrize(
+    "learned, valid", [(["MEND"], True), (["UNKNOWN"], False), ("MEND", False)]
+)
+def test_card_spell_knowledge_is_validated_before_roster_mutation(
+    monkeypatch, tmp_path, learned, valid
+):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, _, _, _, base = setup_scene(app)
+    created = player.post(
+        "/api/v2/player/characters",
+        json={
+            "world_id": base["world_id"],
+            "name": "Apprentice",
+            "sheet": {"mana": 8, "known_spells": learned},
+        },
+    )
+    assert created.status_code == 201
+    new_card = created.get_json()
+    game = admin.post(
+        "/api/v2/dm/games", json={"world_id": base["world_id"], "name": "Apprentice game"}
+    ).get_json()
+    response = admin.put(
+        f"/api/v2/dm/games/{game['game_id']}/members",
+        json={
+            "user_id": card["owner_user_id"],
+            "character_id": new_card["character_id"],
+            "membership_role": "PLAYER",
+        },
+    )
+    assert response.status_code == (200 if valid else 400), response.get_json()
+    if valid:
+        saved = next(
+            c
+            for c in player.get("/api/v2/player/characters").get_json()["items"]
+            if c["character_id"] == new_card["character_id"]
+        )
+        body = (
+            app.extensions["simulation"]
+            .states.get(uuid.UUID(base["branch_id"]))
+            .projections["tabletop.entities"][saved["entity_id"]]
+        )
+        assert body["known_spells"] == learned
+        assert (
+            player.patch(
+                f"/api/v2/player/characters/{new_card['character_id']}",
+                json={"sheet": {"mana": 999, "known_spells": ["ARCANE_BOLT", "MEND"]}},
+            ).status_code
+            == 200
+        )
+        assert (
+            admin.put(
+                f"/api/v2/dm/games/{game['game_id']}/members",
+                json={
+                    "user_id": card["owner_user_id"],
+                    "character_id": new_card["character_id"],
+                    "membership_role": "PLAYER",
+                },
+            ).status_code
+            == 200
+        )
+        body = (
+            app.extensions["simulation"]
+            .states.get(uuid.UUID(base["branch_id"]))
+            .projections["tabletop.entities"][saved["entity_id"]]
+        )
+        assert body["known_spells"] == learned and body["mana"] == 8
     else:
         games = admin.get("/api/v2/games").get_json()["items"]
         assert not next(row for row in games if row["game_id"] == game["game_id"])["members"]

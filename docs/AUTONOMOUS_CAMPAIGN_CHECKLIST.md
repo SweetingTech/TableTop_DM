@@ -150,8 +150,14 @@ as composition glue; reusable execution services must also work from workers and
 
 - [ ] C1 — Replace caller-selected attack bonuses/dice with rules resolved from the body, weapon,
   abilities, conditions, and costs in [combat](../domains/tabletop/combat/__init__.py).
-- [ ] C2 — Resolve learned spells, power, mana, range, targets, and eligibility from versioned definitions
+  Partial: target-only contract 2.0.0 uses registered owned weapons, body bonuses, reach, sight,
+  zone, incapacity and poison/fear disadvantage. Full action costs/timing remain C3.
+- [x] C2 — Resolve learned spells, power, mana, range, targets, and eligibility from versioned definitions
   in [magic](../domains/tabletop/magic/__init__.py); remove player authority to choose arbitrary power/cost.
+  Both cast/invoke use registered ARCANE_BOLT/MEND rules and body-owned known spells/mana;
+  initial card validation precedes roster writes, and later card edits cannot refill/teach bodies.
+  Broader spells/loadouts remain future content. This implementation's CI, merge and independent
+  task acceptance are separate gates; section C and campaign milestones remain incomplete.
 - [ ] C3 — Define action duration, movement budget, initiative/concurrent conflicts, resource consumption,
   condition/blessing expiry, incapacity, defeat, death, healing, rest, and recovery on the shared clock.
 - [ ] C4 — Allocate seeds by distinct logical action from a recorded run seed/sequence. Retries reuse

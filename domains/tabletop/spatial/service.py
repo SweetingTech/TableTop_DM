@@ -6,6 +6,7 @@ from datetime import datetime
 from cognition.context import validated_observations
 from cognition.models import Observation
 from cognition.store import MindStore
+from domains.tabletop.rules import attack_profile, known_spells
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.spatial.scene import (
     ObservationPresentation,
@@ -117,9 +118,10 @@ def build_perceived_scene(
                 if entity_id == observer_entity_id
                 else None,
                 guarded=bool(current.get("guarded")) if inspected else None,
-                attack_reach=max(1, int(current.get("reach", 1)))
+                attack_reach=attack_profile(current).reach
                 if entity_id == observer_entity_id
                 else None,
+                known_spell_ids=known_spells(current) if entity_id == observer_entity_id else None,
                 activity=VisibleActivity(
                     kind=activity["kind"],
                     status=activity["status"],

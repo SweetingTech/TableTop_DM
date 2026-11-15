@@ -3,8 +3,10 @@ from __future__ import annotations
 import random
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from domains.tabletop.rules import RULES_VERSION, attack_profile, capable
+from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
@@ -12,14 +14,13 @@ from kernel.state import BranchState
 
 
 class AttackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     target_id: uuid.UUID
-    attack_bonus: int = Field(default=0, ge=-10, le=30)
-    damage_dice: int = Field(default=1, ge=1, le=20)
-    damage_sides: int = Field(default=6, ge=2, le=100)
-    damage_bonus: int = Field(default=0, ge=-10, le=100)
 
 
 class AttackResult(BaseModel):
+    rules_version: str = RULES_VERSION
+    weapon_id: str = "UNARMED"
     attacker_id: uuid.UUID
     target_id: uuid.UUID
     attack_roll: int = Field(ge=1, le=20)
@@ -39,32 +40,52 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
     target = entities.get(str(request.target_id))
     if attacker is None or target is None:
         raise ValueError("attacker and target must exist")
-    distance = max(
-        abs(int(attacker.get("x", 0)) - int(target.get("x", 0))),
-        abs(int(attacker.get("y", 0)) - int(target.get("y", 0))),
+    if attacker_id == request.target_id:
+        raise ValueError("a melee attack requires another target")
+    profile = attack_profile(attacker)
+    positions = state.projections.get("tabletop.spatial.positions", {})
+    origin, destination = (
+        positions.get(str(attacker_id), attacker),
+        positions.get(str(request.target_id), target),
     )
-    if distance > int(attacker.get("reach", 1)):
-        raise ValueError("target is out of reach")
-    if int(attacker.get("hp", 0)) <= 0 or int(target.get("hp", 0)) <= 0:
+    distance = max(
+        abs(int(origin.get("x", 0)) - int(destination.get("x", 0))),
+        abs(int(origin.get("y", 0)) - int(destination.get("y", 0))),
+    )
+    if (
+        distance > profile.reach
+        or origin.get("zone_id", "world") != destination.get("zone_id", "world")
+        or request.target_id
+        not in GridSpatialPerceptionResolver().visible_entities(state, attacker_id)
+    ):
+        raise ValueError("target is not in visible melee reach")
+    if not capable(attacker) or int(target.get("hp", 0)) <= 0:
         raise ValueError("incapacitated entities cannot attack or be attacked")
     rng = random.Random(proposal.seed)
     attack_roll = rng.randint(1, 20)
+    if profile.disadvantage:
+        attack_roll = min(attack_roll, rng.randint(1, 20))
     hit = attack_roll == 20 or (
         attack_roll != 1
-        and attack_roll + request.attack_bonus
+        and attack_roll + profile.attack_bonus
         >= int(target.get("armor", 10)) + (2 if target.get("guarded") else 0)
     )
     damage = 0
     if hit:
         damage = max(
             0,
-            sum(rng.randint(1, request.damage_sides) for _ in range(request.damage_dice))
-            + request.damage_bonus,
+            sum(
+                rng.randint(1, profile.weapon.damage_sides)
+                for _ in range(profile.weapon.damage_dice)
+            )
+            + profile.damage_bonus,
         )
     hp_before = int(target.get("hp", 0))
     hp_after = max(0, hp_before - damage)
     return CommandResult(
         result={
+            "rules_version": RULES_VERSION,
+            "weapon_id": profile.weapon.weapon_id,
             "attacker_id": str(attacker_id),
             "target_id": str(request.target_id),
             "attack_roll": attack_roll,
@@ -105,6 +126,7 @@ def attack_emission(
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.combat.attack",
+        version="2.0.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=attack,

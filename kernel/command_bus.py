@@ -45,6 +45,20 @@ class CommandReceipt:
     decision_evidence: dict[str, Any] | None = None
 
 
+def normalized_proposal(
+    proposal: CommandProposal, definition: CommandDefinition
+) -> CommandProposal:
+    if definition.request_model is None:
+        return proposal
+    try:
+        parameters = definition.request_model.model_validate(proposal.parameters).model_dump(
+            mode="python"
+        )
+    except ValidationError as exc:
+        raise ValueError(f"Invalid {proposal.command_type} parameters") from exc
+    return proposal.model_copy(update={"parameters": parameters})
+
+
 class CommandBus:
     """Deny-by-default command authority and deterministic mutation boundary."""
 
@@ -91,19 +105,14 @@ class CommandBus:
             and proposal.embodied_entity_id not in actor.controlled_entity_ids
         ):
             raise AuthorizationDenied("Actor does not control the embodied entity")
-        if definition.request_model is not None:
-            try:
-                normalized = definition.request_model.model_validate(
-                    proposal.parameters
-                ).model_dump(mode="python")
-            except ValidationError as exc:
-                raise ValueError(f"Invalid {proposal.command_type} parameters") from exc
-            proposal = proposal.model_copy(update={"parameters": normalized})
+        if self.states.get(proposal.branch_id).world_id != proposal.world_id:
+            raise AuthorizationDenied("Branch does not belong to proposal world")
         key = (proposal.run_id, proposal.actor_id, proposal.idempotency_key)
 
         def run(state: BranchState) -> CommandReceipt:
+            command = normalized_proposal(proposal, definition)
             if self.control_validator is not None:
-                self.control_validator(proposal)
+                self.control_validator(command)
             if state.world_id != proposal.world_id:
                 raise AuthorizationDenied("Branch does not belong to proposal world")
             if state.kind not in definition.allowed_branch_kinds:
@@ -116,23 +125,23 @@ class CommandBus:
             if branch_capability not in actor.capabilities:
                 raise AuthorizationDenied(f"Missing capabilities: ['{branch_capability}']")
             before = state.working_copy()
-            evidence = self.evidence_builder(proposal, before) if self.evidence_builder else None
-            result = definition.handler(proposal, state)
+            evidence = self.evidence_builder(command, before) if self.evidence_builder else None
+            result = definition.handler(command, state)
             if definition.result_model is not None:
                 definition.result_model.model_validate(result.result)
             if self.result_validator is not None:
-                self.result_validator(proposal, result)
+                self.result_validator(command, result)
             for delta in result.deltas:
                 state.apply(delta)
             materialized = self.event_factory.materialize(
-                proposal=proposal,
+                proposal=command,
                 result=result,
                 before=before,
                 after=state,
                 emission_builder=definition.emission_builder,
             )
             if self.control_committer is not None:
-                self.control_committer(proposal)
+                self.control_committer(command)
             return CommandReceipt(
                 result=result,
                 event=materialized.event,

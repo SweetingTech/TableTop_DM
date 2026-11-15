@@ -241,7 +241,14 @@ def physical_relationship_game(app, admin=None, scope=None):
                 "name": name,
                 "entity_type": "NPC",
                 "controller_actor_id": owner,
-                "public_state": {"x": 5, "y": y, "hp": 20, "max_hp": 20, "armor": 10},
+                "public_state": {
+                    "x": 5,
+                    "y": y,
+                    "hp": 20,
+                    "max_hp": 20,
+                    "armor": 10,
+                    "attack_bonus": 30,
+                },
             },
         )
         assert response.status_code == 201, response.get_json()
@@ -306,7 +313,7 @@ def test_attack_reaction_requires_the_actual_perceived_attacker_and_victim(tmp_p
             "embodied_entity_id": target,
             "seed": 1,
             "idempotency_key": "actual-attack",
-            "parameters": {"target_id": observer, "attack_bonus": 30, "damage_sides": 2},
+            "parameters": {"target_id": observer},
         },
     )
     assert event.status_code == 200, event.get_json()

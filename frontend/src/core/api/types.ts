@@ -72,6 +72,7 @@ export type PerceivedScene = {
     health: number | null;
     max_health: number | null;
     status: string | null;
+    known_spell_ids?: string[] | null;
     activity?: EntitySummary["activity"];
   }>;
   recent_observations: Array<{

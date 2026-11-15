@@ -1,5 +1,11 @@
 # Operations, storage, migrations, and security
 
+Combat/cast/invoke request contracts are now 2.0.0: use target-only melee and registered spell ID
+plus target. Deploy the matching compiled console bundle with the API. Committed historical keys
+retain their original receipts; regenerate uncommitted advice containing retired dice/bonus or
+power/cost fields. Initial spell knowledge comes from the validated card sheet; live body state
+owns subsequent resources/knowledge. This change reuses schema 012 and existing workers/stores.
+
 Character knowledge retrieval is read-only and reuses schema 012 plus existing actor-scoped mind
 and binding stores. No service, credential or additional index is required. Keep the perception
 projector running: context/retrieval/proposals return `character_context_pending` (409) while

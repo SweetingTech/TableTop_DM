@@ -39,7 +39,7 @@ def execute(fixture, command, parameters, key, *, listener=False):
 def prepared():
     fixture = _world()
     for body in fixture["state"].projections["tabletop.entities"].values():
-        body.update({"hp": 12, "max_hp": 12, "armor": 10, "mana": 4})
+        body.update({"hp": 12, "max_hp": 12, "armor": 10, "mana": 4, "attack_bonus": 5})
     return fixture
 
 
@@ -48,7 +48,7 @@ def test_guard_adds_two_armor_for_one_attack_and_does_not_stack():
     execute(fixture, "tabletop.combat.guard", {}, "guard", listener=True)
     with pytest.raises(ValueError):
         execute(fixture, "tabletop.combat.guard", {}, "stack", listener=True)
-    parameters = {"target_id": str(fixture["listener"]), "attack_bonus": 5}
+    parameters = {"target_id": str(fixture["listener"])}
     guarded = execute(fixture, "tabletop.combat.attack", parameters, "guarded")
     assert guarded.event.payload["attack_roll"] == 5 and not guarded.event.payload["hit"]
     ordinary = execute(fixture, "tabletop.combat.attack", parameters, "ordinary")
@@ -62,7 +62,7 @@ def test_legacy_attack_preserves_unguarded_projection_shape():
     receipt = execute(
         fixture,
         "tabletop.combat.attack",
-        {"target_id": str(fixture["listener"]), "attack_bonus": 5},
+        {"target_id": str(fixture["listener"])},
         "legacy-attack",
     )
     hp_after = receipt.event.payload["hp_after"]

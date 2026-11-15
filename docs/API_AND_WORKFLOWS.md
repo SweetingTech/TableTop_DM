@@ -702,23 +702,34 @@ phrasing, spell selection, narrative planning and complete timeline restoration 
 
 ## Generated dialogue and tactical choices
 
-Context `character-context-1.2.0` adds the body's own mana/reach and inspected guard stance. Other
-bodies' mana/reach stay hidden. Catalog `tabletop-character-actions-1.2.0` and proposal policy
-`character-proposal-policy-1.3.0` add these typed attempts:
+Context `character-context-1.4.0` includes the body's own mana/reach/learned spell IDs and inspected
+guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
+`tabletop-character-actions-1.3.0` and proposal policy `character-proposal-policy-1.4.0` offer:
 
 - `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next
   physical attack; that attempt consumes the guard, including a miss. Guards do not stack.
-- `tabletop.magic.invoke` takes only `spell_id` and `target_id`. ARCANE_BOLT costs two mana,
+- `tabletop.combat.attack` takes only `target_id`. Rules `tabletop-action-rules-1.0.0` resolve
+  UNARMED/SHORTSWORD (1d6, reach one) or an owned SPEAR (1d8, reach two), body attack/damage bonuses,
+  and poisoned/frightened disadvantage. Legacy unarmed body reach remains supported. A living,
+  awake, capable attacker needs a different visible, living target within the same zone/reach.
+  Caller bonuses/dice are rejected. Action-seed allocation and combat timing remain planned.
+- `tabletop.magic.invoke` and `tabletop.magic.cast` take only `spell_id` and `target_id`.
+  ARCANE_BOLT costs two mana,
   deals three damage and reaches six grid steps. MEND costs two mana, heals four up to maximum
   health and reaches two steps. Both require current same-zone visible capable targets. Callers
-  cannot supply power, cost, range or extra fields. There is no class/protagonist gate.
+  cannot supply power, cost, range or extra fields. The caster must have learned the registered
+  spell; an explicit empty `known_spells` list permits none. Legacy bodies without that field and
+  new cards that omit it retain both starter spells. There is no class/protagonist gate.
 - Autonomy offers damaging spells only against perceived attackers, MEND for its own wounds,
   and guard in threat situations. Injury favors healing/withdrawal; range, wounds, demonstrated
   choices and persona/card tendencies influence priority. All execution rechecks live state.
 
-The console accepts `/guard` and `/invoke ARCANE_BOLT|MEND <perceived target name or id>`.
-New roster-spawned bodies read optional nonnegative starting mana from `character.sheet.mana`,
-default zero. Validation precedes roster mutation. Card changes do not refill a running body.
+The console accepts `/guard`, `/invoke ARCANE_BOLT|MEND <perceived target name or id>` and the same
+`/cast` syntax. The old arbitrary spell/power/cost/effect syntax is rejected. New roster-spawned
+bodies validate optional nonnegative `character.sheet.mana` (default zero) and registered
+`character.sheet.known_spells` before roster mutation. Later card edits and roster retries do not
+refill resources or teach a running body spells. Old committed requests return their original
+scoped receipt even if they contain retired parameters; new requests must use contract 2.0.0.
 Choice version `speech-combat-behavior-1.1.0` and migration 010 extend guard/spell history while
 retaining old 1.0.0 evidence and frozen profiles. Ally strategy, resurrection, broader spell and
 loadout systems, ceasefires and full tactical planning remain open.

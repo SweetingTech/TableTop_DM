@@ -21,6 +21,12 @@ scrolls out of view. Operator directions cannot emit sensory evidence, and broad
 does not grant access to another body's memories. Generated replies use the same scoped sources.
 See [character knowledge](docs/API_AND_WORKFLOWS.md#character-knowledge).
 
+Melee proposals choose a target; the kernel resolves owned equipment, body bonuses, reach,
+visibility and conditions. Both spell entry points use registered ARCANE_BOLT/MEND definitions
+and the body's learned spells. `/cast MEND <target>` and `/invoke MEND <target>` share fixed power,
+cost and eligibility. New requests cannot supply dice, bonuses, spell power or mana cost.
+Recorded action-seed allocation and the full combat clock remain checklist work.
+
 Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
 and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
 perception-scoped movement, speech and tactical catalog. The proposal endpoint itself
