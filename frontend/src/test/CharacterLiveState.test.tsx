@@ -81,6 +81,22 @@ describe("canonical character resources", () => {
     await act(async () => resolve(live()));
   });
 
+  it("resets unbound editors on changed server values and preserves drafts on unchanged polling", async () => {
+    vi.spyOn(api, "getCharacterState").mockResolvedValue({ character_id: "a", card_version: "v", source: "AUTHORED", body: null });
+    const save = vi.fn().mockResolvedValue(undefined);
+    const unbound = { ...card, entity_id: null };
+    const { rerender } = render(<CharacterStatePanel character={unbound} onUpdate={save} />);
+    await screen.findByRole("button", { name: "Save status" });
+    fireEvent.change(screen.getByLabelText("Current hit points"), { target: { value: "3" } });
+    await userEvent.click(screen.getByRole("button", { name: "Refresh character state" }));
+    await screen.findByRole("button", { name: "Save status" });
+    expect(screen.getByLabelText("Current hit points")).toHaveValue(3);
+    rerender(<CharacterStatePanel character={{ ...unbound, current_hit_points: 7, status: "MISSING" }} onUpdate={save} />);
+    expect(screen.getByLabelText("Current hit points")).toHaveValue(7);
+    await userEvent.click(screen.getByRole("button", { name: "Save status" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ current_hit_points: 7, status: "MISSING" }));
+  });
+
   it("rejects a malformed bound response instead of falling back to authored health", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 200, ok: true, json: async () => ({ character_id: "a", source: "KERNEL" }) }));
     await expect(api.getCharacterState("a")).rejects.toThrow("Invalid character state");

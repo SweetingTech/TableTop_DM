@@ -40,7 +40,8 @@ export function CharacterStatePanel({ character, onUpdate }: {
       </div> : null}
     </> : null}
     <div hidden={!authored}>
-      <StartingResources character={character} onUpdate={onUpdate} />
+      <StartingResources key={[character.character_id, character.status, character.current_hit_points,
+        character.maximum_hit_points].join(":")} character={character} onUpdate={onUpdate} />
     </div>
   </section>;
 }
