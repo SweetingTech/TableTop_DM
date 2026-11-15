@@ -844,10 +844,19 @@ class TabletopPortalService:
     def set_member(
         self, actor: UserAccount, game_id: uuid.UUID, payload: dict[str, Any]
     ) -> HostedGame:
+        game, member, _ = self.prepare_member(actor, game_id, payload)
+        self.repository.set_member(game_id, member)
+        return self.repository.get_game(game_id) or game
+
+    def prepare_member(
+        self, actor: UserAccount, game_id: uuid.UUID, payload: dict[str, Any]
+    ) -> tuple[HostedGame, GameMember, CharacterRecord | None]:
+        """Validate a prospective seat without publishing a partially bound character."""
         game = self._hosted(actor, game_id)
+        IdentityService.require_world_role(actor, game.world_id, "DM")
         user_id = uuid.UUID(str(payload["user_id"]))
         account = self.identities.get_account(user_id)
-        if account is None:
+        if account is None or not account.is_active:
             raise KeyError(user_id)
         membership_role = str(payload.get("membership_role", "PLAYER")).upper()
         required = "DM" if membership_role == "CO_DM" else "PLAYER"
@@ -864,6 +873,7 @@ class TabletopPortalService:
             raise ValueError("assigned character must belong to this world")
         if character and membership_role != "PLAYER":
             raise ValueError("only player memberships can have an assigned character")
+        previous = next((row for row in game.members if row.user_id == user_id), None)
         member = GameMember(
             user_id=user_id,
             username=account.username,
@@ -872,12 +882,15 @@ class TabletopPortalService:
             character_name=character.name if character else None,
             membership_role=membership_role,
             status=str(payload.get("status", "INVITED")).upper(),
-            joined_at=datetime.now().astimezone()
+            joined_at=(
+                previous.joined_at
+                if previous and previous.joined_at
+                else datetime.now().astimezone()
+            )
             if str(payload.get("status", "INVITED")).upper() in {"JOINED", "READY"}
             else None,
         )
-        self.repository.set_member(game_id, member)
-        return self.repository.get_game(game_id) or game
+        return game, member, character
 
     def remove_member(self, actor: UserAccount, game_id: uuid.UUID, user_id: uuid.UUID) -> None:
         self._hosted(actor, game_id)

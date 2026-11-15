@@ -17,6 +17,7 @@ def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path
     sim = app.extensions["simulation"]
     ids = app.extensions["demo_ids"]
     events = len(sim.events)
+    initial_event_ids = set(sim.events)
     context = player.get(path + "/context", query_string={"run_id": run}).get_json()
     request = {
         "run_id": run,
@@ -65,7 +66,8 @@ def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path
     assert player.post("/api/v2/commands", json={**body, "control_epoch": 2}).status_code == 200
     assert not any(
         "control" in event.event_type or "handoff" in event.event_type
-        for event in sim.events.values()
+        for event_id, event in sim.events.items()
+        if event_id not in initial_event_ids
     )
 
 

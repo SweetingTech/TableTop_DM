@@ -14,7 +14,8 @@ from domains.tabletop import register_tabletop
 from kernel.branching import BranchManager, promotion_definition
 from kernel.command_bus import CommandBus, CommandReceipt
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, CommandResult, RunKind
-from kernel.control import ControllerState, advanced, validate_controller
+from kernel.control import ControllerState, advanced, reassigned, validate_controller
+from kernel.database import after_commit
 from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayEngine, ReplayRecord
@@ -242,7 +243,7 @@ class SimulationApplication:
                 for row in tuple(self.controller_states.values())
                 if row.world_id == world_id
                 and (
-                    row.owner_actor_id == actor_id
+                    (row.owner_actor_id == actor_id and row.last_error != "seat_removed")
                     or (row.executor_actor_id == actor_id and row.mode == "AUTONOMOUS")
                 )
             }
@@ -352,10 +353,17 @@ class SimulationApplication:
             }
         return entity
 
-    def submit(self, proposal: CommandProposal) -> CommandReceipt:
+    def submit(
+        self,
+        proposal: CommandProposal,
+        *,
+        before_reference_commit: Callable[[], None] | None = None,
+    ) -> CommandReceipt:
         if self.durable_repository is None:
             with self._reference_command_lock:
-                return self._submit(proposal)
+                return self._submit(proposal, before_reference_commit)
+        if before_reference_commit is not None:
+            raise ValueError("reference participant cannot be used with durable storage")
         return self._submit(proposal)
 
     def validate_population_bindings(
@@ -363,6 +371,21 @@ class SimulationApplication:
     ) -> None:
         from population.runtime import source_hash
 
+        for mutation in result.controller_mutations:
+            entity = self.entities.get((proposal.branch_id, mutation.entity_id))
+            if entity is None or entity.world_id != proposal.world_id:
+                raise ValueError("controlled body is unavailable in this world and branch")
+            if mutation.controller_actor_id is not None:
+                target = self.authority(proposal.world_id, mutation.controller_actor_id)
+                if "entity.act" not in target.capabilities:
+                    raise ValueError("controller lacks active authority in this world")
+            for row in self.controller_states.values():
+                if (row.world_id, row.branch_id, row.entity_id) == (
+                    proposal.world_id,
+                    proposal.branch_id,
+                    mutation.entity_id,
+                ):
+                    reassigned(row, mutation.controller_actor_id)
         for binding in result.population_bindings:
             if self.population_source_reader is None:
                 raise ValueError("population source reader is not configured")
@@ -448,7 +471,9 @@ class SimulationApplication:
         with self._reference_command_lock:
             return self.states.synchronized(reader)
 
-    def _submit(self, proposal: CommandProposal) -> CommandReceipt:
+    def _submit(
+        self, proposal: CommandProposal, before_reference_commit: Callable[[], None] | None = None
+    ) -> CommandReceipt:
         branch = self.states.get(proposal.branch_id)
         if branch.world_id != proposal.world_id:
             raise ValueError("proposal branch does not belong to world")
@@ -473,11 +498,19 @@ class SimulationApplication:
                 manifest = self.create_branch_snapshot(proposal.branch_id)
                 self.snapshot_persister(manifest, state.version)
         if self.durable_repository is None:
-            receipt = self.bus.execute(proposal, actor)
+            receipt = self.bus.execute(proposal, actor, before_reference_commit)
         else:
             receipt = self.durable_repository.execute(
                 proposal, actor, self.bus.definition(proposal.command_type)
             )
+            if after_commit(lambda: self._publish_receipt(proposal, receipt)):
+                return receipt
+        return self._publish_receipt(proposal, receipt)
+
+    def _publish_receipt(
+        self, proposal: CommandProposal, receipt: CommandReceipt
+    ) -> CommandReceipt:
+        if self.durable_repository is not None:
             if self.projection_loader is None:
                 raise RuntimeError("durable projection loader is not configured")
             version, projections = self.projection_loader(proposal.world_id, proposal.branch_id)
@@ -486,6 +519,31 @@ class SimulationApplication:
             committed.version = version
         if receipt.event.event_id not in self.events:
             if receipt.result.accepted:
+                for control_mutation in receipt.result.controller_mutations:
+                    key = (proposal.branch_id, control_mutation.entity_id)
+                    entity = self.entities[key]
+                    self.entities[key] = entity.model_copy(
+                        update={"controller_actor_id": control_mutation.controller_actor_id}
+                    )
+                    for authority_key, authority in tuple(self.world_authorities.items()):
+                        if authority_key[0] == proposal.world_id:
+                            controlled = authority.controlled_entity_ids - {
+                                control_mutation.entity_id
+                            }
+                            if authority_key[1] == control_mutation.controller_actor_id:
+                                controlled = controlled | {control_mutation.entity_id}
+                            self.world_authorities[authority_key] = authority.model_copy(
+                                update={"controlled_entity_ids": frozenset(controlled)}
+                            )
+                    for scope, row in tuple(self.controller_states.items()):
+                        if (row.world_id, row.branch_id, row.entity_id) == (
+                            proposal.world_id,
+                            proposal.branch_id,
+                            control_mutation.entity_id,
+                        ):
+                            self.controller_states[scope] = reassigned(
+                                row, control_mutation.controller_actor_id
+                            )
                 for mutation in receipt.result.entity_mutations:
                     key = (proposal.branch_id, mutation.entity_id)
                     expected = EntityRecord(

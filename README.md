@@ -4,6 +4,11 @@ TableTop DM is a local-first tabletop platform built on a deterministic simulati
 supports authenticated Administrator, Dungeon Master, and Player workspaces alongside persistent
 world state, synthetic personas, population simulation, and isolated scenario evaluation.
 
+Roster assignments prepare an uncontrolled body and pinned character binding before publishing
+the seat and human control together. Failed preparation can be retried. Removing the last seat
+keeps the physical character and its history, revokes human control and pauses its runner; it
+does not revoke the account's world role. Apply migration 013 before starting this version.
+
 With a world clock configured, each successful controlled physical action reserves that body's next
 available simulated time. Combat, spells and other physical actions take six seconds. Speech and
 quest bookkeeping do not reserve physical action time. Camera changes are presentation only and
@@ -65,6 +70,13 @@ and perception-scoped experience. The proposal endpoint uses local deterministic
 perception-scoped movement, speech and tactical catalog. The proposal endpoint itself
 does not execute actions, change a human assignment, or run a campaign.
 See [character proposals](docs/API_AND_WORKFLOWS.md#trusted-character-proposals).
+
+The console refreshes authorized scenes every 2.5 seconds while visible and resynchronizes on
+reconnect or focus. It ignores obsolete/older responses, preserves drafts during background
+refresh, and clears local state when choosing another character. Interrupted reads are marked
+stale; actions wait for synchronization and projected experience. Unavailable live reads never
+become demo scenes. Maps use per-zone configuration and every perceived positioned entity.
+Unconfigured/out-of-bounds views use a coordinate grid instead of a fixed Harborport map.
 
 The Game Console now offers **Let character act**, **Pause autonomy**, and **Take control**.
 Explicit handoff starts a bounded local character policy through a dedicated executor;

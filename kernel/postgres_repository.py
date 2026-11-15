@@ -21,7 +21,14 @@ from kernel.contracts import (
     CommandResult,
     EventEnvelopeV2,
 )
-from kernel.control import advanced, load_controller, persist_controller, validate_controller
+from kernel.control import (
+    ControllerState,
+    advanced,
+    load_controller,
+    persist_controller,
+    reassigned,
+    validate_controller,
+)
 from kernel.database import transaction
 from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.event_factory import EventFactory
@@ -250,6 +257,7 @@ class PostgresCommandRepository:
                 for delta in result.deltas:
                     state.apply(delta)
                 self._apply_entity_mutations(cursor, proposal, result)
+                self._apply_controller_mutations(cursor, proposal, result)
                 next_version = state.version + 1
                 state_hash = state.state_hash
                 materialized = self.event_factory.materialize(
@@ -358,6 +366,43 @@ class PostgresCommandRepository:
                     state_hash=state_hash,
                     perceptions=materialized.perceptions,
                 )
+
+    @staticmethod
+    def _apply_controller_mutations(
+        cursor: Any, proposal: CommandProposal, result: CommandResult
+    ) -> None:
+        for mutation in result.controller_mutations:
+            if mutation.controller_actor_id is not None:
+                cursor.execute(
+                    "SELECT 1 FROM sim.actors a WHERE a.id=%s AND a.is_active AND EXISTS "
+                    "(SELECT 1 FROM sim.actor_capabilities c WHERE c.world_id=%s "
+                    "AND c.actor_id=a.id AND c.capability='entity.act')",
+                    (str(mutation.controller_actor_id), str(proposal.world_id)),
+                )
+                if cursor.fetchone() is None:
+                    raise ValueError("controller lacks active authority in this world")
+            cursor.execute(
+                "UPDATE sim.entities SET controller_actor_id=%s "
+                "WHERE (world_id,branch_id,id)=(%s,%s,%s)",
+                (
+                    str(mutation.controller_actor_id) if mutation.controller_actor_id else None,
+                    str(proposal.world_id),
+                    str(proposal.branch_id),
+                    str(mutation.entity_id),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("controlled body is unavailable in this world and branch")
+            cursor.execute(
+                "SELECT payload FROM cognition.controller_assignments "
+                "WHERE (world_id,branch_id,entity_id)=(%s,%s,%s) FOR UPDATE",
+                (str(proposal.world_id), str(proposal.branch_id), str(mutation.entity_id)),
+            )
+            for row in cursor.fetchall():
+                state = reassigned(
+                    ControllerState.model_validate(row["payload"]), mutation.controller_actor_id
+                )
+                persist_controller(cursor, state)
 
     @staticmethod
     def _apply_entity_mutations(

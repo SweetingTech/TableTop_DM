@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import uuid
 from collections.abc import Callable, Iterable
+from decimal import ROUND_HALF_UP, Decimal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -35,8 +36,11 @@ def require_projected_experience(
     grants: Iterable[PerceptionGrant],
     event_reader: EventReader,
     observation_exists: Callable[[uuid.UUID], bool],
+    recorded_observations: Iterable[Observation] = (),
+    stored_confidence_precision: bool = False,
 ) -> None:
     profile = PerceptionProfile(observer_entity_id=entity_id, observer_actor_id=actor_id)
+    recorded = tuple(recorded_observations) if stored_confidence_precision else ()
     for grant in grants:
         if (grant.world_id, grant.branch_id, grant.observer_entity_id) != (
             world_id,
@@ -53,6 +57,22 @@ def require_projected_experience(
             continue
         expected = PerceptionEngine().observe(event, profile, grant=grant)
         if expected is not None and not observation_exists(expected.observation_id):
+            # Historical PostgreSQL fields store four decimals, while immutable
+            # observation IDs used six. Preserve both the IDs and frozen audiences.
+            # Compatibility requires complete same-event/body/mask/time evidence.
+            if any(
+                row.source_event_id == event.event_id
+                and row.observer_entity_id == entity_id
+                and row.observed_at == event.created_at
+                and stable_hash(row.perceived_payload) == stable_hash(expected.perceived_payload)
+                and Decimal(str(row.confidence)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                == Decimal(str(expected.confidence)).quantize(
+                    Decimal("0.0001"), rounding=ROUND_HALF_UP
+                )
+                and observation_exists(row.observation_id)
+                for row in recorded
+            ):
+                continue
             raise CharacterContextPending(
                 "character observations are still updating; retry this request"
             )
