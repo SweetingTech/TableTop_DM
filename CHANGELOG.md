@@ -1,5 +1,10 @@
 # Changelog
 
+- Reject HP/status/max-HP/armor/speed changes through authored-card editing after embodiment,
+  including administrator requests, and prevent world retargeting through that path. Reject mixed
+  resource/identity updates atomically; preserve identity edits, unbound-card setup and existing
+  PATCH-null semantics. Live values remain owned by authorized kernel actions.
+
 - Add an owner/world/body-authorized canonical character-state read, with typed allowlisted
   resources, branch/version provenance and no-store success/error responses. Keep the authored
   card unchanged; distinguish unbound cards from unavailable bound bodies. Player-sheet wiring

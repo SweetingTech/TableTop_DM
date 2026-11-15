@@ -1,5 +1,12 @@
 # Testing
 
+Bound-resource ownership tests reject all five physical fields and world retargeting for owners
+and administrators, including mixed identity requests, without card or canonical writes. They
+preserve identity/unbound edits and PATCH-null behavior. Durable tests repeat after restart and
+compare card rows plus projection/command/event/outbox marks. Run
+`uv run python -m pytest tests/unit/kernel/test_character_resource_ownership.py` and the integration
+lane for `tests/integration/test_character_resource_ownership.py`.
+
 Character live-state tests cover actual healing and resource consumption, unchanged authored
 card/version, explicit unbound source, missing/cross-world/trial projection rejection, owner/world
 authorization, secret/unknown-field exclusion and no-store errors. Durable tests verify unchanged

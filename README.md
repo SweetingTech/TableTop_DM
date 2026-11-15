@@ -30,7 +30,9 @@ Owners can read a character's canonical body at
 `GET /api/v2/player/characters/<character_id>/live-state`. It returns current HP, status, mana,
 inventory and equipment with the canonical branch/version, separately from the authored card.
 Unbound cards report an authored source; missing or unauthorized bound bodies do not fall back
-to old card values. Player Dashboard wiring and bound-card editing controls are the next C5 slice.
+to old card values. Once a card has a body, card edits cannot change its HP, status, max HP,
+armor or speed, or retarget its world. Use authorized world actions for live changes. Identity
+editing and unbound-card setup remain available; Player Dashboard wiring is the next C5 slice.
 
 Melee proposals choose a target; the kernel resolves owned equipment, body bonuses, reach,
 visibility and conditions. Both spell entry points use registered ARCANE_BOLT/MEND definitions

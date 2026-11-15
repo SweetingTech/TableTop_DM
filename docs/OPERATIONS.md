@@ -1,5 +1,11 @@
 # Operations, storage, migrations, and security
 
+Older clients must stop sending physical resource/status edits through the card PATCH route for
+bound characters; such requests now fail400 before metadata/history writes. Do not backfill card
+HP from bodies or bypass the guard for administrators. World actions own live resources. No
+migration, role/capability change, service, configuration or provider setup is needed. The next
+Dashboard client slice will hide these bound-card editors and show the typed live projection.
+
 Canonical character-state reads reuse schema012 and current card/entity/control stores. No
 migration, index, service, model or configuration change is required. The endpoint hydrates a fresh
 durable snapshot and checks current ownership/world/body authority; restart does not require card
