@@ -303,3 +303,12 @@ also check sleeping sensory exclusion, immutable old audiences and immediate inj
 exposing private cooldowns in action receipts. The built-SPA journey
 shows nearby physical travel, sleep and social activity at desktop/mobile sizes without exposing
 future plans. Use the existing Playwright/Chromium fallback; no Browser plugin is installed.
+
+Daily planning tests live in `tests/unit/population/test_planning.py`,
+`tests/integration/test_population_planning.py` and `tests/e2e/test_population_planning_isolated.py`.
+They compare coarse/split daily choices, midnight quotas, rain shelter, goals interrupted by
+appointments, injury, displacement, missing food, fatigue during a commute and blocked alternatives.
+Durable tests inject ledger-boundary rollback, retry once, recreate the API, run two actual workers
+and restart mid-reaction, verify replay and role/world/scene privacy. The built-SPA journey observes
+shelter/rest and completed daily work on desktop/mobile without private goal IDs or planner traces.
+No provider or live application database is used.

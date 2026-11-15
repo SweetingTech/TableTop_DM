@@ -337,6 +337,16 @@ The broader workspace concept used to guide the role-specific surfaces is availa
 
 ### Embodied population and routines
 
+Optional `life.planning` introduces a finite daily intention menu. `population/planning.py`
+selects feasible goals from own bodily needs, configured destinations/priorities and current local
+physical conditions; it never reads another body's hidden cognition. Goals commit through the
+same world-clock handler, using the existing local movement helper and Activity execution.
+Private bounded day/goal counters measure fulfillment, not resources. Actual inventory, health,
+fatigue, work and position remain solely on the body. Fixed retry/day/need boundaries preserve
+coarse-versus-split behavior; viewer presence and population relevance do not select a different
+policy. Goal IDs/choices stay outside sensory projections. This is a physical routine planner,
+separate from the character context/cognition proposal pipeline and future detailed E3 actions.
+
 `population/runtime.py` connects the existing `PopulationLifecycle` to typed canonical commands.
 Each embodied member refers to exactly one existing body. Private branch-local member/history
 projections hold identity, lifecycle and selected mental metadata; the body's canonical projection

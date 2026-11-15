@@ -179,6 +179,15 @@ and typed API contracts are authoritative for interaction behavior.
 
 ## Population binding and continuous routines
 
+Daily planning uses the existing typed routine configuration and fenced clock command. Its
+bounded intention menu and private `planner` metadata are not additional authority. Actual goal
+time, route steps, needs, daily resets, choices and canonical effects commit atomically with the
+receipt; exact retries cannot fulfill an intention twice. No network/model callback runs under
+the clock lock. Goal selection reads own physical needs and approved local destinations, never
+arbitrary private mental state. Priority/distance/ID ordering, fixed retry boundaries and preserved
+partial phases make outcome independent of tick partitioning and human viewers. Midnight resets
+daily fulfillment only; it cannot refill inventory or erase body fatigue/health/work.
+
 `tabletop.population.bind` is a canonical-only command. Its internal binding instruction is excluded
 from public result JSON. Durable execution locks and verifies the source version/content hash in
 the same transaction as its projection, command, event and outbox. Migration 011 freezes that

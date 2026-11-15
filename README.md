@@ -35,7 +35,10 @@ boundaries; returning players see inspected activity/progress in the console. A 
 `world-runner` uses an explicitly granted agent, epoch/step fencing and the normal atomic kernel
 transaction. Configure pause, speed, stop boundary and downtime policy through typed commands;
 see [world time and offscreen activities](docs/API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
-Travel, consumption, population lifecycle coupling and automatic routines remain planned.
+Population binding, finite meals, daily sleep, local travel and recurring appointments now share
+that clock. Optional [daily planning](docs/API_AND_WORKFLOWS.md#daily-goal-planning) lets NPCs choose
+among prioritized work/rest goals with daily limits, seek shelter, recover from displacement or
+injury, and resume unfinished goals. No viewer or additional model provider is required.
 
 ## Product workspaces
 

@@ -1,5 +1,10 @@
 # Changelog
 
+- Add opt-in bounded daily goal planning: prioritized local work/rest intentions with daily quotas,
+  needs and appointments, physical shelter/recovery, blocked-route alternatives and interruption
+  recovery. Persist private choices and partial fulfillment through the existing atomic world clock;
+  midnight resets intentions without duplicating body resources. No new migration or provider.
+
 - Add opt-in home/work travel, daily sleep windows and joint recurring social obligations to the
   existing world clock. Preserve partial work and actual positions across interruptions and restart;
   blocked routes, injuries, absent partners and food shortages produce causal waits or missed meetings.

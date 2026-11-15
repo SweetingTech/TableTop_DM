@@ -958,6 +958,73 @@ pause/downtime policy, atomicity, idempotency and trial isolation remain in forc
 after 011 or additional service/provider is required. Detailed travel observations, tactical
 responses, motive-driven planning and full timeline correction remain separate checklist work.
 
+## Daily goal planning
+
+Add optional `planning` inside a routine's `life` configuration, replacing the routine with its
+current `expected_version` as usual. Existing life plans without this field retain their behavior.
+
+```json
+{
+  "planning": {
+    "retry_seconds": 300,
+    "goals": [
+      {
+        "goal_id": "garden",
+        "kind": "WEED",
+        "place": {"x": 1, "y": 0},
+        "seconds_per_day": 14400,
+        "priority": 80
+      },
+      {
+        "goal_id": "reading",
+        "kind": "REST",
+        "place": {"x": 3, "y": 0},
+        "seconds_per_day": 1800,
+        "priority": 20
+      }
+    ]
+  }
+}
+```
+
+This is the nested `planning` value, not a standalone command. Configure 1–8 unique lowercase
+goal IDs (letters, digits and underscores; start with a letter, at most 40 characters), WEED or
+REST kinds, local same-elevation destinations, daily durations of 1–86400 seconds, priorities
+1–100 and a 10–3600 second retry interval. These are intentions, not guaranteed outcomes. The
+planner selects the highest-priority feasible goal, then shorter Manhattan distance and goal ID;
+it commits to that goal until completion or a causal interruption. Different priorities can produce
+different daily choices without inventing an occupation, personality or knowledge for a body.
+
+Own injury/manual wake triggers the existing quiet interval: the NPC seeks its configured home
+and rests before returning to daily activity. Otherwise sleep, hunger with real carried food,
+fatigue recovery, and due appointments precede discretionary goals. Rain prevents gardening;
+other feasible goals remain available. With no feasible goal, or hunger without food, the NPC
+heads home and rests. This does not generate food, heal injuries, find hidden attackers or
+automatically buy supplies. Actual replenishment lets meals resume on the next clock command.
+
+Blocked goals are reconsidered on fixed simulated-time retry boundaries; feasible alternatives
+can run meanwhile. Manual displacement causes a fresh physical route back to the selected goal,
+preserving partial work instead of requiring reconfiguration. Home can also be unreachable, in
+which case travel waits with `PATH_BLOCKED`. Existing local path bounds and collision rules apply.
+Social attendance still requires real awake participants and may be missed during competing needs.
+
+Only actual WEED/REST time at a goal counts against its daily quota. Travel, meals, emergency
+recovery and interruptions do not fulfill it. At midnight the bounded daily counters reset;
+canonical health, food, position, lifetime work and unfinished needs remain on the same body.
+Daily goals do not accumulate a backlog or unlimited history. Disabling or replacing the routine
+deliberately resets its intentions, as with earlier routine configuration.
+
+Private population inspection includes `routines[body].planner`: policy version, current day,
+per-goal elapsed time, last choice/reason and decision sequence. These records and goal IDs,
+priorities and quotas never enter the player scene or character context. The console continues
+showing inspected physical work, rest, sleep and travel using existing activity labels.
+
+Policy `npc-daily-planning-1.0.0` runs inside `npc-routines-1.2.0` and the existing authorized clock
+transaction; projection, effects, command/event/outbox, retries and replay remain atomic. No new
+migration, worker, provider or port is required. This bounded physical planner does not generate
+new intentions from character beliefs, create dialogue/relationships, choose tactical combat
+responses or implement the remaining detailed cognition/scene-action planning in E3/F.
+
 ## Error contract
 
 Errors use a JSON body with a stable `error` code and, where safe, a human-readable detail.
