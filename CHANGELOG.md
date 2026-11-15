@@ -1,5 +1,8 @@
 # Changelog
 
+- Require source-card authority before NPC association, including locked-record validation and
+  retries, and preserve active motivational belief evidence beyond the recent-experience window.
+
 - Add opt-in belief/persona-driven NPC goal selection from pinned CHARACTER traits and validated
   same-body subjective evidence. Heard importance/danger claims can change priorities or interrupt
   work without changing canonical truth; private versioned inputs commit with clock effects for replay.

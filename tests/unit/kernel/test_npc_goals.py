@@ -472,3 +472,113 @@ def test_malformed_heard_claims_cannot_crash_or_redirect_world_planning(
     say(player, base, player_card, "motive_importance", value, subject_id=target)
     advance_game(admin, base, 20)
     assert admin.get(runtime_path(base)).get_json()["routines"][target]["motivation"] == before
+
+
+def check_npc_card_source_authority(game, source):
+    admin, dm, player_card, player_path, run, target, base = game
+    account = dm.get("/api/v2/auth/session").get_json()["user"]
+    roles = admin.put(
+        f"/api/v2/admin/users/{account['user_id']}/worlds/{base['world_id']}/roles",
+        json={"roles": ["DM", "PLAYER"]},
+    )
+    assert roles.status_code == 200, roles.get_json()
+    owner = dm if source == "OWN_UNASSIGNED" else admin
+    payload = {"name": "Private source", "authored_identity": {"secrets": ["SOURCE_CARD_SECRET"]}}
+    if source == "WORLD_ASSIGNED":
+        payload["world_id"] = base["world_id"]
+    created = owner.post("/api/v2/player/characters", json=payload)
+    assert created.status_code == 201, created.get_json()
+    card = created.get_json()
+    route = (
+        f"/api/v2/dm/worlds/{base['world_id']}/branches/{base['branch_id']}"
+        f"/entities/{target}/character-card"
+    )
+    response = dm.put(route, json={"character_id": card["character_id"]})
+    if source == "OTHER_UNASSIGNED":
+        assert response.status_code == 403, response.get_json()
+        assert "SOURCE_CARD_SECRET" not in response.get_data(as_text=True)
+        assert dm.put(route, json={"character_id": card["character_id"]}).status_code == 403
+        saved = next(
+            row
+            for row in owner.get("/api/v2/player/characters").get_json()["items"]
+            if row["character_id"] == card["character_id"]
+        )
+        assert saved["world_id"] is None and saved["entity_id"] is None
+        response = admin.put(route, json={"character_id": card["character_id"]})
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["character"]["authored_identity"]["secrets"] == [
+        "SOURCE_CARD_SECRET"
+    ]
+    assert owner.get("/api/v2/player/characters").status_code == 200
+    authorized = admin if source == "OTHER_UNASSIGNED" else dm
+    assert (
+        authorized.put(route, json={"character_id": card["character_id"]}).get_json()
+        == response.get_json()
+    )
+
+
+@pytest.mark.parametrize("source", ["OTHER_UNASSIGNED", "OWN_UNASSIGNED", "WORLD_ASSIGNED"])
+def test_npc_card_association_requires_source_card_authority(monkeypatch, tmp_path, source):
+    app = _app(monkeypatch, tmp_path)
+    check_npc_card_source_authority(clock_game(app), source)
+
+
+def check_active_motivation_survives_recent_window(game, path):
+    admin, player, player_card, player_path, run, target, base = game
+    say(
+        player,
+        base,
+        player_card,
+        "motive_importance",
+        {"motive": "CURIOSITY", "importance": 100},
+        subject_id=target,
+        key="lasting-importance",
+    )
+    say(
+        player,
+        base,
+        player_card,
+        "place_danger",
+        {"place": {"x": 1, "y": 0}, "dangerous": True},
+        subject_type="place",
+        key="lasting-danger",
+    )
+    advance_game(admin, base, 20)
+    before = admin.get(runtime_path(base)).get_json()["routines"][target]["motivation"]
+    for index in range(81):
+        say(
+            player,
+            base,
+            player_card,
+            "market_news",
+            {"edition": index},
+            subject_id=player_card["entity_id"],
+            key=f"unrelated:{index}",
+        )
+    context = admin.get(path + "/context?run_id=" + run)
+    assert context.status_code == 200, context.get_json()
+    assert len(context.get_json()["situation"]["experiences"]) == 80
+    advance_game(admin, base, 40)
+    row = admin.get(runtime_path(base)).get_json()["routines"][target]
+    assert row["motivation"] == before
+    assert row["planner"]["reason"] == "BELIEVED_DANGER"
+    say(
+        player,
+        base,
+        player_card,
+        "place_danger",
+        {"place": {"x": 1, "y": 0}, "dangerous": False},
+        subject_type="place",
+        key="danger-corrected",
+    )
+    advance_game(admin, base, 60)
+    row = admin.get(runtime_path(base)).get_json()["routines"][target]
+    assert not row["motivation"]["avoided"]
+    assert row["planner"]["selected"] == "explore"
+    assert row["planner"]["spent"] == {"explore": 20}
+
+
+def test_active_danger_and_importance_beliefs_survive_eighty_newer_events(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    game, card, path, association, config = configure_subjective(app)
+    check_active_motivation_survives_recent_window(game, path)

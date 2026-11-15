@@ -15,6 +15,8 @@ from kernel.contracts import CommandProposal
 from tests.integration.test_world_time import prepare
 from tests.unit.kernel.test_npc_goals import (
     advance_game,
+    check_active_motivation_survives_recent_window,
+    check_npc_card_source_authority,
     clock_path,
     configure_subjective,
     runtime_path,
@@ -23,6 +25,29 @@ from tests.unit.kernel.test_npc_goals import (
 from tests.unit.kernel.test_world_time import NOW, api_command
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.parametrize("source", ["OTHER_UNASSIGNED", "OWN_UNASSIGNED", "WORLD_ASSIGNED"])
+def test_source_card_authority_matches_reference_and_preserves_private_cards(
+    integration_stack, monkeypatch, tmp_path, source
+):
+    app, game = prepare(integration_stack, monkeypatch, tmp_path)
+    check_npc_card_source_authority(game, source)
+
+
+def test_active_motivations_survive_history_window_and_fresh_api(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, game = prepare(integration_stack, monkeypatch, tmp_path)
+    game, card, path, association, config = configure_subjective(app, game)
+    check_active_motivation_survives_recent_window(game, path)
+    original = game[0].get(runtime_path(game[-1])).get_json()["routines"][game[-2]]
+    restored = create_app(artifact_root=tmp_path).test_client()
+    restored.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    advance_game(restored, game[-1], 80)
+    current = restored.get(runtime_path(game[-1])).get_json()["routines"][game[-2]]
+    assert current["motivation"] == original["motivation"]
+    assert current["planner"]["spent"] == {"explore": 40}
 
 
 def test_two_card_associations_serialize_without_overwriting_authored_content(

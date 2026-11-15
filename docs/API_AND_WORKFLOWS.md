@@ -1038,6 +1038,9 @@ Set up an existing canonical NPC body as follows:
    and backstory. As the world's DM/Admin, send PUT to
    `/api/v2/dm/worlds/{world}/branches/{branch}/entities/{entity}/character-card` with
    `{"character_id":"<saved-card UUID>"}`. It requires `entity.control` and `mind.write.all`.
+   A non-admin DM must also own the selected card or have it already assigned to this world;
+   destination-world authority does not permit taking another user's private unassigned card.
+   The repository checks this against the locked card before association or returning its content.
    A card/body association cannot move to a different body or replace another card. Retrying the
    same association returns the saved record. It creates no account, roster seat, body or resources.
 2. Compile and pin a CHARACTER persona through the existing `character-binding` endpoint,
@@ -1068,7 +1071,9 @@ Two structured claim forms from normal perceived events currently influence moti
 
 The claim must match an active belief of this NPC and its frozen source observation. Confidence
 cannot exceed source/claim confidence. Unheard, foreign, malformed, contradicted and unsourced
-inputs are ignored. Existing belief revision keeps the latest active value for each subject and
+inputs are ignored. Active motivation retains its validated source evidence even after more than
+80 newer unrelated events; the model-facing recent-experience window remains bounded at 80.
+Existing belief revision keeps the latest active value for each subject and
 predicate; it does not store simultaneous importance values for different motives on one subject.
 This policy does not interpret arbitrary prose into beliefs or invent new occupations/goals.
 

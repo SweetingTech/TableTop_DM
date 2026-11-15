@@ -146,6 +146,7 @@ class PortalRepository(Protocol):
         entity_id: uuid.UUID,
         *,
         actor_id: uuid.UUID,
+        source_owner_id: uuid.UUID | None = None,
     ) -> CharacterRecord: ...
     def character_revisions(
         self, character_id: uuid.UUID, *, actor_id: uuid.UUID
@@ -186,11 +187,19 @@ class InMemoryPortalRepository:
         row = self.characters.get(character_id)
         return row.model_copy(deep=True) if row else None
 
-    def associate_character(self, character_id, world_id, entity_id, *, actor_id):
+    def associate_character(
+        self, character_id, world_id, entity_id, *, actor_id, source_owner_id=None
+    ):
         with self._card_lock:
             character = self.get_character(character_id)
             if character is None:
                 raise KeyError(character_id)
+            if (
+                source_owner_id is not None
+                and character.owner_user_id != source_owner_id
+                and character.world_id != world_id
+            ):
+                raise PermissionError("character owner or existing world assignment required")
             if character.world_id not in {None, world_id} or character.entity_id not in {
                 None,
                 entity_id,
@@ -322,7 +331,9 @@ class PostgresPortalRepository:
                 row = cursor.fetchone()
                 return self._character(dict(row)) if row else None
 
-    def associate_character(self, character_id, world_id, entity_id, *, actor_id):
+    def associate_character(
+        self, character_id, world_id, entity_id, *, actor_id, source_owner_id=None
+    ):
         with transaction(actor_id=actor_id, dsn=self._dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
@@ -336,6 +347,12 @@ class PostgresPortalRepository:
                 if row is None:
                     raise KeyError(character_id)
                 character = self._character(dict(row))
+                if (
+                    source_owner_id is not None
+                    and character.owner_user_id != source_owner_id
+                    and character.world_id != world_id
+                ):
+                    raise PermissionError("character owner or existing world assignment required")
                 if character.world_id not in {None, world_id} or character.entity_id not in {
                     None,
                     entity_id,
@@ -751,12 +768,17 @@ class TabletopPortalService:
         *,
         world_id: uuid.UUID,
         entity_id: uuid.UUID,
+        require_card_access: bool = False,
     ) -> CharacterRecord:
         """Bind a portal character to its canonical embodied entity as a DM/Admin action."""
         if not actor.is_admin:
             IdentityService.require_world_role(actor, world_id, "DM")
         return self.repository.associate_character(
-            character_id, world_id, entity_id, actor_id=actor.actor_id
+            character_id,
+            world_id,
+            entity_id,
+            actor_id=actor.actor_id,
+            source_owner_id=actor.user_id if require_card_access and not actor.is_admin else None,
         )
 
     def list_games(self, actor: UserAccount) -> tuple[HostedGame, ...]:

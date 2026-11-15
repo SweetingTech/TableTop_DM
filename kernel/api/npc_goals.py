@@ -13,7 +13,7 @@ from cognition.character_decisions import (
     CharacterProposalScope,
     require_projected_character_experience,
 )
-from cognition.context import build_character_context
+from cognition.context import build_character_context, validated_observations
 from cognition.goal_motivation import derive_motivation
 from cognition.models import Observation
 from cognition.store import MindStore
@@ -75,17 +75,42 @@ def make_goal_reader(
             )
             if binding is None or profile is None:
                 raise ValueError("NPC goal planning requires an existing pinned CHARACTER binding")
+            observations = tuple(
+                Observation.model_validate(row)
+                for row in minds.inspect(entity, branch_id=proposal.branch_id)["observations"]
+            )
+            event_order = {event: index for index, event in enumerate(source.events)}
             context = build_character_context(
                 scene=scene,
                 mind=minds.get(entity, branch_id=proposal.branch_id),
-                observations=tuple(
-                    Observation.model_validate(row)
-                    for row in minds.inspect(entity, branch_id=proposal.branch_id)["observations"]
-                ),
+                observations=observations,
                 actor_id=proposal.actor_id,
                 event_reader=source.events.get,
                 grant_reader=lambda event, observer: source.perceptions.get((event, observer)),
-                event_order={event: index for index, event in enumerate(source.events)},
+                event_order=event_order,
+            )
+            # A model's recent-experience window must not erase an active belief's evidence.
+            # This private policy frame retains only validated sources of relevant active beliefs.
+            needed = {
+                belief.source_observation_id
+                for belief in context.beliefs
+                if belief.predicate in {"place_danger", "motive_importance"}
+            }
+            evidence = validated_observations(
+                tuple(row for row in observations if row.observation_id in needed),
+                world_id=proposal.world_id,
+                branch_id=proposal.branch_id,
+                entity_id=entity,
+                actor_id=proposal.actor_id,
+                event_reader=source.events.get,
+                grant_reader=lambda event, observer: source.perceptions.get((event, observer)),
+            )
+            context = context.model_copy(
+                update={
+                    "observations": tuple(
+                        sorted(evidence, key=lambda row: event_order[row.source_event_id])
+                    )
+                }
             )
             result[key] = derive_motivation(
                 context,
@@ -134,20 +159,11 @@ def register_npc_card_binding(
         ):
             raise ValueError("NPC card association requires a canonical body in this world")
         payload = NpcCardRequest.model_validate(request.get_json(force=True))
-        character = portal.repository.get_character(payload.character_id)
-        if character is None:
-            raise KeyError(payload.character_id)
-        if any(
-            row.entity_id == entity_id
-            and row.world_id == world_id
-            and row.character_id != character.character_id
-            for row in portal.repository.list_characters()
-        ):
-            raise ValueError("body already represents another character card")
-        if (character.world_id, character.entity_id) == (world_id, entity_id):
-            return jsonify({"character": character.model_dump(mode="json")})
         saved = portal.bind_character_entity(
-            account, character.character_id, world_id=world_id, entity_id=entity_id
+            account,
+            payload.character_id,
+            world_id=world_id,
+            entity_id=entity_id,
+            require_card_access=True,
         )
-        persisted = portal.repository.get_character(saved.character_id) or saved
-        return jsonify({"character": persisted.model_dump(mode="json")})
+        return jsonify({"character": saved.model_dump(mode="json")})

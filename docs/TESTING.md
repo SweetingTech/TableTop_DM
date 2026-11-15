@@ -324,3 +324,7 @@ restart the API and actual world workers, revoke a captured executor's grant and
 associations while preserving authored revisions. The built SPA shows only actual weeding/rest at
 desktop/mobile sizes. Use the existing Playwright fallback and disposable integration databases;
 run full fast/types/integration gates because the shared clock and association repositories change.
+Review regressions deny a non-admin DM another owner's private unassigned card, allow own or
+already world-assigned cards, and verify reference/durable parity and exact retry. Actual perceived
+events push danger/importance evidence outside the 80-entry presentation window; active choices
+must persist through unrelated events, correction and a fresh API without expanding that window.
