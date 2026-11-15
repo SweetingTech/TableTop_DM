@@ -15,6 +15,12 @@ controller and private metadata for nested trials. Apply migration 012 before ru
 version; these snapshots remain foundations for complete campaign rewind, not whole-mind checkpoints.
 See [snapshots and trials](docs/API_AND_WORKFLOWS.md#snapshots-and-trials).
 
+Character knowledge retrieval uses learned testimony and pinned starting claims rather than the
+world's public lore catalog. Older learned facts remain searchable after recent conversation
+scrolls out of view. Operator directions cannot emit sensory evidence, and broad scene inspection
+does not grant access to another body's memories. Generated replies use the same scoped sources.
+See [character knowledge](docs/API_AND_WORKFLOWS.md#character-knowledge).
+
 Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
 and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
 perception-scoped movement, speech and tactical catalog. The proposal endpoint itself

@@ -207,10 +207,23 @@ summaries are grounded again in the same observation. Operator-tagged and other-
 is excluded. The model-facing situation omits account/control and timeline/ledger metadata.
 Context reads do not mutate minds or the world. Legal action providers are a server injection
 point; the HTTP route injects the [tabletop basic action provider](../domains/tabletop/character_actions.py).
-It uses only the authorized perceived scene and world-scoped actor authority, offering typed
-movement attempts without probing hidden truth. Kernel validation still decides outcomes. The existing caller-authored
-decision API is now restricted to privileged playtester evaluation and refuses character personas
-until the live identity/context/candidate path is connected.
+It uses only the authorized perceived scene and world-scoped actor authority, offering movement,
+speech and fixed tactical attempts without probing hidden truth. Kernel validation decides outcomes.
+Caller-authored evaluation is restricted to privileged playtesters; live characters use their
+pinned trusted context through the proposal service and bounded runner.
+
+Character knowledge is a derived, read-only view in `cognition/knowledge.py`. It indexes validated
+same-branch observation text before recent-window trimming, plus pinned starting claims. It never
+queries the global lore catalog to fill gaps. Durable requests rebuild it from actor-scoped stores;
+there is no second mutable knowledge database. Retrieval and generated dialogue share that view,
+preserving source-event/card provenance privately and exposing only fiction in model inputs.
+Broad scene authority is separate from private mind authority in both repository modes.
+
+One projection readiness guard now fences context, retrieval and proposal generation. Central
+non-sensory tags live in kernel perception contracts; event finalization never invokes a physical
+builder or resolver for operator/director records. Character context remains scoped even when its
+operator can inspect raw events or controls a deity body. Existing branch lineage excludes trial
+testimony from the same logical body's canonical mind; full campaign revision remains separate work.
 
 Scene and context reads hydrate durable observations into a request-local mind snapshot under
 the caller's RLS scope. They never replace the shared projector cache. Accepted embodied command

@@ -91,10 +91,12 @@ def test_durable_handoff_unattended_commit_restart_and_takeover(
     )
     assert self_view["position"]["x"] == planned.outcome.proposal.parameters["dx"]
     assert self_view["position"]["y"] == planned.outcome.proposal.parameters["dy"]
-    assert (
-        player.get(path + "/context", query_string={"run_id": run}).get_json()["projection_version"]
-        == refreshed["projection_version"]
-    )
+    pending = player.get(path + "/context", query_string={"run_id": run})
+    assert pending.status_code == 409, pending.get_json()
+    WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
+    context = player.get(path + "/context", query_string={"run_id": run})
+    assert context.status_code == 200, context.get_json()
+    assert context.get_json()["projection_version"] == refreshed["projection_version"]
     current = player.get(path + "/control", query_string={"run_id": run}).get_json()["control"]
     assert current["mode"] == "PAUSED" and current["step"] == 1
     assert current["owner_actor_id"] != current["executor_actor_id"]

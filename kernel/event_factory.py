@@ -5,6 +5,8 @@ from collections.abc import Callable
 
 from kernel.contracts import CommandProposal, CommandResult, EventEnvelopeV2
 from kernel.perception_contracts import (
+    NON_SENSORY_TAGS,
+    AudienceResolution,
     EventEmission,
     EventMaterialization,
     NullSpatialPerceptionResolver,
@@ -40,17 +42,22 @@ class EventFactory:
         emission_builder: EmissionBuilder | None,
     ) -> EventMaterialization:
         event_id = stable_event_id(proposal)
+        non_sensory = bool(NON_SENSORY_TAGS.intersection(result.domain_tags))
         emission = (
             emission_builder(proposal, result, before, after)
-            if emission_builder is not None
+            if emission_builder is not None and not non_sensory
             else None
         )
-        resolution = self.resolver.resolve(
-            event_id=event_id,
-            proposal=proposal,
-            emission=emission,
-            before=before,
-            after=after,
+        resolution = (
+            AudienceResolution()
+            if non_sensory
+            else self.resolver.resolve(
+                event_id=event_id,
+                proposal=proposal,
+                emission=emission,
+                before=before,
+                after=after,
+            )
         )
         event = EventEnvelopeV2(
             event_id=event_id,

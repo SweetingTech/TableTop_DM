@@ -6,8 +6,12 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from cognition.context import CharacterContext, build_character_context
-from cognition.models import Observation
+from cognition.context import (
+    CharacterContext,
+    build_character_context,
+    require_projected_experience,
+)
+from cognition.models import MindState, Observation
 from cognition.store import MindStore
 from domains.tabletop.character_actions import character_action_candidates
 from domains.tabletop.character_bindings import CharacterBinding, CharacterBindingRepository
@@ -58,6 +62,16 @@ def resolve_character_context(
     can_read = (
         entity in authority.controlled_entity_ids or "mind.read.all" in authority.capabilities
     )
+    if can_read:
+        require_projected_experience(
+            world_id=world,
+            branch_id=branch,
+            entity_id=entity,
+            actor_id=actor_id,
+            grants=simulation.perceptions.values(),
+            event_reader=simulation.events.get,
+            observation_exists=lambda item: minds.has_observation(item, branch_id=branch),
+        )
     binding = (
         bindings.latest((world, branch, run.run_id, entity), actor_id=actor_id)
         if run and can_read
@@ -89,12 +103,14 @@ def resolve_character_context(
     context = build_character_context(
         identity=identity,
         scene=scene,
-        mind=minds.get(entity, branch_id=branch),
+        mind=minds.get(entity, branch_id=branch) if can_read else MindState(entity_id=entity),
         actor_id=actor_id,
         observations=tuple(
             Observation.model_validate(row)
             for row in minds.inspect(entity, branch_id=branch)["observations"]
-        ),
+        )
+        if can_read
+        else (),
         event_reader=simulation.events.get,
         grant_reader=lambda event, observer: simulation.perceptions.get((event, observer)),
         event_order={event: index for index, event in enumerate(simulation.events)},

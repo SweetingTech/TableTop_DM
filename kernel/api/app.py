@@ -37,6 +37,7 @@ from cognition.engine import (
     LayeredDecisionEngine,
     SubjectiveStatePipeline,
 )
+from cognition.knowledge import KNOWLEDGE_VERSION, search_known_lore
 from cognition.models import RelationshipVector, RuntimeAssignment, RuntimeKind
 from cognition.openai_compatible import configured_dialogue
 from cognition.perception import PerceptionProfile
@@ -2344,6 +2345,10 @@ def create_app(
 
     @app.get(
         "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
+        "/entities/<uuid:observer_entity_id>/knowledge"
+    )
+    @app.get(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
         "/entities/<uuid:observer_entity_id>/context"
     )
     def character_context(world_id: uuid.UUID, branch_id: uuid.UUID, observer_entity_id: uuid.UUID):
@@ -2354,7 +2359,23 @@ def create_app(
             source, scene, observed_minds, uuid.UUID(requested_run) if requested_run else None
         )
         context, binding = resolved.context, resolved.binding
-        return jsonify(
+        if request.path.endswith("/knowledge"):
+            hits = search_known_lore(
+                context.known_lore,
+                request.args.get("query", ""),
+                limit=int(request.args.get("limit", "5")),
+            )
+            response = jsonify(
+                {
+                    "knowledge_version": KNOWLEDGE_VERSION,
+                    "evidence_hash": context.evidence_hash,
+                    "items": [item.fiction() for item in hits],
+                    "canonical_truth": False,
+                }
+            )
+            response.headers["Cache-Control"] = "no-store"
+            return response
+        response = jsonify(
             {
                 "context_version": context.context_version,
                 "evidence_hash": context.evidence_hash,
@@ -2365,6 +2386,8 @@ def create_app(
                 "binding": binding.model_dump(mode="json") if binding else None,
             }
         )
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.route("/api/v2/runs", methods=["GET", "POST"])
     def runs():

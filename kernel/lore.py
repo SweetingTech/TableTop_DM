@@ -101,7 +101,18 @@ class QdrantLoreIndex:
             )
         self._request("PUT", f"/collections/{self.collection}/points?wait=true", {"points": points})
 
-    def search(self, world_id: uuid.UUID, query: str, limit: int = 5) -> tuple[LoreHit, ...]:
+    def search(
+        self,
+        world_id: uuid.UUID,
+        query: str,
+        limit: int = 5,
+        *,
+        visibility: frozenset[str] = frozenset({"PUBLIC"}),
+    ) -> tuple[LoreHit, ...]:
+        if not 1 <= limit <= 100:
+            raise ValueError("lore search limit must be between 1 and 100")
+        if not visibility:
+            return ()
         vector = self.vectorizer(query)
         result = self._request(
             "POST",
@@ -110,16 +121,26 @@ class QdrantLoreIndex:
                 "vector": vector,
                 "limit": limit,
                 "with_payload": True,
-                "filter": {"must": [{"key": "world_id", "match": {"value": str(world_id)}}]},
+                "filter": {
+                    "must": [
+                        {"key": "world_id", "match": {"value": str(world_id)}},
+                        {"key": "visibility", "match": {"any": sorted(visibility)}},
+                    ]
+                },
             },
         )
-        return tuple(
+        hits = tuple(
             LoreHit(
                 document=LoreDocument.model_validate(item["payload"]),
                 score=float(item["score"]),
             )
             for item in result.get("result", [])
         )
+        return tuple(
+            hit
+            for hit in hits
+            if hit.document.world_id == world_id and hit.document.visibility in visibility
+        )[:limit]
 
     def _request(self, method: str, path: str, body: dict[str, Any]) -> dict[str, Any]:
         request = Request(

@@ -10,9 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from cognition.choice_state import speech_intent
 from cognition.context import CharacterContext, experience_summary
+from cognition.knowledge import search_known_lore
 from kernel.state import stable_hash
 
-PROMPT_VERSION = "character-dialogue-1.0.0"
+PROMPT_VERSION = "character-dialogue-1.1.0"
 _META = re.compile(
     r"\b(simulation|simulated|npc|ai|prompt|controller|stand-in|player|"
     r"timeline|rewind|language model|software|developer|system prompt|"
@@ -69,6 +70,22 @@ def generate_dialogue(
     sources = {}
     own_lines = set()
     incoming_reference = None
+    query = next(
+        (
+            str(item.perceived_payload["text"])
+            for item in reversed(context.observations)
+            if isinstance(item.perceived_payload.get("text"), str)
+            and str(item.perceived_payload.get("speaker_entity_id"))
+            != str(context.scene.observer_entity_id)
+        ),
+        "",
+    )[:400]
+    for item in search_known_lore(context.known_lore, query, limit=8):
+        text = fiction(item.text)
+        if text:
+            reference = "k" + str(len(experiences))
+            experiences.append({"reference": reference, "text": text, "speaker": "recollection"})
+            sources[reference] = item.source_event_id
     for memory in context.memories[-8:]:
         text = fiction(memory.summary)
         if text:
@@ -143,7 +160,11 @@ def generate_dialogue(
                 status="GENERATED",
                 model_version=provider.model_version,
                 runtime_kind=getattr(provider, "runtime_kind", "HOSTED_LLM"),
-                source_event_ids=tuple(sources[key] for key in dict.fromkeys(answer.sources)),
+                source_event_ids=tuple(
+                    source
+                    for key in dict.fromkeys(answer.sources)
+                    if (source := sources[key]) is not None
+                ),
                 output_hash=stable_hash(text),
             )
         except Exception:  # Contain untrusted provider failure; never log its text or credentials.

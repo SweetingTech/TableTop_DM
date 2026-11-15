@@ -58,7 +58,7 @@ def test_generated_receipt_restart_and_separate_worker_never_train_human_history
                 (run,),
             )
             parameters, model, version = cursor.fetchone()
-            assert model == "fixture-model-v1" and version == "character-dialogue-1.0.0"
+            assert model == "fixture-model-v1" and version == "character-dialogue-1.1.0"
             assert parameters["text"] == receipt["outcome"]["proposal"]["parameters"]["text"]
             assert parameters["claims"] == []
             cursor.execute(

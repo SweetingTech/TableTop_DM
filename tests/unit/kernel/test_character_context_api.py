@@ -1,12 +1,150 @@
 from __future__ import annotations
 
+import os
 import uuid
 
 import pytest
 
 from kernel.api.app import create_app
+from tests.unit.cognition.test_relationship_api import physical_relationship_game
+from tests.unit.kernel.test_character_binding_api import _app, setup_bound_character
 
 pytestmark = pytest.mark.unit
+
+
+def test_knowledge_waits_for_sensory_projection_and_retry_projects_once(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin = app.test_client()
+    admin.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    client, base, controller, observer, target, speak = physical_relationship_game(app, admin)
+    simulation = app.extensions["simulation"]
+    original = simulation.subjective_projector
+    simulation.configure_subjective_projector(lambda receipt: None)
+    first = speak("delayed-knowledge")
+    endpoint = (
+        f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}"
+        f"/entities/{observer}/knowledge"
+    )
+    headers = {"X-TTDM-Actor-ID": controller}
+    pending = client.get(endpoint, headers=headers, query_string={"query": "neighbor"})
+    assert pending.status_code == 409, pending.get_json()
+    before = len(simulation.events)
+    assert original is not None
+    simulation.configure_subjective_projector(original)
+    assert speak("delayed-knowledge") == first
+    assert len(simulation.events) == before
+    ready = client.get(endpoint, headers=headers, query_string={"query": "neighbor"})
+    assert ready.status_code == 200, ready.get_json()
+    assert [item["text"] for item in ready.get_json()["items"]] == ["Hello, neighbor."]
+
+
+def check_pinned_knowledge(app, *, scope=None):
+    admin, player, card, game, path, run, user = setup_bound_character(app, scope=scope)
+    endpoint = path + "/knowledge"
+    response = player.get(endpoint, query_string={"run_id": run, "query": "ferry"})
+    assert response.status_code == 200, response.get_json()
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.get_json()["items"] == [
+        {
+            "text": "The ferry sails at dawn.",
+            "basis": "recollection",
+            "confidence": 1.0,
+        }
+    ]
+    assert response.get_json()["canonical_truth"] is False
+    changed = player.patch(
+        f"/api/v2/player/characters/{card['character_id']}",
+        json={
+            "authored_identity": {"initial_known_facts": ["NEW_SECRET passage under the marsh."]}
+        },
+    )
+    assert changed.status_code == 200, changed.get_json()
+    assert player.get(endpoint, query_string={"query": "NEW_SECRET"}).get_json()["items"] == []
+    assert len(player.get(endpoint, query_string={"query": "ferry"}).get_json()["items"]) == 1
+    assert player.get(endpoint, query_string={"limit": 21}).status_code == 400
+    assert player.get(
+        endpoint.replace(card["entity_id"], str(app.extensions["demo_ids"]["hero_id"]))
+    ).status_code in {403, 404}
+    return admin, player, card, endpoint, run
+
+
+def test_character_knowledge_uses_pinned_starting_claims_and_preserves_scope(monkeypatch, tmp_path):
+    check_pinned_knowledge(_app(monkeypatch, tmp_path))
+
+
+def test_broad_scene_inspection_cannot_read_another_characters_learned_knowledge(
+    monkeypatch, tmp_path
+):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, endpoint, run = check_pinned_knowledge(app)
+    ids, sim = app.extensions["demo_ids"], app.extensions["simulation"]
+    spoken = player.post(
+        "/api/v2/commands",
+        json={
+            "world_id": card["world_id"],
+            "branch_id": str(ids["branch_id"]),
+            "run_id": run,
+            "embodied_entity_id": card["entity_id"],
+            "command_type": "tabletop.dialogue.speak",
+            "parameters": {"text": "PRIVATE_RECOLLECTION brass gate."},
+            "idempotency_key": "private-lore",
+        },
+    )
+    assert spoken.status_code == 200, spoken.get_json()
+    assert player.get(endpoint, query_string={"query": "PRIVATE_RECOLLECTION"}).get_json()["items"]
+    sim.grant_authority(
+        ids["world_id"], ids["actor_id"], roles=set(), capabilities={"world.read", "world.read.all"}
+    )
+    inspected = admin.get(endpoint, query_string={"query": "PRIVATE_RECOLLECTION"})
+    assert inspected.status_code == 200 and inspected.get_json()["items"] == []
+    context = admin.get(endpoint.removesuffix("knowledge") + "context").get_json()["situation"]
+    assert (
+        context["experiences"] == [] and context["memories"] == [] and context["identity"] is None
+    )
+
+
+def test_operator_and_god_body_do_not_share_omniscient_knowledge(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin = app.test_client()
+    admin.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    ids = app.extensions["demo_ids"]
+    world, branch, run, actor = (
+        str(ids[key]) for key in ("world_id", "branch_id", "run_id", "actor_id")
+    )
+    body = admin.post(
+        f"/api/v2/worlds/{world}/entities",
+        json={
+            "name": "River deity",
+            "entity_type": "GOD",
+            "controller_actor_id": actor,
+            "public_state": {"x": 5, "y": 5, "hp": 100},
+        },
+    )
+    assert body.status_code == 201, body.get_json()
+    secret = admin.post(
+        "/api/v2/commands",
+        json={
+            "world_id": world,
+            "branch_id": branch,
+            "run_id": run,
+            "command_type": "tabletop.console.submit",
+            "parameters": {"text": "OPERATOR_HIDDEN_ENDING"},
+            "idempotency_key": "private-ending",
+        },
+    )
+    assert secret.status_code == 200, secret.get_json()
+    events = admin.get("/api/v2/events", query_string={"world_id": world, "branch_id": branch})
+    assert "OPERATOR_HIDDEN_ENDING" in events.get_data(as_text=True)
+    endpoint = f"/api/v2/worlds/{world}/branches/{branch}/entities/{body.get_json()['entity_id']}"
+    context = admin.get(endpoint + "/context", query_string={"run_id": run})
+    assert context.status_code == 200, context.get_json()
+    assert "OPERATOR_HIDDEN_ENDING" not in context.get_data(as_text=True)
+    assert (
+        admin.get(
+            endpoint + "/knowledge", query_string={"query": "OPERATOR_HIDDEN_ENDING"}
+        ).get_json()["items"]
+        == []
+    )
 
 
 def test_character_context_excludes_secrets(monkeypatch, tmp_path):

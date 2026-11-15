@@ -23,5 +23,5 @@ class CharacterIdentity(BaseModel):
     values: IdentityEntries = ()
     bonds: IdentityEntries = ()
     secrets: IdentityEntries = ()
-    # Author assertions about starting knowledge, awaiting the trusted knowledge boundary.
+    # Starting claims are adopted through a pinned card; they are not canonical truth.
     initial_known_facts: IdentityEntries = ()

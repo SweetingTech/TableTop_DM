@@ -1,5 +1,10 @@
 # Changelog
 
+- Add character-scoped learned-lore retrieval and older-testimony grounding in generated dialogue,
+  with pinned starting claims and a shared sensory projection barrier. Keep broad scene inspection
+  separate from private mind access in reference and durable modes. Centralize non-sensory event
+  suppression and filter global vector lore by world/visibility. No new schema or provider setup.
+
 - Ground controlled relationship classifications in frozen physical evidence and preserve historical
   retry receipts without resetting later vectors. Keep privileged subjective overrides explicit.
 - Freeze entity identity/controller/secrets in snapshot 2.1, restore nested trials from exact source

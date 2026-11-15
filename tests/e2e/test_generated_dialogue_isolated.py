@@ -31,6 +31,22 @@ def test_generated_reply_is_visible_and_control_metadata_stays_out_of_fiction(
             assert len(requests) == 1
             assert "handoff" not in page.locator(".event-feed").inner_text().lower()
             assert "profile" not in page.locator(".event-feed").inner_text().lower()
+            knowledge = page.evaluate(
+                """async url => {
+                  const response = await fetch(url);
+                  return {status: response.status, cache: response.headers.get('Cache-Control'),
+                          payload: await response.json()};
+                }""",
+                path + "/knowledge?run_id=" + run + "&query=ferry",
+            )
+            assert knowledge["status"] == 200 and knowledge["cache"] == "no-store"
+            assert knowledge["payload"]["items"] == [
+                {"text": "The ferry sails at dawn.", "basis": "recollection", "confidence": 1.0}
+            ]
+            assert knowledge["payload"]["canonical_truth"] is False
+            for viewport in ({"width": 1440, "height": 1100}, {"width": 390, "height": 844}):
+                page.set_viewport_size(viewport)
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             page.get_by_role("button", name="Take control", exact=True).click()
             expect(page.get_by_text("You are playing", exact=True)).to_be_visible()
             page.screenshot(path=str(tmp_path / "generated-dialogue.png"), full_page=True)

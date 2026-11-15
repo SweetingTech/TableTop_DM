@@ -1,5 +1,12 @@
 # Operations, storage, migrations, and security
 
+Character knowledge retrieval is read-only and reuses schema 012 plus existing actor-scoped mind
+and binding stores. No service, credential or additional index is required. Keep the perception
+projector running: context/retrieval/proposals return `character_context_pending` (409) while
+physical evidence is pending. Repair the projector rather than bypassing that barrier. Broad
+world/scene inspection does not grant private mind or learned-lore access. Card edits affect
+starting knowledge only after an explicit binding successor; no history is silently rewritten.
+
 ## Runtime profiles
 
 ### Durable stack

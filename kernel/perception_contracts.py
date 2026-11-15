@@ -9,6 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from kernel.contracts import CommandProposal, EventEnvelopeV2
 from kernel.state import BranchState
 
+NON_SENSORY_TAGS = frozenset(
+    {"operator", "director", "timeline_revision", "checkpoint", "protection_policy", "evaluation"}
+)
+
 
 class SensoryModality(StrEnum):
     SIGHT = "SIGHT"

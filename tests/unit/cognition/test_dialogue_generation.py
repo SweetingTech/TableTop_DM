@@ -3,19 +3,86 @@ from __future__ import annotations
 import json
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
 from cognition.choice_state import SPEECH
-from cognition.dialogue_generation import DialogueRequest
+from cognition.dialogue_generation import DialogueRequest, generate_dialogue
 from cognition.openai_compatible import OpenAICompatibleDialogue, configured_dialogue
+from tests.unit.cognition.test_character_context import assemble, fixture_context
 from tests.unit.kernel.test_character_binding_api import _app
 from tests.unit.kernel.test_speech_combat_behavior import prompt, setup_scene
 from tests.unit.kernel.test_tactical_choices import leave_and_run
 
 pytestmark = pytest.mark.unit
+
+
+def test_provider_can_ground_a_reply_in_old_learned_lore_without_hidden_sources():
+    scene, actor, event, observation, grant = fixture_context()
+    events, grants, observations = {}, {}, []
+    for index in range(100):
+        text = "The brass gate opens at moonrise." if index == 0 else "Weather talk."
+        if index == 99:
+            text = "When does the brass gate open?"
+        payload = {"text": text, "speaker_entity_id": str(uuid.UUID(int=9000))}
+        source = event.model_copy(update={"event_id": uuid.UUID(int=index + 1), "payload": payload})
+        item = observation.model_copy(
+            update={
+                "observation_id": uuid.UUID(int=index + 501),
+                "source_event_id": source.event_id,
+                "perceived_payload": payload,
+            }
+        )
+        events[source.event_id] = source
+        observations.append(item)
+        grants[(source.event_id, scene.observer_entity_id)] = grant.model_copy(
+            update={
+                "event_id": source.event_id,
+                "allowed_payload_fields": ("text", "speaker_entity_id"),
+            }
+        )
+    context = assemble(
+        scene,
+        actor,
+        events,
+        observations,
+        grants,
+        event_order={key: n for n, key in enumerate(events)},
+    )
+    requests = []
+
+    class Provider:
+        model_version = "knowledge-fixture"
+
+        def complete(self, request):
+            requests.append(request)
+            old = next(row for row in request.experiences if "moonrise" in row["text"])
+            question = next(
+                row for row in reversed(request.experiences) if row["speaker"] == "other"
+            )
+            return {
+                "text": "The brass gate opens at moonrise.",
+                "sources": [old["reference"], question["reference"]],
+            }
+
+    text, receipt = generate_dialogue(
+        context, {"text": SPEECH["GREET"], "volume": "NORMAL"}, {}, 42, Provider()
+    )
+    assert text == "The brass gate opens at moonrise." and receipt.status == "GENERATED"
+    assert uuid.UUID(int=1) in receipt.source_event_ids
+    assert uuid.UUID(int=100) in receipt.source_event_ids
+    encoded = requests[0].model_dump_json()
+    for hidden in (
+        "HIDDEN_PLOT",
+        "source_event_id",
+        "source_card_hash",
+        str(scene.branch_id),
+        str(scene.observer_entity_id),
+    ):
+        assert hidden not in encoded
 
 
 @contextmanager

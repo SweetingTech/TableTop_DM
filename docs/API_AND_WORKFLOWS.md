@@ -372,6 +372,33 @@ Mind inspection applies the same server-side world and actor checks in reference
 storage. It requires the entity's controller or a world-scoped `mind.read.all`/`mind.write.all`
 capability. A browser-supplied actor ID cannot borrow another actor's access.
 
+## Character knowledge
+
+`GET /api/v2/worlds/{world_id}/branches/{branch_id}/entities/{entity_id}/knowledge` accepts
+`query` (at most 400 characters), `limit` (1–20, default 5) and optional `run_id`. It uses the same
+authorized trusted context as `/context`, returns `Cache-Control: no-store`, and labels retrieved
+items as subjective testimony, experience or recollection rather than canonical truth. Source
+card edits do not alter the character's pinned starting claims until an explicit authorized rebind.
+
+Retrieval searches only this body's validated same-branch physical experience and adopted starting
+claims. Facts older than the recent 80-observation window remain searchable; arbitrary stored
+memory summaries, hidden masks, operator notes, other worlds and other branches never supply text.
+Public world lore and a matching global/vector search result do not establish character knowledge.
+Reference and durable readers with broad scene inspection but no body control or `mind.read.all`
+receive no private experience, memories, card identity or learned lore for another body.
+
+Context reads, retrieval and autonomous proposals share a sensory projection barrier. A pending
+source returns the existing `character_context_pending` response (409); retry after the projector
+catches up. Retrying the original command can recover reference projection without another event.
+The kernel suppresses physical emission and audience resolution for operator/director, evaluation,
+checkpoint, correction and protection tags. Such records remain operator audit data.
+
+Context version 1.4, proposal policy 1.4 and dialogue prompt 1.1 record these inputs. Generated
+dialogue can retrieve older relevant testimony and cites its original source events in its private
+receipt. Model requests contain fiction-only recollection references, never source IDs, controller
+metadata or card hashes. Existing immutable proposal receipts retain their original inputs/results.
+This boundary does not implement a revised canonical continuation; complete rewind remains section I.
+
 ## Population workflow
 
 1. Generate a pool for an explicit world and branch.

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import uuid
 
-from cognition.context import NON_SENSORY_TAGS
 from cognition.perception import PerceptionEngine, PerceptionProfile
 from kernel.contracts import EventEnvelopeV2
-from kernel.perception_contracts import PerceptionGrant
+from kernel.perception_contracts import NON_SENSORY_TAGS, PerceptionGrant
 
 POLICY_VERSION = "relationship-evidence-1.0.0"
 
