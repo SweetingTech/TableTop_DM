@@ -1,5 +1,10 @@
 # Simulation-kernel contract
 
+The portal rejects bound-card resource/world edits before any metadata/history save, including
+mixed requests containing permitted identity changes. This is not a second physical mutation
+handler: live changes still require typed authorized kernel commands. Initial unbound-card stats
+remain authored setup; editing a bound card's identity does not heal, equip or relocate its body.
+
 The character live-state endpoint is read-only. Its pure projection accepts only a matching
 canonical world/body, exposes an allowlist of physical resource fields and never copies arbitrary
 public-state keys, entity secrets or card backstory. No command, ledger event, outbox record or

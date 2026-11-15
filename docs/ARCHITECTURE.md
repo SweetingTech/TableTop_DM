@@ -2,6 +2,11 @@
 
 ## System shape
 
+An embodied character's physical resources are owned by its canonical body. Portal card updates
+cannot change HP/status/max HP/armor/speed or retarget that bound card's world. This applies to
+owners and administrators alike; card ownership does not grant an alternate canonical write path.
+Identity edits remain authored/versioned separately, and unbound cards still author initial values.
+
 Character live-state reads project the canonical branch's physical body into a typed allowlist;
 they do not synchronize wounds/resources back into authored cards. HTTP composition checks card
 ownership, current world access and body inspection authority, then freezes the reference read

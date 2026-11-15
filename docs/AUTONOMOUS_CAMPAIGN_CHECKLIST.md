@@ -180,8 +180,10 @@ as composition glue; reusable execution services must also work from workers and
   each value and projections for other views. Avoid stale character cards overwriting live outcomes.
   Backend read foundation: owner/world/body-authorized live-state endpoint projects only the
   canonical body's current physical resources with branch/version and no-store responses. Reads
-  never sync values into authored cards or fall back for missing bodies. Dashboard wiring and
-  bound-card resource-write ownership remain the next slice; C5 is not yet complete.
+  never sync values into authored cards or fall back for missing bodies. Bound-card editing now
+  rejects HP/status/maxHP/armor/speed and world retargeting, with owner/admin parity and atomic
+  mixed-request rejection. Identity/unbound edits remain available. Dashboard wiring is the next
+  slice; C5 is not yet complete.
 - [ ] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;
   current quest requests supply their own amount and target. Extend economy/inventory/trade as needed for activities.
 - [ ] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible

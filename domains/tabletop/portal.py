@@ -725,6 +725,19 @@ class TabletopPortalService:
         existing = self._character(character_id)
         if not actor.is_admin and existing.owner_user_id != actor.user_id:
             raise PermissionError("only the character owner can edit this character")
+        if existing.entity_id is not None:
+            if {
+                "status",
+                "current_hit_points",
+                "maximum_hit_points",
+                "armor_class",
+                "speed",
+            }.intersection(payload):
+                raise ValueError("bound character resources must change through world actions")
+            if "world_id" in payload and uuid.UUID(str(payload["world_id"])) != existing.world_id:
+                raise ValueError(
+                    "a bound character cannot be moved to another world by card editing"
+                )
         allowed = {
             "name",
             "species",

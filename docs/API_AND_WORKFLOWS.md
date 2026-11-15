@@ -1,5 +1,13 @@
 # API and user workflows
 
+`PATCH /api/v2/player/characters/<character_id>` rejects supplied `status`, `current_hit_points`,
+`maximum_hit_points`, `armor_class` or `speed` after `entity_id` is bound. A non-null `world_id`
+that differs from the bound world is also rejected. This applies to administrators as well as
+owners and returns the existing `invalid_operation`400 without partial identity/card writes.
+Use authorized world actions for current physical effects. Same-world/identity edits remain
+supported; unbound cards retain their starting-stat controls. Existing null-as-omitted PATCH
+semantics are preserved, so null cannot detach a body or clear its world through this route.
+
 `GET /api/v2/player/characters/<character_id>/live-state` returns `character_id`, authored
 `card_version`, `source` (AUTHORED or KERNEL), and optional typed `body`. KERNEL body fields include
 world/branch/entity IDs, projection_version, HP/max HP, status, armor, speed, mana, owned inventory,
