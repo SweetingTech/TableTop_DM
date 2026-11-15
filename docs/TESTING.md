@@ -312,3 +312,5 @@ Durable tests inject ledger-boundary rollback, retry once, recreate the API, run
 and restart mid-reaction, verify replay and role/world/scene privacy. The built-SPA journey observes
 shelter/rest and completed daily work on desktop/mobile without private goal IDs or planner traces.
 No provider or live application database is used.
+Review regressions cover homeward steps longer than retry slots during missing food, injury and
+day completion, including exact partial-step retry and API restart before arrival.

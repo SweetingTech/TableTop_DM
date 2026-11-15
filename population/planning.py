@@ -30,7 +30,7 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
         }
     planner["policy_version"] = POLICY_VERSION
     planner["blocked"] = {task: until for task, until in planner["blocked"].items() if until > now}
-    allowed_cache = {"meal", "need:rest"} | {
+    allowed_cache = {"meal", "need:rest", "travel:homeward"} | {
         prefix + f"goal:{day}:{goal['goal_id']}"
         for goal in options["goals"]
         for prefix in ("", "travel:")
@@ -59,7 +59,13 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
 
     def choose(task: str, kind: str, place: dict, duration: int, reason: str, details=None):
         if actual != place:
-            activity = travel(state, key, row, task, place, now)
+            # Retry slots rotate rest decisions, not an unfinished physical journey.
+            travel_task = (
+                "homeward"
+                if place == plan["home"] and task.startswith(("fallback:", "safe:", "sleep:"))
+                else task
+            )
+            activity = travel(state, key, row, travel_task, place, now)
         else:
             activity = switch(state, key, row, task, kind, now, duration, details)
         return activity, reason

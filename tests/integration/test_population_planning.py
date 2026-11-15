@@ -17,6 +17,82 @@ from tests.unit.population.test_planning import configure_game_plan
 pytestmark = pytest.mark.integration
 
 
+def test_slow_homeward_step_survives_retry_slots_and_api_restart(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, game = prepare(integration_stack, monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = game
+    config = configure_game_plan(app, game)
+    api_command(
+        admin,
+        base,
+        "tabletop.routine.configure",
+        {
+            **config,
+            "expected_version": 3,
+            "life": {
+                **config["life"],
+                "step_seconds": 60,
+                "planning": {
+                    "retry_seconds": 10,
+                    "goals": [
+                        {
+                            "goal_id": "brief",
+                            "kind": "WEED",
+                            "place": {"x": 1, "y": 0},
+                            "seconds_per_day": 1,
+                        }
+                    ],
+                },
+            },
+        },
+        "slow-homeward",
+    )
+    first = api_command(
+        admin,
+        base,
+        "tabletop.clock.advance",
+        {
+            "expected_epoch": 1,
+            "expected_seconds": 0,
+            "to_seconds": 45,
+        },
+        "partial-step",
+    )
+    activity = admin.get(clock_path(base)).get_json()["activities"][target]
+    assert activity["details"]["step_progress"] == 44
+    restored = create_app(artifact_root=tmp_path).test_client()
+    restored.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    retry = api_command(
+        restored,
+        base,
+        "tabletop.clock.advance",
+        {
+            "expected_epoch": 1,
+            "expected_seconds": 0,
+            "to_seconds": 45,
+        },
+        "partial-step",
+    )
+    assert retry == first
+    api_command(
+        restored,
+        base,
+        "tabletop.clock.advance",
+        {
+            "expected_epoch": 1,
+            "expected_seconds": 45,
+            "to_seconds": 122,
+        },
+        "arrive-home",
+    )
+    replay = restored.get(f"/api/v2/branches/{base['branch_id']}/replay").get_json()
+    assert replay["verified"]
+    body = replay["projections"]["tabletop.entities"][target]
+    assert body["travel_steps"] == 2 and body["weeded_units"] == 1
+    assert replay["projections"]["tabletop.spatial.positions"][target]["x"] == 3
+
+
 def test_planning_quota_and_shelter_rollback_retry_restart_and_privacy(
     integration_stack, monkeypatch, tmp_path
 ):

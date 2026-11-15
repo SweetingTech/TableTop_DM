@@ -360,3 +360,46 @@ def test_missing_food_preempts_an_appointment_without_inventing_attendance():
     row = current.projections["tabletop.obligations"][identity]
     assert row["status"] == "MISSED" and row["progress_seconds"] == 10
     assert current.projections[ROUTINES][body]["planner"]["reason"] == "NO_FOOD"
+
+
+@pytest.mark.parametrize("cause", ["NO_FOOD", "INJURY", "DAY_COMPLETE"])
+def test_homeward_steps_survive_retry_slots_shorter_than_travel(cause):
+    results = []
+    for split in (False, True):
+        app, ids, body = planning_life(
+            goals=[
+                {
+                    "goal_id": "brief_work",
+                    "kind": "WEED",
+                    "place": {"x": 50, "y": 0},
+                    "seconds_per_day": 1,
+                    "priority": 50,
+                }
+            ]
+        )
+        row = state(app, ids).projections[ROUTINES][body]
+        configure_plan(
+            app,
+            ids,
+            body,
+            life={
+                **row["life"],
+                "step_seconds": 60,
+                "planning": {**row["life"]["planning"], "retry_seconds": 10},
+            },
+        )
+        physical = state(app, ids).projections["tabletop.entities"][body]
+        if cause == "NO_FOOD":
+            physical["inventory"]["food"] = 0
+            physical["hunger"] = 86400
+        advance(app, ids, 1)
+        if cause == "INJURY":
+            state(app, ids).projections["tabletop.entities"][body]["hp"] = 90
+        for until in [2, 9, 10, 30, 59, 60, 61, 90, 119, 120, 121, 140, 200] if split else [200]:
+            advance(app, ids, until)
+        current = state(app, ids)
+        assert current.projections["tabletop.spatial.positions"][body]["x"] == 52
+        assert current.projections["tabletop.entities"][body]["travel_steps"] == 2
+        assert current.projections[ROUTINES][body]["planner"]["reason"] == cause
+        results.append(outcomes(current))
+    assert results[0] == results[1]

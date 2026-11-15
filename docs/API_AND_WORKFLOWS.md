@@ -1003,7 +1003,8 @@ heads home and rests. This does not generate food, heal injuries, find hidden at
 automatically buy supplies. Actual replenishment lets meals resume on the next clock command.
 
 Blocked goals are reconsidered on fixed simulated-time retry boundaries; feasible alternatives
-can run meanwhile. Manual displacement causes a fresh physical route back to the selected goal,
+can run meanwhile. Retry boundaries preserve unfinished homeward steps even when retries are
+shorter than a movement step, including across restart. Manual displacement causes a fresh physical route back to the selected goal,
 preserving partial work instead of requiring reconfiguration. Home can also be unreachable, in
 which case travel waits with `PATH_BLOCKED`. Existing local path bounds and collision rules apply.
 Social attendance still requires real awake participants and may be missed during competing needs.
