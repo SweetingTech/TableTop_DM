@@ -354,3 +354,18 @@ boundaries inside the existing clock transaction. Deterministic phase IDs and a 
 version support replay. Physical proximity determines automatic lifecycle relevance; connection
 or camera presence is never an input. Trial copies resolve identity scope from their own branch
 and cannot bind another source. Whole-population planning and richer occupations remain separate.
+
+`population/life.py` adds an opt-in physical schedule to those same routines, under policy
+`npc-routines-1.1.0`. A bounded event loop advances all participants to shared movement, need,
+sleep, weather and appointment boundaries before choosing their next phases. Travel applies the
+same pure cardinal movement/collision helper as manual moves and changes the one canonical position.
+It never relocates a body merely to satisfy a meeting. Daily sleep uses simulated time; injury or
+accepted human input can wake a sleeper. Captured autonomous actions recheck sleep under the command
+transaction, and the character runner preserves its controller budget while the body sleeps.
+
+Social obligations are private branch-local records, not cognition. Attendance requires capable,
+awake, physically present participants, and only joint elapsed attendance earns progress. Missing
+participants, interrupted attendance and deadlines can cause a missed occurrence. Recurrence stores
+counters and the latest outcome rather than creating unlimited jobs. Actual dialogue, beliefs and
+relationships still require their existing perception-scoped source events. Scenes expose physical
+travel/sleep/social activity but omit plans, destination, route and schedule progress.

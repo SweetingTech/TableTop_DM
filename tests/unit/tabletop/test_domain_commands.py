@@ -173,6 +173,8 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.population.bind",
         "tabletop.population.level",
         "tabletop.routine.configure",
+        "tabletop.obligation.schedule",
+        "tabletop.obligation.cancel",
         "tabletop.magic.cast",
         "tabletop.magic.invoke",
         "tabletop.economy.trade",

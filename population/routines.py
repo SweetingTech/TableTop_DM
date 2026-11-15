@@ -11,11 +11,12 @@ from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position,
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult
 from kernel.state import BranchState
+from population.life import LifePlan, validate_place
 from population.models import PopulationLevel
 from population.runtime import MEMBERS, projection_deltas, transition
 
 ROUTINES = "tabletop.routines"
-POLICY_VERSION = "npc-routines-1.0.0"
+POLICY_VERSION = "npc-routines-1.1.0"
 
 
 class RoutineRequest(BaseModel):
@@ -30,6 +31,7 @@ class RoutineRequest(BaseModel):
     hunger_limit: int = Field(default=14400, ge=60, le=86400)
     relevance_radius: int = Field(default=12, ge=0, le=1000)
     relevance_anchors: tuple[uuid.UUID, ...] = Field(default=(), max_length=32)
+    life: LifePlan | None = None
 
 
 class RoutineResult(BaseModel):
@@ -56,7 +58,12 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
     if activity and activity["status"] in {"RUNNING", "WAITING"} and not activity.get("routine_id"):
         raise ValueError("cancel the manual activity before assigning a routine")
     now = seconds(state)
+    if request.life is not None:
+        validate_place(state, key, request.life.home)
+        validate_place(state, key, request.life.workplace)
     working = state.working_copy()
+    if request.life is not None or (old and old.get("life")):
+        working.projections["tabletop.entities"][key]["asleep"] = False
     version = request.expected_version + 1
     row = {
         **request.model_dump(mode="json"),
@@ -66,6 +73,7 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
         "phase_sequence": 0,
         "updated_seconds": now,
         "resume_work": None,
+        "suspended": {},
     }
     working.projections.setdefault(ROUTINES, {})[key] = row
     if activity and activity.get("routine_id"):
@@ -74,7 +82,7 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
         new_phase(working, key, row, "WEED", now)
     return CommandResult(
         result={"entity_id": key, "version": version},
-        deltas=projection_deltas(state, working, (ROUTINES, ACTIVITIES)),
+        deltas=projection_deltas(state, working, (ROUTINES, ACTIVITIES, "tabletop.entities")),
         domain_tags=("operator", "npc_routine_configuration"),
     )
 
@@ -198,7 +206,14 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
     routine["updated_seconds"] = until
 
 
-def advance_routines(state: BranchState, until: int) -> None:
+def advance_routines(state: BranchState, until: int, start: int | None = None) -> None:
+    if state.projections.get("tabletop.obligations") or any(
+        row["enabled"] and row.get("life") for row in state.projections.get(ROUTINES, {}).values()
+    ):
+        from population.life import advance_life
+
+        advance_life(state, until, start)
+        return
     for key, routine in sorted(state.projections.get(ROUTINES, {}).items()):
         if routine["enabled"]:
             advance_body(state, key, routine, until)

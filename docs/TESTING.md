@@ -290,3 +290,16 @@ subsequent worker restart. The reference lane compares coarse/split progression,
 during long rain waits, partial-work lifecycle continuity and trial isolation. Build a clean wheel
 and run its verifier because packaged migration expectations changed. Never point these tests at
 the user's live application database.
+
+Life-plan coverage is in `tests/unit/population/test_life.py`,
+`tests/integration/test_population_life.py` and `tests/e2e/test_population_life_isolated.py`.
+Reference tests compare coarse/split travel, sleep and attendance; cover blocked routing, saved work,
+repeating/overlapping commitments, hunger, injury, midnight/day cycles and unmanaged participants;
+and verify sleeping character policies preserve budgets while human actions can wake bodies.
+Durable tests inject rollback after movement, race two actual world-runner processes, restart
+mid-commute, verify recurring meetings, replay, world/role denial and scene/context privacy, and
+reject a captured character policy after the clock puts its body to sleep. They
+also check sleeping sensory exclusion, immutable old audiences and immediate injury wake without
+exposing private cooldowns in action receipts. The built-SPA journey
+shows nearby physical travel, sleep and social activity at desktop/mobile sizes without exposing
+future plans. Use the existing Playwright/Chromium fallback; no Browser plugin is installed.

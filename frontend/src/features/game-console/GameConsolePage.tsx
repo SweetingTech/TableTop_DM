@@ -161,9 +161,11 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
 
 function EntityRow({ entity, selected, onSelect }: { entity: EntitySummary; selected: boolean; onSelect: () => void }) {
   const health = entity.health === undefined || !entity.max_health ? 0 : Math.round(entity.health / entity.max_health * 100);
+  const activityNames = { WEED: "Weeding", REST: "Resting", EAT: "Eating", TRAVEL: "Traveling", SLEEP: "Sleeping", SOCIAL: "Socializing" };
+  const measurable = entity.activity && ["WEED", "REST", "EAT"].includes(entity.activity.kind);
   return (
     <button className={`selection-row ${selected ? "selected" : ""}`} type="button" role="option" aria-selected={selected} onClick={onSelect}>
-      <span className="entity-sigil">{entity.detail_level === "PRESENCE" ? "•" : entity.name.slice(0, 1)}</span><span><strong>{entity.name}</strong><small>{entity.entity_type} · {entity.location ?? "Unknown"} · {entity.detail_level ?? "VISIBLE"}</small>{entity.activity ? <small>{entity.activity.kind === "WEED" ? "Weeding" : entity.activity.kind === "EAT" ? "Eating" : "Resting"} · {entity.activity.progress_percent}% · {entity.activity.status.toLowerCase()} · work {entity.activity.weeded_units}</small> : null}{entity.health === undefined ? null : <i className="health-track"><b style={{ width: `${health}%` }} /></i>}</span>
+      <span className="entity-sigil">{entity.detail_level === "PRESENCE" ? "•" : entity.name.slice(0, 1)}</span><span><strong>{entity.name}</strong><small>{entity.entity_type} · {entity.location ?? "Unknown"} · {entity.detail_level ?? "VISIBLE"}</small>{entity.activity ? <small>{entity.activity.kind === "SOCIAL" && entity.activity.status === "WAITING" ? "Waiting" : activityNames[entity.activity.kind]} · {measurable ? `${entity.activity.progress_percent}% · ` : ""}{entity.activity.status.toLowerCase()} · work {entity.activity.weeded_units}</small> : null}{entity.health === undefined ? null : <i className="health-track"><b style={{ width: `${health}%` }} /></i>}</span>
     </button>
   );
 }

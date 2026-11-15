@@ -182,10 +182,13 @@ metadata is branch-local; migration 011 freezes the source rather than keeping a
 resource store. Opt-in WEED/REST/EAT routines persist hunger, fatigue, finite food consumption and
 partial work across physical relevance, lifecycle transitions and worker restart. Physical anchors
 drive automatic relevance independently of human presence. Both active and offscreen members use
-the same coarse routine; detailed activity planning, travel, sleep cycles and social obligations
-remain open. See [population routines](API_AND_WORKFLOWS.md#population-binding-and-npc-routines).
+the same coarse routine. Opt-in life plans now add local home/work commutes, fixed daily sleep and
+joint recurring social commitments, with arrival/deadline checks and causal waits/misses. Injuries
+wake sleepers; asleep character policies retain their action budgets and humans can wake by acting.
+General detailed activity planning, cross-zone routes and richer motive-driven choices remain open.
+See [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations).
 
-- [ ] E1 — Add typed activity definitions/state for work, travel, sleep, consumption, and interruptions
+- [x] E1 — Add typed activity definitions/state for work, travel, sleep, consumption, and interruptions
   under `domains/tabletop/activities/` (proposed). Persist start/due time, progress, inputs/outputs, owner, and cause.
 - [x] E2 — Connect materialized population state to due activities and canonical entities where needed;
   statistical/materialized/active representation must not create duplicate people or resource balances.
@@ -193,7 +196,7 @@ remain open. See [population routines](API_AND_WORKFLOWS.md#population-binding-a
   relevant. Choose update resolution from interaction needs, not whether a human camera observes the person.
 - [x] E4 — Reconcile pending work and progress on activation/deactivation in `PopulationLifecycle`;
   neither reset activity nor award its output twice. Define how relevance is computed automatically.
-- [ ] E5 — Add persistent needs/routines and causal interruptions: hunger, fatigue, rain, danger,
+- [x] E5 — Add persistent needs/routines and causal interruptions: hunger, fatigue, rain, danger,
   resource shortage, social obligations, travel arrival. Scope initial activity vocabulary explicitly.
 - [x] E6 — Acceptance: gardener weeds while party leaves; rain interrupts at the right time; returning
   party sees the resulting partial work and location. Repeat across deactivation and process restart.

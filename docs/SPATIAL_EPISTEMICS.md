@@ -88,7 +88,7 @@ Sight uses same-zone range plus deterministic grid supercover line-of-sight. Sou
 ambient noise, portal transmission, and occluder attenuation. There are no random perception rolls
 in this slice. Future stealth or concealment checks must be seeded and versioned.
 
-Resolver `grid-spatial-perception-1.2.0` admits a sensory modality only after acuity produces
+Resolver `grid-spatial-perception-1.3.0` admits a sensory modality only after acuity produces
 positive finite confidence at the stored six-decimal precision. Zero or invalid sight/hearing
 cannot create a grant or reveal its payload. Mixed emissions retain only the sensed modalities.
 Sound propagation selects the strongest complete portal path, independent of portal ordering.
@@ -148,3 +148,9 @@ entering afterward does not reveal the old event; repeating the statement produc
 the repeater; one controller's remote bodies do not share knowledge; hidden entities do not appear
 in the player scene; retries do not duplicate grants/evidence/memories; and a Player can move only
 their assigned body.
+
+Sleep uses canonical bodily state, not a camera flag. Resolver 1.3.0 excludes sleeping observers
+from ordinary sight/sound grants and current sight of other bodies. Injury or accepted human action
+can wake a body; that action's audience may use its frozen post-state for the waking observer.
+Permanent sensory impairments still apply, and old events never acquire new grants after waking.
+Sleep schedules, destinations and appointment metadata never enter physical observations.

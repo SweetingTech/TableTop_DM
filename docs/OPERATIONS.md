@@ -373,3 +373,18 @@ epoch fence and selected FREEZE/CATCH_UP policy. Routine reconfiguration replace
 disabling cancels managed work before manual activities can take ownership. Monitor the private
 population and clock inspections for waiting food, movement, weather or incapacitation. This change
 does not apply migrations to a running user database or deploy/restart the live stack automatically.
+
+## Local NPC life plans
+
+Travel, daily sleep and social obligations reuse the existing `world-runner` and schema 011;
+there is no new service, migration, credential or provider dependency. They are opt-in through
+[life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations). Routine configuration is
+a versioned replacement; disabling clears sleeping state and cancels managed activity.
+
+Inspect private routine/activity/obligation state for `PATH_BLOCKED`, `MOVED`, `NO_FOOD`, `DANGER`
+or unavailable partners. The planner never teleports a late participant or fabricates food.
+Movement uses bounded local routes; large or cross-zone journeys require later navigation work.
+Recurring commitments reuse one record, preserve completion/miss counters across restart, and
+require cancellation with their current occurrence. Sleep follows simulated time and the clock's
+existing FREEZE/CATCH_UP policy. Human wake actions are ordinary authorized body actions; sleeping
+policies retain controller budgets. No live upgrade or deployment is performed by adding this code.

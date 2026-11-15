@@ -27,7 +27,7 @@ from domains.tabletop.portal import PortalRepository
 from domains.tabletop.spatial.service import build_perceived_scene
 from kernel.application import SimulationApplication
 from kernel.control import ControllerState, ControlScope
-from kernel.errors import KernelError, WorldClockPaused
+from kernel.errors import BodySleeping, KernelError, WorldClockPaused
 from persona.models import CompiledPersona
 
 
@@ -154,6 +154,13 @@ class CharacterRunner:
                 )
                 if clock is not None and clock["paused"]:
                     continue
+                if (
+                    source.states.get(controller.branch_id)
+                    .projections.get("tabletop.entities", {})
+                    .get(str(controller.entity_id), {})
+                    .get("asleep")
+                ):
+                    continue
                 receipt = self.decisions.decide(
                     controller.scope,
                     controller.executor_actor_id,
@@ -162,7 +169,7 @@ class CharacterRunner:
                 )
                 self.snapshot().submit(receipt.outcome.proposal)
                 committed += 1
-            except WorldClockPaused:
+            except (WorldClockPaused, BodySleeping):
                 # Pause may win after the initial check, including during model generation.
                 # Keep epoch/step, mode and failure budget intact for clock resume.
                 continue

@@ -123,7 +123,9 @@ def build_perceived_scene(
                 activity=VisibleActivity(
                     kind=activity["kind"],
                     status=activity["status"],
-                    progress_percent=min(
+                    progress_percent=0
+                    if activity["kind"] in {"TRAVEL", "SLEEP", "SOCIAL"}
+                    else min(
                         100,
                         int(activity["progress_seconds"])
                         * 100
@@ -131,7 +133,9 @@ def build_perceived_scene(
                     ),
                     weeded_units=max(0, int(current.get("weeded_units", 0))),
                 )
-                if inspected and activity
+                if inspected
+                and activity
+                and not (activity["kind"] == "SLEEP" and not current.get("asleep"))
                 else None,
             )
         )
