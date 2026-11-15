@@ -123,7 +123,7 @@ def overlapping(first: dict, second: dict) -> bool:
     if period_a or period_b:
         if period_b:
             a, b, width_a, width_b, period_a = b, a, width_b, width_a, period_b
-        occurrence = (b - a) // period_a
+        occurrence = max(0, (b - a) // period_a)
         return any(
             a + n * period_a < b + width_b and b < a + n * period_a + width_a
             for n in (occurrence - 1, occurrence, occurrence + 1)

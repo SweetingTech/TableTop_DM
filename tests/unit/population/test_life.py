@@ -272,6 +272,42 @@ def test_overlap_validation_allows_distinct_repeating_commitments_but_rejects_co
     assert state(app, ids).state_hash == before
 
 
+@pytest.mark.parametrize("recurring_first", [False, True])
+def test_long_oneoff_window_cannot_overlap_first_future_recurring_commitment(recurring_first):
+    app, ids, body = living(sleep_start=1000)
+    requests = [
+        {"starts": 0, "duration": 86400, "grace": 20000, "lead_seconds": 0},
+        {"starts": 100000, "duration": 100, "grace": 0, "lead_seconds": 0, "repeat": 600},
+    ]
+    if recurring_first:
+        requests.reverse()
+    meeting(app, ids, body, **requests[0])
+    before = state(app, ids).state_hash
+    with pytest.raises(ValueError, match="overlapping"):
+        meeting(app, ids, body, **requests[1])
+    assert state(app, ids).state_hash == before
+
+
+def test_oneoff_ending_at_first_recurrence_start_does_not_overlap():
+    from population.life import overlapping
+
+    oneoff = {
+        "starts_seconds": 0,
+        "duration_seconds": 86400,
+        "grace_seconds": 13600,
+        "lead_seconds": 0,
+    }
+    recurring = {
+        "starts_seconds": 100000,
+        "duration_seconds": 100,
+        "grace_seconds": 0,
+        "lead_seconds": 0,
+        "repeat_seconds": 600,
+    }
+    assert not overlapping(oneoff, recurring)
+    assert not overlapping(recurring, oneoff)
+
+
 def test_unmanaged_attendance_is_not_double_counted_at_weather_boundaries():
     results = []
     for weather in (False, True):

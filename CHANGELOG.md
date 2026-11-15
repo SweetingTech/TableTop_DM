@@ -1,5 +1,8 @@
 # Changelog
 
+- Reject long one-off commitment windows that overlap the first future recurring occurrence,
+  in either scheduling order; retain exact touching-window compatibility and atomic rejection.
+
 - Add opt-in bounded daily goal planning: prioritized local work/rest intentions with daily quotas,
   needs and appointments, physical shelter/recovery, blocked-route alternatives and interruption
   recovery. Persist private choices and partial fulfillment through the existing atomic world clock;
