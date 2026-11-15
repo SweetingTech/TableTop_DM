@@ -1,12 +1,14 @@
 # API and user workflows
 
-On a configured clock, successful controlled commands reserve per-body action time. Physical
+On a configured clock, successful controlled physical commands reserve per-body action time. Physical
 actions cost six simulated seconds and a five-foot movement step costs
 ceil(30/body speed), at least one second. Callers cannot choose these costs. Before readiness,
 new actions return existing `invalid_operation`400 without writes; retrying an already committed
 idempotency key returns its original receipt. Paused clocks can be advanced explicitly by their
 authorized operator; actions do not move global time. Unconfigured worlds stay untimed.
 Speech, console interpretation and quest bookkeeping do not spend physical action time. The
+camera/control-mode command is presentation only: it does not wait for readiness, wake a body,
+or consume/reset its action budget. Controlled-entity authorization still applies. The
 own-body `PerceivedEntity.action_wait_seconds` reports remaining readiness; it is null for
 other bodies. Character proposals omit impossible candidates and unattended runners wait without
 spending budgets, including proposal/commit races. A guard expires at its six-second boundary

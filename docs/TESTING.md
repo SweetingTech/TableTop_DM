@@ -10,6 +10,8 @@ transactions and resumes a restarted autonomous runner without wait-budget loss.
 The actual built-SPA `tests/e2e/test_action_time_isolated.py` journey guards, rejects premature
 movement without a new event, advances the shared clock and offscreen gardening, then moves and
 observes the refreshed scene and expired guard.
+Camera regressions cover ready/busy, sleeping, stunned and dead bodies, unchanged resources and
+reservations, controlled-entity authorization, restart and idempotent metadata updates.
 
 Live-sheet frontend tests cover canonical values, denied refresh without authored fallback,
 cancelled out-of-order reads, explicit unbound editing, in-flight deduplication and invalid typed

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
@@ -22,6 +23,67 @@ from tests.unit.kernel.test_tactical_choices import command, resources
 from tests.unit.kernel.test_world_time import NOW, api_command
 
 pytestmark = pytest.mark.integration
+
+
+def test_camera_modes_preserve_busy_body_and_reservation_after_restart(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, card, path, run, target, base) = prepare(
+        integration_stack, monkeypatch, tmp_path
+    )
+    assert (
+        command(
+            player,
+            base,
+            card,
+            "tabletop.battlefield.set_control_mode",
+            {"camera_mode": "THIRD_PERSON"},
+            "ready-camera",
+        ).status_code
+        == 200
+    )
+    assert command(player, base, card, "tabletop.combat.guard", {}, "guard").status_code == 200
+    restarted, client = player_after_restart(tmp_path, player)
+    branch = uuid.UUID(base["branch_id"])
+    before = restarted.extensions["world_runner"].snapshot().states.get(branch)
+    bodies, timing = (
+        copy.deepcopy(before.projections["tabletop.entities"]),
+        copy.deepcopy(before.projections[ACTION_TIME]),
+    )
+    first = command(
+        client,
+        base,
+        card,
+        "tabletop.battlefield.set_control_mode",
+        {"camera_mode": "FIRST_PERSON"},
+        "busy-camera",
+    )
+    assert first.status_code == 200, first.get_json()
+    after = restarted.extensions["world_runner"].snapshot().states.get(branch)
+    assert (
+        after.projections["tabletop.entities"] == bodies
+        and after.projections[ACTION_TIME] == timing
+    )
+    mark = durable_mark(integration_stack, base)
+    assert (
+        command(
+            client,
+            base,
+            card,
+            "tabletop.battlefield.set_control_mode",
+            {"camera_mode": "FIRST_PERSON"},
+            "busy-camera",
+        ).get_json()
+        == first.get_json()
+    )
+    assert durable_mark(integration_stack, base) == mark
+    assert (
+        command(
+            client, base, card, "tabletop.spatial.move", {"dx": 1, "dy": 0}, "still-busy"
+        ).status_code
+        == 400
+    )
+    assert durable_mark(integration_stack, base) == mark
 
 
 def test_cost_effect_parity_restart_retry_and_replay(integration_stack, monkeypatch, tmp_path):

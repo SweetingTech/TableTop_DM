@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
@@ -17,6 +18,60 @@ from tests.unit.kernel.test_tactical_choices import command
 from tests.unit.kernel.test_world_time import NOW, api_command, clock_game
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize(
+    "physical", [{}, {"asleep": True}, {"conditions": ["stunned"]}, {"hp": 0, "dead": True}]
+)
+def test_camera_modes_do_not_wait_wake_or_spend_physical_time(monkeypatch, tmp_path, physical):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = clock_game(app)
+    assert command(player, base, card, "tabletop.combat.guard", {}, "guard").status_code == 200
+    state = app.extensions["simulation"].states.get(uuid.UUID(base["branch_id"]))
+    state.projections["tabletop.entities"][card["entity_id"]].update(physical)
+    bodies = copy.deepcopy(state.projections["tabletop.entities"])
+    timing = copy.deepcopy(state.projections[ACTION_TIME])
+    for mode in ("THIRD_PERSON", "FIRST_PERSON", "TACTICAL"):
+        response = command(
+            player, base, card, "tabletop.battlefield.set_control_mode", {"camera_mode": mode}, mode
+        )
+        assert response.status_code == 200, response.get_json()
+        assert state.projections["tabletop.entities"] == bodies
+        assert state.projections[ACTION_TIME] == timing
+        assert state.projections["tabletop.control_modes"][card["entity_id"]]["camera_mode"] == mode
+
+
+def test_ready_camera_change_leaves_movement_ready_and_control_required(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = clock_game(app)
+    state = app.extensions["simulation"].states.get(uuid.UUID(base["branch_id"]))
+    assert (
+        command(
+            player,
+            base,
+            card,
+            "tabletop.battlefield.set_control_mode",
+            {"camera_mode": "FIRST_PERSON"},
+            "camera",
+        ).status_code
+        == 200
+    )
+    assert not state.projections.get(ACTION_TIME)
+    assert (
+        command(player, base, card, "tabletop.spatial.move", {"dx": 1, "dy": 0}, "move").status_code
+        == 200
+    )
+    before = state.state_hash, state.version
+    denied = command(
+        player,
+        base,
+        {"entity_id": target},
+        "tabletop.battlefield.set_control_mode",
+        {"camera_mode": "TACTICAL"},
+        "not-mine",
+    )
+    assert denied.status_code == 403
+    assert (state.state_hash, state.version) == before
 
 
 def clock_path(base):

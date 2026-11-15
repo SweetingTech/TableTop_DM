@@ -4,9 +4,10 @@ TableTop DM is a local-first tabletop platform built on a deterministic simulati
 supports authenticated Administrator, Dungeon Master, and Player workspaces alongside persistent
 world state, synthetic personas, population simulation, and isolated scenario evaluation.
 
-With a world clock configured, each successful controlled action reserves that body's next
+With a world clock configured, each successful controlled physical action reserves that body's next
 available simulated time. Combat, spells and other physical actions take six seconds. Speech and
-quest bookkeeping do not reserve physical action time. A five-foot grid step uses the body's speed
+quest bookkeeping do not reserve physical action time. Camera changes are presentation only and
+neither wait for readiness nor wake the body. A five-foot grid step uses the body's speed
 and rounds up to whole seconds (one second
 at speed30, two at speed15). Retries reuse their original cost and receipt. Autonomous characters
 wait without losing control budgets, while the world keeps moving. Guards expire after six

@@ -50,7 +50,9 @@ def command_definitions(
         quests(),
     )
     return tuple(
-        replace(
+        replace(definition, version=f"{definition.version}+presentation.1")
+        if definition.command_type == "tabletop.battlefield.set_control_mode"
+        else replace(
             definition,
             version=f"{definition.version}+voluntary-body.1.action-time.1",
             handler=with_action_time(with_wakeup(definition.handler)),

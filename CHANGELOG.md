@@ -1,5 +1,9 @@
 # Changelog
 
+- Keep battlefield camera/control-mode changes outside physical readiness, incapacity and wakeup
+  checks while retaining entity-control authorization. Changing presentation never spends or
+  resets action time, wakes a sleeping body, or changes body resources.
+
 - Reserve per-body action readiness atomically on configured world clocks, with server-owned
   durations and movement speed costs shared by human and autonomous commands. Expire timed guards
   through clock ticks/advances; preserve retry/restart/replay and suspend waiting stand-ins without
