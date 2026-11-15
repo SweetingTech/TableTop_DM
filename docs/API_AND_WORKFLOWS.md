@@ -1,5 +1,18 @@
 # API and user workflows
 
+`GET /api/v2/player/characters/<character_id>/live-state` returns `character_id`, authored
+`card_version`, `source` (AUTHORED or KERNEL), and optional typed `body`. KERNEL body fields include
+world/branch/entity IDs, projection_version, HP/max HP, status, armor, speed, mana, owned inventory,
+equipped weapon, learned spell IDs and conditions. No client-selected run/branch is used; the
+world's canonical branch is authoritative. Status distinguishes ALIVE, ASLEEP, INCAPACITATED,
+DEFEATED and DEAD. Reading neither changes card data nor commits a simulation action.
+
+The caller must own the card or be an administrator, retain world access, and control/inspect the
+bound body under the existing scene authority rules. Other owners and revoked roles receive403.
+Unbound cards return AUTHORED/body:null; missing bound metadata/projection returns
+`character_body_unavailable`409. Success and errors use Cache-Control:no-store. Dashboard display
+and bound-card editing controls are not yet wired by this backend-only slice.
+
 Voluntary controlled commands reject incapacitated bodies consistently. A valid human command
 can wake ordinary sleep, including attack/cast/invoke; an invalid attempt does not wake or spend
 resources. Autonomous sleepers retain the existing suspension behavior. Own scene status reports

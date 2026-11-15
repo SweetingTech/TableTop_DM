@@ -1,5 +1,11 @@
 # Operations, storage, migrations, and security
 
+Canonical character-state reads reuse schema012 and current card/entity/control stores. No
+migration, index, service, model or configuration change is required. The endpoint hydrates a fresh
+durable snapshot and checks current ownership/world/body authority; restart does not require card
+resource backfill. Keep its private allowlisted response out of shared caches (including errors).
+This slice does not yet change the Player Dashboard or the authored-card update API.
+
 The shared voluntary-action policy is recorded in command versions as `+voluntary-body.1`.
 No migration, worker, environment variable or frontend source update is required. Historical
 committed receipts still precede validation; retry them normally after upgrade. New invalid

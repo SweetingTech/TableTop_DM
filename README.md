@@ -26,6 +26,12 @@ branch, run, embodied entity and idempotency key. It uses the trusted pinned con
 path, returns a proposal without committing, and rejects caller-authored context or action lists.
 Legacy caller-authored evaluation remains restricted to privileged playtester flows.
 
+Owners can read a character's canonical body at
+`GET /api/v2/player/characters/<character_id>/live-state`. It returns current HP, status, mana,
+inventory and equipment with the canonical branch/version, separately from the authored card.
+Unbound cards report an authored source; missing or unauthorized bound bodies do not fall back
+to old card values. Player Dashboard wiring and bound-card editing controls are the next C5 slice.
+
 Melee proposals choose a target; the kernel resolves owned equipment, body bonuses, reach,
 visibility and conditions. Both spell entry points use registered ARCANE_BOLT/MEND definitions
 and the body's learned spells. Cast/invoke share fixed power, cost and eligibility. New requests

@@ -1,5 +1,12 @@
 # Testing
 
+Character live-state tests cover actual healing and resource consumption, unchanged authored
+card/version, explicit unbound source, missing/cross-world/trial projection rejection, owner/world
+authorization, secret/unknown-field exclusion and no-store errors. Durable tests verify unchanged
+ledger/projection counts on reads, restart equality and current role revocation. Run
+`uv run python -m pytest tests/unit/kernel/test_character_live_state.py` and the integration lane
+for `tests/integration/test_character_live_state.py`.
+
 Body-capability regressions exercise zero HP, defeat, mixed-case conditions, dead flags/status,
 movement/speech/guard parity, sleeping policy suspension, successful and failed human combat wakeup,
 dead-target healing and self-only scene status. Durable tests verify no-write rejection, mana/wake
