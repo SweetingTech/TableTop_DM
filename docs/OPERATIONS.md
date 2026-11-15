@@ -1,5 +1,11 @@
 # Operations, storage, migrations, and security
 
+Attack handler 2.1.0 uses recorded per-action RNG proofs with schema 012 unchanged. New omitted
+run seeds persist as zero; existing null seeds retain storage identity and resolve to zero for
+mechanics. Previously committed receipts are returned unchanged, including receipts without RNG
+proofs. No backfill, resource reset, new service or provider setup is required. Keep the private
+canonical receipt/ledger separate from character-facing observations when exporting diagnostics.
+
 Combat/cast/invoke request contracts are now 2.0.0: use target-only melee and registered spell ID
 plus target. Merge and deploy the paired backend and console changes with their current compiled
 bundle together; the preceding console's `/cast` adapter is incompatible. Committed historical keys

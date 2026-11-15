@@ -4,6 +4,12 @@ The Flask application serves the React client and a JSON API from the same origi
 live under `/v2/*`; API resources live under `/api/v2/*`. UUIDs are serialized as strings and
 timestamps use ISO 8601.
 
+Attack contract 2.1.0 allocates physical roll seeds on the server. The optional proposal `seed`
+remains decision/evaluation provenance and cannot select a live attack roll. Submit a new
+idempotency key for a distinct action; retry the original key to recover its original outcome.
+Authorized canonical command receipts include private `result.randomness` provenance. Character
+observations and generated dialogue receive only their masked physical facts, never this proof.
+
 ## Authentication
 
 ### Browser sessions

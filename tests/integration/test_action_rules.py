@@ -196,10 +196,17 @@ def test_legacy_attack_receipt_retries_after_strict_request_upgrade_and_restart(
         idempotency_key="legacy-committed-attack",
         seed=2,
     )
-    legacy = replace(current, request_model=LegacyAttack, handler=legacy_handler, version="1.0.0")
+    legacy = replace(
+        current,
+        request_model=LegacyAttack,
+        handler=legacy_handler,
+        version="1.0.0",
+        uses_randomness=False,
+    )
     original = sim.durable_repository.execute(
         proposal, sim.authority(proposal.world_id, proposal.actor_id), legacy
     )
+    assert "randomness" not in original.result.result
     before = durable_mark(integration_stack, base)
     restored = create_app(artifact_root=tmp_path).extensions["simulation"]
     receipt = restored.submit(proposal)

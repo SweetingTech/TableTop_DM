@@ -1,5 +1,10 @@
 # Changelog
 
+- Allocate physical-action randomness under the branch commit lock from the recorded run seed
+  and logical command sequence. Ignore caller roll seeds, preserve policy trace seeds separately,
+  and retain private versioned RNG proof for retries/replay. Legacy unseeded runs use zero;
+  new runs record zero by default. No schema or frontend deployment change.
+
 - Wire the console's cast alias to registered spell IDs, retain its accessible composer name
   after invalid input, and ship the current production bundle. Pair with the authoritative
   backend contract update; browser tests cover both aliases, health refresh and mobile layout.

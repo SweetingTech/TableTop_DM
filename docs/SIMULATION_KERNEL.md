@@ -1,5 +1,17 @@
 # Simulation-kernel contract
 
+Random mechanics declare `uses_randomness` in their command definition. Both commit adapters
+derive a 63-bit action seed from the RNG policy version, recorded run seed, next committed branch
+sequence and command type. Failed commands publish no sequence advancement; concurrent commands
+serialize; receipt retries allocate nothing. Non-random commands also advance the branch sequence.
+Legacy null run seeds resolve to zero, which is recorded in each proof; new omitted run seeds are
+stored as zero. Actor/run UUIDs and caller text/seeds do not influence mechanics RNG. Independent
+runs with equal seeds and command order intentionally share random numbers for comparisons.
+The handler receives the action seed; the original proposal/event seed retains policy provenance.
+The private canonical result stores the typed proof; frozen physical observations do not include it.
+Standalone canonical buses require a trusted run-seed reader. Only isolated low-level trial harnesses
+may explicitly inject handler seeds; application-backed trials use the same allocator as live play.
+
 TableTop DM is one domain-neutral simulation system with three execution modes:
 
 ```text

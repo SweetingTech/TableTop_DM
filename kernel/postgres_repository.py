@@ -8,7 +8,12 @@ from typing import Any
 import psycopg2.errors
 import psycopg2.extras
 
-from kernel.command_bus import CommandDefinition, CommandReceipt, normalized_proposal
+from kernel.command_bus import (
+    CommandDefinition,
+    CommandReceipt,
+    normalized_proposal,
+    resolve_command,
+)
 from kernel.contracts import (
     Actor,
     BranchKind,
@@ -75,7 +80,7 @@ class PostgresCommandRepository:
 
                 cursor.execute(
                     """
-                    SELECT 1
+                    SELECT seed
                     FROM sim.runs
                     WHERE world_id = %s AND branch_id = %s AND id = %s
                     """,
@@ -85,7 +90,8 @@ class PostgresCommandRepository:
                         str(proposal.run_id),
                     ),
                 )
-                if cursor.fetchone() is None:
+                run = cursor.fetchone()
+                if run is None:
                     raise BranchIsolationError("Proposal run does not belong to the world branch")
                 if proposal.interaction_id is not None:
                     cursor.execute(
@@ -238,7 +244,7 @@ class PostgresCommandRepository:
                 evidence = (
                     self.evidence_builder(proposal, before) if self.evidence_builder else None
                 )
-                result = definition.handler(proposal, state)
+                result = resolve_command(definition, proposal, state, run_seed=run["seed"])
                 if definition.result_model is not None:
                     definition.result_model.model_validate(result.result)
                 for delta in result.deltas:

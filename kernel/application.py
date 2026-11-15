@@ -51,7 +51,7 @@ class RunRecord(BaseModel):
     branch_id: uuid.UUID
     kind: RunKind
     status: str = "ACTIVE"
-    seed: int | None = None
+    seed: int | None = 0
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -85,6 +85,7 @@ class SimulationApplication:
         self.goal_input_reader: GoalInputReader | None = None
         self.bus = register_tabletop(CommandBus(self.states), self.read_goal_inputs)
         self.bus.control_validator = self.validate_control
+        self.bus.run_seed_reader = self.read_run_seed
         self.bus.control_committer = self.advance_control
         self.bus.result_validator = self.validate_population_bindings
         self.population_source_reader: Callable[[uuid.UUID, uuid.UUID], PopulationMember] | None = (
@@ -128,6 +129,12 @@ class SimulationApplication:
         if self.goal_input_reader is None:
             raise ValueError("trusted NPC goal reader is unavailable")
         return self.goal_input_reader(proposal, state)
+
+    def read_run_seed(self, proposal: CommandProposal) -> int | None:
+        run = self.runs.get(proposal.run_id)
+        if run is None or (run.world_id, run.branch_id) != (proposal.world_id, proposal.branch_id):
+            raise BranchIsolationError("Proposal run does not belong to the world branch")
+        return run.seed
 
     def create_world(
         self,
@@ -281,7 +288,7 @@ class SimulationApplication:
             world_id=world_id,
             branch_id=branch_id,
             kind=kind,
-            seed=seed,
+            seed=0 if seed is None else seed,
         )
         if record.run_id in self.runs:
             raise ValueError("run already exists")

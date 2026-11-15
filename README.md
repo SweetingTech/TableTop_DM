@@ -27,7 +27,9 @@ and the body's learned spells. Cast/invoke share fixed power, cost and eligibili
 cannot supply dice, bonuses, spell power or mana cost. The matching console accepts
 `/cast MEND <target>` and `/invoke MEND <target>`. Merge and deploy this console/bundle change
 together with its backend contract update.
-Recorded action-seed allocation and the full combat clock remain checklist work.
+Melee rolls use a recorded run seed and the next committed branch sequence. New identical
+attacks get independent seeds; retries return the original receipt. The full combat clock remains
+checklist work.
 
 Bound characters can now produce persisted, retry-safe action proposals from their pinned identity
 and perception-scoped experience. The proposal endpoint uses local deterministic policy and the
