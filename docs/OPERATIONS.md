@@ -1,18 +1,27 @@
 # Operations, storage, migrations, and security
 
+Action timing reuses the existing projection store; no migration, new service or provider is
+required. Deploy the command handlers and character/world runners together. Configured clocks
+now pace actions in simulated time, independent of controller `interval_ms` (which remains a
+poll/due bound). Set `seconds_per_tick` to the desired simulation speed; a paused clock requires
+authorized advance/resume before reserved actions become ready. Do not remove readiness rows or
+backfill authored card values to accelerate a character. Clockless legacy worlds stay untimed.
+Existing recorded receipts/replay deltas remain valid after upgrade. Fresh trials inherit
+physical readiness but require their own clock/run configuration before new timed actions.
+
 Older clients must stop sending physical resource/status edits through the card PATCH route for
 bound characters; such requests now fail400 before metadata/history writes. Do not backfill card
 HP from bodies or bypass the guard for administrators. World actions own live resources. No
-migration, role/capability change, service, configuration or provider setup is needed. The next
-Dashboard client slice will hide these bound-card editors and show the typed live projection.
+migration, role/capability change, service, configuration or provider setup is needed. The
+Dashboard hides bound-card editors and shows the typed live projection.
 
 Canonical character-state reads reuse schema012 and current card/entity/control stores. No
 migration, index, service, model or configuration change is required. The endpoint hydrates a fresh
 durable snapshot and checks current ownership/world/body authority; restart does not require card
 resource backfill. Keep its private allowlisted response out of shared caches (including errors).
-This slice does not yet change the Player Dashboard or the authored-card update API.
+The Dashboard consumes this projection and the card update API enforces separate resource ownership.
 
-The shared voluntary-action policy is recorded in command versions as `+voluntary-body.1`.
+The shared voluntary-action policy is recorded with `voluntary-body.1` and `action-time.1` in command versions.
 No migration, worker, environment variable or frontend source update is required. Historical
 committed receipts still precede validation; retry them normally after upgrade. New invalid
 incapacitated actions leave no writes. A failed wake attempt does not change sleep state.

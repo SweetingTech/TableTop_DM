@@ -42,6 +42,7 @@ class PerceivedEntity(BaseModel):
     guarded: bool | None = None
     attack_reach: int | None = None
     known_spell_ids: tuple[str, ...] | None = None
+    action_wait_seconds: int | None = Field(default=None, ge=0)
     activity: VisibleActivity | None = None
 
 

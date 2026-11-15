@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from domains.tabletop.action_time import expire_guards
 from domains.tabletop.activities import ACTIVITIES, SCHEDULE, WEATHER, advance_activities
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
@@ -94,6 +95,7 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
 
 def advance_result(state: BranchState, clock: Clock, until: int, **updates) -> CommandResult:
     working = state.working_copy()
+    expire_guards(working, until)
     advance_activities(working, until)
     updated = clock.model_copy(update={"seconds": until, "step": clock.step + 1, **updates})
     deltas = [StateDelta(projection=CLOCK, operation="SET", values=updated.model_dump(mode="json"))]
@@ -185,6 +187,7 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
     return tuple(
         CommandDefinition(
             command_type=name,
+            version="1.1.0" if name != "tabletop.clock.configure" else "1.0.0",
             required_capabilities=frozenset(
                 {"action.propose", "entity.control"}
                 if name != "tabletop.clock.tick"

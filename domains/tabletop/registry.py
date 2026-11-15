@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from domains.tabletop.action_time import with_action_time
 from domains.tabletop.activities import command_definitions as activities
 from domains.tabletop.battlefield import command_definitions as battlefield
 from domains.tabletop.combat import command_definition as combat
@@ -51,8 +52,8 @@ def command_definitions(
     return tuple(
         replace(
             definition,
-            version=f"{definition.version}+voluntary-body.1",
-            handler=with_wakeup(definition.handler),
+            version=f"{definition.version}+voluntary-body.1.action-time.1",
+            handler=with_action_time(with_wakeup(definition.handler)),
         )
         if definition.requires_controlled_entity
         else replace(definition, handler=with_motivation(definition.handler, motivation_reader))

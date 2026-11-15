@@ -1,5 +1,18 @@
 # API and user workflows
 
+On a configured clock, successful controlled commands reserve per-body action time. Physical
+actions cost six simulated seconds and a five-foot movement step costs
+ceil(30/body speed), at least one second. Callers cannot choose these costs. Before readiness,
+new actions return existing `invalid_operation`400 without writes; retrying an already committed
+idempotency key returns its original receipt. Paused clocks can be advanced explicitly by their
+authorized operator; actions do not move global time. Unconfigured worlds stay untimed.
+Speech, console interpretation and quest bookkeeping do not spend physical action time. The
+own-body `PerceivedEntity.action_wait_seconds` reports remaining readiness; it is null for
+other bodies. Character proposals omit impossible candidates and unattended runners wait without
+spending budgets, including proposal/commit races. A guard expires at its six-second boundary
+through either a clock tick or explicit advance. This does not add full initiative, timed
+condition/blessing definitions or death/recovery policy.
+
 `PATCH /api/v2/player/characters/<character_id>` rejects supplied `status`, `current_hit_points`,
 `maximum_hit_points`, `armor_class` or `speed` after `entity_id` is bound. A non-null `world_id`
 that differs from the bound world is also rejected. This applies to administrators as well as
@@ -760,7 +773,8 @@ guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
   UNARMED/SHORTSWORD (1d6, reach one) or an owned SPEAR (1d8, reach two), body attack/damage bonuses,
   and poisoned/frightened disadvantage. Legacy unarmed body reach remains supported. A living,
   awake, capable attacker needs a different visible, living target within the same zone/reach.
-  Caller bonuses/dice are rejected. Action-seed allocation and combat timing remain planned.
+  Caller bonuses/dice are rejected. Logical action seeds and configured-clock readiness are
+  allocated by the kernel; full initiative and condition/death lifecycle rules remain planned.
   Selling the final equipped weapon copy atomically switches the seller to UNARMED. Legacy
   unavailable equipment keeps scene/context reads available and suppresses impossible melee
   candidates; the attack handler still rejects an unavailable loadout.

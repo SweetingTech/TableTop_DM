@@ -411,6 +411,7 @@ def test_unheard_claims_do_not_change_the_npcs_intentions(monkeypatch, tmp_path)
             },
         )
         assert response.status_code == 200, response.get_json()
+        advance_game(admin, base, step + 1)
     say(
         player,
         base,

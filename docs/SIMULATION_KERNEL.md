@@ -1,5 +1,18 @@
 # Simulation-kernel contract
 
+The controlled-command action-time wrapper reads the branch clock and body's last readiness,
+then appends a SET delta in `tabletop.action_time` only after an accepted handler result. Effects,
+resource spending, wakeup, readiness, event and outbox persist atomically through both adapters.
+Actions never advance the clock. A retry returns its original receipt before current readiness
+checks; new distinct commands racing for one body serialize under the branch lock. Waiting raises
+`BodyActionPending`, an expected runner suspension that consumes no step or failure budget.
+Integer-second duration is six for physical actions and ceil(30/speed) with a
+minimum of one for a five-foot move; zero-speed movement is rejected. Guard expiry is applied in
+the clock's isolated working copy and emitted as ordinary body deltas. No-clock branches preserve
+untimed behavior; clock-run mismatch rejects new actions. Speech, console interpretation and quest
+bookkeeping reserve no physical time. Command versions record
+`+voluntary-body.1.action-time.1`, clock tick/advance use1.1.0, and the action catalog uses1.4.0.
+
 The portal rejects bound-card resource/world edits before any metadata/history save, including
 mixed requests containing permitted identity changes. This is not a second physical mutation
 handler: live changes still require typed authorized kernel commands. Initial unbound-card stats

@@ -1,5 +1,16 @@
 # Testing
 
+Shared-clock action tests exercise physical durations, body-owned movement speed, non-overridable
+costs, retry/no-write rejection, actual concurrent reference submissions, finite guard expiry,
+self-only scene readiness and controller wait/race/resume. Run `uv run python -m pytest
+tests/unit/kernel/test_action_time_api.py tests/unit/kernel/test_world_time.py`.
+The integration lane for `tests/integration/test_action_time.py` compares reference/durable state,
+restarts and retries real resource effects, verifies ledger replay, races separate durable
+transactions and resumes a restarted autonomous runner without wait-budget loss.
+The actual built-SPA `tests/e2e/test_action_time_isolated.py` journey guards, rejects premature
+movement without a new event, advances the shared clock and offscreen gardening, then moves and
+observes the refreshed scene and expired guard.
+
 Live-sheet frontend tests cover canonical values, denied refresh without authored fallback,
 cancelled out-of-order reads, explicit unbound editing, in-flight deduplication and invalid typed
 responses. Run `npm --prefix frontend run test -- --run src/test/CharacterLiveState.test.tsx`.
