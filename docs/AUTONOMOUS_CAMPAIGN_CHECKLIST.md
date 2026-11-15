@@ -185,7 +185,10 @@ drive automatic relevance independently of human presence. Both active and offsc
 the same coarse routine. Opt-in life plans now add local home/work commutes, fixed daily sleep and
 joint recurring social commitments, with arrival/deadline checks and causal waits/misses. Injuries
 wake sleepers; asleep character policies retain their action budgets and humans can wake by acting.
-General detailed activity planning, cross-zone routes and richer motive-driven choices remain open.
+Opt-in daily planning now selects prioritized local work/rest goals with daily quotas, responds to
+rain/injury/food shortage, returns after displacement and retries blocked goals. Persistent choices
+and goal fulfillment survive restart and split ticks. General detailed cognition-driven actions,
+cross-zone routes and richer motive-driven choices remain open; E3 is therefore still partial.
 See [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations).
 
 - [x] E1 — Add typed activity definitions/state for work, travel, sleep, consumption, and interruptions

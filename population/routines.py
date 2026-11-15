@@ -16,7 +16,7 @@ from population.models import PopulationLevel
 from population.runtime import MEMBERS, projection_deltas, transition
 
 ROUTINES = "tabletop.routines"
-POLICY_VERSION = "npc-routines-1.1.0"
+POLICY_VERSION = "npc-routines-1.2.0"
 
 
 class RoutineRequest(BaseModel):
@@ -61,6 +61,9 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
     if request.life is not None:
         validate_place(state, key, request.life.home)
         validate_place(state, key, request.life.workplace)
+        if request.life.planning:
+            for goal in request.life.planning.goals:
+                validate_place(state, key, goal.place)
     working = state.working_copy()
     if request.life is not None or (old and old.get("life")):
         working.projections["tabletop.entities"][key]["asleep"] = False

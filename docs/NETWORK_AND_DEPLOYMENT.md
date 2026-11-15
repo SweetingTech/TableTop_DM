@@ -249,3 +249,7 @@ Opt-in travel/sleep/social schedules share this same worker and projection trans
 remains current. Clock retries cover location, rest, food and joint attendance together; separate
 processes do not each award their own effects. Private routes and appointment schedules are manager
 inspection only. These features add no port, database table or model-provider connection.
+
+Daily goal selection executes within that same world-runner transaction and requires no external
+AI connection. Schema 011 and current service topology remain unchanged. Planner metadata is
+manager-only inspection; the served console reads existing perception-scoped physical activities.

@@ -376,6 +376,15 @@ does not apply migrations to a running user database or deploy/restart the live 
 
 ## Local NPC life plans
 
+Optional [daily planning](API_AND_WORKFLOWS.md#daily-goal-planning) shares schema 011 and the same
+world-runner. Inspect the private routine's `planner.reason`, `spent`, `day` and `blocked` metadata
+when a person changes goals. Needs, rain, injury, exhausted daily quotas and blocked routes can
+defer an intention. Supply real food, restore a reachable path or allow the quiet interval to pass;
+the policy retries without replacing the routine. Goals reset at simulated midnight, not wall time.
+Reconfiguration intentionally replaces the intention menu and counters. Pause the clock before
+operator maintenance. No credentials, provider settings, live schema or containers are changed
+by adding this opt-in policy.
+
 Travel, daily sleep and social obligations reuse the existing `world-runner` and schema 011;
 there is no new service, migration, credential or provider dependency. They are opt-in through
 [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations). Routine configuration is

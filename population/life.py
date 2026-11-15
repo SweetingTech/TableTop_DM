@@ -5,6 +5,7 @@ from __future__ import annotations
 import heapq
 import math
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -28,6 +29,27 @@ class Place(BaseModel):
     zone_id: str = Field(default="world", min_length=1, max_length=120)
 
 
+class DailyGoal(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    goal_id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+    kind: Literal["WEED", "REST"]
+    place: Place
+    seconds_per_day: int = Field(default=1800, ge=1, le=86400)
+    priority: int = Field(default=50, ge=1, le=100)
+
+
+class DailyPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    goals: tuple[DailyGoal, ...] = Field(min_length=1, max_length=8)
+    retry_seconds: int = Field(default=300, ge=10, le=3600)
+
+    @model_validator(mode="after")
+    def unique_goals(self):
+        if len({goal.goal_id for goal in self.goals}) != len(self.goals):
+            raise ValueError("daily goal identifiers must be unique")
+        return self
+
+
 class LifePlan(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     home: Place
@@ -36,6 +58,7 @@ class LifePlan(BaseModel):
     sleep_start_seconds: int = Field(default=79200, ge=0, lt=DAY)
     sleep_seconds: int = Field(default=28800, ge=60, lt=DAY)
     danger_quiet_seconds: int = Field(default=300, ge=1, le=3600)
+    planning: DailyPlan | None = None
 
 
 class ObligationRequest(BaseModel):
@@ -100,7 +123,7 @@ def overlapping(first: dict, second: dict) -> bool:
     if period_a or period_b:
         if period_b:
             a, b, width_a, width_b, period_a = b, a, width_b, width_a, period_b
-        occurrence = (b - a) // period_a
+        occurrence = max(0, (b - a) // period_a)
         return any(
             a + n * period_a < b + width_b and b < a + n * period_a + width_a
             for n in (occurrence - 1, occurrence, occurrence + 1)
@@ -383,6 +406,11 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
         for task, value in row.get("suspended", {}).items()
         if not task.startswith("travel:social:") or task in valid
     }
+    if row["life"].get("planning"):
+        from population.planning import prepare_plan
+
+        prepare_plan(state, key, row, now)
+        return
     reason = (
         "INCAPACITATED"
         if hp <= 0
@@ -550,6 +578,9 @@ def next_boundary(state: BranchState, now: int, until: int) -> int:
         if not row["enabled"] or not row.get("life"):
             continue
         plan = row["life"]
+        if plan.get("planning"):
+            interval = plan["planning"]["retry_seconds"]
+            candidates.extend((now + (interval - now % interval), now + (DAY - now % DAY)))
         for offset in (
             plan["sleep_start_seconds"],
             (plan["sleep_start_seconds"] + plan["sleep_seconds"]) % DAY,
@@ -568,7 +599,9 @@ def next_boundary(state: BranchState, now: int, until: int) -> int:
             candidates.append(now + plan["step_seconds"] - activity.details["step_progress"])
         elif activity.kind in {"WEED", "REST", "EAT", "SLEEP"}:
             candidates.append(now + activity.duration_seconds - activity.progress_seconds)
-        if activity.kind == "WEED" and int(body.get("fatigue", 0)) < row["fatigue_limit"]:
+        if (
+            activity.kind == "WEED" or (plan.get("planning") and activity.kind == "TRAVEL")
+        ) and int(body.get("fatigue", 0)) < row["fatigue_limit"]:
             candidates.append(now + row["fatigue_limit"] - int(body.get("fatigue", 0)))
     return min(value for value in candidates if value > now)
 
@@ -612,6 +645,10 @@ def progress_body(state: BranchState, key: str, row: dict, until: int) -> None:
                 body["travel_steps"] = int(body.get("travel_steps", 0)) + 1
             activity = activity.model_copy(update={"details": details})
         complete = progress >= activity.duration_seconds
+        if activity.details.get("planning_goal") and activity.kind in {"WEED", "REST"}:
+            goal = activity.details["planning_goal"]
+            planner = row["planner"]
+            planner["spent"][goal] = planner["spent"].get(goal, 0) + elapsed
         if complete and activity.kind == "EAT":
             inventory = dict(body.get("inventory", {}))
             inventory["food"] = int(inventory["food"]) - 1
