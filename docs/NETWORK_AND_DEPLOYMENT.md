@@ -253,3 +253,9 @@ inspection only. These features add no port, database table or model-provider co
 Daily goal selection executes within that same world-runner transaction and requires no external
 AI connection. Schema 011 and current service topology remain unchanged. Planner metadata is
 manager-only inspection; the served console reads existing perception-scoped physical activities.
+
+Optional NPC belief/persona motivation uses the same worker, PostgreSQL transaction and schema 011.
+Configure an explicit world-scoped mind-read grant for its clock executor and keep the existing
+perception projector running. It makes no provider/network call under the clock lock and adds no
+listener or secret. Private authored-card RLS is unchanged. Deploying code does not enable motivated
+routines; association, pinning and opt-in configuration are separate operator actions.

@@ -16,7 +16,7 @@ from population.models import PopulationLevel
 from population.runtime import MEMBERS, projection_deltas, transition
 
 ROUTINES = "tabletop.routines"
-POLICY_VERSION = "npc-routines-1.2.0"
+POLICY_VERSION = "npc-routines-1.3.0"
 
 
 class RoutineRequest(BaseModel):

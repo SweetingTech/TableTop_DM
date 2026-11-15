@@ -314,3 +314,13 @@ shelter/rest and completed daily work on desktop/mobile without private goal IDs
 No provider or live application database is used.
 Review regressions cover homeward steps longer than retry slots during missing food, injury and
 day completion, including exact partial-step retry and API restart before arrival.
+
+Motivated NPC coverage is in `tests/unit/cognition/test_goal_motivation.py`,
+`tests/unit/kernel/test_npc_goals.py`, `tests/integration/test_npc_goals.py` and
+`tests/e2e/test_npc_goals_isolated.py`. It covers distinct pinned CHARACTER traits, heard beliefs
+preempting work, danger/contradiction, source-confidence caps, unheard/forged/malformed evidence,
+authorization and unbound identity failures, split ticks and replay. Durable cases inject rollback,
+restart the API and actual world workers, revoke a captured executor's grant and race card/body
+associations while preserving authored revisions. The built SPA shows only actual weeding/rest at
+desktop/mobile sizes. Use the existing Playwright fallback and disposable integration databases;
+run full fast/types/integration gates because the shared clock and association repositories change.

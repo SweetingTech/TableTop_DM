@@ -187,9 +187,14 @@ joint recurring social commitments, with arrival/deadline checks and causal wait
 wake sleepers; asleep character policies retain their action budgets and humans can wake by acting.
 Opt-in daily planning now selects prioritized local work/rest goals with daily quotas, responds to
 rain/injury/food shortage, returns after displacement and retries blocked goals. Persistent choices
-and goal fulfillment survive restart and split ticks. General detailed cognition-driven actions,
-cross-zone routes and richer motive-driven choices remain open; E3 is therefore still partial.
+and goal fulfillment survive restart and split ticks. Optional motivation now ranks the bounded
+work/rest menu using pinned CHARACTER traits and validated own beliefs. Heard importance/danger
+claims can interrupt choices without changing truth or exposing private intentions. The explicit
+NPC card association requires no player seat. Frozen inputs, effects and replay stay atomic.
+General detailed cognition-driven actions, cross-zone routes, new occupations and unrestricted goal
+generation remain open; E3 is therefore still partial.
 See [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations).
+See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-goals) for setup and limits.
 
 - [x] E1 — Add typed activity definitions/state for work, travel, sleep, consumption, and interruptions
   under `domains/tabletop/activities/` (proposed). Persist start/due time, progress, inputs/outputs, owner, and cause.

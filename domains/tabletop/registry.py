@@ -20,11 +20,14 @@ from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.world_time import command_definitions as world_time
 from kernel.command_bus import CommandBus, CommandDefinition, CommandHandler
 from population.life import command_definitions as life
+from population.motivation import GoalInputReader, with_motivation
 from population.routines import command_definitions as routines
 from population.runtime import command_definitions as population
 
 
-def command_definitions() -> tuple[CommandDefinition, ...]:
+def command_definitions(
+    motivation_reader: GoalInputReader | None = None,
+) -> tuple[CommandDefinition, ...]:
     definitions = (
         *world_time(),
         *activities(),
@@ -48,6 +51,9 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
     return tuple(
         replace(definition, handler=with_wakeup(definition.handler))
         if definition.requires_controlled_entity
+        else replace(definition, handler=with_motivation(definition.handler, motivation_reader))
+        if definition.command_type
+        in {"tabletop.clock.tick", "tabletop.clock.advance", "tabletop.routine.configure"}
         else definition
         for definition in definitions
     )
@@ -62,8 +68,10 @@ def with_wakeup(handler: CommandHandler) -> CommandHandler:
     return execute
 
 
-def register_tabletop(bus: CommandBus) -> CommandBus:
+def register_tabletop(
+    bus: CommandBus, motivation_reader: GoalInputReader | None = None
+) -> CommandBus:
     bus.event_factory.resolver = GridSpatialPerceptionResolver()
-    for definition in command_definitions():
+    for definition in command_definitions(motivation_reader):
         bus.register(definition)
     return bus

@@ -385,6 +385,16 @@ Reconfiguration intentionally replaces the intention menu and counters. Pause th
 operator maintenance. No credentials, provider settings, live schema or containers are changed
 by adding this opt-in policy.
 
+[Belief/persona motivation](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-goals) additionally
+requires an explicitly associated NPC card, pinned CHARACTER profile and world-scoped mind access
+for the configured clock executor. Existing non-user agents need an explicit `mind.read.all`
+grant; this does not grant access to private authored cards. The perception projector must catch
+up before the next motivated command. Missing evidence projection, profile or authority rejects
+the whole command without advancing the clock. Repair the grant/pin or run the projector before
+retrying; do not bypass the evidence barrier. Inspect private `motivation` policy/input hash,
+source IDs and `planner.reason` (including `BELIEF_AVOIDANCE`/`BELIEVED_DANGER`) to diagnose changes.
+Only physical activity is public. Schema 011 and the existing worker/credential setup remain current.
+
 Travel, daily sleep and social obligations reuse the existing `world-runner` and schema 011;
 there is no new service, migration, credential or provider dependency. They are opt-in through
 [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations). Routine configuration is

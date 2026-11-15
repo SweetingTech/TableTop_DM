@@ -22,6 +22,7 @@ from kernel.snapshots import SnapshotManifest, SnapshotStore
 from kernel.state import BranchState, InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
 from population.models import PopulationMember
+from population.motivation import GoalInputReader
 
 ReadResult = TypeVar("ReadResult")
 
@@ -81,7 +82,8 @@ class SimulationApplication:
         self.human_decision_evidence: dict[uuid.UUID, dict] = {}
         self.states = InMemoryStateStore()
         self.branches = BranchManager(self.states)
-        self.bus = register_tabletop(CommandBus(self.states))
+        self.goal_input_reader: GoalInputReader | None = None
+        self.bus = register_tabletop(CommandBus(self.states), self.read_goal_inputs)
         self.bus.control_validator = self.validate_control
         self.bus.control_committer = self.advance_control
         self.bus.result_validator = self.validate_population_bindings
@@ -120,6 +122,11 @@ class SimulationApplication:
 
     def configure_subjective_projector(self, projector: Callable[[CommandReceipt], None]) -> None:
         self.subjective_projector = projector
+
+    def read_goal_inputs(self, proposal, state):
+        if self.goal_input_reader is None:
+            raise ValueError("trusted NPC goal reader is unavailable")
+        return self.goal_input_reader(proposal, state)
 
     def create_world(
         self,

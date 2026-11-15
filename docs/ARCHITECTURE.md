@@ -344,8 +344,24 @@ same world-clock handler, using the existing local movement helper and Activity 
 Private bounded day/goal counters measure fulfillment, not resources. Actual inventory, health,
 fatigue, work and position remain solely on the body. Fixed retry/day/need boundaries preserve
 coarse-versus-split behavior; viewer presence and population relevance do not select a different
-policy. Goal IDs/choices stay outside sensory projections. This is a physical routine planner,
-separate from the character context/cognition proposal pipeline and future detailed E3 actions.
+policy. Goal IDs/choices stay outside sensory projections.
+
+With `life.planning.motivated`, the trusted API composition injects an authorized input reader
+(`kernel/api/npc_goals.py`). It builds the NPC's own perception-scoped character context from
+event-time grants, requires projected experience to be current, and resolves the exact pinned
+CHARACTER profile. Approved deep traits are reconstructed from its immutable blueprint because
+durable compiled profile rows omit those fields. No private authored card read is needed by the
+clock executor. `cognition/goal_motivation.py` validates each belief against a matching perceived
+source claim, caps confidence, and derives bounded motive weights and believed-danger avoidance.
+`population/motivation.py` freezes these private inputs under the normal clock lock; the handler
+alone commits choices and effects. Missing authority, binding or evidence projection fails closed.
+Replay uses committed deltas rather than rereading current minds. This links subjective cognition
+to the finite physical goal menu; detailed actions and unrestricted goal invention remain E3/F work.
+
+The DM character-card association API links an existing canonical body to a saved card without
+creating a player account or party seat. Reference locking and durable body-scoped advisory locks
+serialize competing associations; durable updates touch association columns only. Persona pins,
+mind state, controller assignments, population identity and body resources remain separate.
 
 `population/runtime.py` connects the existing `PopulationLifecycle` to typed canonical commands.
 Each embodied member refers to exactly one existing body. Private branch-local member/history

@@ -36,12 +36,14 @@ class DailyGoal(BaseModel):
     place: Place
     seconds_per_day: int = Field(default=1800, ge=1, le=86400)
     priority: int = Field(default=50, ge=1, le=100)
+    motive: Literal["DUTY", "CURIOSITY", "CARE", "RECOVERY"] | None = None
 
 
 class DailyPlan(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     goals: tuple[DailyGoal, ...] = Field(min_length=1, max_length=8)
     retry_seconds: int = Field(default=300, ge=10, le=3600)
+    motivated: bool = False
 
     @model_validator(mode="after")
     def unique_goals(self):

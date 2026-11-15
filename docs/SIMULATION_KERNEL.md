@@ -184,7 +184,14 @@ bounded intention menu and private `planner` metadata are not additional authori
 time, route steps, needs, daily resets, choices and canonical effects commit atomically with the
 receipt; exact retries cannot fulfill an intention twice. No network/model callback runs under
 the clock lock. Goal selection reads own physical needs and approved local destinations, never
-arbitrary private mental state. Priority/distance/ID ordering, fixed retry boundaries and preserved
+arbitrary private mental state. Optional motivation reads only the bound body's authorized,
+event-grounded subjective context and pinned CHARACTER traits. Its typed, scope-checked input
+records the policy/compiler/persona versions, deterministic seed, semantic input hash and source
+evidence IDs privately with the routine projection. The wrapper refreshes these inputs under the
+same command lock before execution, and the normal transaction commits them with effects, receipt,
+event and outbox. Failure rolls everything back; exact retry and replay retain the original inputs.
+Current private DM notes, secret state, unsourced beliefs and unheard claims are not policy inputs.
+Priority/distance/ID ordering, fixed retry boundaries and preserved
 partial phases make outcome independent of tick partitioning and human viewers. Midnight resets
 daily fulfillment only; it cannot refill inventory or erase body fatigue/health/work.
 

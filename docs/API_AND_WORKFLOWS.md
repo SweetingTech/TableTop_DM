@@ -1020,11 +1020,62 @@ per-goal elapsed time, last choice/reason and decision sequence. These records a
 priorities and quotas never enter the player scene or character context. The console continues
 showing inspected physical work, rest, sleep and travel using existing activity labels.
 
-Policy `npc-daily-planning-1.0.0` runs inside `npc-routines-1.2.0` and the existing authorized clock
+Policy `npc-daily-planning-1.1.0` runs inside `npc-routines-1.3.0` and the existing authorized clock
 transaction; projection, effects, command/event/outbox, retries and replay remain atomic. No new
-migration, worker, provider or port is required. This bounded physical planner does not generate
-new intentions from character beliefs, create dialogue/relationships, choose tactical combat
+migration, worker, provider or port is required. Without optional motivation below, this bounded
+physical planner uses authored priorities. It does not create dialogue/relationships, choose tactical combat
 responses or implement the remaining detailed cognition/scene-action planning in E3/F.
+
+## Belief and persona driven NPC goals
+
+Daily planning can additionally rank its finite goal menu using the NPC's pinned identity and
+own perceived evidence. This is opt-in: set `life.planning.motivated` to `true`. Existing routines
+retain their authored priorities when this flag is absent. No model provider is required.
+
+Set up an existing canonical NPC body as follows:
+
+1. Create a saved character card through the existing character API with the intended identity
+   and backstory. As the world's DM/Admin, send PUT to
+   `/api/v2/dm/worlds/{world}/branches/{branch}/entities/{entity}/character-card` with
+   `{"character_id":"<saved-card UUID>"}`. It requires `entity.control` and `mind.write.all`.
+   A card/body association cannot move to a different body or replace another card. Retrying the
+   same association returns the saved record. It creates no account, roster seat, body or resources.
+2. Compile and pin a CHARACTER persona through the existing `character-binding` endpoint,
+   including the card revision. Keep the population source/body binding as its separate setup step.
+3. Configure a life plan and daily goals through the normal versioned routine command. Each goal
+   may declare `"motive":"DUTY"`, `"CURIOSITY"`, `"CARE"` or `"RECOVERY"`. Defaults are DUTY for
+   WEED and RECOVERY for REST. Set `"motivated":true` alongside the planning goals/retry interval.
+4. Grant the configured clock executor world-scoped `mind.read.all` explicitly, in addition to
+   its existing clock capabilities. An actor controlling the particular body with `entity.act`
+   may read its own mind instead. Keep the perception projector running: an unprojected experience,
+   unavailable pin, or missing grant rejects the clock command atomically rather than guessing.
+
+Policy `npc-goal-motivation-1.0.0` adds LOW/MEDIUM/HIGH trait weights of -20/0/+20 per trait to
+authored priorities: DUTY uses conscientiousness/achievement priority, CURIOSITY curiosity/openness,
+CARE agreeableness/community loyalty, and RECOVERY security priority/patience. Need, sleep and
+appointment constraints still precede discretionary goals. A changed relevant belief may interrupt
+a committed goal while retaining its actual partial work and daily fulfillment.
+
+Two structured claim forms from normal perceived events currently influence motivation:
+
+- `subject_type: "entity"`, `subject_id: <this NPC body>`, `predicate: "motive_importance"`,
+  `value: {"motive":"CARE","importance":80}` adjusts that motive by confidence times the signed
+  integer importance (-100 through 100). It expresses subjective importance, not canonical fact.
+- `subject_type: "place"`, `predicate: "place_danger"`,
+  `value: {"place":<normal local Place object>,"dangerous":true}` can exclude goals at that place.
+  LOW/MEDIUM/HIGH risk tolerance requires confidence at least 0.25/0.5/0.75. A later matching
+  non-danger belief can reopen it; a believed-unsafe home is not used as a fallback destination.
+
+The claim must match an active belief of this NPC and its frozen source observation. Confidence
+cannot exceed source/claim confidence. Unheard, foreign, malformed, contradicted and unsourced
+inputs are ignored. Existing belief revision keeps the latest active value for each subject and
+predicate; it does not store simultaneous importance values for different motives on one subject.
+This policy does not interpret arbitrary prose into beliefs or invent new occupations/goals.
+
+Manager inspection exposes private motivation provenance and chosen goals. Player scenes expose
+only physical activity/progress. Choice inputs and effects commit together; replay and exact retry
+use the original frozen inputs even if later beliefs differ. Trials still require their own valid
+scope/pin and remain isolated. Schema 011 remains current; no new UI form or provider is enabled.
 
 ## Error contract
 

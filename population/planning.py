@@ -6,17 +6,22 @@ This policy does not read another person's hidden state or write subjective cogn
 
 from __future__ import annotations
 
+from cognition.goal_motivation import GoalMotivation
 from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position
 from kernel.state import BranchState
 from population.life import DAY, due_obligation, route, sleeping, switch, travel
 
-POLICY_VERSION = "npc-daily-planning-1.0.0"
+POLICY_VERSION = "npc-daily-planning-1.1.0"
 
 
 def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
     body = state.projections["tabletop.entities"][key]
     plan = row["life"]
     options = plan["planning"]
+    motivation = (
+        GoalMotivation.model_validate(row["motivation"]) if options.get("motivated") else None
+    )
+    motivation_hash = motivation.input_hash if motivation else None
     old = Activity.model_validate(state.projections[ACTIVITIES][key])
     actual = position(state, key)
     day = now // DAY
@@ -58,6 +63,19 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
     slot = now // interval
 
     def choose(task: str, kind: str, place: dict, duration: int, reason: str, details=None):
+        if (
+            motivation
+            and place == plan["home"]
+            and place in motivation.unsafe_places
+            and task.startswith(("fallback:", "safe:", "sleep:"))
+        ):
+            task, kind, place, duration, reason = (
+                f"fallback:{slot}",
+                "REST",
+                actual,
+                interval,
+                "BELIEVED_DANGER",
+            )
         if actual != place:
             # Retry slots rotate rest decisions, not an unfinished physical journey.
             travel_task = (
@@ -101,6 +119,8 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
         goals = []
         for goal in options["goals"]:
             identity = goal["goal_id"]
+            if motivation and identity in motivation.avoided:
+                continue
             if planner["spent"].get(identity, 0) >= goal["seconds_per_day"]:
                 continue
             if goal["kind"] == "WEED" and raining:
@@ -112,6 +132,7 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
                 "COMPLETED",
                 "CANCELLED",
             }
+            ongoing = ongoing and motivation_hash == planner.get("motivation_hash")
             expected = old.details.get("expected") if old.kind == "TRAVEL" else old.origin
             obstructed = False
             if ongoing and old.kind == "TRAVEL":
@@ -132,10 +153,12 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
                 continue
             # Finish a selected feasible goal before scoring the remaining intentions.
             distance = sum(abs(actual[axis] - goal["place"][axis]) for axis in ("x", "y"))
-            goals.append((not ongoing, -goal["priority"], distance, identity, goal))
+            priority = motivation.priorities[identity] if motivation else goal["priority"]
+            goals.append((not ongoing, -priority, distance, identity, goal))
         if goals:
             *_, identity, goal = min(goals)
             planner["selected"] = identity
+            planner["motivation_hash"] = motivation_hash
             activity, reason = choose(
                 f"goal:{day}:{identity}",
                 goal["kind"],
@@ -145,7 +168,13 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
                 {"planning_goal": identity},
             )
         else:
-            reason = "RAIN" if raining else "DAY_COMPLETE"
+            reason = (
+                "RAIN"
+                if raining
+                else "BELIEF_AVOIDANCE"
+                if motivation and motivation.avoided
+                else "DAY_COMPLETE"
+            )
             activity, reason = choose(f"fallback:{slot}", "REST", plan["home"], interval, reason)
 
     activity = activity.model_copy(update={"status": "RUNNING", "reason": None})
@@ -180,7 +209,7 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
         activity = activity.model_copy(update={"origin": actual})
     if activity.reason != "PATH_BLOCKED":
         activity = activity.model_copy(update={"status": "RUNNING", "reason": None})
-    decision = (activity.task_key, reason)
+    decision = (activity.task_key, reason, motivation_hash)
     if tuple(planner.get("decision", ())) != decision:
         planner["decision_sequence"] = planner.get("decision_sequence", 0) + 1
         planner.update(decision=list(decision), decided_seconds=now, reason=reason)
