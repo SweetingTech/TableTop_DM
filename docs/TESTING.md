@@ -1,24 +1,5 @@
 # Testing
 
-Roster recovery tests cover missing/finished runs, preparation/final-publication failures,
-retry deduplication, reassignment, shared seats, removal, epoch fencing and rejoining without
-losing the body or pinned binding. The durable lane verifies seat/control rollback, restarted
-retry, runtime-owner forced-RLS denial and paused runners after removal. Migration013 is tested
-on a clean install and012 upgrade, transaction rollback, repeat application and least-privilege
-function grants. These are A2/A3 checks; full A2–A8 acceptance also requires the two-client UI
-journey and restart described in the campaign checklist.
-
-Console regressions cover same-version projection, cancelled/out-of-order reads, monotonic
-versions, reconnect, denied-access clearing, pinned bodies, draft/focus preservation and stale
-read labels. Readiness tests cover delayed other-body evidence, stored confidence precision and
-rejection of changed source/body/payload/time/confidence. Map tests cover translated/negative
-coordinates, unknown/out-of-bounds positions, player configuration denial and hidden-zone/model
-context exclusion. `tests/e2e/test_human_play_closeout.py` uses isolated PostgreSQL, two real
-cookie-authenticated Chromium clients, the built SPA and a real projector. It exercises DM
-invitations, movement, dialogue, attacks, polling health/position, more than four tokens,
-viewpoint/draft isolation, offline recovery and app restart at the same URL. Run it with
-`TTDM_INTEGRATION=1` and the integration database/Redis settings in the existing browser lane.
-
 Shared-clock action tests exercise physical durations, body-owned movement speed, non-overridable
 costs, retry/no-write rejection, actual concurrent reference submissions, finite guard expiry,
 self-only scene readiness and controller wait/race/resume. Run `uv run python -m pytest

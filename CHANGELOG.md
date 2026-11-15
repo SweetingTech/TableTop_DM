@@ -1,17 +1,5 @@
 # Changelog
 
-- Synchronize perception-scoped console scenes with bounded visible-tab polling, reconnect,
-  obsolete-response protection and explicit unavailable/stale/projection-pending states.
-  Preserve background drafts and isolate body changes. Replace the fixed map/four-token cap
-  with per-zone presentation and known coordinates; keep interface metadata out of cognition.
-  Recognize complete stored-precision observations without rewriting evidence or widening masks.
-
-- Make character assignment prepare an uncontrolled body/binding before atomically publishing
-  its roster seat and typed human-control grant. Retry failures without duplicating bodies or
-  persona bindings. Reassignment/last-seat removal revoke prior control and fence paused runners
-  while preserving physical state/history and independent world roles. Migration013 closes
-  stale runtime-owner RLS delegation; shared seats retain their grant.
-
 - Keep battlefield camera/control-mode changes outside physical readiness, incapacity and wakeup
   checks while retaining entity-control authorization. Changing presentation never spends or
   resets action time, wakes a sleeping body, or changes body resources.
