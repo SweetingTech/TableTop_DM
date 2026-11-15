@@ -28,6 +28,7 @@ REQUIRED_MEMBERS = (
     "infra/sql/migrations/009_speech_combat_evidence.sql",
     "infra/sql/migrations/010_tactical_choice_evidence.sql",
     "infra/sql/migrations/011_population_body_binding.sql",
+    "infra/sql/migrations/012_snapshot_entity_identity.sql",
     "static/v2/index.html",
 )
 
@@ -78,6 +79,7 @@ assert [item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "009_speech_combat_evidence.sql",
     "010_tactical_choice_evidence.sql",
     "011_population_body_binding.sql",
+    "012_snapshot_entity_identity.sql",
 ]
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

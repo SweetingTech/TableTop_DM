@@ -37,7 +37,7 @@ from cognition.engine import (
     LayeredDecisionEngine,
     SubjectiveStatePipeline,
 )
-from cognition.models import RuntimeAssignment, RuntimeKind
+from cognition.models import RelationshipVector, RuntimeAssignment, RuntimeKind
 from cognition.openai_compatible import configured_dialogue
 from cognition.perception import PerceptionProfile
 from cognition.planning import GoapAction
@@ -103,7 +103,7 @@ from kernel.branching import ConsequencePackage
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
 from kernel.control import ControllerState, ControlScope
 from kernel.database import execute_one
-from kernel.errors import KernelError
+from kernel.errors import BranchIsolationError, KernelError
 from kernel.postgres_control_plane import PostgresControlPlane
 from kernel.postgres_repository import PostgresCommandRepository
 from kernel.state import InMemoryStateStore
@@ -308,9 +308,14 @@ class ObservationRequest(BaseModel):
 class RelationshipRequest(BaseModel):
     target_entity_id: uuid.UUID
     source_event_id: uuid.UUID
-    event_type: str = Field(min_length=1, max_length=120)
+    event_type: str | None = Field(default=None, min_length=1, max_length=120)
     deltas: dict[str, float] | None = None
     modifiers: RelationshipModifiers = Field(default_factory=RelationshipModifiers)
+
+
+class SnapshotRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    branch_id: uuid.UUID | None = None
 
 
 class LoginRequest(BaseModel):
@@ -2808,7 +2813,8 @@ def create_app(
         target = canonical_entity(body.target_entity_id)
         if (entity.world_id, entity.branch_id) != (target.world_id, target.branch_id):
             raise ValueError("relationship entities must share a world branch")
-        source_event = simulation.events[body.source_event_id]
+        source = controller_snapshot()
+        source_event = source.events[body.source_event_id]
         if (source_event.world_id, source_event.branch_id) != (
             entity.world_id,
             entity.branch_id,
@@ -2816,7 +2822,7 @@ def create_app(
             raise ValueError("relationship source event must share the entity world branch")
         require_world_access(entity.world_id)
         actor_id = current_actor_id()
-        actor = simulation.authority(entity.world_id, actor_id)
+        actor = source.authority(entity.world_id, actor_id)
         if (
             entity_id not in actor.controlled_entity_ids
             and "mind.write.all" not in actor.capabilities
@@ -2829,8 +2835,6 @@ def create_app(
             raise PermissionError(
                 "controlled actors must use deterministic relationship event mappings"
             )
-        if VisibilityPolicy.event_for(source_event, actor) is None:
-            raise PermissionError("relationship source event is not visible to actor")
         change_id = RelationshipChangeRecord.identity(
             world_id=entity.world_id,
             branch_id=entity.branch_id,
@@ -2841,18 +2845,49 @@ def create_app(
         existing = minds.relationship_change(change_id, branch_id=entity.branch_id)
         if existing is None and mind_repository is not None:
             existing = mind_repository.get_relationship_change(change_id, actor_id=actor_id)
-        before = (
-            existing.before
-            if existing is not None
-            else minds.relationship(
+        from cognition.relationship_evidence import POLICY_VERSION, classify_relationship
+
+        event_type = body.event_type
+        if existing is not None:
+            if VisibilityPolicy.event_for(
+                source_event, actor
+            ) is None and not source.perception_grant(source_event.event_id, entity_id):
+                raise PermissionError("relationship source event is not available to actor")
+            event_type = event_type or existing.event_type
+        elif not has_global_mind_write or event_type is None:
+            derived = classify_relationship(
+                source_event,
+                source.perception_grant(source_event.event_id, entity_id),
                 entity_id,
                 body.target_entity_id,
-                branch_id=entity.branch_id,
+                actor_id,
             )
-        )
+            if event_type is not None and event_type != derived:
+                raise ValueError("requested relationship reaction differs from perceived evidence")
+            event_type = derived
+        elif VisibilityPolicy.event_for(source_event, actor) is None:
+            raise PermissionError("relationship source event is not visible to actor")
+        if existing is None and mind_repository is not None:
+            _, _, relationships = mind_repository.load_projection(
+                world_id=entity.world_id,
+                branch_id=entity.branch_id,
+                entity_id=entity_id,
+                actor_id=actor_id,
+            )
+            before = dict(relationships).get(body.target_entity_id, RelationshipVector())
+        else:
+            before = (
+                existing.before
+                if existing is not None
+                else minds.relationship(
+                    entity_id,
+                    body.target_entity_id,
+                    branch_id=entity.branch_id,
+                )
+            )
         change = relationship_engine.apply(
             before,
-            body.event_type,
+            event_type,
             modifiers=body.modifiers,
             deltas=body.deltas,
         )
@@ -2864,10 +2899,21 @@ def create_app(
             target_entity_id=body.target_entity_id,
             source_event_id=source_event.event_id,
             actor_id=actor_id,
-            policy_version=relationship_engine.VERSION,
+            policy_version=(
+                existing.policy_version
+                if existing is not None
+                else relationship_engine.VERSION
+                if has_global_mind_write and body.event_type is not None
+                else POLICY_VERSION
+            ),
         )
+        if existing is not None:
+            if existing.immutable_content() != record.immutable_content():
+                raise ValueError("relationship change retry differs from immutable history")
+            return _json(existing, 201)
         if mind_repository is not None:
             record = mind_repository.save_relationship_change(record)
+            return _json(record, 201)
         committed = minds.apply_relationship_change(record)
         return _json(committed, 201)
 
@@ -2909,25 +2955,46 @@ def create_app(
         actor = simulation.authority(world_id, actor_id)
         if "run.branch" not in actor.capabilities:
             raise PermissionError("actor cannot snapshot this world")
-        manifest = simulation.create_snapshot(world_id)
+        body = SnapshotRequest.model_validate(request.get_json(silent=True) or {})
+        branch_id = body.branch_id or simulation.worlds[world_id].canonical_branch_id
         if durable_control:
-            state = simulation.states.get(manifest.branch_id)
-            durable_control.persist_snapshot(manifest, state.version)
+            manifest = durable_control.capture_snapshot(
+                simulation, world_id, branch_id, actor_id=actor_id
+            )
+        else:
+            if simulation.states.get(branch_id).world_id != world_id:
+                raise ValueError("snapshot branch does not belong to world")
+            manifest = simulation.create_branch_snapshot(branch_id)
         return _json(manifest, 201)
 
     @app.post("/api/v2/snapshots/<uuid:snapshot_id>/branches")
     def create_branch(snapshot_id: uuid.UUID):
         body = request.get_json(silent=True) or {}
-        manifest = simulation.snapshots[snapshot_id]
+        source = controller_snapshot()
+        manifest = source.snapshots[snapshot_id]
         world_id = uuid.UUID(str(body.get("world_id", manifest.world_id)))
         actor_id = current_actor_id()
-        actor = simulation.authority(world_id, actor_id)
+        actor = source.authority(world_id, actor_id)
         if "run.branch" not in actor.capabilities:
             raise PermissionError("actor cannot create trial branches in this world")
         seed = int(body.get("seed", 101))
-        branch, run = simulation.create_trial(world_id, snapshot_id, seed)
+        branch, run = source.create_trial(world_id, snapshot_id, seed)
         if durable_control:
-            durable_control.sync(simulation)
+            durable_control.persist_trial(source, branch, run, snapshot_id, actor_id=actor_id)
+
+            def publish_trial():
+                try:
+                    simulation.states.get(branch.branch_id)
+                except BranchIsolationError:
+                    simulation.states.add(branch.working_copy())
+                simulation.runs.setdefault(run.run_id, run)
+                simulation.snapshots.setdefault(snapshot_id, manifest)
+                simulation.branch_snapshot_ids.setdefault(branch.branch_id, snapshot_id)
+                for key, entity in source.entities.items():
+                    if key[0] == branch.branch_id:
+                        simulation.entities.setdefault(key, entity.model_copy(deep=True))
+
+            simulation.read_reference(publish_trial)
         return jsonify(
             {
                 "branch_id": str(branch.branch_id),

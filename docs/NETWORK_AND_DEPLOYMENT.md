@@ -3,7 +3,8 @@
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 
-This API version requires migrations through 011, including character history/bindings,
+This API version requires migrations through 012, including frozen snapshot artifact identity,
+character history/bindings,
 private proposal receipts, controller ownership and human choice evidence. Revision, binding, and proposal
 records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
 The migration owner remains separate from the runtime login. Card revisions are authored source
@@ -245,13 +246,14 @@ The readiness check expects `011_population_body_binding.sql`. Routine execution
 follows the clock's explicit pause/downtime policy. This change does not enable a model provider or
 alter operator credentials. See the [setup workflow](API_AND_WORKFLOWS.md#population-binding-and-npc-routines).
 
-Opt-in travel/sleep/social schedules share this same worker and projection transaction. Schema 011
-remains current. Clock retries cover location, rest, food and joint attendance together; separate
+Opt-in travel/sleep/social schedules share this same worker and projection transaction. Their schema
+remains 011; the application additionally requires snapshot migration 012. Clock retries cover
+location, rest, food and joint attendance together; separate
 processes do not each award their own effects. Private routes and appointment schedules are manager
 inspection only. These features add no port, database table or model-provider connection.
 
 Daily goal selection executes within that same world-runner transaction and requires no external
-AI connection. Schema 011 and current service topology remain unchanged. Planner metadata is
+AI connection. Daily planning uses schema 011 and the existing service topology. Planner metadata is
 manager-only inspection; the served console reads existing perception-scoped physical activities.
 
 Optional NPC belief/persona motivation uses the same worker, PostgreSQL transaction and schema 011.

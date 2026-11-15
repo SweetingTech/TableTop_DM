@@ -1,5 +1,13 @@
 # Testing
 
+Relationship/snapshot repair tests cover frozen physical classification, rejected fabricated
+promise/rescue reactions, masked raw-event RLS, immutable retries after later updates, current
+vectors across independent API processes, nested trial-only bodies and historical secrets,
+metadata-distinct snapshot IDs with equal projection hashes, tamper rejection, exact base snapshot
+lineage after restart/replay, and transaction rollback without partial in-memory publication.
+Migration 012 is exercised on clean installs and upgrades from 011 with a retained legacy artifact.
+Legacy projection-only artifacts stay readable and fail closed for new entity restoration.
+
 World-time tests cover epoch/step/executor fencing, pause/resume and manual boundaries, FREEZE and
 bounded CATCH_UP, deterministic ordering/replay, trial/world isolation, empty-viewer progression,
 rain boundaries and partial work, rest/cancel/movement/incapacity, and inspected activity privacy.

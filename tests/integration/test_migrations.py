@@ -47,6 +47,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("009_speech_combat_evidence.sql",),
             ("010_tactical_choice_evidence.sql",),
             ("011_population_body_binding.sql",),
+            ("012_snapshot_entity_identity.sql",),
         ]
         cursor.execute(
             """

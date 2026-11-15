@@ -435,7 +435,7 @@ def test_010_upgrade_preserves_materialized_source_and_can_bind_afterwards(
         )
         root, member_path, body = seed_routine(app, admin, base, target, bind=False)
         before = admin.get(member_path).get_json()
-        assert migrate(url, migrations) == 1
+        assert migrate(url, migrations) == 2
         assert migrate(url, migrations) == 0
         assert admin.get(member_path).get_json() == before
         accepted = admin.post(member_path + "/bind", json=body)

@@ -129,8 +129,21 @@ physical witness membership. See [Spatial epistemics](SPATIAL_EPISTEMICS.md).
 ## Canonical state, snapshots, trials, and replay
 
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
-projection, command boundary, contract version, and content hashes. Trial branches load an
+projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
+entity's identity, controller and secret metadata at that boundary. Public body resources remain
+only in the projection. Snapshot identity includes metadata; replay state hashes still identify
+projections. Migration 012 permits distinct artifacts with the same projection and command boundary.
+Trial branches load an
 immutable snapshot and preserve logical entity IDs beneath a different branch-scoped key.
+
+Durable capture locks branch then projection, reads entity metadata and command boundary, and
+persists artifact metadata plus manifest in one transaction. Trial creation persists only that
+trial's branch, projection, entities and run; it never resynchronizes world grants. Memory publishes
+after commit. Nested trials restore the selected snapshot's metadata, never today's canonical
+entities. The exact base snapshot ID survives hydration even when projection hashes match.
+Legacy 2.0 artifacts remain readable for replay; new trial restoration from them fails closed
+because their historical entity metadata is unavailable. Minds, evidence, population source stores,
+controller assignments and retrieval indexes still need complete checkpoint support.
 
 Trials write only their own projection and ledger. Canonical promotion is a separate reviewed
 command requiring:

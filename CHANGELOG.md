@@ -1,5 +1,12 @@
 # Changelog
 
+- Ground controlled relationship classifications in frozen physical evidence and preserve historical
+  retry receipts without resetting later vectors. Keep privileged subjective overrides explicit.
+- Freeze entity identity/controller/secrets in snapshot 2.1, restore nested trials from exact source
+  metadata, and atomically persist scoped trial creation without resynchronizing world grants.
+  Add migration 012 for metadata-distinct snapshot identity; legacy 2.0 artifacts remain readable
+  but require a new capture for new trial restoration. Complete campaign checkpoints remain planned.
+
 - Require source-card authority before NPC association, including locked-record validation and
   retries, and preserve active motivational belief evidence beyond the recent-experience window.
 

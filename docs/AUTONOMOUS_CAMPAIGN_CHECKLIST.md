@@ -133,6 +133,8 @@ as composition glue; reusable execution services must also work from workers and
   observations, prompts, receipts, and retrieval so revision notes/protection rules never become character evidence.
 - [ ] B7 — Acceptance: seed hidden plot facts and abandoned-timeline facts; verify they cannot enter
   character context, speech, memory, or retrieval. Test god knowledge limits and human-player/character separation.
+  Causal relationship hardening derives controlled reactions from frozen physical evidence and
+  rejects arbitrary promise/rescue labels; broader knowledge and abandoned-timeline acceptance remains open.
 
 ## C. Make action outcomes authoritative
 
@@ -308,6 +310,9 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
 - [ ] I1 — Specify a consistent checkpoint manifest spanning canonical projection and entity metadata,
   secrets, minds/evidence/memories/relationships, population, control assignments, activities, clock,
   RNG allocation, story state, tasks, narrative/retrieval indexes, and relevant versioned artifacts.
+  Snapshot 2.1 freezes projection plus entity identity/controller/secrets for exact nested trials.
+  Migration 012 preserves metadata-distinct artifacts. This remains a partial foundation: subjective
+  state, population sources, controller assignments and narrative/retrieval stores are not restored.
 - [ ] I2 — Add a pause/quiescence barrier for workers and projector. Checkpoint one causal boundary;
   identify pending outbox work and prevent a mix of pre-event bodies and post-event minds.
 - [ ] I3 — Extend snapshot storage/repositories and hydrate all checkpoint components. Add scheduled

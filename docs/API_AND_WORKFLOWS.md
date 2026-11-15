@@ -284,6 +284,20 @@ trial with `POST /api/v2/snapshots/{snapshot_id}/branches`, inspect replay with
 `GET /api/v2/branches/{branch_id}/replay`, and submit an approved consequence package through
 `POST /api/v2/branches/{branch_id}/promotions`.
 
+### Snapshots and trials
+
+`POST /api/v2/worlds/{world_id}/snapshots` accepts an optional `branch_id`, defaulting to the
+canonical branch. It requires current world-scoped `run.branch` authority and captures snapshot
+contract 2.1 with frozen entity identity, controller and private metadata. The selected branch must
+belong to that world. Branch creation uses the exact snapshot ID and seed; retries preserve an
+existing trial's progress. Nested trials retain trial-only entities and historical secrets.
+Snapshot bodies stay in the private artifact store; public scenes never receive this metadata.
+
+Legacy 2.0 snapshots remain readable for replay. Creating a new trial from one returns
+`invalid_operation` with an instruction to capture a new snapshot, because historical entity
+metadata cannot be reconstructed safely. Existing persisted trials remain available. These are
+projection/entity snapshots; full campaign checkpoint and timeline revision remain unfinished.
+
 ### World-scoped reads
 
 Every world-scoped route requires `ADMIN`, or a `DM` or `PLAYER` grant **for that world**. Roles
@@ -344,6 +358,15 @@ PUT  /api/v2/entities/{entity_id}/runtime
 Observations must derive from visible canonical/trial events. Relationship changes require a
 same-world, same-branch source event. A decision returns a trace and proposal; it does not mutate
 world state until the proposal enters `/commands`.
+
+For controlled relationship updates, omit `event_type` to derive `conversation` from heard speech
+by the target or `attacked` from a perceived damaging attack by that target against the observer.
+If supplied, `event_type` must match this fixed classification. Frozen physical grants and masks
+govern eligibility; raw event ACLs and caller-authored observation overrides cannot invent evidence.
+Unsupported promise/rescue/humiliation classifications are rejected. Only explicit world-scoped
+`mind.write.all` callers retain authored subjective overrides with custom deltas/modifiers. Exact
+historical retries return their original record without resetting later relationship changes.
+Durable updates load current vectors from storage and retain compare-and-set conflict checks.
 
 Mind inspection applies the same server-side world and actor checks in reference and durable
 storage. It requires the entity's controller or a world-scoped `mind.read.all`/`mind.write.all`
@@ -1080,7 +1103,8 @@ This policy does not interpret arbitrary prose into beliefs or invent new occupa
 Manager inspection exposes private motivation provenance and chosen goals. Player scenes expose
 only physical activity/progress. Choice inputs and effects commit together; replay and exact retry
 use the original frozen inputs even if later beliefs differ. Trials still require their own valid
-scope/pin and remain isolated. Schema 011 remains current; no new UI form or provider is enabled.
+scope/pin and remain isolated. Motivation reuses schema 011; snapshot identity additionally
+requires migration 012. No new UI form or provider is enabled.
 
 ## Error contract
 

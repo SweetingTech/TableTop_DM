@@ -123,7 +123,7 @@ losing the bootstrap authority fails closed without widening grants.
 Durable readiness includes:
 
 - PostgreSQL runtime connection;
-- migration history through `011_population_body_binding.sql`;
+- migration history through `012_snapshot_entity_identity.sql`;
 - Redis authentication and ping;
 - Qdrant HTTP readiness;
 - active durable storage mode.
@@ -227,7 +227,7 @@ and serialized successor checks. Runtime can read permitted revisions but cannot
 them directly. The migration does not auto-create personas for old characters; retry their roster
 assignment to create a missing initial binding. Existing bindings are never silently replaced.
 
-Apply migrations through 011 before starting this application version. Back up PostgreSQL and artifacts and verify
+Apply migrations through 012 before starting this application version. Back up PostgreSQL and artifacts and verify
 the upgrade in an isolated restore first, using the normal schema-change procedure below.
 Unbound card deletion explicitly erases its private authored history. Bound revisions and bindings
 are retained; retire the saved card instead of deleting evidence beneath a running identity.
@@ -393,7 +393,21 @@ up before the next motivated command. Missing evidence projection, profile or au
 the whole command without advancing the clock. Repair the grant/pin or run the projector before
 retrying; do not bypass the evidence barrier. Inspect private `motivation` policy/input hash,
 source IDs and `planner.reason` (including `BELIEF_AVOIDANCE`/`BELIEVED_DANGER`) to diagnose changes.
-Only physical activity is public. Schema 011 and the existing worker/credential setup remain current.
+Only physical activity is public. Motivation uses schema 011; the current application also requires
+snapshot migration 012. The existing worker/credential setup remains current.
+
+## Snapshot metadata and migration 012
+
+Run the normal owner migration lane before starting this application version. Migration 012
+replaces projection-only snapshot uniqueness with uniqueness that also includes the artifact ID.
+It preserves existing rows, references, append-only protections, runtime grants and RLS. No live
+deployment or data reset is needed for isolated test runs; normal deployment still applies the migration.
+
+Contract 2.1 artifacts contain frozen controller and secret entity metadata. Keep the artifact
+volume private and back it up with PostgreSQL. SQL rollback can leave an unreferenced content-addressed
+file; it does not publish a manifest or partial trial. Legacy 2.0 snapshots remain readable, but
+new restoration requires a 2.1 capture rather than copying current metadata into old history.
+Whole-campaign checkpoints and abandoned-timeline mind/index restoration remain incomplete.
 
 Travel, daily sleep and social obligations reuse the existing `world-runner` and schema 011;
 there is no new service, migration, credential or provider dependency. They are opt-in through
