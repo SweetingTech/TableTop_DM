@@ -713,6 +713,9 @@ guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
   and poisoned/frightened disadvantage. Legacy unarmed body reach remains supported. A living,
   awake, capable attacker needs a different visible, living target within the same zone/reach.
   Caller bonuses/dice are rejected. Action-seed allocation and combat timing remain planned.
+  Selling the final equipped weapon copy atomically switches the seller to UNARMED. Legacy
+  unavailable equipment keeps scene/context reads available and suppresses impossible melee
+  candidates; the attack handler still rejects an unavailable loadout.
 - `tabletop.magic.invoke` and `tabletop.magic.cast` take only `spell_id` and `target_id`.
   ARCANE_BOLT costs two mana,
   deals three damage and reaches six grid steps. MEND costs two mana, heals four up to maximum

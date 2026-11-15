@@ -4,6 +4,9 @@
   after invalid input, and ship the current production bundle. Pair with the authoritative
   backend contract update; browser tests cover both aliases, health refresh and mobile layout.
 
+- Clear the equipped weapon atomically when its final copy is sold. Keep legacy unavailable
+  loadouts readable and omit impossible melee choices while retaining execution validation.
+
 - Make new melee requests target-only and resolve registered owned weapons, body bonuses,
   visibility/reach and conditions inside the kernel. Unify cast/invoke under fixed versioned
   learned-spell rules; validate initial card knowledge/resources without overwriting live bodies.

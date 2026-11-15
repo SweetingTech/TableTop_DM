@@ -10,11 +10,69 @@ from pydantic import BaseModel
 from cognition.projector import WorldEventProjector
 from kernel.api.app import create_app
 from kernel.contracts import CommandProposal
+from tests.integration.test_relationship_snapshot_repairs import fresh_client
 from tests.integration.test_speech_combat_behavior import prepare
 from tests.unit.kernel.test_speech_combat_behavior import provoke
 from tests.unit.kernel.test_tactical_choices import command, resources
 
 pytestmark = pytest.mark.integration
+
+
+def test_last_equipped_weapon_trade_preserves_reads_retries_and_replay_after_restart(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, card, path, run, target, base) = prepare(
+        integration_stack, monkeypatch, tmp_path
+    )
+    spawned = admin.post(
+        f"/api/v2/worlds/{base['world_id']}/entities",
+        json={
+            "name": "Equipment seller",
+            "entity_type": "NPC",
+            "controller_actor_id": str(app.extensions["demo_ids"]["actor_id"]),
+            "public_state": {
+                "x": 2,
+                "y": 0,
+                "hp": 20,
+                "max_hp": 20,
+                "gold": 0,
+                "equipped_weapon": "SPEAR",
+                "inventory": {"SPEAR": 1},
+            },
+        },
+    )
+    assert spawned.status_code == 201, spawned.get_json()
+    entity = spawned.get_json()["entity_id"]
+    request = {
+        **base,
+        "embodied_entity_id": entity,
+        "command_type": "tabletop.economy.trade",
+        "parameters": {
+            "counterparty_id": target,
+            "item": "SPEAR",
+            "quantity": 1,
+            "unit_price": 0,
+            "direction": "SELL",
+        },
+        "idempotency_key": "last-weapon-trade",
+    }
+    response = admin.post("/api/v2/commands", json=request)
+    assert response.status_code == 200, response.get_json()
+    before = durable_mark(integration_stack, base)
+    restored, reader = fresh_client(tmp_path)
+    assert reader.post("/api/v2/commands", json=request).get_json() == response.get_json()
+    assert durable_mark(integration_stack, base) == before
+    state = restored.extensions["simulation"].states.get(uuid.UUID(base["branch_id"]))
+    body = state.projections["tabletop.entities"][entity]
+    assert body["equipped_weapon"] == "UNARMED" and body["inventory"]["SPEAR"] == 0
+    endpoint = f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}/entities/{entity}"
+    scene = reader.get(endpoint + "/scene")
+    assert scene.status_code == 200
+    own = next(row for row in scene.get_json()["perceived_entities"] if row["entity_id"] == entity)
+    assert own["attack_reach"] == 1
+    assert reader.get(endpoint + "/context").status_code == 200
+    replay = reader.get(f"/api/v2/branches/{base['branch_id']}/replay")
+    assert replay.status_code == 200 and replay.get_json()["verified"]
 
 
 def durable_mark(stack, base):
