@@ -1,5 +1,8 @@
 # Changelog
 
+- Clear the equipped weapon atomically when its final copy is sold. Keep legacy unavailable
+  loadouts readable and omit impossible melee choices while retaining execution validation.
+
 - Make new melee requests target-only and resolve registered owned weapons, body bonuses,
   visibility/reach and conditions inside the kernel. Unify cast/invoke under fixed versioned
   learned-spell rules; validate initial card knowledge/resources without overwriting live bodies.

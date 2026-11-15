@@ -1,17 +1,113 @@
 from __future__ import annotations
 
+import os
+import uuid
 from dataclasses import replace
 
 import pytest
 from pydantic import BaseModel, ConfigDict
 
+from kernel.application import stable_id
 from kernel.command_bus import CommandBus, CommandDefinition
 from kernel.contracts import BranchKind, CommandResult, StateDelta
 from kernel.errors import AuthorizationDenied
+from tests.unit.kernel.test_character_binding_api import _app
+from tests.unit.kernel.test_speech_combat_behavior import provoke, setup_scene
+from tests.unit.kernel.test_tactical_choices import resources
 from tests.unit.tabletop.test_domain_commands import domain as domain
 from tests.unit.tabletop.test_domain_commands import proposal
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize("weapon", ["SPEAR", "SHORTSWORD"])
+@pytest.mark.parametrize("copies", [1, 2])
+def test_trade_reconciles_equipment_only_after_selling_final_copy(domain, weapon, copies):
+    hero = domain["state"].projections["tabletop.entities"][str(domain["hero"])]
+    hero.update({"equipped_weapon": weapon, "inventory": {weapon: copies}})
+    request = proposal(
+        domain,
+        "tabletop.economy.trade",
+        {
+            "counterparty_id": str(domain["merchant"]),
+            "item": weapon,
+            "quantity": 1,
+            "unit_price": 5,
+            "direction": "SELL",
+        },
+        "sell-weapon",
+    )
+    receipt = domain["bus"].execute(request, domain["actor"])
+    after = domain["state"].projections["tabletop.entities"][str(domain["hero"])]
+    assert after["inventory"][weapon] == copies - 1
+    assert after["equipped_weapon"] == ("UNARMED" if copies == 1 else weapon)
+    assert domain["bus"].execute(request, domain["actor"]) == receipt
+    assert after["gold"] == 55
+
+
+def test_scene_and_context_remain_available_after_selling_equipped_weapon(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    sim, ids = app.extensions["simulation"], app.extensions["demo_ids"]
+    body = sim.states.get(ids["branch_id"]).projections["tabletop.entities"][str(ids["hero_id"])]
+    body.update({"equipped_weapon": "SPEAR", "inventory": {"SPEAR": 1}})
+    client = app.test_client()
+    client.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    base = {k: str(ids[k]) for k in ("world_id", "branch_id", "run_id")}
+    response = client.post(
+        "/api/v2/commands",
+        json={
+            **base,
+            "embodied_entity_id": str(ids["hero_id"]),
+            "command_type": "tabletop.economy.trade",
+            "parameters": {
+                "counterparty_id": str(stable_id("demo:entity:merchant")),
+                "item": "SPEAR",
+                "quantity": 1,
+                "unit_price": 5,
+                "direction": "SELL",
+            },
+            "idempotency_key": "sell-last-spear",
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    path = f"/api/v2/worlds/{ids['world_id']}/branches/{ids['branch_id']}/entities/{ids['hero_id']}"
+    scene = client.get(path + "/scene")
+    assert scene.status_code == 200
+    own = next(
+        row
+        for row in scene.get_json()["perceived_entities"]
+        if row["entity_id"] == str(ids["hero_id"])
+    )
+    assert own["attack_reach"] == 1
+    assert client.get(path + "/context").status_code == 200
+
+
+def test_old_unavailable_equipment_does_not_block_scene_or_offer_impossible_melee(
+    monkeypatch, tmp_path
+):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = setup_scene(app)
+    resources(app, admin, base, card["entity_id"])
+    state = app.extensions["simulation"].states.get(uuid.UUID(base["branch_id"]))
+    state.projections["tabletop.entities"][card["entity_id"]].update(
+        {"equipped_weapon": "SPEAR", "inventory": {}}
+    )
+    provoke(admin, base, target, card, "old-loadout-threat")
+    scene = player.get(path + "/scene")
+    assert scene.status_code == 200
+    own = next(
+        row
+        for row in scene.get_json()["perceived_entities"]
+        if row["entity_id"] == card["entity_id"]
+    )
+    assert own["attack_reach"] == 0
+    context = player.get(path + "/context", query_string={"run_id": run})
+    assert context.status_code == 200
+    assert context.get_json()["action_candidates"]
+    assert all(
+        c["command_type"] != "tabletop.combat.attack"
+        for c in context.get_json()["action_candidates"]
+    )
 
 
 @pytest.mark.parametrize(

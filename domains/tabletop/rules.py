@@ -69,6 +69,14 @@ def attack_profile(body: dict) -> AttackProfile:
     )
 
 
+def available_melee_reach(body: dict) -> int:
+    """Own-loadout availability for scenes; invalid equipment cannot prevent a read."""
+    try:
+        return attack_profile(body).reach
+    except ValueError:
+        return 0
+
+
 class SpellRule(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     spell_id: SpellId

@@ -79,7 +79,7 @@ def character_action_candidates(
                 parameters=AttackRequest(target_id=threat.entity_id).model_dump(mode="json"),
             )
             for index, threat in enumerate(frame.threats)
-            if threat.distance <= (body.attack_reach or 1)
+            if body.attack_reach != 0 and threat.distance <= (body.attack_reach or 1)
         )
     if frame is not None and frame.threats:
         if not frame.guarded:
