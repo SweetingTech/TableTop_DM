@@ -264,7 +264,7 @@ def test_two_cookie_clients_invite_act_resynchronize_switch_and_survive_restart(
         expect(
             a.get_by_text(
                 "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, "
-                "/equip, /trade, /offer, /withdraw, /cast, /invoke, or type dialogue.",
+                "/equip, /trade, /offer, /withdraw, /quest, /cast, /invoke, or type dialogue.",
                 exact=True,
             )
         ).to_be_visible()

@@ -4,6 +4,16 @@ import { parseCommand } from "../features/game-console/api";
 import { entityMapPosition } from "../features/game-console/mapPosition";
 
 describe("typed game command parser", () => {
+  it("allows quest references but no self-reported completion or reward terms", () => {
+    const id = "b4a03714-a3c3-42af-8e6a-afd19da7dc84";
+    expect(parseCommand(`/quest claim ${id}`, demoGameState)).toEqual({
+      commandType: "tabletop.quest.claim", parameters: { quest_id: id } });
+    expect(parseCommand(`/quest status ${id}`, demoGameState)).toEqual({
+      commandType: "tabletop.quest.advance", parameters: { quest_id: id } });
+    for (const text of [`/quest claim ${id} 100`, "/quest accept none", `/quest complete ${id}`, `/quest status ${id} 1 1`]) {
+      expect(() => parseCommand(text, demoGameState)).toThrow("Use /quest");
+    }
+  });
   it("accepts an offer reference without inventing its price or counterparty", () => {
     const id = "b4a03714-a3c3-42af-8e6a-afd19da7dc84";
     expect(parseCommand(`/trade ${id} 2`, demoGameState)).toEqual({
@@ -71,7 +81,7 @@ describe("typed game command parser", () => {
   it("rejects unsupported slash commands with the supported actions", () => {
     for (const command of ["/teleport moon", "/", "  /dance wildly  "]) {
       expect(() => parseCommand(command, demoGameState)).toThrow(
-        "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /trade, /offer, /withdraw, /cast, /invoke, or type dialogue.",
+        "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /trade, /offer, /withdraw, /quest, /cast, /invoke, or type dialogue.",
       );
     }
   });

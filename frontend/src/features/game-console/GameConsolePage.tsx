@@ -61,6 +61,7 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
   const game = resource.data?.data;
   const selectedViewpointId = selectedEntityId || game?.observer_entity_id || "";
   const selectedViewpoint = game?.viewpoints?.find((item) => item.entity_id === selectedViewpointId);
+  const personalQuests = game?.entities.find((entity) => entity.entity_id === selectedViewpointId)?.quests ?? [];
   const ownedViewpoint = Boolean(selectedViewpoint) && selectedViewpoint?.can_act !== false && resource.data?.source === "live";
   const canAct = ownedViewpoint && Boolean(game?.run) && controlMode === "HUMAN" && !resource.syncError && game?.experience_ready !== false;
   const selected = game?.entities.find((entity) => entity.entity_id === focusedEntityId)
@@ -141,6 +142,27 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
             {game.entities.map((entity) => <EntityRow key={entity.entity_id} entity={entity} selected={entity.entity_id === selected?.entity_id} onSelect={() => setFocusedEntityId(entity.entity_id)} />)}
           </div>
           {selected ? <div className="entity-detail"><DefinitionList items={[["Type", selected.entity_type], ["Location", selected.location ?? "Unknown"], ["Status", <Status value={selected.status ?? "UNKNOWN"} />], ["Health", selected.health === undefined ? "—" : `${selected.health} / ${selected.max_health ?? "—"}`]]} /></div> : null}
+          {selected?.quest_offers?.length ? <section aria-label="Offered quests">
+            <h3>Offered quests</h3>
+            {selected.quest_offers.map((quest) => <article key={quest.quest_id}>
+              <h4>{quest.title}</h4><p>{quest.description}</p>
+              <ul>{quest.objectives.map((objective, index) => <li key={index}>{objective.description} · {objective.target} needed</li>)}</ul>
+              <p>Reward: {quest.reward_gold} gold{Object.entries(quest.reward_items).map(([item, count]) => ` · ${count} ${item}`).join("")}</p>
+              <button type="button" className="button secondary" disabled={!canAct || sending} onClick={() => {
+                setCommand(`/quest accept ${quest.quest_id}`); commandInput.current?.focus();
+              }}>Accept {quest.title}</button>
+            </article>)}
+          </section> : null}
+          {personalQuests.length ? <section aria-label="Personal quest journal">
+            <h3>Your quests</h3>
+            {personalQuests.map((quest) => <article key={quest.quest_id}>
+              <h4>{quest.title}</h4><p>{({ ACTIVE: "In progress", READY: "Ready for reward", CLAIMED: "Reward received", CANCELLED: "Withdrawn", OFFERED: "Offered" })[quest.status]}</p>
+              <ul>{quest.objectives.map((objective, index) => <li key={index}>{objective.description} · {objective.progress} / {objective.target}</li>)}</ul>
+              {quest.status === "READY" ? <button type="button" className="button secondary" disabled={!canAct || sending} onClick={() => {
+                setCommand(`/quest claim ${quest.quest_id}`); commandInput.current?.focus();
+              }}>Claim reward for {quest.title}</button> : null}
+            </article>)}
+          </section> : null}
           {selected?.trade_offers?.length ? <section aria-label="Trade offers">
             <h3>Trade offers</h3>
             <p>Choose an offer to prepare a command, then send it below.</p>

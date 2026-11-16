@@ -1,12 +1,19 @@
 # TableTop DM
 
+Quests use manager-authored movement, defeat, trade or weeding objectives and rewards reserved
+from the giver's actual goods/gold. Inspect a nearby giver, accept an offer, then complete its
+objectives through ordinary actions. The personal journal follows committed outcomes, including
+offscreen work. Return to a capable nearby giver to claim the promised reward once. Console
+commands are `/quest accept|status|claim <quest id>`. Requests cannot supply progress or reward
+amounts. The autonomous planner's pursuit of these opportunities remains a later checklist item.
+
 Trade uses standing offers backed by the maker's carried goods or gold. In the console, inspect
 an adjacent merchant and choose an offer to prepare a command, then send it. `/offer buy|sell
 <item> <quantity> <unit price>` posts your own offer; `/trade <offer id> [quantity]` accepts its
 fixed terms and `/withdraw <offer id>` returns your reserved resources. Both participants must
 be capable, visible and adjacent; an exchange occupies both bodies for six simulated seconds.
-Expired or cancelled offers return the unused reserve once. Quest progress and rewards are
-still being converted to authorized evidence; this trade work does not complete that checklist item.
+Expired or cancelled offers return the unused reserve once. Whole-section verification and
+independent acceptance remain separate from individual trade/quest implementation changes.
 
 Attacks use canonical ability scores, weapon rules and training. Shortswords may use the higher
 of Strength/Dexterity; unarmed attacks and spears use Strength. `/equip UNARMED|SHORTSWORD|SPEAR`

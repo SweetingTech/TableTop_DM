@@ -19,7 +19,8 @@ from domains.tabletop.initiative import command_definitions as initiative
 from domains.tabletop.magic import command_definition as magic
 from domains.tabletop.magic.tactical import command_definition as invoke
 from domains.tabletop.onboarding import command_definition as onboarding
-from domains.tabletop.quests import command_definition as quests
+from domains.tabletop.quests import command_definitions as quests
+from domains.tabletop.quests.evidence import EVIDENCE_COMMANDS, with_quest_evidence
 from domains.tabletop.recovery import command_definition as stabilize
 from domains.tabletop.recovery import with_recovery
 from domains.tabletop.rest import command_definitions as rest
@@ -63,9 +64,9 @@ def command_definitions(
         *economy(),
         factions(),
         divine(),
-        quests(),
+        *quests(),
     )
-    return tuple(
+    wrapped = tuple(
         replace(definition, version=f"{definition.version}+presentation.1")
         if definition.command_type == "tabletop.battlefield.set_control_mode"
         else replace(
@@ -81,6 +82,16 @@ def command_definitions(
         in {"tabletop.clock.tick", "tabletop.clock.advance", "tabletop.routine.configure"}
         else definition
         for definition in definitions
+    )
+    return tuple(
+        replace(
+            definition,
+            version=f"{definition.version}+quest-evidence.1",
+            handler=with_quest_evidence(definition.handler),
+        )
+        if definition.command_type in EVIDENCE_COMMANDS
+        else definition
+        for definition in wrapped
     )
 
 

@@ -8,6 +8,7 @@ from cognition.models import Observation
 from cognition.store import MindStore
 from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.economy import visible_offers
+from domains.tabletop.quests import personal_quests, visible_quests
 from domains.tabletop.rules import available_melee_reach, dead, incapacitated, known_spells
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.spatial.scene import (
@@ -151,6 +152,12 @@ def build_perceived_scene(
                     for row in visible_offers(state, observer_entity_id, entity_id)
                 )
                 if inspected
+                else (),
+                quest_offers=visible_quests(state, observer_entity_id, entity_id)
+                if inspected
+                else (),
+                quests=personal_quests(state, observer_entity_id)
+                if entity_id == observer_entity_id
                 else (),
                 activity=VisibleActivity(
                     kind=activity["kind"],

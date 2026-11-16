@@ -1,5 +1,15 @@
 # Operations, storage, migrations, and security
 
+Quest contracts use existing atomic branch projections, with no migration or separate worker.
+Deploy matching Python/SPA versions. Create funded contracts through manager-only typed commands;
+do not migrate legacy caller-reported quest counters into verified objectives. Old committed
+keys still return their original canonical receipts, while new `quest.advance` requests accept
+only a quest ID. No model/provider writes progress or rewards. Existing world clock commands
+produce offscreen work evidence atomically; failed publication rolls back both work and progress.
+Claim/cancel are terminal reserve settlements, and historical rows do not consume active quotas.
+Ordinary healing cannot restore a dead giver: continuation after such a death remains governed
+by the existing director/rewind checklist work rather than a reward bypass.
+
 Trade offers use existing atomic branch projections; no migration, provider or new worker is
 required. Deploy the matching Python code and built SPA together: new trade requests reference
 maker-authorized offers instead of setting price/direction. Old committed keys retain their
