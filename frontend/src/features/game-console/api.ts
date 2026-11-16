@@ -232,6 +232,13 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
       }
       return { commandType: "tabletop.rest.start", parameters: { kind } };
     }
+    case "equip": {
+      const weaponId = (parts[0] ?? "").toUpperCase();
+      if (parts.length !== 1 || !["UNARMED", "SHORTSWORD", "SPEAR"].includes(weaponId)) {
+        throw new Error("Use /equip UNARMED|SHORTSWORD|SPEAR");
+      }
+      return { commandType: "tabletop.equipment.equip", parameters: { weapon_id: weaponId } };
+    }
     case "invoke": {
       const spellId = (parts.shift() ?? "").toUpperCase();
       if (!["ARCANE_BOLT", "MEND"].includes(spellId) || !parts.length) {
@@ -249,6 +256,6 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
         spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
     }
     default:
-      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /cast, /invoke, or type dialogue.");
+      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /cast, /invoke, or type dialogue.");
   }
 }

@@ -1,5 +1,13 @@
 # Simulation-kernel contract
 
+`tabletop-action-rules-1.2.0` resolves STR/finesse DEX modifiers and canonical training into melee
+bonuses. The typed attack intent still supplies only a target; physical seeds are allocated by
+the commit adapter. Manager-only `tabletop.body.configure` accepts bounded definitions without
+healing, refilling or replacing inventory. `tabletop.equipment.equip` verifies registered owned
+gear and uses the shared controlled-action wrappers, including incapacity, initiative, readiness,
+rest interruption and atomic retry. Its sensory summary is in-world and sight-scoped. Canonical
+live-sheet abilities/profile are distinct from the immutable authored starting card.
+
 `tabletop-initiative-1.0.0` records start command/run provenance and a stable d20+DEX order in
 `tabletop.encounters`. The same branch/run clock selects repeating six-second participant windows.
 Clock progression is independent of connection or controller presence. Out-of-turn physical

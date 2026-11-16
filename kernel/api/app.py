@@ -1839,6 +1839,8 @@ def create_app(
                                 "known_spells": list(starting_resources.known_spells),
                                 "speed": character.speed,
                                 "ability_scores": character.ability_scores,
+                                "proficiency_bonus": 2 + (character.level - 1) // 4,
+                                "trained_weapons": ["UNARMED", "SHORTSWORD", "SPEAR"],
                             },
                             "controller_actor_id": None,
                         },

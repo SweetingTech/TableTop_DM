@@ -33,17 +33,34 @@ export function CharacterStatePanel({ character, onUpdate }: {
         <p>Equipped weapon: <strong style={{ overflowWrap: "anywhere" }}>{body.equipped_weapon.replaceAll("_", " ")}</strong></p>
         <p>Learned spells: {body.known_spells.length ? body.known_spells.map((spell) => spell.replaceAll("_", " ")).join(", ") : "None"}</p>
         <p>Conditions: {body.conditions.length ? body.conditions.join(", ") : "None"}</p>
+        {body.attack_bonus != null ? <p>Attack bonus: <strong>{body.attack_bonus >= 0 ? "+" : ""}{body.attack_bonus}</strong>
+          {body.damage_bonus != null ? <> · Damage bonus: <strong>{body.damage_bonus >= 0 ? "+" : ""}{body.damage_bonus}</strong></> : null}</p> : null}
         <div aria-label="Inventory" style={{ maxHeight: "16rem", overflowY: "auto", overflowWrap: "anywhere" }}>
           <strong>Inventory</strong>
           {inventory.length ? <ul>{inventory.map(([item, amount]) => <li key={item}>{item}: {amount}</li>)}</ul> : <p>Empty</p>}
         </div>
       </div> : null}
+      {body?.ability_scores ? <Abilities scores={body.ability_scores} label="Campaign abilities" />
+        : authored ? <Abilities scores={character.ability_scores} label="Starting abilities" />
+        : body ? <p>Ability scores are not configured for this body.</p> : null}
     </> : null}
     <div hidden={!authored}>
       <StartingResources key={[character.character_id, character.status, character.current_hit_points,
         character.maximum_hit_points].join(":")} character={character} onUpdate={onUpdate} />
     </div>
   </section>;
+}
+
+const abilityNames = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"];
+function Abilities({ scores, label }: { scores: Record<string, number>; label: string }) {
+  return <div className="ability-grid" role="group" aria-label={label}>
+    {abilityNames.map((ability) => {
+      const score = scores[ability] ?? 10;
+      const modifier = Math.floor((score - 10) / 2);
+      return <div key={ability}><span>{ability.slice(0, 3).toUpperCase()}</span>
+        <strong>{score}</strong><small>{modifier >= 0 ? "+" : ""}{modifier}</small></div>;
+    })}
+  </div>;
 }
 
 function StartingResources({ character, onUpdate }: {

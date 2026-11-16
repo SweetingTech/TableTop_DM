@@ -68,6 +68,8 @@ export type CharacterState = {
     world_id: string; branch_id: string; entity_id: string; projection_version: number;
     status: "ALIVE" | "ASLEEP" | "INCAPACITATED" | "DEFEATED" | "DEAD";
     hp: number; max_hp: number; armor: number; speed: number; mana: number;
+    ability_scores?: Record<string, number> | null; proficiency_bonus?: number | null;
+    attack_bonus?: number | null; damage_bonus?: number | null;
     inventory: Record<string, number>; equipped_weapon: string;
     known_spells: string[]; conditions: string[];
   };

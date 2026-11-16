@@ -1,5 +1,11 @@
 # Changelog
 
+- Derive attacks from canonical STR/finesse DEX, training and owned weapon definitions. Add strict
+  manager body configuration and ordinary controlled `/equip` intent; preserve legacy scoreless
+  profiles until explicit conversion. Show live body abilities and bonuses on the player sheet,
+  retain authored card isolation, and emit in-world equipment observations. Verify canonical
+  seeded outcomes, authority/forgery rejection, retry, restart/replay/rollback and actual UI.
+
 - Add kernel-seeded initiative and fixed six-second participant windows over the shared clock.
   Enforce the same turn/readiness rules for human and autonomous actions, preserve offscreen work,
   reject overlapping/bypassed encounters and keep private order/seed metadata out of sensory scenes.

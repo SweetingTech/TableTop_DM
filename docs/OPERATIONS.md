@@ -1,5 +1,12 @@
 # Operations, storage, migrations, and security
 
+Ability-derived attacks/loadouts require no migration or new process. Newly bound characters
+receive scores/proficiency/training as canonical starting definitions. Existing scoreless bodies
+keep their explicit legacy combat profile; configure them deliberately with the typed manager
+`tabletop.body.configure` command when their intended scores/training are known. This operation
+does not infer card stats, create equipment, heal or refill resources. Bound-card score edits stay
+rejected; the player sheet reads current body scores and bonuses through its existing live API.
+
 Initiative needs the existing configured world clock and no new service/migration. World managers
 use typed `tabletop.encounter.start`/`stop` commands; the manager role remains distinct from body
 control. Participants can miss windows while the clock continues; pausing the clock pauses their

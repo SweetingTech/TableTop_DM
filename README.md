@@ -1,5 +1,10 @@
 # TableTop DM
 
+Attacks use canonical ability scores, weapon rules and training. Shortswords may use the higher
+of Strength/Dexterity; unarmed attacks and spears use Strength. `/equip UNARMED|SHORTSWORD|SPEAR`
+readies an owned weapon and spends the normal action cost. The live sheet follows current body
+scores and attack/damage bonuses, while the authored character card remains separate.
+
 New defeats start death saves every six simulated seconds: three successes stabilize, three
 failures kill; a natural 1 counts twice and a natural 20 restores 1 HP. Saves use recorded
 kernel-owned damage seeds. Healing can rescue a living body at 0 HP, and `/stabilize <target>`

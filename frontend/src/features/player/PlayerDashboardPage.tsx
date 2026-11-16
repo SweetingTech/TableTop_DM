@@ -297,22 +297,6 @@ function CharacterSheet({
         </div>
       </div>
       <CharacterStatePanel character={character} onUpdate={onUpdate} />
-      <div className="ability-grid">
-        {abilities.map((ability) => (
-          <div key={ability}>
-            <span>{ability.slice(0, 3).toUpperCase()}</span>
-            <strong>{character.ability_scores[ability] ?? 10}</strong>
-            <small>
-              {Math.floor(
-                ((character.ability_scores[ability] ?? 10) - 10) / 2,
-              ) >= 0
-                ? "+"
-                : ""}
-              {Math.floor(((character.ability_scores[ability] ?? 10) - 10) / 2)}
-            </small>
-          </div>
-        ))}
-      </div>
       <form onSubmit={async (event) => {
         event.preventDefault();
         setSavingIdentity(true);

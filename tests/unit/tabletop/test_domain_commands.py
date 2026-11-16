@@ -167,6 +167,8 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.combat.attack",
         "tabletop.combat.stabilize",
         "tabletop.rest.start",
+        "tabletop.body.configure",
+        "tabletop.equipment.equip",
         "tabletop.encounter.start",
         "tabletop.encounter.stop",
         "tabletop.resources.configure",

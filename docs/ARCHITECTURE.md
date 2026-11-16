@@ -2,6 +2,13 @@
 
 ## System shape
 
+Canonical scores/training and versioned weapon definitions drive attack profiles in
+`domains/tabletop/rules.py`. Typed manager body configuration sets definitions without changing
+resources; controlled equip is an ordinary physical action over owned inventory. A score-bearing
+body ignores obsolete flat attack/damage fields. New bindings pin starting scores/proficiency;
+legacy scoreless bodies keep their explicit profile until authorized conversion. Live sheet
+projections expose current own-body scores and bonuses without rereading authored physical stats.
+
 Initiative is one branch projection, `tabletop.encounters`, over the existing world clock.
 Manager-only typed commands roll server-seeded canonical DEX scores and start/stop the fixed
 order. No client supplies rolls, bonuses or turn duration. The ordinary controlled-action wrapper,

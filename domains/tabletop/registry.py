@@ -5,6 +5,7 @@ from dataclasses import replace
 from domains.tabletop.action_time import with_action_time
 from domains.tabletop.activities import command_definitions as activities
 from domains.tabletop.battlefield import command_definitions as battlefield
+from domains.tabletop.body_configuration import command_definitions as body_configuration
 from domains.tabletop.combat import command_definition as combat
 from domains.tabletop.combat.tactics import command_definition as guard
 from domains.tabletop.dialogue import command_definitions as dialogue
@@ -44,6 +45,7 @@ def command_definitions(
         *routines(),
         *life(),
         *battlefield(),
+        *body_configuration(),
         onboarding(),
         *dialogue(),
         entities(),
