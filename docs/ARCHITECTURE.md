@@ -2,6 +2,11 @@
 
 ## System shape
 
+Durable private-receipt presentation uses the existing `sim.has_world_capability` function in an
+actor-scoped transaction. This bounded read observes current exact-world grants without hydrating
+all world state or trusting the API's cached authority. A separate-process DM revocation applies
+to new and cached HTTP receipts; the committed command result remains unchanged.
+
 HTTP receipt presentation omits private quest/offer projection deltas for actors without
 world-scoped `world.read.all`. This pure projection never changes canonical receipts or replay
 inputs; public action results and scenes remain available without revealing hidden objective

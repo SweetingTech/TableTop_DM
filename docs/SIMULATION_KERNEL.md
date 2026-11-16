@@ -1,5 +1,11 @@
 # Simulation-kernel contract
 
+HTTP private-receipt inspection reads current durable capability through
+`sim.has_world_capability(world_id, 'world.read.all')` with transaction-local `app.actor_id`.
+This existing RLS primitive checks the exact world and active actor. The API's cached actor model
+cannot grant private presentation after another process revokes access. The read changes no
+canonical result, seed, cost, receipt or replay state, including for an idempotent cached retry.
+
 Canonical command results retain all quest/offer deltas for persistence, retries and replay.
 The HTTP receipt is a separate projection: actors without `world.read.all` in the exact world
 receive no private quest/offer delta records. Public result models already exclude source/target

@@ -1,5 +1,11 @@
 # Testing
 
+The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
+proves the database grant is revoked while the original API cache still says read-all. It then
+requires both a new reward response and a cached acceptance receipt to exclude private quest
+deltas, preserving original event/hash and leaving no retry writes. It failed before the bounded
+current-capability read and passes with that fix, alongside the four existing durable quest cases.
+
 Quest/offer receipt regressions assert that ordinary submissions and cached retries omit private
 projection deltas and source/target provenance, privileged world-manager inspection remains
 available, and the pure presenter leaves canonical result bytes unchanged. The durable quest

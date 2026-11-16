@@ -2590,13 +2590,18 @@ def create_app(
         proposal = CommandProposal.model_validate(payload)
         require_world_access(proposal.world_id)
         receipt = simulation.submit(proposal)
-        authority = simulation.authority(proposal.world_id, proposal.actor_id)
+        include_private = (
+            durable_control.has_world_capability(
+                proposal.world_id, proposal.actor_id, "world.read.all"
+            )
+            if durable_control is not None
+            else "world.read.all"
+            in simulation.authority(proposal.world_id, proposal.actor_id).capabilities
+        )
         cursor = command_scene_cursor(receipt, simulation.states.get(proposal.branch_id).version)
         return jsonify(
             {
-                "result": present_command_result(
-                    receipt.result, include_private="world.read.all" in authority.capabilities
-                ),
+                "result": present_command_result(receipt.result, include_private=include_private),
                 "event": receipt.event.model_dump(mode="json"),
                 "state_hash": receipt.state_hash,
                 "scene_refresh": cursor.model_dump(mode="json") if cursor is not None else None,

@@ -45,6 +45,18 @@ class PostgresControlPlane:
         self.dsn = dsn
         self.actor_id: uuid.UUID | None = None
 
+    def has_world_capability(
+        self, world_id: uuid.UUID, actor_id: uuid.UUID, capability: str
+    ) -> bool:
+        """Read current protected grants without hydrating a cached application snapshot."""
+        with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT sim.has_world_capability(%s, %s)", (str(world_id), capability)
+                )
+                row = cursor.fetchone()
+                return bool(row and row[0])
+
     def sync(self, simulation: SimulationApplication) -> None:
         """Create missing metadata without ever overwriting canonical projections."""
         with transaction(dsn=self.dsn) as connection:

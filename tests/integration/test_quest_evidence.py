@@ -8,6 +8,7 @@ import pytest
 
 from kernel.api.app import create_app
 from kernel.contracts import CommandProposal
+from kernel.database import transaction
 from kernel.postgres_repository import PostgresCommandRepository
 from tests.integration.test_action_rules import durable_mark, player_after_restart
 from tests.integration.test_relationship_snapshot_repairs import fresh_client
@@ -139,3 +140,49 @@ def test_separate_workers_retry_reward_once_and_reject_new_duplicate_claim(
     with pytest.raises(ValueError):
         sources[1].submit(intent.model_copy(update={"idempotency_key": "second-reward"}))
     assert durable_mark(integration_stack, base) == after
+
+
+def test_private_receipt_grant_revocation_in_another_api_process_fences_new_and_cached_results(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, game = prepare(integration_stack, monkeypatch, tmp_path)
+    game, maker, buy, sell, quest = prepare_quest(app, game)
+    admin, player, card, path, run, target, base = game
+    account = player.get("/api/v2/auth/session").get_json()["user"]
+    role_path = f"/api/v2/admin/users/{account['user_id']}/worlds/{base['world_id']}/roles"
+    elevated = admin.put(role_path, json={"roles": ["PLAYER", "DM"]})
+    assert elevated.status_code == 200, elevated.get_json()
+    first = accepted(player, base, card, quest)
+    assert any(delta["projection"] == QUESTS for delta in first["result"]["deltas"])
+    completed(admin, player, base, card, buy)
+    advance_clock(admin, base, 13)
+    # A separate process changes durable grants without updating the original API cache.
+    _, other_operator = fresh_client(tmp_path)
+    revoked = other_operator.put(role_path, json={"roles": ["PLAYER"]})
+    assert revoked.status_code == 200, revoked.get_json()
+    with (
+        transaction(
+            actor_id=uuid.UUID(account["actor_id"]), dsn=integration_stack.database_url
+        ) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute("SELECT sim.has_world_capability(%s, 'world.read.all')", (base["world_id"],))
+        assert cursor.fetchone()[0] is False
+    sim = app.extensions["simulation"]
+    assert (
+        "world.read.all"
+        in sim.authority(uuid.UUID(base["world_id"]), uuid.UUID(account["actor_id"])).capabilities
+    )
+    paid = command(
+        player, base, card, "tabletop.quest.claim", {"quest_id": quest}, "after-revocation"
+    )
+    assert paid.status_code == 200, paid.get_json()
+    assert all(delta["projection"] != QUESTS for delta in paid.get_json()["result"]["deltas"])
+    assert "source_command_id" not in str(paid.get_json())
+    mark = durable_mark(integration_stack, base)
+    cached = command(player, base, card, "tabletop.quest.accept", {"quest_id": quest}, "accept")
+    assert cached.status_code == 200, cached.get_json()
+    assert all(delta["projection"] != QUESTS for delta in cached.get_json()["result"]["deltas"])
+    for field in ("event", "state_hash"):
+        assert cached.get_json()[field] == first[field]
+    assert durable_mark(integration_stack, base) == mark
