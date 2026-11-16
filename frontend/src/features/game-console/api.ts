@@ -237,6 +237,6 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
         spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
     }
     default:
-      return { commandType: "tabletop.console.submit", parameters: { text } };
+      throw new Error("Unsupported command. Use /move, /attack, /guard, /cast, /invoke, or type dialogue.");
   }
 }

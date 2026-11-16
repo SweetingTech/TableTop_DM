@@ -217,9 +217,12 @@ GET /api/v2/worlds/{world_id}/branches/{branch_id}/entities/{entity_id}/scene
 GET /api/v2/events/{event_id}/perceptions       # privileged inspection only
 ```
 
-Normal prose submits `tabletop.dialogue.speak`, an embodied sound emission. Slash actions submit
-their typed movement/combat/magic contracts; explicit OOC/interface text remains
-`tabletop.console.submit`. The scene contains only current perceived entities and subjective
+Normal prose submits `tabletop.dialogue.speak`, an embodied sound emission. The console supports
+`/move`, `/attack`, `/guard`, `/cast` and `/invoke` through their typed movement/combat/magic
+contracts. Unknown slash commands show those supported actions, retain the draft and make no
+command request. API callers can explicitly submit uninterpreted OOC/interface text through
+`tabletop.console.submit`; recording that proposal does not execute a physical action.
+The scene contains only current perceived entities and subjective
 observation presentations, with detail levels from anonymous `PRESENCE` through `INSPECTED`.
 
 Accepted embodied `POST /api/v2/commands` receipts include `scene_refresh` with `world_id`,

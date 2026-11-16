@@ -1,0 +1,150 @@
+{
+  "schema": "ttdm-a2-a8-verification-1.0.0",
+  "code_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
+  "reports": [
+    {
+      "path": "fast.log",
+      "sha256": "0ea52735d6324328c614d9183b743de508fe15e699c8955da68df944c7f919f4",
+      "original_sha256": "f2b7258e25119407efc742f9dfd6f079a2f1cb4f4bba0e95ffdeca3fe6162bd1",
+      "bytes": 3713,
+      "transform": "ANSI removed; local workspace/temp path prefixes replaced. Connection/credential patterns fail closed.",
+      "tested_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "scripts/test.py",
+        "fast"
+      ],
+      "started_at": "2026-11-16T03:05:53.759018+00:00",
+      "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "platform": "win32",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T03:07:45.440508+00:00"
+    },
+    {
+      "path": "types.log",
+      "sha256": "186cc0c1aea3775e003f558152b988d5ca54bba36db4f9b6701f3eeb10d30ec3",
+      "original_sha256": "7f1235fe069e6a22ff8b4e2aa23bde549d7468ff595e8213b81252e49eee7982",
+      "bytes": 45,
+      "transform": "ANSI removed; local workspace/temp path prefixes replaced. Connection/credential patterns fail closed.",
+      "tested_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
+      "command": [
+        "uv",
+        "run",
+        "mypy",
+        "kernel",
+        "persona",
+        "cognition",
+        "population",
+        "experiments",
+        "domains",
+        "identity",
+        "infra",
+        "main.py"
+      ],
+      "started_at": "2026-11-16T03:05:53.758498+00:00",
+      "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "platform": "win32",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T03:05:54.905067+00:00"
+    },
+    {
+      "path": "human-play.log",
+      "sha256": "b6a6ea2039d4ec7c0d451ed3dbd1ef339756de9ce96c1bd51df2fa22a5a4150d",
+      "original_sha256": "f9a140350b764029be924537d1b417ee2b458f1be209084c3312c603c635ca70",
+      "bytes": 1846,
+      "transform": "ANSI removed; local workspace/temp path prefixes replaced. Connection/credential patterns fail closed.",
+      "tested_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "<temp>\\ttdm-integration-stream.py",
+        "ttdm-a7-human-play.log",
+        "-m",
+        "e2e",
+        "tests/e2e/test_human_play_closeout.py",
+        "-v",
+        "-rA",
+        "--junitxml=<temp>/ttdm-a7-verification/human-play.junit.xml"
+      ],
+      "started_at": "2026-11-16T03:05:53.759542+00:00",
+      "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "platform": "win32",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T03:06:50.071358+00:00"
+    },
+    {
+      "path": "human-play.junit.xml",
+      "sha256": "4a2ac7585f4d0034aa8a1eaee3f90fe45ed801b7330c949e6e904bad68d0907a",
+      "original_sha256": "4a2ac7585f4d0034aa8a1eaee3f90fe45ed801b7330c949e6e904bad68d0907a",
+      "bytes": 410,
+      "transform": "ANSI removed; local workspace/temp path prefixes replaced. Connection/credential patterns fail closed.",
+      "tested_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "<temp>\\ttdm-integration-stream.py",
+        "ttdm-a7-human-play.log",
+        "-m",
+        "e2e",
+        "tests/e2e/test_human_play_closeout.py",
+        "-v",
+        "-rA",
+        "--junitxml=<temp>/ttdm-a7-verification/human-play.junit.xml"
+      ],
+      "started_at": "2026-11-16T03:05:53.759542+00:00",
+      "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "platform": "win32",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T03:06:50.071358+00:00"
+    },
+    {
+      "path": "wheel.log",
+      "sha256": "e44061e450287c3b5e8a2003a4711062042eecda851e755f3133272cfd7ccd25",
+      "original_sha256": "54e3f6f925ea3a9c7f7626ad69d105e1d273e872ad1743cbd5c72de70fdbc1ed",
+      "bytes": 2731,
+      "transform": "ANSI removed; local workspace/temp path prefixes replaced. Connection/credential patterns fail closed. Final60actual output lines; verbose build inventory omitted.",
+      "tested_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "<temp>\\ttdm-repair84-delivery.py",
+        "wheel"
+      ],
+      "started_at": "2026-11-16T03:06:16.627143+00:00",
+      "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "platform": "win32",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T03:06:27.948769+00:00"
+    },
+    {
+      "path": "ci-integration.log",
+      "sha256": "8e907667a4378ff18a43caddd62d8e50e2b385df71f284ec9397ce24b781f140",
+      "bytes": 3319,
+      "tested_revision": "d8899380bed2e03f6b9d987b59bac47e111e8cc4",
+      "command": [
+        "uv",
+        "run",
+        "pytest",
+        "-m",
+        "integration",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_run": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43776322410/job/133003314988",
+      "source_log_sha256": "1a0d7d1458ac0bdc24a09daf12c1772fdab7ac5fcbb2584b7508c33f933fb2d9",
+      "transform": "Complete actual pytest test-step session through139passed; GitHub job/step/timestamp prefixes removed; environment/setup output excluded. Backend and durable tests unchanged at code revision."
+    }
+  ],
+  "limits": [
+    "Report sha256/bytes identify exact Git blob bytes after Git CRLF-to-LF normalization; original_sha256 identifies raw local output bytes.",
+    "Local Python3.12.10; CI uses3.11.",
+    "Local durable browser lane is one full two-client/restart case;139integration report is earlier unchanged-backend CI, not a new local full run.",
+    "Fast subprocess exited0; temporary wrapper later failed printing Unicode to cp1252. Encoding fixed without changing product code or reports.",
+    "Reports are actual observed output; independent Task2 acceptance is separate."
+  ]
+}

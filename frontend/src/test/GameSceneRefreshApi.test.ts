@@ -76,6 +76,12 @@ describe("live scene API", () => {
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
+  it("rejects unsupported commands before posting an uninterpreted proposal", async () => {
+    await expect(proposeCommand("world", "/teleport moon", demoGameState, "hero"))
+      .rejects.toThrow(/Unsupported command.*\/move.*type dialogue/);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
   it("gives actionable stale-control and busy-body errors", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(ok({ error: "AuthorizationDenied" }, 403))
       .mockResolvedValueOnce(ok({ error: "BodyActionPending" }, 403));

@@ -20,7 +20,9 @@ coordinates, unknown/out-of-bounds positions, player configuration denial and hi
 context exclusion. `tests/e2e/test_human_play_closeout.py` uses isolated PostgreSQL, two real
 cookie-authenticated Chromium clients, the built SPA and a real projector. It exercises DM
 invitations, movement, dialogue, attacks, polling health/position, more than four tokens,
-viewpoint/draft isolation, offline recovery and app restart at the same URL. Run it with
+viewpoint/draft isolation, unsupported-command guidance without a POST or draft loss, offline
+recovery and app restart at the same URL. Parser/API regressions also reject unknown slash
+commands before any network request. Run it with
 `TTDM_INTEGRATION=1` and the integration database/Redis settings in the existing browser lane.
 
 Shared-clock action tests exercise physical durations, body-owned movement speed, non-overridable
