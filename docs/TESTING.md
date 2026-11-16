@@ -24,6 +24,7 @@ viewpoint/draft isolation, unsupported-command guidance without a POST or draft 
 recovery and app restart at the same URL. Parser/API regressions also reject unknown slash
 commands before any network request. Run it with
 `TTDM_INTEGRATION=1` and the integration database/Redis settings in the existing browser lane.
+
 Timed-effect tests cover mid-step condition/blessing expiry, permanent-source preservation,
 independent stacks/capacity/retries, world authority, rejected caller expiry/death values, legacy
 blessing anchoring and split-versus-whole weather/effect/readiness boundaries. Manual activities,

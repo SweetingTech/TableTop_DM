@@ -15,6 +15,7 @@
   persona bindings. Reassignment/last-seat removal revoke prior control and fence paused runners
   while preserving physical state/history and independent world roles. Migration013 closes
   stale runtime-owner RLS delegation; shared seats retain their grant.
+
 - Add authorized, bounded timed conditions with independent sources and clock expiry. Preserve
   permanent conditions and make temporary effects participate in existing incapacity and combat
   rules. Expire divine blessings in six-second turns, including deterministic anchoring of old

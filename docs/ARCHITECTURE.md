@@ -15,6 +15,7 @@ separate typed presentation command/projection; only perceived-zone maps and exp
 are added to HTTP interface responses. Character scene contracts and cognition never receive
 these interface fields. Durable readiness accepts complete same-event/body/mask/time evidence at
 the database's stored confidence precision, retaining original IDs and frozen visibility.
+
 Timed conditions are typed records stored separately from a body's permanent condition list.
 Each source retains its creating command/run and absolute simulated expiry. Existing rule
 evaluation unions active timed sources with permanent conditions; expiry removes only the due
