@@ -163,7 +163,7 @@ def test_human_and_separate_runner_use_learned_fixed_spells_with_atomic_rejectio
         )
         parameters, payload = cursor.fetchone()
         assert parameters == intent and payload["power"] == 4
-        assert payload["rules_version"] == "tabletop-action-rules-1.1.0"
+        assert payload["rules_version"] == "tabletop-action-rules-1.2.0"
 
 
 def test_legacy_attack_receipt_retries_after_strict_request_upgrade_and_restart(
