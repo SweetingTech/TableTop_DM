@@ -24,9 +24,9 @@
     },
     {
       "path": "types.log",
-      "sha256": "7f1235fe069e6a22ff8b4e2aa23bde549d7468ff595e8213b81252e49eee7982",
+      "sha256": "186cc0c1aea3775e003f558152b988d5ca54bba36db4f9b6701f3eeb10d30ec3",
       "original_sha256": "7f1235fe069e6a22ff8b4e2aa23bde549d7468ff595e8213b81252e49eee7982",
-      "bytes": 46,
+      "bytes": 45,
       "transform": "ANSI removed; local workspace/temp path prefixes replaced. Connection/credential patterns fail closed.",
       "tested_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
       "command": [
@@ -51,9 +51,9 @@
     },
     {
       "path": "human-play.log",
-      "sha256": "980eeaa7388f07967ce4d9da8406143639342e1dc141db3381ebf0c611efef5f",
+      "sha256": "b6a6ea2039d4ec7c0d451ed3dbd1ef339756de9ce96c1bd51df2fa22a5a4150d",
       "original_sha256": "f9a140350b764029be924537d1b417ee2b458f1be209084c3312c603c635ca70",
-      "bytes": 1878,
+      "bytes": 1846,
       "transform": "ANSI removed; local workspace/temp path prefixes replaced. Connection/credential patterns fail closed.",
       "tested_revision": "9d63d25bdfb9e6baf5afd1be134ad846bae995c7",
       "command": [
@@ -141,6 +141,7 @@
     }
   ],
   "limits": [
+    "Report sha256/bytes identify exact Git blob bytes after Git CRLF-to-LF normalization; original_sha256 identifies raw local output bytes.",
     "Local Python3.12.10; CI uses3.11.",
     "Local durable browser lane is one full two-client/restart case;139integration report is earlier unchanged-backend CI, not a new local full run.",
     "Fast subprocess exited0; temporary wrapper later failed printing Unicode to cp1252. Encoding fixed without changing product code or reports.",
