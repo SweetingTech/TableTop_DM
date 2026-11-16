@@ -1,5 +1,12 @@
 # TableTop DM
 
+New defeats start death saves every six simulated seconds: three successes stabilize, three
+failures kill; a natural 1 counts twice and a natural 20 restores 1 HP. Saves use recorded
+kernel-owned damage seeds. Healing can rescue a living body at 0 HP, and `/stabilize <target>`
+provides adjacent first aid with a six-second action cost. Stable bodies recover 1 HP after
+one simulated hour. Ordinary healing cannot resurrect the dead. Old zero-HP bodies are not
+retroactively given a defeat history. Rest and initiative remain open checklist work.
+
 TableTop DM is a local-first tabletop platform built on a deterministic simulation kernel. It
 supports authenticated Administrator, Dungeon Master, and Player workspaces alongside persistent
 world state, synthetic personas, population simulation, and isolated scenario evaluation.
@@ -23,7 +30,7 @@ conditions stack independently from permanent conditions. Clock advances process
 readiness and weather in time order, so incapacitated or busy people do not accrue offscreen
 work or social attendance during blocked intervals. Living needs continue. Divine blessings
 expire after six simulated seconds per requested turn; old remaining-turn grants start their
-countdown on the first new clock advance. Full initiative and death/recovery rules remain open.
+countdown on the first new clock advance. Full initiative and rest rules remain open.
 
 Language models may propose dialogue or actions, but they never write canonical state. Typed
 commands, world-scoped authorization, deterministic handlers, atomic transactions, and an

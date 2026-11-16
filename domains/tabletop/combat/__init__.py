@@ -61,7 +61,7 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
         not in GridSpatialPerceptionResolver().visible_entities(state, attacker_id)
     ):
         raise ValueError("target is not in visible melee reach")
-    if not capable(attacker) or dead(target) or int(target.get("hp", 0)) <= 0:
+    if not capable(attacker) or dead(target) or int(target.get("hp", -1)) < 0:
         raise ValueError("incapacitated entities cannot attack or be attacked")
     rng = random.Random(proposal.seed)
     attack_roll = rng.randint(1, 20)
@@ -128,7 +128,7 @@ def attack_emission(
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.combat.attack",
-        version="2.1.0",
+        version="2.2.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=attack,

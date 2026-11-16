@@ -2,6 +2,13 @@
 
 ## System shape
 
+Defeat saves live in the branch's typed `tabletop.vitals` projection. Damage commands create
+them from the same trusted physical-action seed used by both kernel repositories. Clock
+boundaries resolve indexed rolls and recovery on a private working state; bodies, vitals,
+clock, event and outbox commit together. Healing removes pending saves only for a living body.
+Sensory resolution freezes awareness at event time; dead and unconscious bodies receive no new
+grants. Human scene introspection still shows one's own body status without exposing save seeds.
+
 Roster preparation creates an uncontrolled canonical body and pins its card/persona without
 publishing a seat. Finalization composes the portal seat with a typed controller mutation in
 one actor-scoped PostgreSQL transaction. Reference mode enlists seat publication before atomic

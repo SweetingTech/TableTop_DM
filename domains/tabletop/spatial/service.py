@@ -122,7 +122,17 @@ def build_perceived_scene(
                     else "ACTIVE"
                 )
                 if entity_id == observer_entity_id
-                else (("DEFEATED" if current.get("defeated") else "ACTIVE") if inspected else None),
+                else (
+                    (
+                        "DEAD"
+                        if dead(current)
+                        else "DEFEATED"
+                        if current.get("defeated")
+                        else "ACTIVE"
+                    )
+                    if inspected
+                    else None
+                ),
                 mana=max(0, int(current.get("mana", 0)))
                 if entity_id == observer_entity_id
                 else None,

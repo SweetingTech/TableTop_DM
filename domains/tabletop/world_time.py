@@ -102,6 +102,7 @@ def advance_result(state: BranchState, clock: Clock, until: int, **updates) -> C
         WEATHER,
         SCHEDULE,
         "tabletop.entities",
+        "tabletop.vitals",
         "tabletop.population",
         "tabletop.population_transitions",
         "tabletop.routines",

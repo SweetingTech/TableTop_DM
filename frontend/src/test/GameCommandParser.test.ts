@@ -6,6 +6,10 @@ import { entityMapPosition } from "../features/game-console/mapPosition";
 describe("typed game command parser", () => {
   it("uses server-owned guard and spell invocation contracts", () => {
     expect(parseCommand("/guard", demoGameState)).toEqual({ commandType: "tabletop.combat.guard", parameters: {} });
+    expect(parseCommand("/stabilize Dockmaster Vale", demoGameState)).toEqual({
+      commandType: "tabletop.combat.stabilize", parameters: { target_id: demoGameState.entities[1].entity_id } });
+    expect(() => parseCommand("/stabilize", demoGameState)).toThrow(/perceived target/);
+    expect(() => parseCommand("/stabilize Nobody", demoGameState)).toThrow(/Unknown target/);
     expect(parseCommand("/invoke ARCANE_BOLT Dockmaster Vale", demoGameState)).toEqual({
       commandType: "tabletop.magic.invoke", parameters: { spell_id: "ARCANE_BOLT", target_id: demoGameState.entities[1].entity_id } });
     expect(() => parseCommand("/guard 999", demoGameState)).toThrow();
@@ -38,7 +42,7 @@ describe("typed game command parser", () => {
   it("rejects unsupported slash commands with the supported actions", () => {
     for (const command of ["/teleport moon", "/", "  /dance wildly  "]) {
       expect(() => parseCommand(command, demoGameState)).toThrow(
-        "Unsupported command. Use /move, /attack, /guard, /cast, /invoke, or type dialogue.",
+        "Unsupported command. Use /move, /attack, /guard, /stabilize, /cast, /invoke, or type dialogue.",
       );
     }
   });

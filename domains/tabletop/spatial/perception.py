@@ -5,6 +5,7 @@ import uuid
 from collections import deque
 from typing import Any
 
+from domains.tabletop.rules import conditions, dead
 from kernel.contracts import CommandProposal
 from kernel.perception_contracts import (
     AudienceResolution,
@@ -18,10 +19,19 @@ from kernel.state import BranchState, stable_hash
 from .models import SpatialOccluder, SpatialPortal, SpatialPosition, SpatialZone
 
 
+def unaware(body: dict) -> bool:
+    return bool(
+        dead(body)
+        or ("hp" in body and int(body["hp"]) <= 0)
+        or "unconscious" in conditions(body)
+        or str(body.get("status", "")).upper() == "UNCONSCIOUS"
+    )
+
+
 class GridSpatialPerceptionResolver:
     """Deterministic grid sight/sound resolver over event-time projections."""
 
-    VERSION = "grid-spatial-perception-1.3.1"
+    VERSION = "grid-spatial-perception-1.4.0"
 
     def visible_entities(
         self,
@@ -45,7 +55,8 @@ class GridSpatialPerceptionResolver:
         except (TypeError, ValueError, OverflowError):
             return visible
         if (
-            state.projections.get("tabletop.entities", {})
+            unaware(state.projections.get("tabletop.entities", {}).get(str(observer_entity_id), {}))
+            or state.projections.get("tabletop.entities", {})
             .get(str(observer_entity_id), {})
             .get("asleep")
             or profile.get("blinded")
@@ -126,6 +137,10 @@ class GridSpatialPerceptionResolver:
                 # Freeze against that event's post-state, never a later/current position.
                 perception_state = after
                 observer = self._positions(after).get(entity_id, observer)
+            if unaware(
+                perception_state.projections.get("tabletop.entities", {}).get(str(entity_id), {})
+            ):
+                continue
             profile = sensor_profiles.get(str(entity_id), {})
             perceived: list[SensoryModality] = []
             confidences: list[float] = []

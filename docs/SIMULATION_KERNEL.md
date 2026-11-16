@@ -1,5 +1,22 @@
 # Simulation-kernel contract
 
+`tabletop.vitals` stores versioned death-save state beside canonical body/clock projections.
+Damage-induced defeat records the kernel-allocated physical action seed. Indexed rolls use that
+seed and the body identity, so command retries and different clock partitions cannot reroll saves.
+New zero-HP damage adds failures; a melee natural 20 adds two. First aid is a typed controlled
+contact action; MEND rescues living zero-HP bodies. No ordinary action clears a dead flag.
+Clock expiry/recovery and physical bodies publish atomically; snapshots and recorded replay
+already retain these ordinary projections. Clockless pending saves start on the first clock advance.
+Pre-existing zero-HP bodies without a source record are not assigned invented old saves.
+
+Saves occur every six seconds: 10+ succeeds, natural 1 counts two failures, natural 20 restores
+1 HP. Three successes stabilize; three failures kill. Stable bodies with known positive maximum
+HP recover 1 HP after one simulated hour. Permanent conditions are independent of this recovery.
+Resolver 1.4.0 denies new sight/sound grants to dead or unconscious/zero-HP observers, frozen
+at event time. Existing memories/grants remain historical; private save records never enter the
+character scene/context. Own-body human introspection remains available. Rest and initiative
+still require the remaining original C3 work.
+
 `tabletop.entity.set_controllers` requires world-scoped `entity.control`, `mind.write.all` and
 canonical commit authority. Its typed metadata changes, sensory-controller projection, fenced
 runtime state, ledger and outbox share one commit. The command emits no sensory evidence.
@@ -64,8 +81,9 @@ and paralyzed bodies. Ordinary sleep is distinct: captured CHARACTER_POLICY acti
 without a control step; a human action may wake only if its handler succeeds. The handler sees
 an isolated awake evaluation view, and an appended delta commits wakeup atomically with effects.
 Legacy bodies lacking an HP field remain eligible for non-combat voluntary actions; combat/spells
-still require explicit positive HP. Dead markers remain authoritative even with stale positive HP;
-ordinary healing does not clear them. This is not death saving throws or a resurrection policy.
+still require explicit positive actor HP. Dead markers remain authoritative even with stale positive HP;
+ordinary healing does not clear them. New damage-induced defeats follow the death-save rules above;
+ordinary healing can rescue a living target at zero HP but cannot resurrect a dead one.
 `BodyIncapacitated` is expected runner suspension, including a condition acquired during model
 generation before commit. Waiting does not spend controller steps/failures or disable autonomy.
 

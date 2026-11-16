@@ -18,7 +18,7 @@ def cast(proposal: CommandProposal, state: BranchState) -> CommandResult:
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.magic.cast",
-        version="2.0.0",
+        version="2.1.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=cast,
@@ -26,4 +26,5 @@ def command_definition() -> CommandDefinition:
         result_model=CastResult,
         requires_controlled_entity=True,
         emission_builder=invoke_emission,
+        uses_randomness=True,
     )
