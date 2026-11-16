@@ -38,7 +38,7 @@ Checked items mean locally implemented and verified; Orderly acceptance and live
 | Personas | B1 adds distinct character/playtester purpose and [compiler](../persona/compilation/compiler.py) trait filtering | Trusted live context, authored character identity, and player-history imitation remain unfinished |
 | Runtime assignment | [MindStore](../cognition/store.py), [durable minds](../cognition/postgres.py), entity runtime API | Assignment exists; presence, exclusive control, and safe handoff are not a complete flow |
 | Experiments | [ApplicationBranchExecutor.execute](../experiments/executor.py) | Applies a single scenario intervention, returns `steps=1`; horizon metadata is not a live campaign loop |
-| Factions/gods/quests | [Reputation](../domains/tabletop/factions/__init__.py), [blessing](../domains/tabletop/divine/__init__.py), [quest counter](../domains/tabletop/quests/__init__.py) | These commands do not constitute autonomous factions, divine agendas, or causally verified quest systems |
+| Factions/gods/quests | [Reputation](../domains/tabletop/factions/__init__.py), [blessing](../domains/tabletop/divine/__init__.py), [funded quest contracts](../domains/tabletop/quests/__init__.py) | Quest evidence is kernel-derived; autonomous faction/divine agendas and pursuit of quest opportunities still require later checklist work |
 | History | [Snapshots](../kernel/snapshots.py), [replay](../kernel/replay.py), [branching](../kernel/branching.py) | Snapshots contain projections; replay applies committed deltas; neither provides complete campaign revision |
 | Lore | [Lore indexes](../kernel/lore.py) | Search primitives exist; character-specific, timeline-safe retrieval must be wired and tested |
 
@@ -228,12 +228,18 @@ as composition glue; reusable execution services must also work from workers and
   Identity drafts survive polling; unbound cards retain starting-resource controls. Unit, durable
   and real-browser verification cover this ownership boundary. Whole-section C acceptance remains open.
 - [ ] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;
-  current quest requests supply their own amount and target. Extend economy/inventory/trade as needed for activities.
+  replace legacy requests supplying their own amount and target. Extend economy/inventory/trade as needed for activities.
   Trade now has maker-authorized carried escrow, fixed-price reference-only acceptance, physical
   contact/visibility/capacity, both-body costs, clock expiry/refund and perceived console offers.
   Human/agent parity, actual durable restart/rollback/replay/race and built desktop/mobile paths
-  cover that portion. Quest objectives, evidence-derived progress and once-only rewards remain
-  open; do not close C6 or advance sections on the trade implementation alone.
+  cover that portion. Quest contracts now define bounded MOVE/DEFEAT/TRADE/WEED objectives and
+  funded item/gold rewards. Authorized physical/clock results derive progress atomically;
+  distinct defeat targets count once, historical work is excluded and clients cannot supply
+  progress, targets or payout terms. Controlled physical acceptance and READY reward claims,
+  public receipt redaction with world-scoped privileged inspection,
+  manager cancellation/refund, private evidence provenance and perceived offers/personal journal
+  have unit/durable/browser coverage. Current-head full gates, merge and independent whole-C
+  acceptance still precede closure or any later section. Autonomous pursuit remains section F.
 - [ ] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible
   actions leave no writes; retries spend resources once; distinct seeded actions replay correctly.
 

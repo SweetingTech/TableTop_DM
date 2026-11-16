@@ -2,6 +2,20 @@
 
 ## System shape
 
+HTTP receipt presentation omits private quest/offer projection deltas for actors without
+world-scoped `world.read.all`. This pure projection never changes canonical receipts or replay
+inputs; public action results and scenes remain available without revealing hidden objective
+targets or source provenance. Cached retries pass through the same authority-based presentation.
+
+Quest contract definitions and their funded reward reserves live in `tabletop.quest_contracts`.
+Definitions are immutable; each accepted contract records one body owner and progress from
+authorized same-transaction MOVE, DEFEAT, TRADE or clock-owned WEED outcomes. A handler wrapper
+derives bounded progress and private source command IDs after ordinary physical rules resolve,
+then commits the physical result, quest evidence, receipt, event and outbox together. Defeat
+targets count once. Claimed/cancelled contracts retain terminal audit state but consume no active
+quota. Other characters see only nearby public offers; only an owner's scene exposes its journal.
+Neither public views nor fiction context reveal target IDs or private source/provenance records.
+
 Trade consent is canonical, versioned `tabletop.trade_offers` state. SELL offers reserve items;
 BUY offers reserve gold from the maker's free body inventory. The reserve remains in that body's
 physical custody, so acceptance requires contact with its capable, perceived maker. Takers submit

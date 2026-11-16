@@ -1,11 +1,23 @@
 # Changelog
 
+- Omit private quest/offer projection deltas from ordinary HTTP command receipts, including
+  cached retries. Preserve full canonical/durable/replay results and exact-world read-all
+  inspection. Verify public/privileged presentation and immutable internal evidence bytes.
+
+- Replace self-reported quest counters with immutable funded objectives and same-transaction
+  evidence derived from movement, unique defeats, accepted trades and new offscreen weeding.
+  Add controlled physical acceptance/once-only reward claims and manager cancellation/refund.
+  Keep private target/source/owner metadata out of public scenes and fiction context; expose
+  nearby offers and an owner-only journal through typed console intents. Preserve old receipts,
+  reject caller progress/reward terms and verify authority, restart, provenance, replay, rollback,
+  worker races and actual desktop/mobile play. Autonomous quest pursuit remains later work.
+
 - Replace caller-priced trades with maker-authorized offers backed by carried item/gold escrow.
   Add controlled posting/withdrawal and manager configuration/cancellation; accept only offer
   references and quantities at physical contact. Reserve both bodies' action time and interrupt
   rest. Refund unused escrow once on cancellation/clock expiry. Expose perceived quotes through
   typed console intents and fiction-safe context; verify parity, rejection, conservation,
-  concurrency, restart/replay/rollback and actual desktop/mobile behavior. Quest evidence remains open.
+  concurrency, restart/replay/rollback and actual desktop/mobile behavior.
 
 - Derive attacks from canonical STR/finesse DEX, training and owned weapon definitions. Add strict
   manager body configuration and ordinary controlled `/equip` intent; preserve legacy scoreless

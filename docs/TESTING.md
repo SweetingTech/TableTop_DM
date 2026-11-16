@@ -1,5 +1,21 @@
 # Testing
 
+Quest/offer receipt regressions assert that ordinary submissions and cached retries omit private
+projection deltas and source/target provenance, privileged world-manager inspection remains
+available, and the pure presenter leaves canonical result bytes unchanged. The durable quest
+restart/retry/replay case also checks receipt redaction without losing stored source evidence.
+
+Quest coverage is in `tests/unit/kernel/test_quest_evidence_api.py`: all-objective completion,
+unique defeats, post-acceptance offscreen work, funded rewards, settlement/retry, physical giver
+availability, reference-only forgery rejection, ownership, public/fiction privacy and human/agent
+trial parity. `tests/integration/test_quest_evidence.py` checks actual PostgreSQL source-command
+provenance, restart/replay, late retries, concurrent reward workers and atomic physical/evidence
+rollback on publication failure. `tests/e2e/test_quest_evidence_isolated.py` runs the built SPA:
+accept a perceived offer, move, deliver through an authorized trade, observe journal progress,
+claim once on mobile, and reject forged progress/reward syntax without a command request. It
+also checks focus, console errors and horizontal overflow. These gates do not claim autonomous
+quest planning or whole-campaign acceptance.
+
 Trade authority regressions are in `tests/unit/kernel/test_trade_offers_api.py`: fixed maker terms,
 carried escrow conservation, contact/visibility/incapacity, forged intent rejection, both-body
 costs, passive rest interruption, expiry/partition/refund, retries and human/agent trial parity.

@@ -140,7 +140,7 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.5.0"
+    context_version: str = "character-context-1.6.0"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
@@ -198,8 +198,24 @@ class CharacterContext(BaseModel):
                             "detail_level",
                             "position_confidence",
                             "trade_offers",
+                            "quest_offers",
+                            "quests",
                         },
                     ),
+                    "quest_offers": [
+                        {
+                            "reference": f"{references[entity.entity_id]}-task-{index + 1}",
+                            **quest.model_dump(mode="json", exclude={"quest_id"}),
+                        }
+                        for index, quest in enumerate(entity.quest_offers)
+                    ],
+                    "quests": [
+                        {
+                            "reference": f"personal-task-{index + 1}",
+                            **quest.model_dump(mode="json", exclude={"quest_id"}),
+                        }
+                        for index, quest in enumerate(entity.quests)
+                    ],
                     "trade_offers": [
                         {
                             "reference": f"{references[entity.entity_id]}-offer-{index + 1}",

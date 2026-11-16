@@ -33,6 +33,12 @@ export type ActorSummary = {
 };
 
 export type TradeOffer = { offer_id: string; side: "SELL" | "BUY"; item: string; quantity: number; unit_price: number };
+export type QuestSummary = {
+  quest_id: string; title: string; description: string;
+  status: "OFFERED" | "ACTIVE" | "READY" | "CLAIMED" | "CANCELLED";
+  objectives: Array<{ description: string; progress: number; target: number }>;
+  reward_gold: number; reward_items: Record<string, number>;
+};
 
 export type EntitySummary = {
   entity_id: string;
@@ -50,6 +56,8 @@ export type EntitySummary = {
   detail_level?: "PRESENCE" | "CLASSIFIED" | "IDENTIFIED" | "INSPECTED";
   position_confidence?: number;
   trade_offers?: TradeOffer[];
+  quest_offers?: QuestSummary[];
+  quests?: QuestSummary[];
   activity?: { kind: "WEED" | "REST" | "EAT" | "TRAVEL" | "SLEEP" | "SOCIAL"; status: string; progress_percent: number; weeded_units: number } | null;
 };
 
@@ -84,6 +92,8 @@ export type PerceivedScene = {
     status: string | null;
     known_spell_ids?: string[] | null;
     trade_offers?: TradeOffer[];
+    quest_offers?: QuestSummary[];
+    quests?: QuestSummary[];
     activity?: EntitySummary["activity"];
   }>;
   recent_observations: Array<{

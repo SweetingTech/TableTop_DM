@@ -1,5 +1,40 @@
 # API and user workflows
 
+`POST /api/v2/commands` presents quest/offer results without private projection deltas unless
+the submitting actor has `world.read.all` in the command's exact world. Quest source commands,
+unperceived target IDs and offer provenance cannot leak through accept/trade/reward receipts or
+cached retries. The committed receipt, event, hash and replay records are unchanged internally;
+ordinary public results and scene synchronization still describe the action. Client parameters
+cannot request privileged presentation or grant capabilities.
+
+Quest contract `tabletop-quests-2.0.0` uses `POST /api/v2/commands`:
+
+- Manager `tabletop.quest.configure`: `{giver_id, title, description, objectives, reward_gold?,
+  reward_items?}`. One to eight immutable objectives combine with AND. Rewards reserve available
+  giver gold and inventory at creation; titles/descriptions are explicitly public in-world text.
+- Objectives each have `description` plus one discriminated definition: `kind: "MOVE"` with
+  `x,y,zone_id?,z?`; `kind: "DEFEAT"` with distinct `target_ids` (all must be defeated once);
+  `kind: "TRADE"` with `side: "BUY"|"SELL",counterparty_id,item,quantity`; or `kind: "WEED"`
+  with `units`. Targets/counterparties must exist in the same branch. DEFEAT means a genuine
+  positive-to-zero HP outcome caused by the owner's attack/spell, not necessarily permanent death.
+- Controlled `tabletop.quest.accept`, `tabletop.quest.advance` and `tabletop.quest.claim` accept
+  only `{quest_id}`. Accept fixes the body owner; advance only reviews recorded status. New
+  requests cannot supply `amount`, `target`, source evidence, ownership or reward overrides.
+- Manager `tabletop.quest.cancel` accepts `{quest_id}` and returns any unsettled funded reward once.
+
+Accept and claim require a capable, visible, adjacent giver and reserve both participants for six
+seconds with encounter/readiness checks. Claim requires every objective satisfied; the body must
+return to the giver and cannot claim twice. Cancellation/claim retain terminal audit state.
+Offscreen WEED progress counts only newly committed work after acceptance, excluding action-busy,
+blocked or pre-acceptance work. The ordinary command receipt remains the retry authority.
+Scenes expose nearby `quest_offers` as public descriptions/rewards; only the observing body's
+`quests` includes its journal, with active tasks first and up to 32 recent entries. Full terminal
+history remains canonical. Source commands, raw target/counterparty IDs and owner metadata are
+excluded from these views. Fiction context version `character-context-1.6.0` replaces quest IDs
+with local task references. The console prepares `/quest accept|status|claim <quest id>` intents
+from the offer or personal journal; choosing a button focuses the draft and sending commits.
+This wires enforcement and observed opportunities; autonomous goal selection remains checklist F.
+
 Trade contract `tabletop-trade-2.0.0` uses these typed commands through `POST /api/v2/commands`:
 
 - `tabletop.economy.configure_offer`: world-manager capability `entity.control`, with
@@ -17,7 +52,7 @@ Unused escrow returns on cancellation/expiry and active offer state is removed. 
 trade receipts still replay on their original key; new requests must use the offer contract.
 The perceived scene exposes `trade_offers` only on inspected contact-range makers (and one's own
 body): offer ID, side, item, available quantity and unit price. No private book, source command,
-run provenance or expiration metadata is exposed. Context version `character-context-1.5.0`
+run provenance or expiration metadata is exposed. Context version `character-context-1.6.0`
 uses fiction references instead of offer IDs. This exposes opportunities without yet adding an
 autonomous trading policy. In the console, choose a quote, then send the prepared intent, or use
 `/trade <offer id> [quantity]`, `/offer buy|sell <item> <quantity> <unit price>` and
@@ -958,7 +993,7 @@ phrasing, spell selection, narrative planning and complete timeline restoration 
 
 ## Generated dialogue and tactical choices
 
-Context `character-context-1.5.0` includes the body's own mana/reach/learned spell IDs and inspected
+Context `character-context-1.6.0` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
 `tabletop-character-actions-1.3.0` and proposal policy `character-proposal-policy-1.4.0` offer:
 

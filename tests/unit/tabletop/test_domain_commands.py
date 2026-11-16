@@ -208,6 +208,10 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.faction.adjust_reputation",
         "tabletop.divine.bless",
         "tabletop.quest.advance",
+        "tabletop.quest.configure",
+        "tabletop.quest.accept",
+        "tabletop.quest.claim",
+        "tabletop.quest.cancel",
     }
     assert all(contract["request_schema"]["type"] == "object" for contract in contracts)
     assert all(contract["result_schema"]["type"] == "object" for contract in contracts)
@@ -327,18 +331,43 @@ def test_faction_divine_and_quest_updates_are_replayable(domain):
         ),
         domain["actor"],
     )
+    # Quest progress is a physical outcome rather than a caller-authored counter.
+    domain["state"].projections["tabletop.entities"][str(domain["merchant"])].update(x=2, y=2)
+    offered = domain["bus"].execute(
+        proposal(
+            domain,
+            "tabletop.quest.configure",
+            {
+                "giver_id": str(domain["merchant"]),
+                "title": "Reach the road",
+                "description": "Walk to the road.",
+                "objectives": [
+                    {"kind": "MOVE", "description": "Reach road", "x": 2, "y": 1},
+                ],
+            },
+            "quest-offer",
+        ),
+        domain["actor"],
+    )
+    quest_id = offered.result.result["quest_id"]
+    domain["bus"].execute(
+        proposal(domain, "tabletop.quest.accept", {"quest_id": quest_id}, "accept"), domain["actor"]
+    )
+    domain["bus"].execute(
+        proposal(domain, "tabletop.spatial.move", {"dx": 1, "dy": 0}, "road"), domain["actor"]
+    )
     quest = domain["bus"].execute(
         proposal(
             domain,
             "tabletop.quest.advance",
-            {"quest_id": "lost-lantern", "objective": "clues", "amount": 2, "target": 2},
+            {"quest_id": quest_id},
             "quest",
         ),
         domain["actor"],
     )
     assert faction.result.result["after"] == 100
     assert blessing.result.result["duration_turns"] == 3
-    assert quest.result.result["completed"] is True
+    assert quest.result.result["status"] == "READY"
     assert (
         domain["state"].projections["tabletop.reputation"][str(domain["hero"])]["factions"][
             "harbor-watch"

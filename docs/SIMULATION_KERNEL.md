@@ -1,5 +1,26 @@
 # Simulation-kernel contract
 
+Canonical command results retain all quest/offer deltas for persistence, retries and replay.
+The HTTP receipt is a separate projection: actors without `world.read.all` in the exact world
+receive no private quest/offer delta records. Public result models already exclude source/target
+metadata. Presentation filtering is pure and applies equally to original and cached receipts;
+it cannot alter committed state, evidence, resource costs or replay hashes.
+
+`tabletop-quests-2.0.0` replaces self-reported counters. Manager-only `quest.configure` validates
+same-branch giver/target references and reserves defined gold/items from the giver. Controlled
+`quest.accept` pins the owner; MOVE, unique-target DEFEAT, exact-counterparty/item TRADE and
+new clock-owned WEED outcomes update evidence only through the authorized handler wrapper.
+Objectives combine with AND. Historical work, raw client claims, unrelated bodies, failed actions
+and retries cannot increment progress. Source command IDs stay private, while recorded physical
+and quest deltas replay together. No later narration or current perception reinterprets evidence.
+`quest.claim` requires READY status and current physical giver contact/encounter/readiness;
+both participants reserve six seconds and receive normal rest interruption. The reward transfers
+only once from reserved funds/items, without minting. Manager `quest.cancel` returns the reserve
+once, even after partial work. `quest.advance` now accepts only a quest reference and acknowledges
+recorded progress without changing it. Legacy self-reported `tabletop.quests` rows are not evidence
+for the new contracts; old committed receipt keys remain readable. Active limits are 256 per
+branch, 16 per giver and 16 accepted per body, without a lifetime completion quota.
+
 `tabletop-trade-2.0.0` replaces caller-authored exchange terms with maker-authorized escrowed
 offers. Controlled `tabletop.economy.offer` and manager-only `configure_offer` reserve available
 items or gold; `trade` accepts `{offer_id, quantity}` with no price, direction or counterparty

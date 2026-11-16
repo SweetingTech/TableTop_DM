@@ -90,6 +90,8 @@ export async function loadGameState(worldId: string, requestedViewpoint = "", cu
         status: entity.status ?? undefined,
         activity: entity.activity,
         trade_offers: entity.trade_offers,
+        quest_offers: entity.quest_offers,
+        quests: entity.quests,
         public_state: entity.position ?? undefined,
         knowledge_state: entity.knowledge_state,
         detail_level: entity.detail_level,
@@ -240,6 +242,16 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
       }
       return { commandType: "tabletop.equipment.equip", parameters: { weapon_id: weaponId } };
     }
+    case "quest": {
+      const [action, questId = ""] = parts;
+      const operation = (action ?? "").toLocaleLowerCase();
+      if (parts.length !== 2 || !["accept", "status", "claim"].includes(operation)
+        || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(questId)) {
+        throw new Error("Use /quest accept|status|claim <quest id>");
+      }
+      return { commandType: `tabletop.quest.${operation === "status" ? "advance" : operation}`,
+        parameters: { quest_id: questId } };
+    }
     case "trade":
     case "withdraw": {
       const offerId = parts[0] ?? "";
@@ -284,6 +296,6 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
         spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
     }
     default:
-      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /trade, /offer, /withdraw, /cast, /invoke, or type dialogue.");
+      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /trade, /offer, /withdraw, /quest, /cast, /invoke, or type dialogue.");
   }
 }

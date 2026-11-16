@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from domains.tabletop.quests.contracts import QuestView
+
 
 class SceneCoordinate(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -54,6 +56,8 @@ class PerceivedEntity(BaseModel):
     action_wait_seconds: int | None = Field(default=None, ge=0)
     activity: VisibleActivity | None = None
     trade_offers: tuple[VisibleTradeOffer, ...] = ()
+    quest_offers: tuple[QuestView, ...] = ()
+    quests: tuple[QuestView, ...] = ()
 
 
 class ObservationPresentation(BaseModel):
