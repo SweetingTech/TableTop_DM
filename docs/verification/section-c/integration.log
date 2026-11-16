@@ -1,0 +1,53 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: <workspace>
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.12.1, base-url-2.1.0, cov-7.1.0, playwright-0.9.0
+collected 914 items / 756 deselected / 158 selected
+
+tests\integration\test_action_randomness.py .                            [  0%]
+tests\integration\test_action_rules.py ...                               [  2%]
+tests\integration\test_action_time.py ....                               [  5%]
+tests\integration\test_body_capability.py ..                             [  6%]
+tests\integration\test_character_bindings.py ....                        [  8%]
+tests\integration\test_character_decisions.py ......                     [ 12%]
+tests\integration\test_character_knowledge.py ...                        [ 14%]
+tests\integration\test_character_live_state.py .                         [ 15%]
+tests\integration\test_character_resource_ownership.py .                 [ 15%]
+tests\integration\test_clean_boot.py ......                              [ 19%]
+tests\integration\test_cognition_character_entrypoint.py .               [ 20%]
+tests\integration\test_cognition_repository.py ...                       [ 22%]
+tests\integration\test_controller_runner.py ........                     [ 27%]
+tests\integration\test_death_recovery.py ..                              [ 28%]
+tests\integration\test_derived_combat.py ..                              [ 29%]
+tests\integration\test_durable_authorization.py .......                  [ 34%]
+tests\integration\test_durable_command_repository.py ....                [ 36%]
+tests\integration\test_generated_dialogue.py ..                          [ 37%]
+tests\integration\test_identity_portal.py .                              [ 38%]
+tests\integration\test_initiative.py ...                                 [ 40%]
+tests\integration\test_migration_013.py .                                [ 41%]
+tests\integration\test_migrations.py ....                                [ 43%]
+tests\integration\test_npc_goals.py ........                             [ 48%]
+tests\integration\test_persona_repository.py ...........                 [ 55%]
+tests\integration\test_player_behavior.py .....                          [ 58%]
+tests\integration\test_population_life.py .....                          [ 62%]
+tests\integration\test_population_planning.py ...                        [ 63%]
+tests\integration\test_population_repository.py .                        [ 64%]
+tests\integration\test_population_runtime.py .....                       [ 67%]
+tests\integration\test_quest_evidence.py ....                            [ 70%]
+tests\integration\test_relationship_snapshot_repairs.py ........         [ 75%]
+tests\integration\test_rest_recovery.py ..                               [ 76%]
+tests\integration\test_roster_recovery.py .....                          [ 79%]
+tests\integration\test_scenario_branch_restoration.py ..                 [ 81%]
+tests\integration\test_scene_refresh.py .                                [ 81%]
+tests\integration\test_schema_invariants.py .......                      [ 86%]
+tests\integration\test_speech_combat_behavior.py .....                   [ 89%]
+tests\integration\test_tactical_choices.py ...                           [ 91%]
+tests\integration\test_telemetry_repository.py .                         [ 91%]
+tests\integration\test_timed_effects.py ...                              [ 93%]
+tests\integration\test_trade_offers.py ...                               [ 95%]
+tests\integration\test_worker.py .                                       [ 96%]
+tests\integration\test_world_time.py ......                              [100%]
+
+========= 158 passed, 756 deselected, 1 warning in 3923.01s (1:05:23) =========

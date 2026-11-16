@@ -1,0 +1,35 @@
+Two isolated built-SPA quest/trade journeys
+{
+  "schema": "ttdm.tool-captured-verification/v1",
+  "tested_revision": "d76b610e82cadf0cac2703bf1c9bf4408e879c1f",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "-m",
+    "pytest",
+    "tests/e2e/test_quest_evidence_isolated.py",
+    "tests/e2e/test_trade_offers_isolated.py",
+    "-q",
+    "--tb=short"
+  ],
+  "result": {
+    "chunk_id": "f4ae56",
+    "wall_time_seconds": 8.1850964,
+    "exit_code": 0,
+    "original_token_count": 21,
+    "output": "..                                                                       [100%]\r\n"
+  }
+}
+
+Actual two-client PostgreSQL human-play journey
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: <workspace>-pr107
+configfile: pyproject.toml
+plugins: anyio-4.12.1, base-url-2.1.0, cov-7.1.0, playwright-0.9.0
+collected 1 item
+
+tests\e2e\test_human_play_closeout.py .                                  [100%]
+
+============================= 1 passed in 49.31s ==============================

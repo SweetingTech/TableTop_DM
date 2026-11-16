@@ -1,0 +1,175 @@
+{
+  "schema": "ttdm-section-c-verification/v1",
+  "captured_at": "2026-11-16T08:24:50.351080+00:00",
+  "code_revision": "328df7b52c9aadaf0b5c99de0edd77c851960d85",
+  "base_main_revision": "e67fb613c52baebc68d3835ceda7c1cdbd0ca530",
+  "code_tree": "cb6c0fe1dfd93574714644dfa78215ac348ceb5d",
+  "code_pull_request": "https://github.com/SweetingTech/TableTop_DM/pull/106",
+  "full_local_integration_revision": "1020d5f444128a73a7213ee30fee4d48bf905624",
+  "reports": [
+    {
+      "path": "ci-integration.log",
+      "original_sha256": "ccce77af8dfd4c14aa0108d16fd6c388462745a2fba5c3f460be1f1b45abda7f",
+      "sha256": "266fa97a1c36dc5962ec40f5c10a9b673d145134cf234ac95fa2c528fe1666c9",
+      "bytes": 3879,
+      "transform": "ANSI removed; Windows path prefixes replaced; terminal blank lines normalized; credential patterns fail closed.",
+      "tested_revision": "d76b610e82cadf0cac2703bf1c9bf4408e879c1f",
+      "exit_code": 0,
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "pytest",
+        "-m",
+        "integration",
+        "-v"
+      ],
+      "observed_passed": 158,
+      "elapsed_seconds": 1632.78,
+      "github_job": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43821389327/job/133145022572",
+      "original_ci_log_sha256": "aa6a406b917c9059877e2115f9f01371c41cf338d54aff0e431610804d16e3a8",
+      "source_transform": "Only the complete actual pytest session retained; runner prefixes removed."
+    },
+    {
+      "path": "fast.log",
+      "original_sha256": "915b0484c44d657c0eef3735e478327f909eed2317c5891d7f0cbbd554d1d3dc",
+      "sha256": "93c39f6073046a0d79aa617326918519bf0e36e81d15a71127128cc4ab9b5196",
+      "bytes": 3790,
+      "transform": "ANSI removed; Windows path prefixes replaced; terminal blank lines normalized; credential patterns fail closed.",
+      "tested_revision": "328df7b52c9aadaf0b5c99de0edd77c851960d85",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "scripts/test.py",
+        "fast"
+      ],
+      "started_at": "2026-11-16T08:07:13.827412+00:00",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T08:09:45.317699+00:00"
+    },
+    {
+      "path": "types.log",
+      "original_sha256": "fd79775cdafd55878599a748608d6820173d539af213a0d7e37183fd4d28eb02",
+      "sha256": "46068eced9129924d3b0be52573b15943bf1750d772d5fb26c8ee0dcfc5840b2",
+      "bytes": 45,
+      "transform": "ANSI removed; Windows path prefixes replaced; terminal blank lines normalized; credential patterns fail closed.",
+      "tested_revision": "328df7b52c9aadaf0b5c99de0edd77c851960d85",
+      "command": [
+        "uv",
+        "run",
+        "mypy",
+        "kernel",
+        "persona",
+        "cognition",
+        "population",
+        "experiments",
+        "domains",
+        "identity",
+        "infra",
+        "main.py"
+      ],
+      "started_at": "2026-11-16T08:07:13.827412+00:00",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T08:07:14.481872+00:00"
+    },
+    {
+      "path": "wheel.log",
+      "original_sha256": "22a9f8d542ad6d871daac921d11f1331d15739d259148de1aa3da6746733c698",
+      "sha256": "6fa9871e025b198b6851366557e60b09ff38fd53f3b2142aaf726eafa1c3533c",
+      "bytes": 2731,
+      "transform": "ANSI removed; Windows path prefixes replaced; terminal blank lines normalized; credential patterns fail closed. Actual final 60 output lines retained.",
+      "tested_revision": "328df7b52c9aadaf0b5c99de0edd77c851960d85",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "C:\\Users\\dougl\\AppData\\Local\\Temp\\ttdm-repair84-delivery.py",
+        "wheel"
+      ],
+      "started_at": "2026-11-16T08:07:13.826406+00:00",
+      "exit_code": 0,
+      "finished_at": "2026-11-16T08:07:24.561224+00:00"
+    },
+    {
+      "path": "integration.log",
+      "original_sha256": "bfdce69d9b1f7ccb579f6d252446ef28168e14b5aada753cfe5064895cec69ba",
+      "sha256": "50e7fb85ed28be14d3309d2a84c6605f20df7b79d93fb1bbbca2c64d72bd1c8f",
+      "bytes": 3847,
+      "transform": "ANSI removed; Windows path prefixes replaced; terminal blank lines normalized; credential patterns fail closed.",
+      "tested_revision": "1020d5f444128a73a7213ee30fee4d48bf905624",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "pytest",
+        "-m",
+        "integration",
+        "-v",
+        "--tb=short"
+      ],
+      "exit_code": 0,
+      "observed_passed": 158,
+      "runtime": "actual isolated PostgreSQL/Redis; Windows Python3.12"
+    },
+    {
+      "path": "receipt-integration.log",
+      "original_sha256": "2400881640be29bc6eb57604c07721522c0fc02ff5dba493d4b3a699ff1e48d3",
+      "sha256": "dcf9f49a33da63b4b3ead222fa0edbe6a77f9c11a88f2d18d4cff02d2417ff28",
+      "bytes": 442,
+      "transform": "ANSI removed; Windows path prefixes replaced; terminal blank lines normalized; credential patterns fail closed.",
+      "tested_snapshot": "Working tree runtime immediately before commit; same runtime source as committed revision",
+      "committed_runtime_revision": "328df7b52c9aadaf0b5c99de0edd77c851960d85",
+      "command": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "pytest",
+        "tests/integration/test_quest_evidence.py",
+        "-v",
+        "--tb=short"
+      ],
+      "exit_code": 0,
+      "observed_passed": 5,
+      "elapsed_seconds": 60.31,
+      "runtime": "actual PostgreSQL; run serially after the full lane",
+      "before_fix": {
+        "result": "one expected regression failure",
+        "elapsed_seconds": 16.39,
+        "source": "ttdm-c6-revoked-receipt-before.log",
+        "assertion": "Revoked current database read-all must hide private quest deltas despite cached DM grant"
+      }
+    },
+    {
+      "path": "browser.log",
+      "original_sha256": "addde668c37ec4703e3f2be562aca8bf924877c87d84c7a305aeff0d6a87bd0d",
+      "sha256": "df6812bae69ad786e463a35869b1b72465abce5ee85ea636dfb25206764b0b40",
+      "bytes": 1087,
+      "transform": "ANSI removed; Windows path prefixes replaced; terminal blank lines normalized; credential patterns fail closed.",
+      "tested_revisions": [
+        "d76b610e82cadf0cac2703bf1c9bf4408e879c1f",
+        "328df7b52c9aadaf0b5c99de0edd77c851960d85"
+      ],
+      "exit_code": 0,
+      "observed_passed": 3,
+      "command": [
+        "two isolated quest/trade SPA journeys plus serial PostgreSQL human-play journey"
+      ]
+    }
+  ],
+  "caveats": [
+    "Full local158-test lane ran on unchanged core1020d5f; prior CI158 ran on d76b610. Later changes only private-delta HTTP presentation/current capability reads, tests and docs; canonical transactions/domain code is unchanged. Current five durable cases and committed-revision PostgreSQL browser are recorded separately.",
+    "One attempted concurrent narrow PostgreSQL lane failed during shared-role migration before tests. It is not counted as passing. Remaining durable lanes were run serially.",
+    "Source review and task acceptance are separate. This report does not complete Orderly Task4 or later roadmap tasks.",
+    "No provider-generated dialogue, full unattended campaign, screenshot, trace, database dump or private gameplay data is claimed or retained."
+  ],
+  "ci": {
+    "revision": "328df7b52c9aadaf0b5c99de0edd77c851960d85",
+    "run": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43829210884",
+    "browser_run": "https://github.com/SweetingTech/TableTop_DM/actions/runs/43829210796",
+    "note": "Read current check state separately; report capture does not invent a CI result."
+  }
+}
