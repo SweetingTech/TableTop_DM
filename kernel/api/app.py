@@ -1835,6 +1835,7 @@ def create_app(
                                 "max_hp": character.maximum_hit_points,
                                 "armor": character.armor_class,
                                 "mana": starting_resources.mana,
+                                "max_mana": starting_resources.mana,
                                 "known_spells": list(starting_resources.known_spells),
                                 "speed": character.speed,
                             },

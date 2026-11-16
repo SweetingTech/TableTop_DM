@@ -166,6 +166,8 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.spatial.move",
         "tabletop.combat.attack",
         "tabletop.combat.stabilize",
+        "tabletop.rest.start",
+        "tabletop.resources.configure",
         "tabletop.combat.guard",
         "tabletop.clock.configure",
         "tabletop.clock.tick",

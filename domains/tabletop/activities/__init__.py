@@ -210,6 +210,8 @@ def cancel_weather(proposal: CommandProposal, state: BranchState) -> CommandResu
 
 def progress(state: BranchState, until: int) -> None:
     """Advance a private working copy; never persist or inspect cameras/minds."""
+    from domains.tabletop.rest import recover
+
     for key, raw in sorted(state.projections.get(ACTIVITIES, {}).items()):
         activity = Activity.model_validate(raw)
         if activity.routine_id is not None:
@@ -241,6 +243,14 @@ def progress(state: BranchState, until: int) -> None:
         )
         if elapsed < 0:
             raise ValueError("activity time cannot move backward")
+        if body is not None:
+            activity = recover(
+                activity,
+                body,
+                activity.updated_seconds,
+                activity.updated_seconds + elapsed,
+                allowed=reason is None,
+            )
         if elapsed and body is not None:
             if activity.kind == "WEED":
                 body["weeded_units"] = int(body.get("weeded_units", 0)) + elapsed
@@ -250,8 +260,12 @@ def progress(state: BranchState, until: int) -> None:
         state.projections[ACTIVITIES][key] = activity.model_copy(
             update={
                 "progress_seconds": total,
-                "updated_seconds": until,
-                "status": "COMPLETED"
+                "updated_seconds": activity.updated_seconds + elapsed
+                if total == activity.duration_seconds
+                else until,
+                "status": "CANCELLED"
+                if reason and activity.details.get("rest_kind")
+                else "COMPLETED"
                 if total == activity.duration_seconds
                 else "WAITING"
                 if reason
@@ -262,6 +276,7 @@ def progress(state: BranchState, until: int) -> None:
 
 
 def advance_activities(state: BranchState, until: int) -> None:
+    from domains.tabletop.rest import boundaries as rest_boundaries
     from population.routines import advance_routines, reconcile_relevance
 
     cursor = seconds(state)
@@ -284,9 +299,11 @@ def advance_activities(state: BranchState, until: int) -> None:
     apply_weather(cursor)
     progress(state, cursor)
     advance_routines(state, cursor, cursor)
-    stops = set(boundaries(state, cursor, until)) | {
-        int(row["due_seconds"]) for _, row in weather if cursor < row["due_seconds"] <= until
-    }
+    stops = (
+        set(boundaries(state, cursor, until))
+        | set(rest_boundaries(state, cursor, until))
+        | {int(row["due_seconds"]) for _, row in weather if cursor < row["due_seconds"] <= until}
+    )
     for stop in sorted(stops):
         progress(state, stop)
         advance_routines(state, stop, cursor)

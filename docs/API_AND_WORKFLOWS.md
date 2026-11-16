@@ -13,7 +13,31 @@ maximum HP recover 1 HP after one simulated hour. Existing unrelated conditions 
 Pending saves on clockless branches start when their clock first advances. Old zero-HP bodies
 without a new defeat record are not assigned fabricated past rolls; first aid remains available.
 Clock advance, retry and restart preserve the same indexed saves. Save seeds/counters are not
-part of sensory scene/context contracts. Full initiative and rest remain original checklist work.
+part of sensory scene/context contracts. Full initiative remains original checklist work.
+
+`/rest short|long` submits the controlled `tabletop.rest.start` intent, with only `kind` set to
+`SHORT` or `LONG`. The current run's configured clock, positive HP, capability and entity control
+are required. A busy body or one with an active manual activity/enabled routine cannot start.
+The existing canonical activity owns progress: starting rest grants no instant resources and does
+not advance global time. Successful physical effort or taking damage cancels a manual rest;
+speech and camera changes do not. Incapacity or displacement cancels it on clock reconciliation.
+An authorized manager can also cancel through the existing `tabletop.activity.cancel` command.
+
+`tabletop-rest-1.0.0` awards a one-time ceil(max_hp/4) HP benefit after 3600 uninterrupted seconds.
+After 28800 seconds, a long rest restores HP/mana to known caps if at least 86400 seconds have passed
+since the prior long-rest benefit. It also receives the earlier hourly benefit. An ineligible
+long rest still reduces fatigue; it cannot refill mana early. These are the project's versioned
+rules, not a claim to implement every tabletop ruleset. Recovery never removes independent
+conditions, revives a dead/downed body, or infers missing capacity from mutable character cards.
+Offscreen routine REST/SLEEP uses the same uninterrupted thresholds and cooldown. Interruptions
+reset recovery eligibility; accumulated gardening/routine work retains its separate progress.
+
+Newly bound bodies initialize `max_mana` from starting mana. Legacy bodies with unknown caps do
+not receive invented refills. A world manager may submit `tabletop.resources.configure` with
+strict `entity_id`, `max_hp` (1..100000) and `max_mana` (0..100000), requiring `entity.control` and
+`action.propose`. Raising caps does not refill resources; lowering below current HP/mana is
+rejected atomically. Players cannot use this command to change their own caps. Trials remain
+isolated, and retries return the original receipt without resetting progress or granting twice.
 
 `tabletop.condition.apply` is a registered typed command for world managers. Its strict parameters
 are `target_id`, `condition` and `duration_seconds` (1..86400). Conditions are case-insensitive

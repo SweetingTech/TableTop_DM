@@ -1,5 +1,11 @@
 # Operations, storage, migrations, and security
 
+Rest uses the existing world clock; there is no new process or migration. Start a configured clock
+or advance its paused simulated time to progress rest and NPC sleep. New character bodies carry
+canonical maximum mana. For legacy bodies, explicitly configure known HP/mana caps through the
+world-manager typed `tabletop.resources.configure` command; never refill by editing an authored
+card. Capacity changes preserve current resources and reject caps below the current amount.
+
 Death saves reuse existing canonical projection storage; no new service, credential or migration
 is needed. Deploy matching recovery, clock, perception, API and runner code with the rebuilt
 console bundle for `/stabilize`. Both spell entry points now record trusted physical RNG provenance;

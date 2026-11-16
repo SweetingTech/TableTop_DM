@@ -1,5 +1,13 @@
 # Testing
 
+Rest regressions in `tests/unit/kernel/test_rest_recovery_api.py` cover fixed thresholds/caps,
+long-rest cooldown, physical/damage interruption, denied parameter overrides, incapacity,
+human/agent trial parity, offscreen routine/sleep recovery and whole-versus-split clock advances.
+`tests/integration/test_rest_recovery.py` verifies actual PostgreSQL restart, late retry,
+recorded replay and injected atomic rollback of body/activity/clock/ledger. The built-SPA
+`tests/e2e/test_rest_recovery_isolated.py` submits `/rest long`, observes live 2/12→5/12→12/12
+health and mana recovery, then interrupts a short rest from the mobile console with `/guard`.
+
 Death/recovery regressions cover exact six-second saves, natural 1/20, stabilization, death,
 clocked recovery, permanent-condition preservation, trusted seed provenance, late retries,
 whole/split advances, 0-HP healing, dead-target rejection and contact/forged first aid. New

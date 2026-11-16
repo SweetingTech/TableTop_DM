@@ -201,7 +201,9 @@ as composition glue; reusable execution services must also work from workers and
   expiry; blocked offscreen work and attendance do not accrue, and missing-health guards remain.
   New damage-induced defeats now use seeded six-second death saves and clocked stabilization/recovery;
   living 0-HP bodies can receive MEND or adjacent first aid. Dead/unconscious bodies receive no new
-  sensory grants. Full initiative and rest still remain open; C3 is not complete.
+  sensory grants. Shared-clock rest now has fixed hourly/eight-hour recovery, canonical HP/mana
+  capacities, interruptions and the same offscreen NPC sleep/rest rules. Full initiative remains
+  open; C3 is not complete.
 - [x] C4 — Allocate seeds by distinct logical action from a recorded run seed/sequence. Retries reuse
   the original seed/receipt; two successive identical attacks must not reuse rolls merely because text matches.
   Both commit adapters derive physical seeds under the branch lock

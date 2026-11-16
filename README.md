@@ -5,7 +5,10 @@ failures kill; a natural 1 counts twice and a natural 20 restores 1 HP. Saves us
 kernel-owned damage seeds. Healing can rescue a living body at 0 HP, and `/stabilize <target>`
 provides adjacent first aid with a six-second action cost. Stable bodies recover 1 HP after
 one simulated hour. Ordinary healing cannot resurrect the dead. Old zero-HP bodies are not
-retroactively given a defeat history. Rest and initiative remain open checklist work.
+retroactively given a defeat history. `/rest short` takes one simulated hour and restores a
+quarter of known maximum HP, rounded up. `/rest long` takes eight hours and also restores HP
+and mana to known body-owned caps, at most once per 24 simulated hours. Physical effort or damage
+interrupts rest. Offscreen NPC rest and sleep use the same recovery rules. Initiative remains open.
 
 TableTop DM is a local-first tabletop platform built on a deterministic simulation kernel. It
 supports authenticated Administrator, Dungeon Master, and Player workspaces alongside persistent

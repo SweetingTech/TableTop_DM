@@ -13,7 +13,12 @@ ACTION_TIME = "tabletop.action_time"
 ACTION_TIME_VERSION = "tabletop-action-time-1.0.0"
 ROUND_SECONDS = 6
 UNTIMED_COMMANDS = frozenset(
-    {"tabletop.dialogue.speak", "tabletop.console.submit", "tabletop.quest.advance"}
+    {
+        "tabletop.dialogue.speak",
+        "tabletop.console.submit",
+        "tabletop.quest.advance",
+        "tabletop.rest.start",
+    }
 )
 
 
