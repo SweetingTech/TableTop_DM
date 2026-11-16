@@ -196,8 +196,10 @@ as composition glue; reusable execution services must also work from workers and
   clocks now reserve body readiness atomically: six-second physical actions and speed-owned
   grid-step costs; guards expire through clock advance. Speech remains free. Retries preserve costs;
   competing commands serialize; waiting/racing stand-ins preserve controller budgets. Clockless
-  legacy branches remain untimed. Full initiative, general timed conditions/blessings, death
-  policy and recovery rules remain open; C3 is not complete.
+  legacy branches remain untimed. Typed bounded conditions and independent blessing expiries now
+  share chronological clock/weather/readiness boundaries. Permanent sources survive temporary
+  expiry; blocked offscreen work and attendance do not accrue, and missing-health guards remain.
+  Full initiative, death policy, healing/rest and recovery rules remain open; C3 is not complete.
 - [x] C4 — Allocate seeds by distinct logical action from a recorded run seed/sequence. Retries reuse
   the original seed/receipt; two successive identical attacks must not reuse rolls merely because text matches.
   Both commit adapters derive physical seeds under the branch lock

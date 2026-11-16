@@ -16,6 +16,14 @@ are added to HTTP interface responses. Character scene contracts and cognition n
 these interface fields. Durable readiness accepts complete same-event/body/mask/time evidence at
 the database's stored confidence precision, retaining original IDs and frozen visibility.
 
+Timed conditions are typed records stored separately from a body's permanent condition list.
+Each source retains its creating command/run and absolute simulated expiry. Existing rule
+evaluation unions active timed sources with permanent conditions; expiry removes only the due
+source. The authorized clock works on a private copy and splits elapsed progression at effect,
+readiness and weather boundaries before emitting ordinary canonical deltas. This preserves
+split-versus-whole physical outcomes and prevents work or joint attendance during incapacity or
+reserved action time. Private source metadata is not added to player scenes or live sheets.
+
 Configured branch clocks govern controlled-action readiness through the domain wrapper
 `action-time.1`. Successful effects and the `tabletop.action_time` reservation share one kernel
 transaction. The wrapper reads body speed and versioned rules, never client duration values.

@@ -1,5 +1,13 @@
 # Operations, storage, migrations, and security
 
+Timed effects reuse the existing body projection store and require no migration or provider setup.
+Deploy matching rules, clock handlers and character/world runners together. New timed conditions
+require a clock; permanent conditions remain separate. Existing blessing records lacking absolute
+expiry receive a deterministic expiry from their remaining turns at the beginning of the first
+new clock advance, not on reads. Backups/replay keep original receipts and deltas. Do not run a
+one-off database backfill or clear source maps to recover a character: use authorized timeline or
+world commands. Routine policy1.4.0 and daily planning1.2.0 record the new blocked-work semantics.
+
 Action timing reuses the existing projection store; no migration, new service or provider is
 required. Deploy the command handlers and character/world runners together. Configured clocks
 now pace actions in simulated time, independent of controller `interval_ms` (which remains a

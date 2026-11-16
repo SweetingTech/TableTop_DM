@@ -16,6 +16,12 @@
   while preserving physical state/history and independent world roles. Migration013 closes
   stale runtime-owner RLS delegation; shared seats retain their grant.
 
+- Add authorized, bounded timed conditions with independent sources and clock expiry. Preserve
+  permanent conditions and make temporary effects participate in existing incapacity and combat
+  rules. Expire divine blessings in six-second turns, including deterministic anchoring of old
+  grants. Split clock advances at readiness/effect/weather boundaries so offscreen activities,
+  routines and social attendance pause for the correct interval. Preserve missing-health guards.
+
 - Keep battlefield camera/control-mode changes outside physical readiness, incapacity and wakeup
   checks while retaining entity-control authorization. Changing presentation never spends or
   resets action time, wakes a sleeping body, or changes body resources.

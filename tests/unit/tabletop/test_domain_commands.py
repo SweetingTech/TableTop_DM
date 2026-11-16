@@ -161,6 +161,7 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.dialogue.speak",
         "tabletop.entity.spawn",
         "tabletop.entity.set_controllers",
+        "tabletop.condition.apply",
         "tabletop.map.configure",
         "tabletop.spatial.move",
         "tabletop.combat.attack",

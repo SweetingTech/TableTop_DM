@@ -150,7 +150,7 @@ def test_weapon_stats_come_from_owned_equipment_and_body(domain):
     )
     assert receipt.result.result["weapon_id"] == "SPEAR"
     assert receipt.result.result["hit"] is True and 1 <= receipt.result.result["damage"] <= 8
-    assert receipt.result.result["rules_version"] == "tabletop-action-rules-1.0.0"
+    assert receipt.result.result["rules_version"] == "tabletop-action-rules-1.1.0"
 
 
 @pytest.mark.parametrize("fault", ["not_owned", "cross_zone", "wall", "invisible", "stunned"])

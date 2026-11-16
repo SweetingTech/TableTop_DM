@@ -25,6 +25,17 @@ recovery and app restart at the same URL. Parser/API regressions also reject unk
 commands before any network request. Run it with
 `TTDM_INTEGRATION=1` and the integration database/Redis settings in the existing browser lane.
 
+Timed-effect tests cover mid-step condition/blessing expiry, permanent-source preservation,
+independent stacks/capacity/retries, world authority, rejected caller expiry/death values, legacy
+blessing anchoring and split-versus-whole weather/effect/readiness boundaries. Manual activities,
+coarse routines, life plans, goal planning and social attendance cannot accrue blocked work;
+missing-health bodies remain unavailable. Run `uv run python -m pytest
+tests/unit/kernel/test_timed_effects_api.py tests/unit/population`.
+The integration lane for `tests/integration/test_timed_effects.py` verifies reference/durable
+parity, restart/late retries/replay, rollback after an injected intermediate-boundary failure and
+restarted autonomous recovery. `tests/e2e/test_timed_effects_isolated.py` exercises the built live
+sheet, incapacity/readiness rejection, expiry/recovery, unchanged authored card and offscreen work.
+
 Shared-clock action tests exercise physical durations, body-owned movement speed, non-overridable
 costs, retry/no-write rejection, actual concurrent reference submissions, finite guard expiry,
 self-only scene readiness and controller wait/race/resume. Run `uv run python -m pytest
