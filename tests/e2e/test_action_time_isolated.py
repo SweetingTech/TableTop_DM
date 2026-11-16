@@ -57,7 +57,7 @@ def test_console_waits_for_clock_while_offscreen_work_continues(browser, monkeyp
             send.click()
         assert early.value.status == 400
         assert early.value.json()["details"] == "body is still completing its previous action"
-        expect(page.get_by_role("alert")).to_contain_text("invalid_operation")
+        expect(page.get_by_role("alert")).to_contain_text("The action was rejected. Refresh")
         expect(page.locator(".entity-detail")).to_contain_text("(0, 0)")
         expect(page.locator(".event-row").filter(has_text="tabletop.spatial.move")).to_have_count(0)
         advance_clock(admin, scope, 6)

@@ -35,6 +35,37 @@ beforeEach(() => {
 });
 
 describe("accepted action scene refresh", () => {
+  it("explains a missing unfinished run and prevents writes", async () => {
+    const unavailable = game(); unavailable.data.run = null;
+    vi.mocked(api.loadGameState).mockResolvedValue(unavailable);
+    const user = userEvent.setup(); render(<GameConsolePage />);
+    await screen.findByText("Start an unfinished live run before acting.");
+    await user.type(screen.getByLabelText("Command or dialogue"), "/move east");
+    expect(screen.getByRole("button", { name: "Send proposal" })).toBeDisabled();
+    expect(api.proposeCommand).not.toHaveBeenCalled();
+  });
+
+  it("keeps an inspect-only viewpoint read-only", async () => {
+    const inspected = game(); inspected.data.viewpoints = inspected.data.viewpoints?.map(view => ({ ...view, can_act: false }));
+    vi.mocked(api.loadGameState).mockResolvedValue(inspected);
+    render(<GameConsolePage />);
+    await screen.findByText(/available for inspection only/);
+    expect(screen.getByRole("button", { name: "Send proposal" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Let character act" })).not.toBeInTheDocument();
+  });
+  it("waits for already committed experience before allowing a human action and preserves its draft", async () => {
+    const pending = game(); pending.data.experience_ready = false;
+    vi.mocked(api.loadGameState).mockResolvedValue(pending);
+    const user = userEvent.setup(); render(<GameConsolePage />);
+    await screen.findByText(/Your character's observations are updating/);
+    await user.type(screen.getByLabelText("Command or dialogue"), "/move east");
+    expect(screen.getByRole("button", { name: "Send proposal" })).toBeDisabled();
+    vi.mocked(api.loadGameState).mockResolvedValue({ ...game(), data: { ...game().data, experience_ready: true } });
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send proposal" })).toBeEnabled());
+    expect(screen.getByLabelText("Command or dialogue")).toHaveValue("/move east");
+    expect(api.proposeCommand).not.toHaveBeenCalled();
+  });
   it("catches controller progress that occurs while a scene reload unmounts the control panel", async () => {
     const pending = deferred<Sourced<GameState>>();
     const control = (step: number): Awaited<ReturnType<typeof api.loadController>> => ({

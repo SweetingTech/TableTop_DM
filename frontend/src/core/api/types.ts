@@ -55,7 +55,14 @@ export type ViewpointSummary = Pick<
   "entity_id" | "name" | "entity_type" | "controller_actor_id"
 > & { can_act?: boolean };
 
+export type MapPresentation = {
+  zone_id: string; name: string; min_x: number; max_x: number; min_y: number; max_y: number;
+  image_path: string | null;
+};
+
 export type PerceivedScene = {
+  experience_ready?: boolean;
+  map_presentations?: MapPresentation[];
   observer_entity_id: string;
   world_id: string;
   branch_id: string;
@@ -134,6 +141,8 @@ export type EventRecord = {
 };
 
 export type GameState = {
+  experience_ready?: boolean;
+  map_presentations?: MapPresentation[];
   run: RunSummary | null;
   branch: BranchSummary | null;
   entities: EntitySummary[];

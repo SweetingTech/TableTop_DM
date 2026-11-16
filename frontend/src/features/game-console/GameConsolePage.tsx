@@ -4,13 +4,11 @@ import { useAppContext } from "../../app/AppContext";
 import { DefinitionList, PageHeader, Panel, Status } from "../../components/ui/Primitives";
 import { EmptyState, ErrorState, LoadingState, SourceNotice } from "../../components/ui/States";
 import type { EntitySummary } from "../../core/api/types";
-import { useAsyncResource } from "../../core/hooks/useAsyncResource";
-import { loadGameState, proposeCommand, type CommandAcknowledgement, type ControlMode } from "./api";
+import { proposeCommand, type CommandAcknowledgement, type ControlMode } from "./api";
 import ControlPanel from "./ControlPanel";
-import { entityMapPosition } from "./mapPosition";
+import { entityMapPosition, mapLayout } from "./mapPosition";
 import { uniqueObservations } from "./sceneRefresh";
-
-const MAP_URL = `${import.meta.env.BASE_URL}assets/harborport-map.png`;
+import { useConsoleScene } from "./useConsoleScene";
 
 export default function GameConsolePage() {
   const { activeWorldId } = useAppContext();
@@ -19,42 +17,32 @@ export default function GameConsolePage() {
 
 function WorldConsole({ activeWorldId }: { activeWorldId: string }) {
   const [selectedEntityId, setSelectedEntityId] = useState("");
-  return <SceneConsole key={selectedEntityId} activeWorldId={activeWorldId}
-    selectedEntityId={selectedEntityId} onViewpointChange={setSelectedEntityId} />;
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
+  function choose(entityId: string) { setSelectedEntityId(entityId); setSelectionEpoch(value => value + 1); }
+  return <SceneConsole key={`${selectedEntityId}:${selectionEpoch}`} activeWorldId={activeWorldId}
+    selectedEntityId={selectedEntityId} onViewpointChange={choose} />;
 }
 
 function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
   activeWorldId: string; selectedEntityId: string; onViewpointChange: (entityId: string) => void;
 }) {
   const [accepted, setAccepted] = useState<CommandAcknowledgement | null>(null);
-  const readController = useRef<AbortController | null>(null);
   const scopeEpoch = useRef(0);
   const commandInput = useRef<HTMLTextAreaElement | null>(null);
   const refreshButton = useRef<HTMLButtonElement | null>(null);
   const restoreFocus = useRef<"command" | "refresh" | null>(null);
-  const resource = useAsyncResource(
-    () => {
-      readController.current?.abort();
-      const controller = new AbortController();
-      readController.current = controller;
-      if (accepted && !accepted.scene_refresh) {
-        return Promise.reject(new Error("The server did not provide scene refresh status. Reload this page to read the scene."));
-      }
-      return loadGameState(activeWorldId, selectedEntityId, accepted?.scene_refresh ?? undefined, controller.signal);
-    },
-    [activeWorldId, selectedEntityId, accepted?.event_id],
-  );
+  const resource = useConsoleScene(activeWorldId, selectedEntityId, accepted);
   useEffect(() => () => {
     scopeEpoch.current += 1;
-    readController.current?.abort();
   }, []);
   useEffect(() => {
     if (resource.loading || resource.error || !restoreFocus.current) return;
     const target = restoreFocus.current === "command" ? commandInput.current : refreshButton.current;
     target?.focus();
     restoreFocus.current = null;
-  }, [resource.loading, resource.error]);
+  }, [resource.loading, resource.error, resource.data]);
   const [focusedEntityId, setFocusedEntityId] = useState("");
+  const [mapZone, setMapZone] = useState("");
   const [command, setCommand] = useState("");
   const [sending, setSending] = useState(false);
   const [commandError, setCommandError] = useState("");
@@ -74,12 +62,19 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
   const selectedViewpointId = selectedEntityId || game?.observer_entity_id || "";
   const selectedViewpoint = game?.viewpoints?.find((item) => item.entity_id === selectedViewpointId);
   const ownedViewpoint = Boolean(selectedViewpoint) && selectedViewpoint?.can_act !== false && resource.data?.source === "live";
-  const canAct = ownedViewpoint && Boolean(game?.run) && controlMode === "HUMAN";
+  const canAct = ownedViewpoint && Boolean(game?.run) && controlMode === "HUMAN" && !resource.syncError && game?.experience_ready !== false;
   const selected = game?.entities.find((entity) => entity.entity_id === focusedEntityId)
     ?? game?.entities.find((entity) => entity.entity_id === selectedViewpointId)
     ?? game?.entities[0]
     ?? null;
   const events = useMemo(() => uniqueObservations(game?.events ?? []), [game?.events]);
+  const zones = Array.from(new Set((game?.entities ?? []).flatMap(entity =>
+    entity.public_state ? [String(entity.public_state.zone_id ?? "world")] : []))).sort();
+  const ownZone = String(game?.entities.find(entity => entity.entity_id === selectedViewpointId)?.public_state?.zone_id ?? "world");
+  const zone = zones.includes(mapZone) ? mapZone : zones.includes(ownZone) ? ownZone : zones[0] ?? "world";
+  const mapEntities = (game?.entities ?? []).filter(entity => entity.public_state && String(entity.public_state.zone_id ?? "world") === zone);
+  const presentation = game?.map_presentations?.find(item => item.zone_id === zone);
+  const layout = mapLayout(mapEntities, presentation);
 
   async function submitCommand(event: React.FormEvent) {
     event.preventDefault();
@@ -104,12 +99,13 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
   }
 
   if (resource.loading) return <LoadingState label={accepted ? "Action accepted. Updating your scene…" : "Loading live world"} />;
-  if (resource.error) return <ErrorState message={accepted ? `Action was accepted. ${resource.error} Retry the scene refresh; do not resend the action.` : resource.error} retry={resource.reload} />;
+  if (resource.error) return <div><ErrorState message={accepted ? `Action was accepted. ${resource.error} Retry the scene refresh; do not resend the action.` : resource.error} retry={resource.reload} /><button className="button" type="button" onClick={() => onViewpointChange("")}>Choose assigned character</button></div>;
   if (!game) return <EmptyState title="No world state" detail="Create a world and start a live run in Control Plane." />;
 
   return (
     <div className="page game-page">
       <SourceNotice source={resource.data?.source ?? "live"} reason={resource.data?.reason} />
+      {resource.syncError ? <div role="status" className="field-error">{resource.syncError} <button className="button" type="button" onClick={() => onViewpointChange("")}>Choose assigned character</button></div> : null}
       <PageHeader
         title="Game Console"
         description="See and hear only what the selected embodied character can perceive, then submit typed proposals."
@@ -120,19 +116,24 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
         scope={{ world: activeWorldId, branch: game.branch.branch_id, run: game.run.run_id, entity: selectedViewpointId }}
         onModeChange={updateController} onProgress={refreshProgress} /> : null}
       <div className="game-grid">
-        <Panel title="Perceived Harborport" meta={<span>Projection {game.projection_version ?? "—"}</span>} className="map-panel">
-          <div className="map-stage" aria-label="Perception-scoped tactical map of Harborport">
-            <img src={MAP_URL} alt="Top-down map of Harborport docks and market" />
-            {game.entities.slice(0, 4).map((entity) => (
+        <Panel title={`Perceived ${presentation?.name ?? zone}`} meta={<span>Projection {game.projection_version ?? "—"}</span>} className="map-panel">
+          {zones.length > 1 ? <label className="map-zone">Map zone<select value={zone} onChange={event => setMapZone(event.target.value)}>{zones.map(item => <option key={item} value={item}>{game.map_presentations?.find(map => map.zone_id === item)?.name ?? item}</option>)}</select></label> : null}
+          <div className={`map-stage ${layout.imagePath ? "" : "coordinate-grid"}`} style={layout.imagePath ? undefined : { backgroundSize: `${100 / (layout.bounds.max_x - layout.bounds.min_x + 1)}% ${100 / (layout.bounds.max_y - layout.bounds.min_y + 1)}%` }} aria-label={`Perception-scoped tactical map of ${presentation?.name ?? zone}`}>
+            {layout.imagePath ? <img src={layout.imagePath} alt={`Map of ${presentation?.name ?? zone}`} /> : null}
+            {mapEntities.map((entity) => {
+              const position = entityMapPosition(entity, layout.bounds);
+              return position ? (
               <button
                 className={`map-token ${entity.entity_id === selected?.entity_id ? "selected" : ""} ${entity.detail_level?.toLowerCase() ?? ""}`}
                 key={entity.entity_id}
-                style={entityMapPosition(entity)}
+                style={position}
                 type="button"
                 aria-label={`Inspect ${entity.name} on map`}
                 onClick={() => setFocusedEntityId(entity.entity_id)}
               >{entity.name.slice(0, 1)}</button>
-            ))}
+              ) : null;
+            })}
+            <span className="map-coordinates">Grid x {layout.bounds.min_x}…{layout.bounds.max_x}, y {layout.bounds.min_y}…{layout.bounds.max_y}{layout.autoScaled ? " · visible positions" : ""}</span>
           </div>
         </Panel>
         <Panel title="Perceived entities" meta={<span>{game.entities.length} perceived</span>} className="entity-panel">
@@ -148,7 +149,7 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
           <form className="command-form" onSubmit={submitCommand}>
             <label>Embodied viewpoint<select value={selectedViewpointId} onChange={(event) => onViewpointChange(event.target.value)}>{(game.viewpoints ?? []).map((entity) => <option key={entity.entity_id} value={entity.entity_id}>{entity.name}{entity.can_act === false ? " · inspect only" : ""}</option>)}</select></label>
             <label>Command or dialogue<textarea aria-label="Command or dialogue" ref={commandInput} value={command} onChange={(event) => setCommand(event.target.value)} placeholder="/move north, /attack Dockmaster Vale, /cast MEND Aster Vale, or speak naturally" rows={4} /></label>
-            {!canAct ? <p className="field-error" role="status">{!game.run ? "Start a live run before acting." : controlMode !== "HUMAN" ? "Take control before submitting a command." : "This viewpoint is available for inspection only. Select a body assigned to you to act."}</p> : null}
+            {!canAct ? <p className="field-error" role="status">{resource.syncError ? "Wait for scene synchronization before acting." : game.experience_ready === false ? "Your character's observations are updating. Wait for synchronization before acting." : !selectedViewpoint ? "No assigned character is available. Ask your DM to assign a body." : !game.run ? "Start an unfinished live run before acting." : controlMode !== "HUMAN" ? "Take control before submitting a command." : "This viewpoint is available for inspection only. Select a body assigned to you to act."}</p> : null}
             {commandError ? <p className="field-error" role="alert">{commandError}</p> : null}
             <button className="button primary" type="submit" disabled={sending || !command.trim() || !canAct}><Send size={15} />{sending ? "Proposing…" : "Send proposal"}</button>
           </form>

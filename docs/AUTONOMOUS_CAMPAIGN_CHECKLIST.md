@@ -28,8 +28,8 @@ Checked items mean locally implemented and verified; Orderly acceptance and live
 
 | Area | Existing wiring | Gap established by inspection |
 | --- | --- | --- |
-| Character binding | A1 wires [roster selection](../frontend/src/features/dm/DungeonMasterPage.tsx) to authorized character lookup and assignment | Atomic binding/reassignment and removal semantics remain A2/A3 |
-| Console | [Page](../frontend/src/features/game-console/GameConsolePage.tsx) refreshes authorized scenes after actions and renders observations once per source event | Cross-client updates, fixed Harborport map, and four-token slice remain A5/A6 |
+| Character binding | [Roster finalization](../kernel/api/roster.py) prepares a retryable uncontrolled body/binding, then publishes the seat and typed control changes atomically | A2/A3 are locally verified; independent Task2 acceptance and deployment remain separate |
+| Console | [Page](../frontend/src/features/game-console/GameConsolePage.tsx) polls authorized versioned scenes, fences stale responses, and renders all positioned perceived tokens using zone map configuration | Full A2–A8 local acceptance is verified below; current-head PR/CI and independent Task2 acceptance remain separate |
 | Commands | [Bus](../kernel/command_bus.py), [application](../kernel/application.py), [durable repository](../kernel/postgres_repository.py) | No connected autonomous campaign driver |
 | Scheduling | [DeterministicScheduler](../kernel/scheduling.py) | In-memory queue; production call sites were not found; only its test imports it |
 | Population | [Lifecycle](../population/lifecycle.py), [repository](../population/postgres.py) | Explicit transitions retain state; `world_step` is supplied by callers, not a world clock; no activity progression |
@@ -65,26 +65,49 @@ as composition glue; reusable execution services must also work from workers and
   Existing members can also receive a character. Lookup returns assignment summaries only;
   assignment validates existence, owner, and world. Verified with service/UI tests, durable
   restart integration, and an isolated Chromium invite/update journey at desktop/mobile sizes.
-- [ ] A2 — Make roster update, entity creation, character binding, and authority changes recoverable
-  as one logical operation. Current API saves membership before binding completes. Cover missing
+- [x] A2 — Make roster update, entity creation, character binding, and authority changes recoverable
+  as one logical operation. Cover missing
   live run, missing character, wrong owner/world, retry, reassignment, and partial failure.
-- [ ] A3 — Define whether removing a member removes control, keeps an autonomous character,
+  Preparation grants no control; failed preparation retains an uncontrolled deterministic body and
+  pinned binding for retry. Final publication joins the seat, grants, projection, ledger and outbox
+  in one durable transaction. Injected binding/publication/event failures and restarted retries are tested.
+- [x] A3 — Define whether removing a member removes control, keeps an autonomous character,
   or only removes the human seat. Wire through [portal](../domains/tabletop/portal.py) and
   [identity grants](../identity/repository.py); never leave stale body control accidentally.
+  Removing the last seat retains the body/card/mind/history and world role, revokes human control,
+  pauses its runner and advances its epoch. Another game's seat preserves the grant. Rejoining restores
+  control without replacing identity. Reference/RLS checks fence explicitly removed seats while preserving
+  legitimate DM runtime ownership of unowned NPCs; stale executor and raw owner SQL are rejected.
 - [x] A4 — Refresh the scene after accepted actions, wait for the relevant observation projection
   boundary, and deduplicate pending versus persisted feed entries. Clear local state on world/viewpoint changes.
   Implemented with an authorized receipt cursor, bounded/cancellable polling, request-local durable
   observation reads, and an observation-only feed. Verified with delayed-projection/retry/scope
   regressions and a real built-SPA cookie session at desktop/mobile sizes. Failed reads retry GET
-  without resubmitting accepted actions. A5 continuous cross-client synchronization remains open.
-- [ ] A5 — Add version/cursor-based updates across clients, reconnect/resync, and out-of-order response
+  without resubmitting accepted actions. Durable readiness also recognizes complete immutable observations
+  at stored confidence precision without rewriting their IDs, masks or frozen audiences.
+- [x] A5 — Add version/cursor-based updates across clients, reconnect/resync, and out-of-order response
   protection. Start with bounded polling if appropriate; preserve perception-scoped reads.
-- [ ] A6 — Replace fixed map metadata with world/zone presentation configuration; remove the four-token
+  Visible tabs poll serially every 2.5 seconds, resynchronize on reconnect/focus and reject obsolete or older
+  replies. Same-version newly projected observations still update. Draft/focus survive background reads;
+  denied access clears the scene. Existing-world viewpoints reflect reassignment through another API process.
+- [x] A6 — Replace fixed map metadata with world/zone presentation configuration; remove the four-token
   limit. Check [map positioning](../frontend/src/features/game-console/mapPosition.ts) against zone coordinates.
-- [ ] A7 — Handle missing run/body, inspect-only viewpoints, unsupported commands, and stale versions
+  Typed map configuration exposes only perceived-zone presentation to the human interface. Every positioned
+  perceived token is rendered; inclusive cell centers support negative/translated extents. Unknown positions
+  are never invented, and out-of-range known coordinates use an explicitly labeled fitted grid.
+- [x] A7 — Handle missing run/body, inspect-only viewpoints, unsupported commands, and stale versions
   with actionable UI states. Never present failed writes as successful demo actions.
-- [ ] A8 — Acceptance: invite and bind a character, speak/move/attack, observe correct health/position
+  Live errors never become demo success. Stale or projection-pending scenes disable acting with recovery
+  guidance; missing runs/bodies and inspect-only viewpoints explain the required next action.
+- [x] A8 — Acceptance: invite and bind a character, speak/move/attack, observe correct health/position
   from two authorized clients, switch viewpoints without mixed observations, and restart successfully.
+  The built-SPA journey uses isolated PostgreSQL, a real projector, two independent player cookie contexts
+  and DM UI invitations. It verifies six map tokens/coordinates, cross-client movement/HP/single speech,
+  draft/feed isolation, offline recovery, app restart and mobile speech after restart (47.81 seconds).
+  Final local gates: 596 Python unit/contracts, 63 frontend tests, lint/build, 143 typed modules, clean wheel and
+  90 documentation links. Full durable run: 136 passed before the final owner-fence correction; all 6 affected
+  roster/migration tests then passed on corrected source. PR/current-head CI, independent original seven
+  Task2 criteria and live deployment are separate; these checked boxes do not assert native acceptance.
 
 ## B. Separate character knowledge from player and operator knowledge
 
