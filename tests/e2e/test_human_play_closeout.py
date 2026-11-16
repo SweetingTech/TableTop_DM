@@ -248,7 +248,30 @@ def test_two_cookie_clients_invite_act_resynchronize_switch_and_survive_restart(
         expect(
             a.get_by_role("heading", name="Perceived Acceptance yard", exact=True)
         ).to_be_visible()
+        command_requests = []
+        a.on(
+            "request",
+            lambda request: (
+                command_requests.append(request.url)
+                if request.method == "POST" and request.url.endswith("/commands")
+                else None
+            ),
+        )
+        unsupported = "/teleport moon"
+        draft = a.get_by_label("Command or dialogue", exact=True)
+        draft.fill(unsupported)
+        a.get_by_role("button", name="Send proposal", exact=True).click()
+        expect(
+            a.get_by_text(
+                "Unsupported command. Use /move, /attack, /guard, /cast, /invoke, "
+                "or type dialogue.",
+                exact=True,
+            )
+        ).to_be_visible()
+        expect(draft).to_have_value(unsupported)
+        assert command_requests == [], "Unsupported input must not post a canonical command"
         command(a, "/move east")
+        assert len(command_requests) == 1
         expect(
             b.get_by_role("listbox", name="Perceived entities").get_by_role(
                 "option", name="Nyra Acceptance", exact=False
@@ -333,7 +356,8 @@ def test_two_cookie_clients_invite_act_resynchronize_switch_and_survive_restart(
         assert not errors, errors
         assert not projection_errors, projection_errors
         print(
-            "A8 PASS: two cookie clients, UI invite/bind, movement/health/speech polling, "
+            "A8 PASS: two cookie clients, UI invite/bind, unsupported command rejected "
+            "without POST or draft loss, movement/health/speech polling, "
             "six map tokens, scoped viewpoint switch, reconnect, "
             "PostgreSQL app restart, desktop/mobile."
         )

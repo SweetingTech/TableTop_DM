@@ -35,6 +35,14 @@ describe("typed game command parser", () => {
     expect(() => parseCommand("/attack Nobody", demoGameState)).toThrow(/Unknown target/);
   });
 
+  it("rejects unsupported slash commands with the supported actions", () => {
+    for (const command of ["/teleport moon", "/", "  /dance wildly  "]) {
+      expect(() => parseCommand(command, demoGameState)).toThrow(
+        "Unsupported command. Use /move, /attack, /guard, /cast, /invoke, or type dialogue.",
+      );
+    }
+  });
+
   it("maps tokens from canonical public grid coordinates", () => {
     const bounds = { min_x: -2, max_x: 7, min_y: 0, max_y: 9 };
     expect(entityMapPosition({ public_state: { x: 2, y: 3 } }, bounds)).toEqual({

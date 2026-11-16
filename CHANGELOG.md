@@ -1,5 +1,9 @@
 # Changelog
 
+- Reject unknown Game Console slash commands with supported-action guidance, preserving the
+  draft and making no command request. Verify the rejection in parser/API regressions and the
+  two-client PostgreSQL browser journey.
+
 - Synchronize perception-scoped console scenes with bounded visible-tab polling, reconnect,
   obsolete-response protection and explicit unavailable/stale/projection-pending states.
   Preserve background drafts and isolate body changes. Replace the fixed map/four-token cap

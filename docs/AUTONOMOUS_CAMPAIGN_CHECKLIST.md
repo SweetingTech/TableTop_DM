@@ -99,6 +99,8 @@ as composition glue; reusable execution services must also work from workers and
   with actionable UI states. Never present failed writes as successful demo actions.
   Live errors never become demo success. Stale or projection-pending scenes disable acting with recovery
   guidance; missing runs/bodies and inspect-only viewpoints explain the required next action.
+  Unknown slash commands list the supported actions and retain the draft without posting an
+  uninterpreted proposal as a successful action. Parser/API tests and the actual A8 browser journey cover it.
 - [x] A8 — Acceptance: invite and bind a character, speak/move/attack, observe correct health/position
   from two authorized clients, switch viewpoints without mixed observations, and restart successfully.
   The built-SPA journey uses isolated PostgreSQL, a real projector, two independent player cookie contexts
