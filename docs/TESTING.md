@@ -1,5 +1,16 @@
 # Testing
 
+Trade authority regressions are in `tests/unit/kernel/test_trade_offers_api.py`: fixed maker terms,
+carried escrow conservation, contact/visibility/incapacity, forged intent rejection, both-body
+costs, passive rest interruption, expiry/partition/refund, retries and human/agent trial parity.
+`tests/integration/test_trade_offers.py` uses actual PostgreSQL for restart, late retry, expiry,
+recorded replay, publication rollback and concurrent separate workers. Existing final-weapon
+trade regressions now require explicit buyer consent and retain equipment/read/replay assertions.
+`tests/e2e/test_trade_offers_isolated.py` exercises the built SPA at desktop/mobile sizes: select
+a perceived quote, prepare/focus and submit, refresh remaining stock, and reject a withdrawn offer
+without losing the draft. It checks console errors and document overflow. Parser tests reject
+invented taker terms. These tests verify C6 trade wiring, not autonomous quest/planning completion.
+
 `tests/unit/kernel/test_derived_combat_api.py` covers STR/finesse/training math, stale flat-bonus
 override denial, explicit legacy profiles, real seeded damage, owned equipment, manager/player
 authority, forged stats/resources, late configuration retry, card isolation, in-world sensory

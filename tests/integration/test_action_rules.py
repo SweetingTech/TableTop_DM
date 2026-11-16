@@ -14,6 +14,7 @@ from tests.integration.test_relationship_snapshot_repairs import fresh_client
 from tests.integration.test_speech_combat_behavior import prepare
 from tests.unit.kernel.test_speech_combat_behavior import provoke
 from tests.unit.kernel.test_tactical_choices import command, resources
+from tests.unit.kernel.test_world_time import api_command
 
 pytestmark = pytest.mark.integration
 
@@ -43,16 +44,26 @@ def test_last_equipped_weapon_trade_preserves_reads_retries_and_replay_after_res
     )
     assert spawned.status_code == 201, spawned.get_json()
     entity = spawned.get_json()["entity_id"]
+    offered = api_command(
+        admin,
+        base,
+        "tabletop.economy.configure_offer",
+        {
+            "maker_id": target,
+            "side": "BUY",
+            "item": "SPEAR",
+            "quantity": 1,
+            "unit_price": 0,
+        },
+        "gift-consent",
+    )
     request = {
         **base,
         "embodied_entity_id": entity,
         "command_type": "tabletop.economy.trade",
         "parameters": {
-            "counterparty_id": target,
-            "item": "SPEAR",
+            "offer_id": offered["result"]["result"]["offer_id"],
             "quantity": 1,
-            "unit_price": 0,
-            "direction": "SELL",
         },
         "idempotency_key": "last-weapon-trade",
     }

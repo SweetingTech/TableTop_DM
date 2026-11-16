@@ -24,6 +24,15 @@ class VisibleActivity(BaseModel):
     weeded_units: int = Field(ge=0)
 
 
+class VisibleTradeOffer(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    offer_id: uuid.UUID
+    side: Literal["SELL", "BUY"]
+    item: str
+    quantity: int = Field(ge=1)
+    unit_price: int = Field(ge=0)
+
+
 class PerceivedEntity(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -44,6 +53,7 @@ class PerceivedEntity(BaseModel):
     known_spell_ids: tuple[str, ...] | None = None
     action_wait_seconds: int | None = Field(default=None, ge=0)
     activity: VisibleActivity | None = None
+    trade_offers: tuple[VisibleTradeOffer, ...] = ()
 
 
 class ObservationPresentation(BaseModel):

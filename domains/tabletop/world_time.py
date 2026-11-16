@@ -103,6 +103,7 @@ def advance_result(state: BranchState, clock: Clock, until: int, **updates) -> C
         SCHEDULE,
         "tabletop.entities",
         "tabletop.vitals",
+        "tabletop.trade_offers",
         "tabletop.population",
         "tabletop.population_transitions",
         "tabletop.routines",
@@ -186,7 +187,7 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
     return tuple(
         CommandDefinition(
             command_type=name,
-            version="1.4.0" if name != "tabletop.clock.configure" else "1.0.0",
+            version="1.5.0" if name != "tabletop.clock.configure" else "1.0.0",
             required_capabilities=frozenset(
                 {"action.propose", "entity.control"}
                 if name != "tabletop.clock.tick"

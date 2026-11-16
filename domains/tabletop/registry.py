@@ -10,7 +10,7 @@ from domains.tabletop.combat import command_definition as combat
 from domains.tabletop.combat.tactics import command_definition as guard
 from domains.tabletop.dialogue import command_definitions as dialogue
 from domains.tabletop.divine import command_definition as divine
-from domains.tabletop.economy import command_definition as economy
+from domains.tabletop.economy import command_definitions as economy
 from domains.tabletop.effects import command_definition as conditions
 from domains.tabletop.entities import command_definition as entities
 from domains.tabletop.entities.control import command_definition as entity_controllers
@@ -60,7 +60,7 @@ def command_definitions(
         guard(),
         magic(),
         invoke(),
-        economy(),
+        *economy(),
         factions(),
         divine(),
         quests(),

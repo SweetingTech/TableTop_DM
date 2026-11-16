@@ -1,5 +1,13 @@
 # TableTop DM
 
+Trade uses standing offers backed by the maker's carried goods or gold. In the console, inspect
+an adjacent merchant and choose an offer to prepare a command, then send it. `/offer buy|sell
+<item> <quantity> <unit price>` posts your own offer; `/trade <offer id> [quantity]` accepts its
+fixed terms and `/withdraw <offer id>` returns your reserved resources. Both participants must
+be capable, visible and adjacent; an exchange occupies both bodies for six simulated seconds.
+Expired or cancelled offers return the unused reserve once. Quest progress and rewards are
+still being converted to authorized evidence; this trade work does not complete that checklist item.
+
 Attacks use canonical ability scores, weapon rules and training. Shortswords may use the higher
 of Strength/Dexterity; unarmed attacks and spears use Strength. `/equip UNARMED|SHORTSWORD|SPEAR`
 readies an owned weapon and spends the normal action cost. The live sheet follows current body

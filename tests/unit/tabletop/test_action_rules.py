@@ -7,13 +7,13 @@ from dataclasses import replace
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from kernel.application import stable_id
 from kernel.command_bus import CommandBus, CommandDefinition
 from kernel.contracts import BranchKind, CommandResult, StateDelta
 from kernel.errors import AuthorizationDenied
 from tests.unit.kernel.test_character_binding_api import _app
 from tests.unit.kernel.test_speech_combat_behavior import provoke, setup_scene
 from tests.unit.kernel.test_tactical_choices import resources
+from tests.unit.kernel.test_world_time import api_command
 from tests.unit.tabletop.test_domain_commands import domain as domain
 from tests.unit.tabletop.test_domain_commands import proposal
 
@@ -25,15 +25,30 @@ pytestmark = pytest.mark.unit
 def test_trade_reconciles_equipment_only_after_selling_final_copy(domain, weapon, copies):
     hero = domain["state"].projections["tabletop.entities"][str(domain["hero"])]
     hero.update({"equipped_weapon": weapon, "inventory": {weapon: copies}})
+    domain["state"].projections["tabletop.entities"][str(domain["merchant"])].update(
+        {"x": 2, "y": 2}
+    )
+    offered = domain["bus"].execute(
+        proposal(
+            domain,
+            "tabletop.economy.configure_offer",
+            {
+                "maker_id": str(domain["merchant"]),
+                "side": "BUY",
+                "item": weapon,
+                "quantity": 1,
+                "unit_price": 5,
+            },
+            "weapon-offer",
+        ),
+        domain["actor"],
+    )
     request = proposal(
         domain,
         "tabletop.economy.trade",
         {
-            "counterparty_id": str(domain["merchant"]),
-            "item": weapon,
+            "offer_id": offered.result.result["offer_id"],
             "quantity": 1,
-            "unit_price": 5,
-            "direction": "SELL",
         },
         "sell-weapon",
     )
@@ -53,6 +68,33 @@ def test_scene_and_context_remain_available_after_selling_equipped_weapon(monkey
     client = app.test_client()
     client.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
     base = {k: str(ids[k]) for k in ("world_id", "branch_id", "run_id")}
+    spawned = client.post(
+        f"/api/v2/worlds/{base['world_id']}/entities",
+        json={
+            "name": "Spear buyer",
+            "entity_type": "NPC",
+            "public_state": {
+                "x": body["x"],
+                "y": body["y"],
+                "hp": 10,
+                "gold": 5,
+            },
+        },
+    )
+    assert spawned.status_code == 201, spawned.get_json()
+    offered = api_command(
+        client,
+        base,
+        "tabletop.economy.configure_offer",
+        {
+            "maker_id": spawned.get_json()["entity_id"],
+            "side": "BUY",
+            "item": "SPEAR",
+            "quantity": 1,
+            "unit_price": 5,
+        },
+        "spear-bid",
+    )
     response = client.post(
         "/api/v2/commands",
         json={
@@ -60,11 +102,8 @@ def test_scene_and_context_remain_available_after_selling_equipped_weapon(monkey
             "embodied_entity_id": str(ids["hero_id"]),
             "command_type": "tabletop.economy.trade",
             "parameters": {
-                "counterparty_id": str(stable_id("demo:entity:merchant")),
-                "item": "SPEAR",
+                "offer_id": offered["result"]["result"]["offer_id"],
                 "quantity": 1,
-                "unit_price": 5,
-                "direction": "SELL",
             },
             "idempotency_key": "sell-last-spear",
         },

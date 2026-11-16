@@ -32,6 +32,8 @@ export type ActorSummary = {
   capabilities: string[];
 };
 
+export type TradeOffer = { offer_id: string; side: "SELL" | "BUY"; item: string; quantity: number; unit_price: number };
+
 export type EntitySummary = {
   entity_id: string;
   world_id?: string;
@@ -47,6 +49,7 @@ export type EntitySummary = {
   knowledge_state?: "VISIBLE" | "LAST_KNOWN" | "RUMORED";
   detail_level?: "PRESENCE" | "CLASSIFIED" | "IDENTIFIED" | "INSPECTED";
   position_confidence?: number;
+  trade_offers?: TradeOffer[];
   activity?: { kind: "WEED" | "REST" | "EAT" | "TRAVEL" | "SLEEP" | "SOCIAL"; status: string; progress_percent: number; weeded_units: number } | null;
 };
 
@@ -80,6 +83,7 @@ export type PerceivedScene = {
     max_health: number | null;
     status: string | null;
     known_spell_ids?: string[] | null;
+    trade_offers?: TradeOffer[];
     activity?: EntitySummary["activity"];
   }>;
   recent_observations: Array<{

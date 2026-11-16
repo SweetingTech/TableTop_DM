@@ -128,17 +128,30 @@ def test_blocked_movement_rolls_back(domain):
 
 def test_trade_conserves_gold_and_inventory(domain):
     entities = domain["state"].projections["tabletop.entities"]
+    entities[str(domain["merchant"])].update({"x": 2, "y": 2})
     gold_before = entities[str(domain["hero"])]["gold"] + entities[str(domain["merchant"])]["gold"]
+    offered = domain["bus"].execute(
+        proposal(
+            domain,
+            "tabletop.economy.configure_offer",
+            {
+                "maker_id": str(domain["merchant"]),
+                "side": "SELL",
+                "item": "herb",
+                "quantity": 2,
+                "unit_price": 5,
+            },
+            "herb-offer",
+        ),
+        domain["actor"],
+    )
     domain["bus"].execute(
         proposal(
             domain,
             "tabletop.economy.trade",
             {
-                "counterparty_id": str(domain["merchant"]),
-                "item": "herb",
+                "offer_id": offered.result.result["offer_id"],
                 "quantity": 2,
-                "unit_price": 5,
-                "direction": "BUY",
             },
             "trade",
         ),
@@ -188,6 +201,10 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.magic.cast",
         "tabletop.magic.invoke",
         "tabletop.economy.trade",
+        "tabletop.economy.offer",
+        "tabletop.economy.configure_offer",
+        "tabletop.economy.withdraw_offer",
+        "tabletop.economy.cancel_offer",
         "tabletop.faction.adjust_reputation",
         "tabletop.divine.bless",
         "tabletop.quest.advance",

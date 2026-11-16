@@ -229,6 +229,11 @@ as composition glue; reusable execution services must also work from workers and
   and real-browser verification cover this ownership boundary. Whole-section C acceptance remains open.
 - [ ] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;
   current quest requests supply their own amount and target. Extend economy/inventory/trade as needed for activities.
+  Trade now has maker-authorized carried escrow, fixed-price reference-only acceptance, physical
+  contact/visibility/capacity, both-body costs, clock expiry/refund and perceived console offers.
+  Human/agent parity, actual durable restart/rollback/replay/race and built desktop/mobile paths
+  cover that portion. Quest objectives, evidence-derived progress and once-only rewards remain
+  open; do not close C6 or advance sections on the trade implementation alone.
 - [ ] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible
   actions leave no writes; retries spend resources once; distinct seeded actions replay correctly.
 

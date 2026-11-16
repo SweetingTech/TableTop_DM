@@ -141,6 +141,17 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
             {game.entities.map((entity) => <EntityRow key={entity.entity_id} entity={entity} selected={entity.entity_id === selected?.entity_id} onSelect={() => setFocusedEntityId(entity.entity_id)} />)}
           </div>
           {selected ? <div className="entity-detail"><DefinitionList items={[["Type", selected.entity_type], ["Location", selected.location ?? "Unknown"], ["Status", <Status value={selected.status ?? "UNKNOWN"} />], ["Health", selected.health === undefined ? "—" : `${selected.health} / ${selected.max_health ?? "—"}`]]} /></div> : null}
+          {selected?.trade_offers?.length ? <section aria-label="Trade offers">
+            <h3>Trade offers</h3>
+            <p>Choose an offer to prepare a command, then send it below.</p>
+            {selected.trade_offers.map((offer) => <div key={offer.offer_id}>
+              <p>{offer.quantity} {offer.item} available · {offer.unit_price} gold each</p>
+              <button type="button" className="button secondary" disabled={!canAct || sending} onClick={() => {
+                setCommand(selected.entity_id === selectedViewpointId ? `/withdraw ${offer.offer_id}` : `/trade ${offer.offer_id} 1`);
+                commandInput.current?.focus();
+              }}>{selected.entity_id === selectedViewpointId ? `Withdraw ${offer.item} offer` : `${offer.side === "SELL" ? "Buy" : "Sell"} ${offer.item} for ${offer.unit_price} gold`}</button>
+            </div>)}
+          </section> : null}
         </Panel>
         <Panel title="Observation feed" meta={<span>{events.length} perceived events</span>} className="event-panel">
           {events.length ? <div className="event-feed">{events.map((item) => <article className="event-row" key={item.event_id}><time>{new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span className="event-icon">{item.event_type.includes("dialogue") ? <MessageSquare size={14} /> : item.event_type.includes("movement") ? <Map size={14} /> : <Swords size={14} />}</span><div><strong>{item.actor_name ?? item.event_type}</strong><p>{item.summary}</p></div></article>)}</div> : <EmptyState title="No visible events" detail="Visible ledger events will appear here." />}
