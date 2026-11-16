@@ -6,12 +6,16 @@ This policy does not read another person's hidden state or write subjective cogn
 
 from __future__ import annotations
 
+import uuid
+
 from cognition.goal_motivation import GoalMotivation
+from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position
+from domains.tabletop.rules import incapacitated
 from kernel.state import BranchState
 from population.life import DAY, due_obligation, route, sleeping, switch, travel
 
-POLICY_VERSION = "npc-daily-planning-1.1.0"
+POLICY_VERSION = "npc-daily-planning-1.2.0"
 
 
 def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
@@ -43,10 +47,17 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
     row["suspended"] = {
         task: raw for task, raw in row["suspended"].items() if task in allowed_cache
     }
-    if int(body.get("hp", 0)) <= 0:
-        body["asleep"] = row["was_asleep"] = False
+    busy = bool(wait_seconds(state, uuid.UUID(key), at_seconds=now))
+    unavailable = int(body.get("hp", 0)) <= 0 or incapacitated(body)
+    if unavailable or busy:
+        if int(body.get("hp", 0)) <= 0:
+            body["asleep"] = row["was_asleep"] = False
         state.projections[ACTIVITIES][key] = old.model_copy(
-            update={"updated_seconds": now, "status": "WAITING", "reason": "INCAPACITATED"}
+            update={
+                "updated_seconds": now,
+                "status": "WAITING",
+                "reason": "INCAPACITATED" if unavailable else "ACTION_BUSY",
+            }
         ).model_dump(mode="json")
         return
 

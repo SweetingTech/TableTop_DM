@@ -18,6 +18,13 @@ at speed30, two at speed15). Retries reuse their original cost and receipt. Auto
 wait without losing control budgets, while the world keeps moving. Guards expire after six
 simulated seconds. Worlds without a clock retain their existing untimed behavior.
 
+World managers can apply bounded timed conditions through `tabletop.condition.apply`. Timed
+conditions stack independently from permanent conditions. Clock advances process expiry,
+readiness and weather in time order, so incapacitated or busy people do not accrue offscreen
+work or social attendance during blocked intervals. Living needs continue. Divine blessings
+expire after six simulated seconds per requested turn; old remaining-turn grants start their
+countdown on the first new clock advance. Full initiative and death/recovery rules remain open.
+
 Language models may propose dialogue or actions, but they never write canonical state. Typed
 commands, world-scoped authorization, deterministic handlers, atomic transactions, and an
 append-only ledger decide what actually happened.

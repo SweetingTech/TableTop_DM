@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position, seconds
 from domains.tabletop.rules import incapacitated
 from domains.tabletop.spatial import MoveRequest, move_entity
@@ -426,7 +427,9 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
         return
     reason = (
         "INCAPACITATED"
-        if hp <= 0
+        if hp <= 0 or incapacitated(body)
+        else "ACTION_BUSY"
+        if wait_seconds(state, uuid.UUID(key), at_seconds=now)
         else "DANGER"
         if now < row.get("awake_until", 0)
         else "MOVED"
@@ -436,8 +439,9 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
         else None
     )
     if reason:
-        body["asleep"] = False
-        row["was_asleep"] = False
+        if reason in {"DANGER", "MOVED"} or hp <= 0:
+            body["asleep"] = False
+            row["was_asleep"] = False
         state.projections[ACTIVITIES][key] = old.model_copy(
             update={"updated_seconds": now, "status": "WAITING", "reason": reason}
         ).model_dump(mode="json")
@@ -534,6 +538,8 @@ def ready(state: BranchState, identity: str, row: dict, now: int) -> bool:
         actual, place = position(state, key), row["place"]
         if (
             int(body.get("hp", 0)) <= 0
+            or incapacitated(body)
+            or wait_seconds(state, uuid.UUID(key), at_seconds=now)
             or body.get("asleep")
             or (actual["zone_id"], actual["z"]) != (place["zone_id"], place["z"])
             or sum((actual[axis] - place[axis]) ** 2 for axis in ("x", "y")) > row["radius"] ** 2

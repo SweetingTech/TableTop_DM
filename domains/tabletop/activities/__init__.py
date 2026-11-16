@@ -7,6 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from domains.tabletop.action_time import wait_seconds
+from domains.tabletop.effects import anchor_legacy_blessings, boundaries, expire
+from domains.tabletop.rules import incapacitated
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.state import BranchState
@@ -33,6 +36,7 @@ class Activity(BaseModel):
         Literal[
             "RAIN",
             "INCAPACITATED",
+            "ACTION_BUSY",
             "MOVED",
             "NO_FOOD",
             "PATH_BLOCKED",
@@ -101,7 +105,7 @@ def start(proposal: CommandProposal, state: BranchState) -> CommandResult:
     key = str(request.entity_id)
     body = state.projections.get("tabletop.entities", {}).get(key)
     origin = position(state, key)
-    if body is None or int(body.get("hp", 0)) <= 0:
+    if body is None or int(body.get("hp", 0)) <= 0 or incapacitated(body):
         raise ValueError("activity requires a capable body")
     rows = state.projections.get(ACTIVITIES, {})
     if state.projections.get("tabletop.routines", {}).get(key, {}).get("enabled"):
@@ -215,7 +219,9 @@ def progress(state: BranchState, until: int) -> None:
         body = state.projections["tabletop.entities"].get(key)
         reason = (
             "INCAPACITATED"
-            if body is None or int(body.get("hp", 0)) <= 0
+            if body is None or int(body.get("hp", 0)) <= 0 or incapacitated(body)
+            else "ACTION_BUSY"
+            if wait_seconds(state, activity.entity_id, at_seconds=activity.updated_seconds)
             else "MOVED"
             if position(state, key) != activity.origin
             else "RAIN"
@@ -258,23 +264,38 @@ def progress(state: BranchState, until: int) -> None:
 def advance_activities(state: BranchState, until: int) -> None:
     from population.routines import advance_routines, reconcile_relevance
 
-    reconcile_relevance(state, seconds(state))
     cursor = seconds(state)
+    reconcile_relevance(state, cursor)
+    anchor_legacy_blessings(state, cursor)
+    expire(state, cursor)
     pending = state.projections.get(SCHEDULE, {})
-    for key, row in sorted(
+    weather = sorted(
         tuple(pending.items()), key=lambda item: (item[1]["due_seconds"], item[1]["order"], item[0])
-    ):
-        if row["due_seconds"] > until:
-            continue
-        progress(state, row["due_seconds"])
-        advance_routines(state, row["due_seconds"], cursor)
-        cursor = row["due_seconds"]
-        state.projections.setdefault(WEATHER, {}).setdefault("singleton", {})[row["zone_id"]] = row[
-            "raining"
-        ]
-        del pending[key]
-    progress(state, until)
-    advance_routines(state, until, cursor)
+    )
+
+    def apply_weather(now: int) -> None:
+        for key, row in weather:
+            if key in pending and row["due_seconds"] <= now:
+                state.projections.setdefault(WEATHER, {}).setdefault("singleton", {})[
+                    row["zone_id"]
+                ] = row["raining"]
+                del pending[key]
+
+    apply_weather(cursor)
+    progress(state, cursor)
+    advance_routines(state, cursor, cursor)
+    stops = set(boundaries(state, cursor, until)) | {
+        int(row["due_seconds"]) for _, row in weather if cursor < row["due_seconds"] <= until
+    }
+    for stop in sorted(stops):
+        progress(state, stop)
+        advance_routines(state, stop, cursor)
+        expire(state, stop)
+        apply_weather(stop)
+        # Reconcile without elapsed work so split and whole advances agree at the boundary.
+        progress(state, stop)
+        advance_routines(state, stop, stop)
+        cursor = stop
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:

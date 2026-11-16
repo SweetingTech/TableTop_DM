@@ -1,5 +1,24 @@
 # API and user workflows
 
+`tabletop.condition.apply` is a registered typed command for world managers. Its strict parameters
+are `target_id`, `condition` and `duration_seconds` (1..86400). Conditions are case-insensitive
+`stunned`, `incapacitated`, `unconscious`, `paralyzed`, `poisoned` or `frightened`; death is not a
+temporary condition. The target must exist in the branch, and that branch must have the current
+run's clock. Required world capabilities are `entity.control` and `action.propose`; another
+world's DM role grants no authority. The result reports `effect_id`, target, condition and absolute
+`expires_seconds`. Clients cannot choose source IDs/expiry, and at most32 timed sources fit per body.
+Retries return the original receipt even after expiry; they do not reapply the condition.
+
+`tabletop.divine.bless` retains `target_id`, `blessing` and `duration_turns`. With a matching clock,
+each turn lasts six simulated seconds and the result includes `expires_seconds`. Separate grants
+expire independently. Without a clock, the legacy remaining-turn record is retained until the
+first clock advance anchors it. Blessings remain descriptive grants; no new stat bonus is inferred
+from their names. Current permanent conditions and historical receipts remain unchanged.
+
+The live sheet reports active condition names through its existing typed fields; private creating
+command/run metadata is excluded. Clock advancement processes intermediate boundaries, so an NPC
+stunned for five seconds during a ten-second advance can only work for the remaining five.
+
 On a configured clock, successful controlled physical commands reserve per-body action time. Physical
 actions cost six simulated seconds and a five-foot movement step costs
 ceil(30/body speed), at least one second. Callers cannot choose these costs. Before readiness,

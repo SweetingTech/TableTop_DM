@@ -10,6 +10,7 @@ from domains.tabletop.combat.tactics import command_definition as guard
 from domains.tabletop.dialogue import command_definitions as dialogue
 from domains.tabletop.divine import command_definition as divine
 from domains.tabletop.economy import command_definition as economy
+from domains.tabletop.effects import command_definition as conditions
 from domains.tabletop.entities import command_definition as entities
 from domains.tabletop.entities.control import command_definition as entity_controllers
 from domains.tabletop.factions import command_definition as factions
@@ -42,6 +43,7 @@ def command_definitions(
         *dialogue(),
         entities(),
         entity_controllers(),
+        conditions(),
         spatial(),
         map_presentation(),
         combat(),
@@ -58,7 +60,7 @@ def command_definitions(
         if definition.command_type == "tabletop.battlefield.set_control_mode"
         else replace(
             definition,
-            version=f"{definition.version}+voluntary-body.1.action-time.1",
+            version=f"{definition.version}+voluntary-body.2.action-time.1",
             handler=with_action_time(with_wakeup(definition.handler)),
         )
         if definition.requires_controlled_entity

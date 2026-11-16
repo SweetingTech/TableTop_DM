@@ -7,7 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-RULES_VERSION = "tabletop-action-rules-1.0.0"
+from domains.tabletop.effects import timed_conditions
+
+RULES_VERSION = "tabletop-action-rules-1.1.0"
 SpellId = Literal["ARCANE_BOLT", "MEND"]
 DEFAULT_SPELLS: tuple[SpellId, ...] = ("ARCANE_BOLT", "MEND")
 
@@ -39,7 +41,9 @@ class AttackProfile(BaseModel):
 
 
 def conditions(body: dict) -> frozenset[str]:
-    return frozenset(str(value).casefold() for value in body.get("conditions", ()))
+    return frozenset(str(value).casefold() for value in body.get("conditions", ())) | frozenset(
+        row.condition for row in timed_conditions(body).values()
+    )
 
 
 def capable(body: dict) -> bool:

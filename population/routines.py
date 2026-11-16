@@ -7,7 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position, seconds
+from domains.tabletop.rules import incapacitated
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult
 from kernel.state import BranchState
@@ -16,7 +18,7 @@ from population.models import PopulationLevel
 from population.runtime import MEMBERS, projection_deltas, transition
 
 ROUTINES = "tabletop.routines"
-POLICY_VERSION = "npc-routines-1.3.0"
+POLICY_VERSION = "npc-routines-1.4.0"
 
 
 class RoutineRequest(BaseModel):
@@ -121,9 +123,17 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
     cursor = int(routine["updated_seconds"])
     if until < cursor:
         raise ValueError("routine time cannot move backward")
-    if body is None or int(body.get("hp", 0)) <= 0:
+    busy = bool(wait_seconds(state, uuid.UUID(key), at_seconds=cursor))
+    unavailable = body is None or int(body.get("hp", 0)) <= 0 or incapacitated(body)
+    if body is None or unavailable or busy:
         raw = state.projections[ACTIVITIES][key]
-        raw.update(status="WAITING", reason="INCAPACITATED", updated_seconds=until)
+        raw.update(
+            status="WAITING",
+            reason="INCAPACITATED" if unavailable else "ACTION_BUSY",
+            updated_seconds=until,
+        )
+        if body is not None and int(body.get("hp", 0)) > 0:
+            body["hunger"] = int(body.get("hunger", 0)) + until - cursor
         routine["updated_seconds"] = until
         return
     while True:

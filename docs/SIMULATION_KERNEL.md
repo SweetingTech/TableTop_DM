@@ -29,8 +29,24 @@ Integer-second duration is six for physical actions and ceil(30/speed) with a
 minimum of one for a five-foot move; zero-speed movement is rejected. Guard expiry is applied in
 the clock's isolated working copy and emitted as ordinary body deltas. No-clock branches preserve
 untimed behavior; clock-run mismatch rejects new actions. Speech, console interpretation and quest
-bookkeeping reserve no physical time. Command versions record
-`+voluntary-body.1.action-time.1`, clock tick/advance use1.1.0, and the action catalog uses1.4.0.
+bookkeeping reserve no physical time. Physical command versions record
+`+voluntary-body.2.action-time.1`; camera modes use `+presentation.1`, clock tick/advance use1.2.0,
+divine blessings use1.1.0, action rules use1.1.0, and the action catalog uses1.4.0.
+
+`tabletop.condition.apply` requires world-scoped `entity.control` and `action.propose`, an existing
+body in the branch and a clock belonging to the same run. Its strict request selects one of six
+registered conditions and duration1..86400 seconds, never an expiry or canonical delta. At most
+32 independent timed sources can be active on a body; duplicate receipts remain readable at
+capacity and after expiry. Timed records are distinct from permanent conditions, so removing one
+source cannot erase another. These operator configuration events do not create sensory evidence.
+The body's own allowlisted live state can still report its current physical conditions.
+
+Clock advancement anchors legacy blessings at the prior clock time, then advances through all
+due weather/effect/readiness boundaries. It accrues blocked intervals without voluntary work,
+expires due sources and reconciles zero elapsed time at the boundary. Existing positive-health
+requirements remain for activities and attendance; a missing HP field cannot fabricate work.
+All intermediate changes remain private until the complete typed clock result commits atomically.
+Historic deltas and receipts are not rewritten.
 
 The portal rejects bound-card resource/world edits before any metadata/history save, including
 mixed requests containing permitted identity changes. This is not a second physical mutation

@@ -17,12 +17,13 @@ UNTIMED_COMMANDS = frozenset(
 )
 
 
-def wait_seconds(state: BranchState, entity_id: uuid.UUID) -> int:
+def wait_seconds(state: BranchState, entity_id: uuid.UUID, *, at_seconds: int | None = None) -> int:
     clock = state.projections.get("tabletop.clock", {}).get("singleton")
     if clock is None:
         return 0
     row = state.projections.get(ACTION_TIME, {}).get(str(entity_id), {})
-    return max(0, int(row.get("ready_seconds", 0)) - int(clock["seconds"]))
+    now = int(clock["seconds"]) if at_seconds is None else at_seconds
+    return max(0, int(row.get("ready_seconds", 0)) - now)
 
 
 def duration_seconds(command_type: str, body: dict) -> int:
