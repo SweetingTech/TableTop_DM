@@ -1,5 +1,11 @@
 # API and user workflows
 
+For durable command receipts, private inspection authorization is read from the current protected
+world grant after execution, using the same `sim.has_world_capability` primitive as RLS. A cached
+in-process DM grant cannot survive another API process's revocation. New responses and cached
+retries are both redacted after revocation; privileged inspection remains available when the
+current exact-world grant allows it. Reference mode uses its existing world-scoped authority.
+
 `POST /api/v2/commands` presents quest/offer results without private projection deltas unless
 the submitting actor has `world.read.all` in the command's exact world. Quest source commands,
 unperceived target IDs and offer provenance cannot leak through accept/trade/reward receipts or

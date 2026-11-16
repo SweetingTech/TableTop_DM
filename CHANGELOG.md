@@ -1,5 +1,10 @@
 # Changelog
 
+- Revalidate private receipt inspection through the existing actor/world-scoped database
+  capability function. Separate-process DM revocation now fences new and cached HTTP results
+  even when the original API retains a cached grant. Preserve canonical receipt/replay bytes;
+  verify actual revocation, current-grant inspection, restart, retries and no duplicate writes.
+
 - Omit private quest/offer projection deltas from ordinary HTTP command receipts, including
   cached retries. Preserve full canonical/durable/replay results and exact-world read-all
   inspection. Verify public/privileged presentation and immutable internal evidence bytes.

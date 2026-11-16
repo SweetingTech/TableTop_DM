@@ -1,5 +1,8 @@
 # TableTop DM
 
+Durable receipt inspection checks the current database grant, including when another API process
+changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.
+
 Ordinary command receipts omit internal quest/offer projection deltas. The canonical receipt
 and replay evidence remain complete; inspecting them requires read-all authority in that world.
 

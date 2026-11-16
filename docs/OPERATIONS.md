@@ -1,5 +1,11 @@
 # Operations, storage, migrations, and security
 
+Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
+the existing protected `sim.has_world_capability` function with the submitting actor set locally
+on the read transaction. Deploy the matching API/control-plane code. Role changes from a second
+API process take effect for private receipt inspection without restarting the first process or
+hydrating all campaign state on every command. Canonical command authorization remains in the kernel.
+
 Quest/offer receipt privacy requires the matching API update. There is no migration or stored
 receipt rewrite: nonprivileged HTTP responses omit private projection deltas, while exact-world
 read-all operators retain full diagnostic receipts. Do not elevate players to recover internal
