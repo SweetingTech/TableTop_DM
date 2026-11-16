@@ -1,0 +1,46 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.18, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/runner/work/TableTop_DM/TableTop_DM
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.1.0, anyio-4.12.1, base-url-2.1.0, playwright-0.9.0
+collected 777 items / 638 deselected / 139 selected
+
+tests/integration/test_action_randomness.py .                            [  0%]
+tests/integration/test_action_rules.py ...                               [  2%]
+tests/integration/test_action_time.py ....                               [  5%]
+tests/integration/test_body_capability.py ..                             [  7%]
+tests/integration/test_character_bindings.py ....                        [ 10%]
+tests/integration/test_character_decisions.py ......                     [ 14%]
+tests/integration/test_character_knowledge.py ...                        [ 16%]
+tests/integration/test_character_live_state.py .                         [ 17%]
+tests/integration/test_character_resource_ownership.py .                 [ 17%]
+tests/integration/test_clean_boot.py ......                              [ 22%]
+tests/integration/test_cognition_character_entrypoint.py .               [ 23%]
+tests/integration/test_cognition_repository.py ...                       [ 25%]
+tests/integration/test_controller_runner.py ........                     [ 30%]
+tests/integration/test_durable_authorization.py .......                  [ 35%]
+tests/integration/test_durable_command_repository.py ....                [ 38%]
+tests/integration/test_generated_dialogue.py ..                          [ 40%]
+tests/integration/test_identity_portal.py .                              [ 41%]
+tests/integration/test_migration_013.py .                                [ 41%]
+tests/integration/test_migrations.py ....                                [ 44%]
+tests/integration/test_npc_goals.py ........                             [ 50%]
+tests/integration/test_persona_repository.py ...........                 [ 58%]
+tests/integration/test_player_behavior.py .....                          [ 61%]
+tests/integration/test_population_life.py .....                          [ 65%]
+tests/integration/test_population_planning.py ...                        [ 67%]
+tests/integration/test_population_repository.py .                        [ 68%]
+tests/integration/test_population_runtime.py .....                       [ 71%]
+tests/integration/test_relationship_snapshot_repairs.py ........         [ 77%]
+tests/integration/test_roster_recovery.py .....                          [ 81%]
+tests/integration/test_scenario_branch_restoration.py ..                 [ 82%]
+tests/integration/test_scene_refresh.py .                                [ 83%]
+tests/integration/test_schema_invariants.py .......                      [ 88%]
+tests/integration/test_speech_combat_behavior.py .....                   [ 92%]
+tests/integration/test_tactical_choices.py ...                           [ 94%]
+tests/integration/test_telemetry_repository.py .                         [ 94%]
+tests/integration/test_worker.py .                                       [ 95%]
+tests/integration/test_world_time.py ......                              [100%]
+
+========= 139 passed, 638 deselected, 1 warning in 1261.00s (0:21:00) ==========

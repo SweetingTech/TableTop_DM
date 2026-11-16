@@ -1,0 +1,32 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: <workspace>
+configfile: pyproject.toml
+plugins: anyio-4.12.1, base-url-2.1.0, cov-7.1.0, playwright-0.9.0
+collected 1 item
+
+tests\e2e\test_human_play_closeout.py .                                  [100%]
+
+=================================== PASSES ====================================
+_ test_two_cookie_clients_invite_act_resynchronize_switch_and_survive_restart[chromium] _
+---------------------------- Captured stdout setup ----------------------------
+applied 001_simulation_kernel.sql
+applied 002_identity_and_tabletop_workspaces.sql
+applied 003_spatial_epistemics.sql
+applied 004_persona_purpose.sql
+applied 005_character_history_and_bindings.sql
+applied 006_character_proposal_receipts.sql
+applied 007_controller_handoff_runner.sql
+applied 008_player_behavior_evidence.sql
+applied 009_speech_combat_evidence.sql
+applied 010_tactical_choice_evidence.sql
+applied 011_population_body_binding.sql
+applied 012_snapshot_entity_identity.sql
+applied 013_roster_controller_revocation.sql
+migration state current (13 migrations)
+---------------------------- Captured stdout call -----------------------------
+A8 PASS: two cookie clients, UI invite/bind, unsupported command rejected without POST or draft loss, movement/health/speech polling, six map tokens, scoped viewpoint switch, reconnect, PostgreSQL app restart, desktop/mobile.
+- generated xml file: <temp>\ttdm-a7-verification\human-play.junit.xml -
+=========================== short test summary info ===========================
+PASSED tests/e2e/test_human_play_closeout.py::test_two_cookie_clients_invite_act_resynchronize_switch_and_survive_restart[chromium]
+============================= 1 passed in 53.43s ==============================
