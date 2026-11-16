@@ -76,15 +76,15 @@ mana, inventory, equipment, learned spells and conditions. It refreshes the sele
 five seconds while visible, with a manual Refresh control. Loading and failed reads never show
 old card resources as live state. Polling preserves unsaved character identity edits.
 
-Melee proposals choose a target; the kernel resolves owned equipment, body bonuses, reach,
+Melee proposals choose a target; the kernel resolves owned equipment, ability/training bonuses, reach,
 visibility and conditions. Both spell entry points use registered ARCANE_BOLT/MEND definitions
 and the body's learned spells. Cast/invoke share fixed power, cost and eligibility. New requests
 cannot supply dice, bonuses, spell power or mana cost. The matching console accepts
 `/cast MEND <target>` and `/invoke MEND <target>`. Merge and deploy this console/bundle change
 together with its backend contract update.
 Melee rolls use a recorded run seed and the next committed branch sequence. New identical
-attacks get independent seeds; retries return the original receipt. The full combat clock remains
-checklist work.
+attacks get independent seeds; retries return the original receipt. Configured clocks enforce action
+readiness, initiative windows, timed conditions, death saves and recovery as described above.
 
 Voluntary actions share incapacity checks. A human-controlled sleeper can wake by a valid
 action, including combat or magic; failed attempts leave sleep and resources unchanged. Sleeping
