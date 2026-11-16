@@ -236,6 +236,7 @@ as composition glue; reusable execution services must also work from workers and
   funded item/gold rewards. Authorized physical/clock results derive progress atomically;
   distinct defeat targets count once, historical work is excluded and clients cannot supply
   progress, targets or payout terms. Controlled physical acceptance and READY reward claims,
+  public receipt redaction with world-scoped privileged inspection,
   manager cancellation/refund, private evidence provenance and perceived offers/personal journal
   have unit/durable/browser coverage. Current-head full gates, merge and independent whole-C
   acceptance still precede closure or any later section. Autonomous pursuit remains section F.

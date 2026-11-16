@@ -1,5 +1,8 @@
 # TableTop DM
 
+Ordinary command receipts omit internal quest/offer projection deltas. The canonical receipt
+and replay evidence remain complete; inspecting them requires read-all authority in that world.
+
 Quests use manager-authored movement, defeat, trade or weeding objectives and rewards reserved
 from the giver's actual goods/gold. Inspect a nearby giver, accept an offer, then complete its
 objectives through ordinary actions. The personal journal follows committed outcomes, including

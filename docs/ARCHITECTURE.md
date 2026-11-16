@@ -2,6 +2,11 @@
 
 ## System shape
 
+HTTP receipt presentation omits private quest/offer projection deltas for actors without
+world-scoped `world.read.all`. This pure projection never changes canonical receipts or replay
+inputs; public action results and scenes remain available without revealing hidden objective
+targets or source provenance. Cached retries pass through the same authority-based presentation.
+
 Quest contract definitions and their funded reward reserves live in `tabletop.quest_contracts`.
 Definitions are immutable; each accepted contract records one body owner and progress from
 authorized same-transaction MOVE, DEFEAT, TRADE or clock-owned WEED outcomes. A handler wrapper

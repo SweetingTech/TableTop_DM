@@ -1,5 +1,10 @@
 # Operations, storage, migrations, and security
 
+Quest/offer receipt privacy requires the matching API update. There is no migration or stored
+receipt rewrite: nonprivileged HTTP responses omit private projection deltas, while exact-world
+read-all operators retain full diagnostic receipts. Do not elevate players to recover internal
+delta access; use perceived scenes and the public typed action result.
+
 Quest contracts use existing atomic branch projections, with no migration or separate worker.
 Deploy matching Python/SPA versions. Create funded contracts through manager-only typed commands;
 do not migrate legacy caller-reported quest counters into verified objectives. Old committed

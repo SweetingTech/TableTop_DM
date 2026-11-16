@@ -1,5 +1,11 @@
 # Simulation-kernel contract
 
+Canonical command results retain all quest/offer deltas for persistence, retries and replay.
+The HTTP receipt is a separate projection: actors without `world.read.all` in the exact world
+receive no private quest/offer delta records. Public result models already exclude source/target
+metadata. Presentation filtering is pure and applies equally to original and cached receipts;
+it cannot alter committed state, evidence, resource costs or replay hashes.
+
 `tabletop-quests-2.0.0` replaces self-reported counters. Manager-only `quest.configure` validates
 same-branch giver/target references and reserves defined gold/items from the giver. Controlled
 `quest.accept` pins the owner; MOVE, unique-target DEFEAT, exact-counterparty/item TRADE and

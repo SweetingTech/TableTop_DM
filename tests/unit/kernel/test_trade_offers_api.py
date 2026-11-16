@@ -255,6 +255,8 @@ def test_controlled_issuer_reserves_owned_weapon_and_cannot_self_trade(monkeypat
     )
     assert posted.status_code == 200, posted.get_json()
     offer_id = identity(posted.get_json())
+    assert all(delta["projection"] != OFFERS for delta in posted.get_json()["result"]["deltas"])
+    assert "source_command_id" not in str(posted.get_json())
     state = app.extensions["simulation"].states.get(uuid.UUID(base["branch_id"]))
     assert state.projections["tabletop.entities"][card["entity_id"]]["inventory"]["SPEAR"] == 0
     advance_clock(admin, base, 6)

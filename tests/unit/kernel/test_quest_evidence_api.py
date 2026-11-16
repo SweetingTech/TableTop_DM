@@ -157,12 +157,49 @@ def test_public_quotes_and_personal_progress_hide_objective_provenance_and_other
     assert "A market errand" in fiction and "Deliver a spear" in fiction
     for private in (quest, maker, "source_command_id", "seen_entity_ids", "counterparty_id"):
         assert private not in fiction
-    accepted(player, base, card, quest)
+    receipt = accepted(player, base, card, quest)
+    assert all(delta["projection"] != QUESTS for delta in receipt["result"]["deltas"])
+    assert "source_command_id" not in str(receipt) and "counterparty_id" not in str(receipt)
     scene = player.get(path + "/scene").get_json()
     own = next(row for row in scene["perceived_entities"] if row["entity_id"] == card["entity_id"])
     assert own["quests"][0]["status"] == "ACTIVE"
     other = next(row for row in scene["perceived_entities"] if row["entity_id"] == maker)
     assert not other["quests"] and not other["quest_offers"]
+
+
+def test_public_receipt_redaction_preserves_internal_evidence_and_privileged_world_inspection(
+    monkeypatch, tmp_path
+):
+    from domains.tabletop.receipts import present_command_result
+    from kernel.contracts import CommandResult, StateDelta
+
+    # Presentation is pure, including for cached receipts and a result with mixed projections.
+    command_result = CommandResult(
+        deltas=(
+            StateDelta(projection=QUESTS, operation="SET", values={"source_command_id": "PRIVATE"}),
+            StateDelta(projection="tabletop.entities", operation="MERGE", values={"hp": 5}),
+        )
+    )
+    private_bytes = command_result.model_dump_json()
+    public = present_command_result(command_result, include_private=False)
+    assert [delta["projection"] for delta in public["deltas"]] == ["tabletop.entities"]
+    assert command_result.model_dump_json() == private_bytes
+    assert "PRIVATE" in str(present_command_result(command_result, include_private=True))
+    app = _app(monkeypatch, tmp_path)
+    game, maker, buy, sell, quest = prepare_quest(app)
+    admin, player, card, path, run, target, base = game
+    first = accepted(player, base, card, quest)
+    replay = command(player, base, card, "tabletop.quest.accept", {"quest_id": quest}, "accept")
+    assert replay.get_json() == first
+    assert "source_command_id" not in str(first)
+    reviewed = api_command(admin, base, "tabletop.quest.cancel", {"quest_id": quest}, "cancel")
+    internal = next(
+        delta for delta in reviewed["result"]["deltas"] if delta["projection"] == QUESTS
+    )
+    assert (
+        internal["values"]["source_command_id"]
+        and internal["values"]["owner_id"] == card["entity_id"]
+    )
 
 
 def test_offscreen_work_derives_only_new_committed_work_after_acceptance(monkeypatch, tmp_path):

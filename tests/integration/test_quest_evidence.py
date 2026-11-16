@@ -43,6 +43,8 @@ def test_quest_outcomes_reward_restart_late_retry_provenance_and_replay(
     assert [e["last_source_command_id"] for e in evidence] == [move_id, trade_id]
     paid = command(client, base, card, "tabletop.quest.claim", {"quest_id": quest}, "reward")
     assert paid.status_code == 200, paid.get_json()
+    assert "source_command_id" not in str(paid.get_json())
+    assert all(delta["projection"] != QUESTS for delta in paid.get_json()["result"]["deltas"])
     _, operator = fresh_client(tmp_path)
     advance_clock(operator, base, 19)
     restored, reader = player_after_restart(tmp_path, player)

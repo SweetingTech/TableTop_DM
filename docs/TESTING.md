@@ -1,5 +1,10 @@
 # Testing
 
+Quest/offer receipt regressions assert that ordinary submissions and cached retries omit private
+projection deltas and source/target provenance, privileged world-manager inspection remains
+available, and the pure presenter leaves canonical result bytes unchanged. The durable quest
+restart/retry/replay case also checks receipt redaction without losing stored source evidence.
+
 Quest coverage is in `tests/unit/kernel/test_quest_evidence_api.py`: all-objective completion,
 unique defeats, post-acceptance offscreen work, funded rewards, settlement/retry, physical giver
 availability, reference-only forgery rejection, ownership, public/fiction privacy and human/agent

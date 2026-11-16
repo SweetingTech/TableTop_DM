@@ -1,5 +1,9 @@
 # Changelog
 
+- Omit private quest/offer projection deltas from ordinary HTTP command receipts, including
+  cached retries. Preserve full canonical/durable/replay results and exact-world read-all
+  inspection. Verify public/privileged presentation and immutable internal evidence bytes.
+
 - Replace self-reported quest counters with immutable funded objectives and same-transaction
   evidence derived from movement, unique defeats, accepted trades and new offscreen weeding.
   Add controlled physical acceptance/once-only reward claims and manager cancellation/refund.

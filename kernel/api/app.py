@@ -69,6 +69,7 @@ from domains.tabletop.portal import (
     PostgresPortalRepository,
     TabletopPortalService,
 )
+from domains.tabletop.receipts import present_command_result
 from domains.tabletop.spatial.presentation import visible_maps
 from domains.tabletop.spatial.refresh import command_scene_cursor, scene_refresh_status
 from domains.tabletop.spatial.scene import PerceivedScene
@@ -2589,10 +2590,13 @@ def create_app(
         proposal = CommandProposal.model_validate(payload)
         require_world_access(proposal.world_id)
         receipt = simulation.submit(proposal)
+        authority = simulation.authority(proposal.world_id, proposal.actor_id)
         cursor = command_scene_cursor(receipt, simulation.states.get(proposal.branch_id).version)
         return jsonify(
             {
-                "result": receipt.result.model_dump(mode="json"),
+                "result": present_command_result(
+                    receipt.result, include_private="world.read.all" in authority.capabilities
+                ),
                 "event": receipt.event.model_dump(mode="json"),
                 "state_hash": receipt.state_hash,
                 "scene_refresh": cursor.model_dump(mode="json") if cursor is not None else None,

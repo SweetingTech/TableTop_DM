@@ -1,5 +1,12 @@
 # API and user workflows
 
+`POST /api/v2/commands` presents quest/offer results without private projection deltas unless
+the submitting actor has `world.read.all` in the command's exact world. Quest source commands,
+unperceived target IDs and offer provenance cannot leak through accept/trade/reward receipts or
+cached retries. The committed receipt, event, hash and replay records are unchanged internally;
+ordinary public results and scene synchronization still describe the action. Client parameters
+cannot request privileged presentation or grant capabilities.
+
 Quest contract `tabletop-quests-2.0.0` uses `POST /api/v2/commands`:
 
 - Manager `tabletop.quest.configure`: `{giver_id, title, description, objectives, reward_gold?,
