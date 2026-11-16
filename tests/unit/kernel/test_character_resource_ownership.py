@@ -18,6 +18,7 @@ pytestmark = pytest.mark.unit
         ("maximum_hit_points", 50),
         ("armor_class", 25),
         ("speed", 90),
+        ("ability_scores", {"dexterity": 30}),
         ("world_id", str(uuid.uuid4())),
     ],
 )

@@ -1,5 +1,33 @@
 # API and user workflows
 
+World managers submit `tabletop.encounter.start` with only `participants` (2..64 distinct living
+body UUIDs), requiring world-scoped `action.propose` and `entity.control`. A current run clock is
+required. The kernel allocates a recorded action seed and rolls d20 + floor((DEX−10)/2) from each
+canonical body's ability scores; legacy bodies without that field use DEX10. Sort descending by
+total, then bonus, then UUID. New character bindings pin their authored starting scores into the
+body; later card edits cannot rewrite ability scores or an already rolled order.
+
+Policy `tabletop-initiative-1.0.0` gives each participant a six-second window in that fixed order,
+repeating on the shared clock. Starting an encounter does not advance time. Physical actions still
+reserve their ordinary body-owned duration; fast movement may use multiple steps in a window,
+while a six-second action consumes its readiness. Speech and camera changes remain legal off turn.
+A missed, sleeping, incapacitated or dead participant's window passes as time advances. Other
+bodies continue working and living; clock boundaries enforce participant readiness for offscreen
+work too. These continuous-time rules do not implement a separate frozen-world turn engine.
+
+Out-of-turn attempts return `invalid_operation`400 without writes or costs; runners wait without
+spending failure/step budgets. Concurrent attempts serialize under the branch lock and retries
+return the original receipt. Players see only their own `action_wait_seconds`, never other
+bodies' initiative rolls, encounter IDs, future windows or seed provenance in sensory context.
+Physical interaction with someone in a different/unjoined encounter is rejected. A body cannot
+belong to overlapping encounters or begin manual rest during combat. World managers choose all
+participants without class/party restrictions; to change the roster, stop and start an encounter.
+
+`tabletop.encounter.stop` accepts only `encounter_id` under the same manager capabilities. It
+removes the active projection while preserving append-only command/event history and receipts;
+it does not refund body action costs. A current-run manager can end a previous run's stale
+encounter. There may be32 active encounters; completed fights do not consume a lifetime quota.
+
 The console accepts `/stabilize <perceived target name or id>`, submitting
 `tabletop.combat.stabilize` with strict `target_id` parameters. A capable controlled body must
 be adjacent to a visible living body at 0 HP. Successful first aid stabilizes it and reserves
@@ -13,7 +41,7 @@ maximum HP recover 1 HP after one simulated hour. Existing unrelated conditions 
 Pending saves on clockless branches start when their clock first advances. Old zero-HP bodies
 without a new defeat record are not assigned fabricated past rolls; first aid remains available.
 Clock advance, retry and restart preserve the same indexed saves. Save seeds/counters are not
-part of sensory scene/context contracts. Full initiative remains original checklist work.
+part of sensory scene/context contracts. Whole-section C acceptance remains a separate gate.
 
 `/rest short|long` submits the controlled `tabletop.rest.start` intent, with only `kind` set to
 `SHORT` or `LONG`. The current run's configured clock, positive HP, capability and entity control
@@ -74,7 +102,7 @@ through either a clock tick or explicit advance. This does not add full initiati
 condition/blessing definitions or death/recovery policy.
 
 `PATCH /api/v2/player/characters/<character_id>` rejects supplied `status`, `current_hit_points`,
-`maximum_hit_points`, `armor_class` or `speed` after `entity_id` is bound. A non-null `world_id`
+`maximum_hit_points`, `armor_class`, `speed` or `ability_scores` after `entity_id` is bound. A non-null `world_id`
 that differs from the bound world is also rejected. This applies to administrators as well as
 owners and returns the existing `invalid_operation`400 without partial identity/card writes.
 Use authorized world actions for current physical effects. Same-world/identity edits remain

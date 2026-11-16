@@ -1,5 +1,14 @@
 # Testing
 
+Initiative cases in `tests/unit/kernel/test_initiative_api.py` cover seeded order, own-only wait,
+invalid/overlapping/outsider requests, human/agent trial parity, concurrent retries, partitioned
+offscreen work and actual autonomous runner suspension/resume without budget loss. Durable tests
+in `tests/integration/test_initiative.py` verify restart, late seed-override retry, replay, concurrent
+transactions and injected event-publication rollback. Canonical score ownership also runs through
+the reference and durable character-resource regressions. The actual Chromium journey in
+`tests/e2e/test_initiative_isolated.py` preserves a rejected off-turn draft, advances the clock,
+then commits the same intended guard and checks desktop/mobile rendering.
+
 Rest regressions in `tests/unit/kernel/test_rest_recovery_api.py` cover fixed thresholds/caps,
 long-rest cooldown, physical/damage interruption, denied parameter overrides, incapacity,
 human/agent trial parity, offscreen routine/sleep recovery and whole-versus-split clock advances.

@@ -186,7 +186,7 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
     return tuple(
         CommandDefinition(
             command_type=name,
-            version="1.3.0" if name != "tabletop.clock.configure" else "1.0.0",
+            version="1.4.0" if name != "tabletop.clock.configure" else "1.0.0",
             required_capabilities=frozenset(
                 {"action.propose", "entity.control"}
                 if name != "tabletop.clock.tick"

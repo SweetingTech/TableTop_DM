@@ -28,6 +28,7 @@ def test_bound_card_rejects_resource_edits_atomically_after_restart(
         ("maximum_hit_points", 20),
         ("armor_class", 30),
         ("speed", 99),
+        ("ability_scores", {"dexterity": 30}),
         ("world_id", "00000000-0000-0000-0000-000000000001"),
     ]:
         response = client.patch(endpoint, json={field: value, "name": "Must not partially update"})

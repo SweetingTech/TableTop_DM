@@ -1,5 +1,12 @@
 # Operations, storage, migrations, and security
 
+Initiative needs the existing configured world clock and no new service/migration. World managers
+use typed `tabletop.encounter.start`/`stop` commands; the manager role remains distinct from body
+control. Participants can miss windows while the clock continues; pausing the clock pauses their
+schedule and offscreen work together. Stop a stale prior-run encounter before beginning a new
+one with those bodies. Stopping preserves body readiness and append-only evidence. Starting
+character ability scores are body-owned after binding, so card patches cannot change them.
+
 Rest uses the existing world clock; there is no new process or migration. Start a configured clock
 or advance its paused simulated time to progress rest and NPC sleep. New character bodies carry
 canonical maximum mana. For legacy bodies, explicitly configure known HP/mana caps through the
