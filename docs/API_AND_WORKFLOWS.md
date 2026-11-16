@@ -1,5 +1,35 @@
 # API and user workflows
 
+Rules `tabletop-action-rules-1.2.0` derive attacks from a canonical body's ability scores,
+equipped registered weapon and training. Unarmed/spear attacks use Strength; a shortsword uses
+Dexterity when it is higher. Attack bonus is the ability modifier plus proficiency if trained;
+damage bonus is that ability modifier. Proficiency is 0..6 and scores are 1..30. Poison/fear still
+apply disadvantage, and existing perception, range, incapacity, clock/initiative and resource
+checks remain mandatory. Old flat bonus fields cannot override a body with configured scores.
+
+New character bodies pin starting scores, level-derived proficiency (2..6) and training for all
+three registered weapons. No class gate prevents using owned gear; an untrained weapon simply
+omits proficiency. Legacy bodies without scores retain their explicit old flat profile until
+an authorized manager configures them; no mutable card data is consulted to guess their stats.
+
+`tabletop.body.configure` is a manager-only typed definition command requiring world-scoped
+`action.propose` and `entity.control`. Parameters are `entity_id`, `ability_scores` (the six named
+scores, omitted entries default 10), `proficiency_bonus` (default 2), `trained_weapons` (up to 3
+registered IDs), `known_spells` (up to 2 registered ARCANE_BOLT/MEND IDs) and `equipped_weapon`
+(default UNARMED). The defaults are the project's starting definition, not caller-selected attack
+rolls or damage. A configured non-unarmed weapon must already be owned. The command cannot
+change HP/mana/inventory, revive a body, supply an attack bonus or invent weapon/spell rules.
+It preserves existing action costs and conditions. Use `tabletop.resources.configure` separately
+for known resource capacities. Retries return the original definition receipt without resetting
+subsequent equipment or resources.
+
+`/equip UNARMED|SHORTSWORD|SPEAR` submits controlled `tabletop.equipment.equip` with only
+`weapon_id`. A capable, authorized body may ready its owned weapon under ordinary six-second
+action/initiative enforcement. Unknown, unowned, already equipped or forged-stat attempts fail
+without writes. Successful changes emit a sight-scoped in-world description, not internal rules
+metadata. The live sheet exposes only allowlisted own-body scores and derived bonuses through
+its existing state request; authored-card values never stand in for unavailable canonical stats.
+
 World managers submit `tabletop.encounter.start` with only `participants` (2..64 distinct living
 body UUIDs), requiring world-scoped `action.propose` and `entity.control`. A current run clock is
 required. The kernel allocates a recorded action seed and rolls d20 + floor((DEX−10)/2) from each
@@ -911,19 +941,21 @@ guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
 
 - `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next
   physical attack; that attempt consumes the guard, including a miss. Guards do not stack.
-- `tabletop.combat.attack` takes only `target_id`. Rules `tabletop-action-rules-1.0.0` resolve
-  UNARMED/SHORTSWORD (1d6, reach one) or an owned SPEAR (1d8, reach two), body attack/damage bonuses,
+- `tabletop.combat.attack` takes only `target_id`. Rules `tabletop-action-rules-1.2.0` resolve
+  UNARMED/SHORTSWORD (1d6, reach one) or an owned SPEAR (1d8, reach two), ability/training bonuses,
   and poisoned/frightened disadvantage. Legacy unarmed body reach remains supported. A living,
   awake, capable attacker needs a different visible, living target within the same zone/reach.
   Caller bonuses/dice are rejected. Logical action seeds and configured-clock readiness are
-  allocated by the kernel; full initiative and condition/death lifecycle rules remain planned.
+  allocated by the kernel; clocked initiative, conditions and death/recovery use the shared policies
+  described above. Legacy scoreless bodies retain their explicit flat profile until configured.
   Selling the final equipped weapon copy atomically switches the seller to UNARMED. Legacy
   unavailable equipment keeps scene/context reads available and suppresses impossible melee
   candidates; the attack handler still rejects an unavailable loadout.
 - `tabletop.magic.invoke` and `tabletop.magic.cast` take only `spell_id` and `target_id`.
   ARCANE_BOLT costs two mana,
   deals three damage and reaches six grid steps. MEND costs two mana, heals four up to maximum
-  health and reaches two steps. Both require current same-zone visible capable targets. Callers
+  health and reaches two steps. Both require a capable caster and current same-zone visible living
+  targets; MEND can rescue a 0-HP body and ordinary spells cannot resurrect a dead one. Callers
   cannot supply power, cost, range or extra fields. The caster must have learned the registered
   spell; an explicit empty `known_spells` list permits none. Legacy bodies without that field and
   new cards that omit it retain both starter spells. There is no class/protagonist gate.

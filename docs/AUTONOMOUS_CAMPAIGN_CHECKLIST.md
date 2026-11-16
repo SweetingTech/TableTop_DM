@@ -180,8 +180,11 @@ as composition glue; reusable execution services must also work from workers and
 
 - [ ] C1 — Replace caller-selected attack bonuses/dice with rules resolved from the body, weapon,
   abilities, conditions, and costs in [combat](../domains/tabletop/combat/__init__.py).
-  Partial: target-only contract 2.0.0 uses registered owned weapons, body bonuses, reach, sight,
-  zone, incapacity and poison/fear disadvantage. Full action costs/timing remain C3.
+  Target-only attacks now use registered owned weapons, canonical STR/finesse DEX and training,
+  reach, sight, zone, incapacity and poison/fear disadvantage. Typed bounded body definitions
+  configure legacy scoreless bodies without card guesses; ordinary owned-weapon equip shares
+  action/initiative costs and retry enforcement. Live sheets show canonical scores/bonuses.
+  Current-head verification, merge and whole-task independent C1–C7 acceptance remain separate.
 - [x] C2 — Resolve learned spells, power, mana, range, targets, and eligibility from versioned definitions
   in [magic](../domains/tabletop/magic/__init__.py); remove player authority to choose arbitrary power/cost.
   Both cast/invoke use registered ARCANE_BOLT/MEND rules and body-owned known spells/mana;

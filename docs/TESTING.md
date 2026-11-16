@@ -1,5 +1,15 @@
 # Testing
 
+`tests/unit/kernel/test_derived_combat_api.py` covers STR/finesse/training math, stale flat-bonus
+override denial, explicit legacy profiles, real seeded damage, owned equipment, manager/player
+authority, forged stats/resources, late configuration retry, card isolation, in-world sensory
+summary and HUMAN/AGENT trial parity. `tests/integration/test_derived_combat.py` verifies actual
+PostgreSQL stat/equipment restart, retries, replay and injected publication rollback without
+inventory/cost changes. Frontend parser/live-sheet regressions cover intent-only equipment and
+canonical score display through one existing request. The actual built-SPA journey
+`tests/e2e/test_derived_combat_isolated.py` equips a shortsword, observes a canonical score/bonus
+change, then equips a spear on mobile while offscreen gardening advances on the same clock.
+
 Initiative cases in `tests/unit/kernel/test_initiative_api.py` cover seeded order, own-only wait,
 invalid/overlapping/outsider requests, human/agent trial parity, concurrent retries, partitioned
 offscreen work and actual autonomous runner suspension/resume without budget loss. Durable tests

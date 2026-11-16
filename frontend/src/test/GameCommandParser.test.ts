@@ -4,6 +4,13 @@ import { parseCommand } from "../features/game-console/api";
 import { entityMapPosition } from "../features/game-console/mapPosition";
 
 describe("typed game command parser", () => {
+  it("only submits an equipment intent without supplying stats", () => {
+    expect(parseCommand("/equip spear", demoGameState)).toEqual({
+      commandType: "tabletop.equipment.equip", parameters: { weapon_id: "SPEAR" } });
+    for (const text of ["/equip", "/equip LASER", "/equip SPEAR 100"]) {
+      expect(() => parseCommand(text, demoGameState)).toThrow("Use /equip");
+    }
+  });
   it("only permits server-owned rest choices", () => {
     expect(parseCommand("/rest short", demoGameState)).toEqual({
       commandType: "tabletop.rest.start", parameters: { kind: "SHORT" } });
@@ -51,7 +58,7 @@ describe("typed game command parser", () => {
   it("rejects unsupported slash commands with the supported actions", () => {
     for (const command of ["/teleport moon", "/", "  /dance wildly  "]) {
       expect(() => parseCommand(command, demoGameState)).toThrow(
-        "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /cast, /invoke, or type dialogue.",
+        "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /cast, /invoke, or type dialogue.",
       );
     }
   });

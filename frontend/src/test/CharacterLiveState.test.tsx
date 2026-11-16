@@ -21,6 +21,18 @@ const live = (id = "a"): api.CharacterState => ({
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("canonical character resources", () => {
+  it("uses canonical abilities and derived bonuses without another request", async () => {
+    const state = live();
+    state.body = { ...state.body!, ability_scores: { strength: 18, dexterity: 20,
+      constitution: 12, intelligence: 10, wisdom: 10, charisma: 10 },
+      attack_bonus: 7, damage_bonus: 5, proficiency_bonus: 2 };
+    const get = vi.spyOn(api, "getCharacterState").mockResolvedValue(state);
+    render(<CharacterStatePanel character={{ ...card, ability_scores: { dexterity: 3 } }} onUpdate={vi.fn()} />);
+    expect(await screen.findByRole("group", { name: "Campaign abilities" })).toHaveTextContent("DEX20+5");
+    expect(screen.getByText("Attack bonus:", { exact: false })).toHaveTextContent("+7");
+    expect(screen.queryByRole("group", { name: "Starting abilities" })).not.toBeInTheDocument();
+    expect(get).toHaveBeenCalledTimes(1);
+  });
   it("shows live effects/equipment and never presents bound card controls", async () => {
     vi.spyOn(api, "getCharacterState").mockResolvedValue(live());
     render(<CharacterStatePanel character={card} onUpdate={vi.fn()} />);

@@ -8,7 +8,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.tabletop.portal import CharacterRecord
-from domains.tabletop.rules import conditions, dead, incapacitated, known_spells
+from domains.tabletop.rules import (
+    AbilityScores,
+    attack_profile,
+    conditions,
+    dead,
+    incapacitated,
+    known_spells,
+)
 from kernel.contracts import BranchKind
 from kernel.state import BranchState
 
@@ -33,6 +40,10 @@ class LiveBodyState(BaseModel):
     equipped_weapon: str
     known_spells: tuple[str, ...]
     conditions: tuple[str, ...]
+    ability_scores: dict[str, int] | None = None
+    proficiency_bonus: int | None = None
+    attack_bonus: int | None = None
+    damage_bonus: int | None = None
 
 
 class CharacterStateView(BaseModel):
@@ -80,6 +91,10 @@ def project_character_state(
         if body.get("asleep")
         else "ALIVE"
     )
+    try:
+        profile = attack_profile(body)
+    except ValueError:
+        profile = None
     return CharacterStateView(
         character_id=character.character_id,
         card_version=character.card_version,
@@ -99,5 +114,11 @@ def project_character_state(
             equipped_weapon=str(body.get("equipped_weapon", "UNARMED")),
             known_spells=known_spells(body),
             conditions=tuple(sorted(conditions(body))),
+            ability_scores=AbilityScores.model_validate(body["ability_scores"]).model_dump()
+            if "ability_scores" in body
+            else None,
+            proficiency_bonus=profile.proficiency_bonus if profile else None,
+            attack_bonus=profile.attack_bonus if profile else None,
+            damage_bonus=profile.damage_bonus if profile else None,
         ),
     )

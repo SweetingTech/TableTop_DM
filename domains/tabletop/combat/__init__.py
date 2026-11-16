@@ -30,6 +30,10 @@ class AttackResult(BaseModel):
     hp_before: int = Field(ge=0)
     hp_after: int = Field(ge=0)
     randomness: ActionRandomness | None = None
+    ability: str | None = None
+    attack_bonus: int = 0
+    damage_bonus: int = 0
+    proficiency_bonus: int = 0
 
 
 def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
@@ -88,6 +92,10 @@ def attack(proposal: CommandProposal, state: BranchState) -> CommandResult:
         result={
             "rules_version": RULES_VERSION,
             "weapon_id": profile.weapon.weapon_id,
+            "ability": profile.ability,
+            "attack_bonus": profile.attack_bonus,
+            "damage_bonus": profile.damage_bonus,
+            "proficiency_bonus": profile.proficiency_bonus,
             "attacker_id": str(attacker_id),
             "target_id": str(request.target_id),
             "attack_roll": attack_roll,
@@ -128,7 +136,7 @@ def attack_emission(
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.combat.attack",
-        version="2.2.0",
+        version="2.3.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=attack,

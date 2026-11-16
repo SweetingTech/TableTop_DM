@@ -9,7 +9,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
 from domains.tabletop.action_time import ROUND_SECONDS
-from domains.tabletop.rules import dead
+from domains.tabletop.rules import AbilityScores, dead
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.errors import BodyActionPending
@@ -98,9 +98,7 @@ def start(proposal: CommandProposal, state: BranchState) -> CommandResult:
             raise ValueError("initiative requires existing living participants")
         if membership(state, entity_id) is not None:
             raise ValueError("body already participates in an active encounter")
-        dexterity = int(body.get("ability_scores", {}).get("dexterity", 10))
-        if not 1 <= dexterity <= 30:
-            raise ValueError("body dexterity is outside the supported rules")
+        dexterity = AbilityScores.model_validate(body.get("ability_scores", {})).dexterity
         material = f"{INITIATIVE_VERSION}:{proposal.seed}:{entity_id}".encode()
         roll = random.Random(int.from_bytes(hashlib.sha256(material).digest(), "big")).randint(
             1, 20
