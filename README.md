@@ -62,7 +62,7 @@ conditions stack independently from permanent conditions. Clock advances process
 readiness and weather in time order, so incapacitated or busy people do not accrue offscreen
 work or social attendance during blocked intervals. Living needs continue. Divine blessings
 expire after six simulated seconds per requested turn; old remaining-turn grants start their
-countdown on the first new clock advance. Full initiative and rest rules remain open.
+countdown on the first new clock advance.
 
 Language models may propose dialogue or actions, but they never write canonical state. Typed
 commands, world-scoped authorization, deterministic handlers, atomic transactions, and an
