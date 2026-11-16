@@ -1,5 +1,10 @@
 # Changelog
 
+- Add controlled `/rest short|long` over canonical activities, shared HP/mana recovery for
+  offscreen NPC rest/sleep, uninterrupted thresholds and a daily long-rest interval. Interrupt
+  recovery on physical effort/damage, keep authored cards separate and add manager-only resource
+  capacity configuration without refills. Verify restart, rollback, replay, parity and live UI.
+
 - Add shared-clock death saves from recorded physical-action seeds, first aid and 0-HP healing.
   Persist save/recovery boundaries with ordinary canonical state, retain retry/replay and atomic
   rollback, and prevent new dead/unconscious sensory grants. Expose `/stabilize` in the console.

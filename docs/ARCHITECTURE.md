@@ -2,6 +2,13 @@
 
 ## System shape
 
+Rest is an activity over the canonical clock and body resources. `domains/tabletop/rest.py`
+owns versioned thresholds, uninterrupted progress and the long-rest interval for both controlled
+bodies and offscreen NPC routines/sleep. The typed rest intent cannot supply duration, healing
+or resource limits. Manager-only capacity configuration is distinct from current resource mutation;
+authored cards never overwrite either. Clock transitions commit activity, HP, mana and cooldown
+with the ledger/outbox. Successful effort/damage appends rest interruptions in the same command.
+
 Defeat saves live in the branch's typed `tabletop.vitals` projection. Damage commands create
 them from the same trusted physical-action seed used by both kernel repositories. Clock
 boundaries resolve indexed rolls and recovery on a private working state; bodies, vitals,

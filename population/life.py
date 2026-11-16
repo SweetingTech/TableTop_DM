@@ -626,9 +626,14 @@ def next_boundary(state: BranchState, now: int, until: int) -> int:
 
 
 def progress_body(state: BranchState, key: str, row: dict, until: int) -> None:
+    from domains.tabletop.rest import recover
+
     body = state.projections["tabletop.entities"][key]
     activity = Activity.model_validate(state.projections[ACTIVITIES][key])
     elapsed = until - row["updated_seconds"]
+    activity = recover(
+        activity, body, row["updated_seconds"], until, allowed=activity.status != "WAITING"
+    )
     if int(body.get("hp", 0)) > 0:
         body["hunger"] = int(body.get("hunger", 0)) + elapsed
     if activity.status != "WAITING" and int(body.get("hp", 0)) > 0:

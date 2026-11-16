@@ -18,7 +18,7 @@ from population.models import PopulationLevel
 from population.runtime import MEMBERS, projection_deltas, transition
 
 ROUTINES = "tabletop.routines"
-POLICY_VERSION = "npc-routines-1.4.0"
+POLICY_VERSION = "npc-routines-1.5.0"
 
 
 class RoutineRequest(BaseModel):
@@ -119,6 +119,8 @@ def food(body: dict) -> int:
 
 
 def advance_body(state: BranchState, key: str, routine: dict, until: int) -> None:
+    from domains.tabletop.rest import recover
+
     body = state.projections.get("tabletop.entities", {}).get(key)
     cursor = int(routine["updated_seconds"])
     if until < cursor:
@@ -127,6 +129,11 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
     unavailable = body is None or int(body.get("hp", 0)) <= 0 or incapacitated(body)
     if body is None or unavailable or busy:
         raw = state.projections[ACTIVITIES][key]
+        if body is not None:
+            raw = recover(
+                Activity.model_validate(raw), body, cursor, until, allowed=False
+            ).model_dump(mode="json")
+            state.projections[ACTIVITIES][key] = raw
         raw.update(
             status="WAITING",
             reason="INCAPACITATED" if unavailable else "ACTION_BUSY",
@@ -179,6 +186,7 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
             else None
         )
         if cursor == until or reason:
+            activity = recover(activity, body, cursor, cursor, allowed=reason is None)
             stop = until
             if reason and activity.kind != "EAT" and hunger < routine["hunger_limit"]:
                 stop = min(until, cursor + routine["hunger_limit"] - hunger)
@@ -206,6 +214,7 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
             body["fatigue"] = fatigue + duration
         elif activity.kind == "REST":
             body["fatigue"] = max(0, fatigue - duration)
+        activity = recover(activity, body, cursor, cursor + duration, allowed=True)
         cursor += duration
         total = activity.progress_seconds + duration
         state.projections[ACTIVITIES][key] = activity.model_copy(

@@ -225,6 +225,13 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
       return { commandType: "tabletop.combat.stabilize", parameters: {
         target_id: resolveEntity(parts.join(" "), state) } };
     }
+    case "rest": {
+      const kind = (parts[0] ?? "").toUpperCase();
+      if (parts.length !== 1 || !["SHORT", "LONG"].includes(kind)) {
+        throw new Error("Use /rest short|long");
+      }
+      return { commandType: "tabletop.rest.start", parameters: { kind } };
+    }
     case "invoke": {
       const spellId = (parts.shift() ?? "").toUpperCase();
       if (!["ARCANE_BOLT", "MEND"].includes(spellId) || !parts.length) {
@@ -242,6 +249,6 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
         spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
     }
     default:
-      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /cast, /invoke, or type dialogue.");
+      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /cast, /invoke, or type dialogue.");
   }
 }

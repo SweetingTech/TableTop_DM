@@ -20,6 +20,8 @@ from domains.tabletop.onboarding import command_definition as onboarding
 from domains.tabletop.quests import command_definition as quests
 from domains.tabletop.recovery import command_definition as stabilize
 from domains.tabletop.recovery import with_recovery
+from domains.tabletop.rest import command_definitions as rest
+from domains.tabletop.rest import with_rest_interruptions
 from domains.tabletop.spatial import command_definition as spatial
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.spatial.presentation import command_definition as map_presentation
@@ -50,6 +52,7 @@ def command_definitions(
         map_presentation(),
         combat(),
         stabilize(),
+        *rest(),
         guard(),
         magic(),
         invoke(),
@@ -63,8 +66,10 @@ def command_definitions(
         if definition.command_type == "tabletop.battlefield.set_control_mode"
         else replace(
             definition,
-            version=f"{definition.version}+voluntary-body.2.action-time.1.recovery.1",
-            handler=with_action_time(with_wakeup(with_recovery(definition.handler))),
+            version=f"{definition.version}+voluntary-body.2.action-time.1.recovery.1.rest.1",
+            handler=with_action_time(
+                with_wakeup(with_rest_interruptions(with_recovery(definition.handler)))
+            ),
         )
         if definition.requires_controlled_entity
         else replace(definition, handler=with_motivation(definition.handler, motivation_reader))

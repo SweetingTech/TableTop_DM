@@ -1,5 +1,13 @@
 # Simulation-kernel contract
 
+`tabletop.rest.start` is an entity-controlled, intent-only action. It creates an existing Activity
+without changing global time or replenishing resources immediately. The clock's isolated working
+state applies `tabletop-rest-1.0.0` to both manual REST and NPC REST/SLEEP. Activity recovery metadata
+records uninterrupted elapsed time and once-only hourly/eight-hour awards; the body's
+`last_long_rest_seconds` enforces 86400 seconds between long-rest benefits. Missing capacities
+produce no inferred refill. Independent conditions and death remain authoritative. Exact-boundary,
+partition, restart, retry and injected-rollback tests cover the shared transition.
+
 `tabletop.vitals` stores versioned death-save state beside canonical body/clock projections.
 Damage-induced defeat records the kernel-allocated physical action seed. Indexed rolls use that
 seed and the body identity, so command retries and different clock partitions cannot reroll saves.

@@ -4,6 +4,15 @@ import { parseCommand } from "../features/game-console/api";
 import { entityMapPosition } from "../features/game-console/mapPosition";
 
 describe("typed game command parser", () => {
+  it("only permits server-owned rest choices", () => {
+    expect(parseCommand("/rest short", demoGameState)).toEqual({
+      commandType: "tabletop.rest.start", parameters: { kind: "SHORT" } });
+    expect(parseCommand("/rest LONG", demoGameState)).toEqual({
+      commandType: "tabletop.rest.start", parameters: { kind: "LONG" } });
+    for (const input of ["/rest", "/rest 1", "/rest long 1", "/rest short 999"]) {
+      expect(() => parseCommand(input, demoGameState)).toThrow("Use /rest short|long");
+    }
+  });
   it("uses server-owned guard and spell invocation contracts", () => {
     expect(parseCommand("/guard", demoGameState)).toEqual({ commandType: "tabletop.combat.guard", parameters: {} });
     expect(parseCommand("/stabilize Dockmaster Vale", demoGameState)).toEqual({
@@ -42,7 +51,7 @@ describe("typed game command parser", () => {
   it("rejects unsupported slash commands with the supported actions", () => {
     for (const command of ["/teleport moon", "/", "  /dance wildly  "]) {
       expect(() => parseCommand(command, demoGameState)).toThrow(
-        "Unsupported command. Use /move, /attack, /guard, /stabilize, /cast, /invoke, or type dialogue.",
+        "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /cast, /invoke, or type dialogue.",
       );
     }
   });
