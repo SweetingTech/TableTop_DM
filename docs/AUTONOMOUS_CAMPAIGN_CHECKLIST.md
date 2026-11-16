@@ -178,22 +178,23 @@ as composition glue; reusable execution services must also work from workers and
 
 ## C. Make action outcomes authoritative
 
-- [ ] C1 — Replace caller-selected attack bonuses/dice with rules resolved from the body, weapon,
+- [x] C1 — Replace caller-selected attack bonuses/dice with rules resolved from the body, weapon,
   abilities, conditions, and costs in [combat](../domains/tabletop/combat/__init__.py).
   Target-only attacks now use registered owned weapons, canonical STR/finesse DEX and training,
   reach, sight, zone, incapacity and poison/fear disadvantage. Typed bounded body definitions
   configure legacy scoreless bodies without card guesses; ordinary owned-weapon equip shares
   action/initiative costs and retry enforcement. Live sheets show canonical scores/bonuses.
-  Current-head verification, merge and whole-task independent C1–C7 acceptance remain separate.
+  PR103 is merged after current-head gates. Exact source and actual results are retained in
+  [section C verification](verification/section-c/README.md); independent Task4 acceptance remains separate.
 - [x] C2 — Resolve learned spells, power, mana, range, targets, and eligibility from versioned definitions
   in [magic](../domains/tabletop/magic/__init__.py); remove player authority to choose arbitrary power/cost.
   Both cast/invoke use registered ARCANE_BOLT/MEND rules and body-owned known spells/mana;
   initial card validation precedes roster writes, and later card edits cannot refill/teach bodies.
   Broader spells/loadouts remain future content. This implementation's CI, merge and independent
   task acceptance are separate gates; section C and campaign milestones remain incomplete.
-- [ ] C3 — Define action duration, movement budget, initiative/concurrent conflicts, resource consumption,
+- [x] C3 — Define action duration, movement budget, initiative/concurrent conflicts, resource consumption,
   condition/blessing expiry, incapacity, defeat, death, healing, rest, and recovery on the shared clock.
-  Partial: shared voluntary-action incapacity and transactional human wakeup are wired, sleeping
+  Shared voluntary-action incapacity and transactional human wakeup are wired, sleeping
   stand-ins suspend, and ordinary healing cannot resurrect dead-marked bodies. Own scene status
   prevents impossible stand-in choices without revealing others' private conditions. Configured
   clocks now reserve body readiness atomically: six-second physical actions and speed-owned
@@ -208,8 +209,9 @@ as composition glue; reusable execution services must also work from workers and
   capacities, interruptions and the same offscreen NPC sleep/rest rules. Versioned seeded initiative
   now selects six-second participant windows over that same clock; ordinary costs, concurrent
   retries and offscreen readiness share enforcement. Missed windows do not freeze the world.
-  This C3 unit still requires current-head gates, merge and whole-task independent acceptance;
-  C1/C6/full C1–C7 review must finish before leaving section C.
+  These mechanics are merged through PR99–102 and pass actual unit, durable and browser gates.
+  See [retained verification](verification/section-c/README.md). Independent all-C acceptance
+  still precedes leaving section C.
 - [x] C4 — Allocate seeds by distinct logical action from a recorded run seed/sequence. Retries reuse
   the original seed/receipt; two successive identical attacks must not reuse rolls merely because text matches.
   Both commit adapters derive physical seeds under the branch lock
@@ -227,7 +229,7 @@ as composition glue; reusable execution services must also work from workers and
   polling, cancellation, manual refresh and loading/error states without stale card fallback.
   Identity drafts survive polling; unbound cards retain starting-resource controls. Unit, durable
   and real-browser verification cover this ownership boundary. Whole-section C acceptance remains open.
-- [ ] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;
+- [x] C6 — Make quest progress/rewards derive from authorized evidence and objective definitions;
   replace legacy requests supplying their own amount and target. Extend economy/inventory/trade as needed for activities.
   Trade now has maker-authorized carried escrow, fixed-price reference-only acceptance, physical
   contact/visibility/capacity, both-body costs, clock expiry/refund and perceived console offers.
@@ -238,10 +240,17 @@ as composition glue; reusable execution services must also work from workers and
   progress, targets or payout terms. Controlled physical acceptance and READY reward claims,
   public receipt redaction with world-scoped privileged inspection,
   manager cancellation/refund, private evidence provenance and perceived offers/personal journal
-  have unit/durable/browser coverage. Current-head full gates, merge and independent whole-C
-  acceptance still precede closure or any later section. Autonomous pursuit remains section F.
-- [ ] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible
+  have actual unit/durable/browser coverage. PR104/105 are merged; tested PR106 closes
+  separate-process grant revocation for private receipt inspection. Its current CI/merge and
+  independent whole-C acceptance still precede task closure or any later section. Autonomous
+  pursuit remains section F. See [exact revisions and evidence](verification/section-c/README.md).
+- [x] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible
   actions leave no writes; retries spend resources once; distinct seeded actions replay correctly.
+  Actual human/agent trial and runner cases, concurrent-worker/restart/rollback/replay cases,
+  private receipt revocation and live browser journeys pass. The full local durable core lane
+  passed158 cases; exact code/revision differences and current focused checks are explicit in
+  [the evidence packet](verification/section-c/README.md). These implementation checkboxes do
+  not substitute for native independent Task4 acceptance or authorize starting section D.
 
 ## D. Persistent world clock and scheduler
 
