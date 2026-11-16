@@ -1838,6 +1838,7 @@ def create_app(
                                 "max_mana": starting_resources.mana,
                                 "known_spells": list(starting_resources.known_spells),
                                 "speed": character.speed,
+                                "ability_scores": character.ability_scores,
                             },
                             "controller_actor_id": None,
                         },

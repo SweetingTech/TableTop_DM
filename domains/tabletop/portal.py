@@ -732,6 +732,7 @@ class TabletopPortalService:
                 "maximum_hit_points",
                 "armor_class",
                 "speed",
+                "ability_scores",
             }.intersection(payload):
                 raise ValueError("bound character resources must change through world actions")
             if "world_id" in payload and uuid.UUID(str(payload["world_id"])) != existing.world_id:

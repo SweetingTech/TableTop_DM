@@ -8,7 +8,10 @@ one simulated hour. Ordinary healing cannot resurrect the dead. Old zero-HP bodi
 retroactively given a defeat history. `/rest short` takes one simulated hour and restores a
 quarter of known maximum HP, rounded up. `/rest long` takes eight hours and also restores HP
 and mana to known body-owned caps, at most once per 24 simulated hours. Physical effort or damage
-interrupts rest. Offscreen NPC rest and sleep use the same recovery rules. Initiative remains open.
+interrupts rest. Offscreen NPC rest and sleep use the same recovery rules. World managers can
+start an encounter with kernel-rolled initiative: six-second action windows rotate on the same
+world clock, so absent participants never freeze offscreen life. These versioned continuous-time
+rules retain ordinary per-body movement/action costs; they are not every tabletop ruleset.
 
 TableTop DM is a local-first tabletop platform built on a deterministic simulation kernel. It
 supports authenticated Administrator, Dungeon Master, and Player workspaces alongside persistent

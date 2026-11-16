@@ -1,5 +1,14 @@
 # Simulation-kernel contract
 
+`tabletop-initiative-1.0.0` records start command/run provenance and a stable d20+DEX order in
+`tabletop.encounters`. The same branch/run clock selects repeating six-second participant windows.
+Clock progression is independent of connection or controller presence. Out-of-turn physical
+attempts leave no writes, while per-body action costs still limit movement and resource spending.
+Intermediate turn boundaries also constrain offscreen work. Existing active encounters cannot
+overlap a body; outsiders cannot bypass the target's encounter through ordinary physical commands.
+Historical order and physical seeds stay in the ledger; own-body readiness is the only new
+player/cognition scheduling signal. Trials retain the same typed authority and isolated state.
+
 `tabletop.rest.start` is an entity-controlled, intent-only action. It creates an existing Activity
 without changing global time or replenishing resources immediately. The clock's isolated working
 state applies `tabletop-rest-1.0.0` to both manual REST and NPC REST/SLEEP. Activity recovery metadata

@@ -14,6 +14,7 @@ from domains.tabletop.effects import command_definition as conditions
 from domains.tabletop.entities import command_definition as entities
 from domains.tabletop.entities.control import command_definition as entity_controllers
 from domains.tabletop.factions import command_definition as factions
+from domains.tabletop.initiative import command_definitions as initiative
 from domains.tabletop.magic import command_definition as magic
 from domains.tabletop.magic.tactical import command_definition as invoke
 from domains.tabletop.onboarding import command_definition as onboarding
@@ -53,6 +54,7 @@ def command_definitions(
         combat(),
         stabilize(),
         *rest(),
+        *initiative(),
         guard(),
         magic(),
         invoke(),
@@ -66,7 +68,7 @@ def command_definitions(
         if definition.command_type == "tabletop.battlefield.set_control_mode"
         else replace(
             definition,
-            version=f"{definition.version}+voluntary-body.2.action-time.1.recovery.1.rest.1",
+            version=f"{definition.version}+voluntary-body.2.action-time.1.recovery.1.rest.1.initiative.1",
             handler=with_action_time(
                 with_wakeup(with_rest_interruptions(with_recovery(definition.handler)))
             ),

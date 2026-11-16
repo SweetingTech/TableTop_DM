@@ -1,5 +1,11 @@
 # Changelog
 
+- Add kernel-seeded initiative and fixed six-second participant windows over the shared clock.
+  Enforce the same turn/readiness rules for human and autonomous actions, preserve offscreen work,
+  reject overlapping/bypassed encounters and keep private order/seed metadata out of sensory scenes.
+  Pin starting ability scores to canonical bodies and reject bound-card stat rewrites. Verify
+  actual runner waiting, concurrent transactions, restart/replay/rollback and live console behavior.
+
 - Add controlled `/rest short|long` over canonical activities, shared HP/mana recovery for
   offscreen NPC rest/sleep, uninterrupted thresholds and a daily long-rest interval. Interrupt
   recovery on physical effort/damage, keep authored cards separate and add manager-only resource

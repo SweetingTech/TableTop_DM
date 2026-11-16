@@ -23,12 +23,15 @@ UNTIMED_COMMANDS = frozenset(
 
 
 def wait_seconds(state: BranchState, entity_id: uuid.UUID, *, at_seconds: int | None = None) -> int:
+    from domains.tabletop.initiative import wait_for_turn
+
     clock = state.projections.get("tabletop.clock", {}).get("singleton")
     if clock is None:
         return 0
     row = state.projections.get(ACTION_TIME, {}).get(str(entity_id), {})
     now = int(clock["seconds"]) if at_seconds is None else at_seconds
-    return max(0, int(row.get("ready_seconds", 0)) - now)
+    ready = max(now, int(row.get("ready_seconds", 0)))
+    return ready - now + wait_for_turn(state, entity_id, ready)
 
 
 def duration_seconds(command_type: str, body: dict) -> int:
@@ -43,6 +46,9 @@ def duration_seconds(command_type: str, body: dict) -> int:
 
 def with_action_time(handler: CommandHandler) -> CommandHandler:
     def execute(proposal: CommandProposal, state: BranchState) -> CommandResult:
+        from domains.tabletop.initiative import validate_attempt
+
+        validate_attempt(proposal, state)
         clock = state.projections.get("tabletop.clock", {}).get("singleton")
         if clock is None or proposal.command_type in UNTIMED_COMMANDS:
             return handler(proposal, state)

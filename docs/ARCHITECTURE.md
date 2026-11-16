@@ -2,6 +2,13 @@
 
 ## System shape
 
+Initiative is one branch projection, `tabletop.encounters`, over the existing world clock.
+Manager-only typed commands roll server-seeded canonical DEX scores and start/stop the fixed
+order. No client supplies rolls, bonuses or turn duration. The ordinary controlled-action wrapper,
+scene readiness, offscreen activity engine and character runner share the same turn wait. Physical
+conflicts serialize in the existing atomic branch transaction; models remain proposal-only.
+Stopping removes active encounter state without deleting ledger evidence or refunding resources.
+
 Rest is an activity over the canonical clock and body resources. `domains/tabletop/rest.py`
 owns versioned thresholds, uninterrupted progress and the long-rest interval for both controlled
 bodies and offscreen NPC routines/sleep. The typed rest intent cannot supply duration, healing
