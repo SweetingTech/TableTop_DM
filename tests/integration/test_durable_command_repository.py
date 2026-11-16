@@ -464,7 +464,19 @@ def test_spatial_perceptions_are_atomic_rls_scoped_idempotent_and_match_referenc
             )
             assert cursor.fetchall() == [(str(listener),)]
 
-    assert WorldEventProjector(integration_stack.database_url).run_once() >= 1
+    projector = WorldEventProjector(integration_stack.database_url)
+    # The session fixture also contains preceding tests' events. Bounded batches
+    # must reach this event before checking its publication and frozen audiences.
+    for _ in range(100):
+        assert projector.run_once() >= 1
+        with psycopg2.connect(integration_stack.admin_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT published_at IS NOT NULL FROM sim.outbox WHERE event_id=%s",
+                    (str(durable.event.event_id),),
+                )
+                if cursor.fetchone() == (True,):
+                    break
     with psycopg2.connect(integration_stack.admin_url) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
