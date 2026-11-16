@@ -1,5 +1,9 @@
 # Changelog
 
+- Add shared-clock death saves from recorded physical-action seeds, first aid and 0-HP healing.
+  Persist save/recovery boundaries with ordinary canonical state, retain retry/replay and atomic
+  rollback, and prevent new dead/unconscious sensory grants. Expose `/stabilize` in the console.
+
 - Reject unknown Game Console slash commands with supported-action guidance, preserving the
   draft and making no command request. Verify the rejection in parser/API regressions and the
   two-client PostgreSQL browser journey.

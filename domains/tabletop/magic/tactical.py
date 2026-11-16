@@ -19,6 +19,7 @@ from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
+from kernel.randomness import ActionRandomness
 from kernel.state import BranchState
 
 
@@ -41,6 +42,7 @@ class InvokeResult(BaseModel):
     effect: str
     power: int
     mana_after: int
+    randomness: ActionRandomness | None = None
 
 
 def invoke(proposal: CommandProposal, state: BranchState) -> CommandResult:
@@ -59,7 +61,7 @@ def invoke(proposal: CommandProposal, state: BranchState) -> CommandResult:
         or target is None
         or not capable(caster)
         or dead(target)
-        or int(target.get("hp", 0)) <= 0
+        or int(target.get("hp", -1)) < 0
     ):
         raise ValueError("capable caster and target are required")
     if request.spell_id not in known_spells(caster):
@@ -130,7 +132,7 @@ def invoke_emission(proposal, result, before, after):
 def command_definition() -> CommandDefinition:
     return CommandDefinition(
         command_type="tabletop.magic.invoke",
-        version="2.0.0",
+        version="2.1.0",
         required_capabilities=frozenset({"action.propose", "entity.act"}),
         allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
         handler=invoke,
@@ -138,4 +140,5 @@ def command_definition() -> CommandDefinition:
         result_model=InvokeResult,
         requires_controlled_entity=True,
         emission_builder=invoke_emission,
+        uses_randomness=True,
     )

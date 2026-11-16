@@ -1,5 +1,15 @@
 # Testing
 
+Death/recovery regressions cover exact six-second saves, natural 1/20, stabilization, death,
+clocked recovery, permanent-condition preservation, trusted seed provenance, late retries,
+whole/split advances, 0-HP healing, dead-target rejection and contact/forged first aid. New
+dead/unconscious sight/sound grants are rejected. Run `uv run python -m pytest
+tests/unit/kernel/test_death_recovery_api.py`. The integration lane for
+`tests/integration/test_death_recovery.py` verifies actual PostgreSQL restart, seed/timer
+preservation, recorded replay and rollback after an intermediate save. The built-SPA journey
+`tests/e2e/test_death_recovery_isolated.py` sends first aid through the human console and observes
+stable recovery without editing the authored card.
+
 The complete PostgreSQL/RLS/worker integration CI job has a 35-minute limit to accommodate
 the full suite under runner load. Every integration test still runs; a timeout is incomplete
 verification and must not be reported as a pass.

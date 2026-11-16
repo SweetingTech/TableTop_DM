@@ -1,5 +1,13 @@
 # Operations, storage, migrations, and security
 
+Death saves reuse existing canonical projection storage; no new service, credential or migration
+is needed. Deploy matching recovery, clock, perception, API and runner code with the rebuilt
+console bundle for `/stabilize`. Both spell entry points now record trusted physical RNG provenance;
+canonical embedders must retain the existing trusted run-seed reader. Saved defeat seeds survive
+restart, retry and clock reconfiguration. Existing zero-HP bodies are not retroactively rerolled.
+Private `tabletop.vitals` records are operator evidence, not character sensory facts. Do not
+publish them through a custom renderer or model context. Old event-time grants remain unchanged.
+
 Timed effects reuse the existing body projection store and require no migration or provider setup.
 Deploy matching rules, clock handlers and character/world runners together. New timed conditions
 require a clock; permanent conditions remain separate. Existing blessing records lacking absolute

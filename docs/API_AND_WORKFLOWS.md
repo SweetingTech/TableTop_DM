@@ -1,5 +1,20 @@
 # API and user workflows
 
+The console accepts `/stabilize <perceived target name or id>`, submitting
+`tabletop.combat.stabilize` with strict `target_id` parameters. A capable controlled body must
+be adjacent to a visible living body at 0 HP. Successful first aid stabilizes it and reserves
+six simulated seconds; rejected/repeated actions do not spend time twice. Cast/invoke MEND can
+also rescue a living 0-HP body with known positive maximum HP, but never revive a dead one.
+
+New damage-induced defeats retain private physical seed provenance and pending death saves.
+Every six seconds, a d20 of 10+ succeeds, a natural 1 adds two failures and a natural 20 restores
+1 HP. Three successes stabilize; three failures mark death. Stable bodies with known positive
+maximum HP recover 1 HP after one simulated hour. Existing unrelated conditions remain intact.
+Pending saves on clockless branches start when their clock first advances. Old zero-HP bodies
+without a new defeat record are not assigned fabricated past rolls; first aid remains available.
+Clock advance, retry and restart preserve the same indexed saves. Save seeds/counters are not
+part of sensory scene/context contracts. Full initiative and rest remain original checklist work.
+
 `tabletop.condition.apply` is a registered typed command for world managers. Its strict parameters
 are `target_id`, `condition` and `duration_seconds` (1..86400). Conditions are case-insensitive
 `stunned`, `incapacitated`, `unconscious`, `paralyzed`, `poisoned` or `frightened`; death is not a
@@ -237,7 +252,7 @@ GET /api/v2/events/{event_id}/perceptions       # privileged inspection only
 ```
 
 Normal prose submits `tabletop.dialogue.speak`, an embodied sound emission. The console supports
-`/move`, `/attack`, `/guard`, `/cast` and `/invoke` through their typed movement/combat/magic
+`/move`, `/attack`, `/guard`, `/stabilize`, `/cast` and `/invoke` through their typed movement/combat/magic
 contracts. Unknown slash commands show those supported actions, retain the draft and make no
 command request. API callers can explicitly submit uninterpreted OOC/interface text through
 `tabletop.console.submit`; recording that proposal does not execute a physical action.

@@ -263,7 +263,7 @@ def test_two_cookie_clients_invite_act_resynchronize_switch_and_survive_restart(
         a.get_by_role("button", name="Send proposal", exact=True).click()
         expect(
             a.get_by_text(
-                "Unsupported command. Use /move, /attack, /guard, /cast, /invoke, "
+                "Unsupported command. Use /move, /attack, /guard, /stabilize, /cast, /invoke, "
                 "or type dialogue.",
                 exact=True,
             )

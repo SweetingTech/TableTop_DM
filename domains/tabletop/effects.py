@@ -121,7 +121,9 @@ def anchor_legacy_blessings(state: BranchState, now: int) -> None:
 
 
 def boundaries(state: BranchState, start: int, until: int) -> tuple[int, ...]:
-    points = {until}
+    from domains.tabletop.recovery import boundaries as recovery_boundaries
+
+    points = {until, *recovery_boundaries(state, start, until)}
     for body in state.projections.get("tabletop.entities", {}).values():
         points.update(row.expires_seconds for row in timed_conditions(body).values())
         points.update(
@@ -137,6 +139,9 @@ def boundaries(state: BranchState, start: int, until: int) -> tuple[int, ...]:
 
 
 def expire(state: BranchState, now: int) -> None:
+    from domains.tabletop.recovery import advance as advance_recovery
+
+    advance_recovery(state, now)
     expire_guards(state, now)
     for body in state.projections.get("tabletop.entities", {}).values():
         if "timed_conditions" in body:
