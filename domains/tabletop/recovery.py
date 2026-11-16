@@ -29,7 +29,7 @@ class VitalState(BaseModel):
     run_id: uuid.UUID
     source_command_id: uuid.UUID
     seed: int = Field(ge=0)
-    status: Literal["DYING", "STABLE", "DEAD"] = "DYING"
+    status: Literal["DYING", "STABLE", "DEAD", "RECOVERED"] = "DYING"
     successes: int = Field(default=0, ge=0, le=3)
     failures: int = Field(default=0, ge=0, le=3)
     rolls: tuple[int, ...] = Field(default=(), max_length=5)
@@ -89,7 +89,8 @@ def advance(state: BranchState, now: int) -> None:
             ).model_dump(mode="json")
             continue
         if int(body.get("hp", 0)) > 0:
-            del rows[key]
+            if row.status != "RECOVERED":
+                del rows[key]
             continue
         if row.status == "DYING" and row.next_save_seconds is None:
             row = row.model_copy(update={"next_save_seconds": now + ROUND_SECONDS})
@@ -105,6 +106,13 @@ def advance(state: BranchState, now: int) -> None:
             row = row.model_copy(update={"rolls": (*row.rolls, roll)})
             if roll == 20:
                 body.update(hp=1, defeated=False)
+                row = row.model_copy(
+                    update={
+                        "status": "RECOVERED",
+                        "next_save_seconds": None,
+                        "recovery_seconds": None,
+                    }
+                )
                 break
             if roll >= 10:
                 row = row.model_copy(update={"successes": min(3, row.successes + 1)})
@@ -120,7 +128,7 @@ def advance(state: BranchState, now: int) -> None:
             else:
                 row = row.model_copy(update={"next_save_seconds": at + ROUND_SECONDS})
         if int(body.get("hp", 0)) > 0:
-            del rows[key]
+            rows[key] = row.model_dump(mode="json")
             continue
         if (
             row.status == "STABLE"
@@ -129,7 +137,9 @@ def advance(state: BranchState, now: int) -> None:
         ):
             if int(body.get("max_hp", 0)) > 0:
                 body.update(hp=1, defeated=False)
-                del rows[key]
+                rows[key] = row.model_copy(
+                    update={"status": "RECOVERED", "recovery_seconds": None}
+                ).model_dump(mode="json")
                 continue
         rows[key] = row.model_dump(mode="json")
 

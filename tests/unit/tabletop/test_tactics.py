@@ -78,7 +78,7 @@ def test_legacy_attack_preserves_unguarded_projection_shape():
     assert "guarded" not in target
 
 
-@pytest.mark.parametrize("failure", ["range", "invisible", "mana", "incapacitated", "zone"])
+@pytest.mark.parametrize("failure", ["range", "invisible", "mana", "dead", "zone"])
 def test_spell_revalidates_live_state_and_rejects_without_consuming_mana(failure):
     fixture = prepared()
     state = fixture["state"]
@@ -93,7 +93,7 @@ def test_spell_revalidates_live_state_and_rejects_without_consuming_mana(failure
     elif failure == "mana":
         caster["mana"] = 1
     else:
-        target["hp"] = 0
+        target.update(hp=0, dead=True)
     version = state.version
     mana = caster["mana"]
     with pytest.raises(ValueError):

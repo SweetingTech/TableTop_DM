@@ -14,7 +14,8 @@ Saves occur every six seconds: 10+ succeeds, natural 1 counts two failures, natu
 HP recover 1 HP after one simulated hour. Permanent conditions are independent of this recovery.
 Resolver 1.4.0 denies new sight/sound grants to dead or unconscious/zero-HP observers, frozen
 at event time. Existing memories/grants remain historical; private save records never enter the
-character scene/context. Own-body human introspection remains available. Rest and initiative
+character scene/context. Terminal recovered records retain their final rolls for operator audit
+and do not run again on later ticks. Own-body human introspection remains available. Rest and initiative
 still require the remaining original C3 work.
 
 `tabletop.entity.set_controllers` requires world-scoped `entity.control`, `mind.write.all` and

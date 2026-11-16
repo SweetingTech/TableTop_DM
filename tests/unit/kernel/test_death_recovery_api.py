@@ -5,16 +5,23 @@ import uuid
 import pytest
 
 from domains.tabletop.recovery import STABLE_RECOVERY_SECONDS, VITALS, VitalState, advance
-from kernel.contracts import BranchKind
+from kernel.contracts import ActorKind, BranchKind
 from kernel.state import BranchState
 from tests.unit.kernel.test_action_time_api import advance_clock
 from tests.unit.kernel.test_character_binding_api import _app
 from tests.unit.kernel.test_tactical_choices import command, resources
 from tests.unit.kernel.test_timed_effects_api import physical_projection, projected_advance
 from tests.unit.kernel.test_world_time import api_command, clock_game
+from tests.unit.tabletop.test_domain_commands import domain as domain_fixture
+from tests.unit.tabletop.test_domain_commands import proposal
 
 pytestmark = pytest.mark.unit
 BODY = uuid.UUID(int=42)
+
+
+@pytest.fixture
+def domain():
+    return domain_fixture.__wrapped__()
 
 
 def dying(seed):
@@ -56,7 +63,8 @@ def test_natural_twenty_recovers_one_health_and_preserves_independent_conditions
     advance(state, 6)
     assert body["hp"] == 1 and body["defeated"] is False
     assert body["conditions"] == ["poisoned"]
-    assert str(BODY) not in state.projections[VITALS]
+    assert state.projections[VITALS][str(BODY)]["status"] == "RECOVERED"
+    assert state.projections[VITALS][str(BODY)]["rolls"] == [20]
 
 
 def test_three_successes_stabilize_then_recover_on_the_clock_once():
@@ -79,6 +87,30 @@ def test_three_failures_die_and_later_time_does_not_resurrect():
     assert body["dead"] and state.projections[VITALS][str(BODY)]["failures"] == 3
     advance(state, 10000)
     assert body["dead"] and body["hp"] == 0
+
+
+@pytest.mark.parametrize("kind", [ActorKind.HUMAN, ActorKind.AGENT])
+def test_actual_critical_damage_to_downed_body_uses_same_kernel_rule(domain, kind):
+    actor = domain["actor"].model_copy(update={"kind": kind})
+    key = str(domain["enemy"])
+    domain["state"].projections["tabletop.entities"][key].update(hp=0, defeated=True)
+    domain["state"].projections[VITALS] = {
+        key: VitalState(
+            run_id=domain["run"],
+            source_command_id=uuid.uuid4(),
+            seed=2,
+            failures=1,
+            next_save_seconds=6,
+        ).model_dump(mode="json")
+    }
+    attack = proposal(domain, "tabletop.combat.attack", {"target_id": key}, "critical", seed=5)
+    receipt = domain["bus"].execute(attack, actor)
+    assert receipt.result.result["attack_roll"] == 20
+    assert domain["state"].projections["tabletop.entities"][key]["dead"]
+    assert domain["state"].projections[VITALS][key]["failures"] == 3
+    before = domain["state"].state_hash, domain["state"].version
+    assert domain["bus"].execute(attack, actor) == receipt
+    assert (domain["state"].state_hash, domain["state"].version) == before
 
 
 def defeat(app, game=None):
