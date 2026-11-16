@@ -4,6 +4,19 @@ import { parseCommand } from "../features/game-console/api";
 import { entityMapPosition } from "../features/game-console/mapPosition";
 
 describe("typed game command parser", () => {
+  it("accepts an offer reference without inventing its price or counterparty", () => {
+    const id = "b4a03714-a3c3-42af-8e6a-afd19da7dc84";
+    expect(parseCommand(`/trade ${id} 2`, demoGameState)).toEqual({
+      commandType: "tabletop.economy.trade", parameters: { offer_id: id, quantity: 2 } });
+    expect(parseCommand(`/withdraw ${id}`, demoGameState)).toEqual({
+      commandType: "tabletop.economy.withdraw_offer", parameters: { offer_id: id } });
+    expect(parseCommand("/offer buy silver herb 3 5", demoGameState)).toEqual({
+      commandType: "tabletop.economy.offer", parameters: { side: "BUY", item: "silver herb", quantity: 3, unit_price: 5 } });
+    for (const text of [`/trade ${id} 1 0`, `/trade ${id} -1`, "/trade nobody", `/withdraw ${id} 1`,
+      "/offer buy herb 0 1", "/offer sell herb 1 -1", "/offer sell herb 2 1.5"]) {
+      expect(() => parseCommand(text, demoGameState)).toThrow(/Use \/(trade|withdraw|offer)/);
+    }
+  });
   it("only submits an equipment intent without supplying stats", () => {
     expect(parseCommand("/equip spear", demoGameState)).toEqual({
       commandType: "tabletop.equipment.equip", parameters: { weapon_id: "SPEAR" } });
@@ -58,7 +71,7 @@ describe("typed game command parser", () => {
   it("rejects unsupported slash commands with the supported actions", () => {
     for (const command of ["/teleport moon", "/", "  /dance wildly  "]) {
       expect(() => parseCommand(command, demoGameState)).toThrow(
-        "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /cast, /invoke, or type dialogue.",
+        "Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /trade, /offer, /withdraw, /cast, /invoke, or type dialogue.",
       );
     }
   });

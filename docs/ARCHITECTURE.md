@@ -2,6 +2,14 @@
 
 ## System shape
 
+Trade consent is canonical, versioned `tabletop.trade_offers` state. SELL offers reserve items;
+BUY offers reserve gold from the maker's free body inventory. The reserve remains in that body's
+physical custody, so acceptance requires contact with its capable, perceived maker. Takers submit
+only an offer reference and quantity. Exchange, remaining reserve, both bodies' readiness and
+rest interruption commit with the same command/event/outbox transaction. Cancellation or clock
+expiry returns the remaining reserve and removes active state, preserving append-only history.
+Scenes expose quotes only at contact range; cognition replaces offer IDs with fiction references.
+
 Canonical scores/training and versioned weapon definitions drive attack profiles in
 `domains/tabletop/rules.py`. Typed manager body configuration sets definitions without changing
 resources; controlled equip is an ordinary physical action over owned inventory. A score-bearing

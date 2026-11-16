@@ -44,6 +44,42 @@ def duration_seconds(command_type: str, body: dict) -> int:
     return ROUND_SECONDS
 
 
+def reservation(
+    proposal: CommandProposal, state: BranchState, entity_id: uuid.UUID, duration: int
+) -> StateDelta | None:
+    clock = state.projections.get("tabletop.clock", {}).get("singleton")
+    if clock is None:
+        return None
+    if str(clock["run_id"]) != str(proposal.run_id):
+        raise ValueError("action requires the current run's clock")
+    now = int(clock["seconds"])
+    record = {
+        "rules_version": ACTION_TIME_VERSION,
+        "run_id": str(proposal.run_id),
+        "command_type": proposal.command_type,
+        "started_seconds": now,
+        "duration_seconds": duration,
+        "ready_seconds": now + duration,
+    }
+    if proposal.command_type == "tabletop.combat.guard":
+        record["guard_expires_seconds"] = now + duration
+    return StateDelta(projection=ACTION_TIME, operation="SET", entity_id=entity_id, values=record)
+
+
+def reserve_counterparty(
+    proposal: CommandProposal, state: BranchState, entity_id: uuid.UUID
+) -> StateDelta | None:
+    """A standing offer authorizes a passive response, not an extra active initiative turn."""
+    clock = state.projections.get("tabletop.clock", {}).get("singleton")
+    if clock is not None:
+        ready = (
+            state.projections.get(ACTION_TIME, {}).get(str(entity_id), {}).get("ready_seconds", 0)
+        )
+        if int(ready) > int(clock["seconds"]):
+            raise BodyActionPending("counterparty is still completing its previous action")
+    return reservation(proposal, state, entity_id, ROUND_SECONDS)
+
+
 def with_action_time(handler: CommandHandler) -> CommandHandler:
     def execute(proposal: CommandProposal, state: BranchState) -> CommandResult:
         from domains.tabletop.initiative import validate_attempt
@@ -64,28 +100,13 @@ def with_action_time(handler: CommandHandler) -> CommandHandler:
         result = handler(proposal, state)
         if not result.accepted:
             return result
-        now = int(clock["seconds"])
-        ready = now + duration
-        record = {
-            "rules_version": ACTION_TIME_VERSION,
-            "run_id": str(proposal.run_id),
-            "command_type": proposal.command_type,
-            "started_seconds": now,
-            "duration_seconds": duration,
-            "ready_seconds": ready,
-        }
-        if proposal.command_type == "tabletop.combat.guard":
-            record["guard_expires_seconds"] = ready
+        timing = reservation(proposal, state, entity_id, duration)
+        assert timing is not None
         return result.model_copy(
             update={
                 "deltas": (
                     *result.deltas,
-                    StateDelta(
-                        projection=ACTION_TIME,
-                        operation="SET",
-                        entity_id=entity_id,
-                        values=record,
-                    ),
+                    timing,
                 )
             }
         )

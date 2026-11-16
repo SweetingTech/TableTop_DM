@@ -190,6 +190,9 @@ def with_rest_interruptions(handler: CommandHandler) -> CommandHandler:
         interrupted: set[str] = set()
         if proposal.command_type not in UNTIMED_COMMANDS:
             interrupted.add(str(proposal.embodied_entity_id))
+        for delta in result.deltas:
+            if delta.projection == "tabletop.action_time" and delta.entity_id is not None:
+                interrupted.add(str(delta.entity_id))
         for key, old in state.projections.get("tabletop.entities", {}).items():
             body = after.projections.get("tabletop.entities", {}).get(key, {})
             if int(body.get("hp", 0)) < int(old.get("hp", 0)):

@@ -1,5 +1,15 @@
 # Simulation-kernel contract
 
+`tabletop-trade-2.0.0` replaces caller-authored exchange terms with maker-authorized escrowed
+offers. Controlled `tabletop.economy.offer` and manager-only `configure_offer` reserve available
+items or gold; `trade` accepts `{offer_id, quantity}` with no price, direction or counterparty
+override. Both bodies must be capable and adjacent in the same zone/elevation, with a physically
+perceived maker and compatible encounter. Acceptance reserves six seconds on both bodies;
+passive acceptance does not consume a separate initiative turn. Maker rest is interrupted.
+Cancellation and clock handler version 1.5.0 expiry refund remaining escrow once. Active state is
+bounded to 256 offers per branch and 16 per maker; consumed/withdrawn offers impose no lifetime quota.
+Clockless quotes anchor their bounded lifetime on the first actual clock advance.
+
 `tabletop-action-rules-1.2.0` resolves STR/finesse DEX modifiers and canonical training into melee
 bonuses. The typed attack intent still supplies only a target; physical seeds are allocated by
 the commit adapter. Manager-only `tabletop.body.configure` accepts bounded definitions without

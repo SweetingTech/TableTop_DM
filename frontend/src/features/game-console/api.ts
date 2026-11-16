@@ -89,6 +89,7 @@ export async function loadGameState(worldId: string, requestedViewpoint = "", cu
         max_health: entity.max_health ?? undefined,
         status: entity.status ?? undefined,
         activity: entity.activity,
+        trade_offers: entity.trade_offers,
         public_state: entity.position ?? undefined,
         knowledge_state: entity.knowledge_state,
         detail_level: entity.detail_level,
@@ -239,6 +240,33 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
       }
       return { commandType: "tabletop.equipment.equip", parameters: { weapon_id: weaponId } };
     }
+    case "trade":
+    case "withdraw": {
+      const offerId = parts[0] ?? "";
+      const quantity = parts[1] === undefined ? 1 : Number(parts[1]);
+      const trade = verb.toLocaleLowerCase() === "trade";
+      if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(offerId)
+        || parts.length < 1 || parts.length > (trade ? 2 : 1)
+        || !Number.isInteger(quantity) || quantity < 1 || quantity > 100000) {
+        throw new Error(trade ? "Use /trade <offer id> [quantity]" : "Use /withdraw <offer id>");
+      }
+      return { commandType: trade ? "tabletop.economy.trade" : "tabletop.economy.withdraw_offer",
+        parameters: trade ? { offer_id: offerId, quantity } : { offer_id: offerId } };
+    }
+    case "offer": {
+      const side = (parts.shift() ?? "").toUpperCase();
+      const priceText = parts.pop() ?? "";
+      const quantityText = parts.pop() ?? "";
+      const item = parts.join(" ");
+      const quantity = Number(quantityText), unitPrice = Number(priceText);
+      if (!["BUY", "SELL"].includes(side) || !/^[A-Za-z0-9][A-Za-z0-9 _-]{0,119}$/.test(item)
+        || !/^\d+$/.test(priceText) || !/^\d+$/.test(quantityText)
+        || !Number.isInteger(quantity) || quantity < 1 || quantity > 100000
+        || !Number.isInteger(unitPrice) || unitPrice < 0 || unitPrice > 1000000) {
+        throw new Error("Use /offer buy|sell <item> <quantity> <unit price>");
+      }
+      return { commandType: "tabletop.economy.offer", parameters: { side, item, quantity, unit_price: unitPrice } };
+    }
     case "invoke": {
       const spellId = (parts.shift() ?? "").toUpperCase();
       if (!["ARCANE_BOLT", "MEND"].includes(spellId) || !parts.length) {
@@ -256,6 +284,6 @@ export function parseCommand(command: string, state: GameState): ParsedCommand {
         spell_id: spellId, target_id: resolveEntity(parts.join(" "), state) } };
     }
     default:
-      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /cast, /invoke, or type dialogue.");
+      throw new Error("Unsupported command. Use /move, /attack, /guard, /stabilize, /rest, /equip, /trade, /offer, /withdraw, /cast, /invoke, or type dialogue.");
   }
 }

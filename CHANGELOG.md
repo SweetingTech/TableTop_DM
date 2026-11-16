@@ -1,5 +1,12 @@
 # Changelog
 
+- Replace caller-priced trades with maker-authorized offers backed by carried item/gold escrow.
+  Add controlled posting/withdrawal and manager configuration/cancellation; accept only offer
+  references and quantities at physical contact. Reserve both bodies' action time and interrupt
+  rest. Refund unused escrow once on cancellation/clock expiry. Expose perceived quotes through
+  typed console intents and fiction-safe context; verify parity, rejection, conservation,
+  concurrency, restart/replay/rollback and actual desktop/mobile behavior. Quest evidence remains open.
+
 - Derive attacks from canonical STR/finesse DEX, training and owned weapon definitions. Add strict
   manager body configuration and ordinary controlled `/equip` intent; preserve legacy scoreless
   profiles until explicit conversion. Show live body abilities and bonuses on the player sheet,

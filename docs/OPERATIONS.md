@@ -1,5 +1,13 @@
 # Operations, storage, migrations, and security
 
+Trade offers use existing atomic branch projections; no migration, provider or new worker is
+required. Deploy the matching Python code and built SPA together: new trade requests reference
+maker-authorized offers instead of setting price/direction. Old committed keys retain their
+canonical receipts. The shared clock advances offer expiry and refunds; clockless offers anchor
+their lifetime when the clock first advances. Reservations remain with the maker's physical body,
+not a remote exchange. Managers seed standing offers through typed configuration over existing
+goods/funds. Do not backfill client-invented prices into offers or mint replacement inventory.
+
 Ability-derived attacks/loadouts require no migration or new process. Newly bound characters
 receive scores/proficiency/training as canonical starting definitions. Existing scoreless bodies
 keep their explicit legacy combat profile; configure them deliberately with the typed manager

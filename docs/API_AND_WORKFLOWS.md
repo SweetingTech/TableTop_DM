@@ -1,5 +1,28 @@
 # API and user workflows
 
+Trade contract `tabletop-trade-2.0.0` uses these typed commands through `POST /api/v2/commands`:
+
+- `tabletop.economy.configure_offer`: world-manager capability `entity.control`, with
+  `{maker_id, side: "SELL"|"BUY", item, quantity, unit_price, valid_for_seconds?}`.
+- `tabletop.economy.offer`: controlled capable maker with `entity.act`; same terms without
+  `maker_id`. SELL reserves its inventory; BUY reserves its gold. Default lifetime is 86400 seconds.
+- `tabletop.economy.trade`: controlled capable taker, `{offer_id, quantity?}`. Quantity defaults to
+  one. No caller-supplied price, item, counterparty or direction is accepted. A zero-price gift
+  still requires an explicit maker offer. Contact, perception, funds/stock, encounter and both
+  bodies' readiness are checked atomically; the exchange occupies both bodies for six seconds.
+- `tabletop.economy.withdraw_offer`: controlled maker, `{offer_id}`; normal action cost.
+- `tabletop.economy.cancel_offer`: manager cancellation, `{offer_id}`; no physical action cost.
+
+Unused escrow returns on cancellation/expiry and active offer state is removed. Old committed
+trade receipts still replay on their original key; new requests must use the offer contract.
+The perceived scene exposes `trade_offers` only on inspected contact-range makers (and one's own
+body): offer ID, side, item, available quantity and unit price. No private book, source command,
+run provenance or expiration metadata is exposed. Context version `character-context-1.5.0`
+uses fiction references instead of offer IDs. This exposes opportunities without yet adding an
+autonomous trading policy. In the console, choose a quote, then send the prepared intent, or use
+`/trade <offer id> [quantity]`, `/offer buy|sell <item> <quantity> <unit price>` and
+`/withdraw <offer id>`. Stale quote rejection preserves the draft and refresh never invents offers.
+
 Rules `tabletop-action-rules-1.2.0` derive attacks from a canonical body's ability scores,
 equipped registered weapon and training. Unarmed/spear attacks use Strength; a shortsword uses
 Dexterity when it is higher. Attack bonus is the ability modifier plus proficiency if trained;
@@ -935,7 +958,7 @@ phrasing, spell selection, narrative planning and complete timeline restoration 
 
 ## Generated dialogue and tactical choices
 
-Context `character-context-1.4.0` includes the body's own mana/reach/learned spell IDs and inspected
+Context `character-context-1.5.0` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
 `tabletop-character-actions-1.3.0` and proposal policy `character-proposal-policy-1.4.0` offer:
 

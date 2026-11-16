@@ -7,6 +7,7 @@ from cognition.context import validated_observations
 from cognition.models import Observation
 from cognition.store import MindStore
 from domains.tabletop.action_time import wait_seconds
+from domains.tabletop.economy import visible_offers
 from domains.tabletop.rules import available_melee_reach, dead, incapacitated, known_spells
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.spatial.scene import (
@@ -15,6 +16,7 @@ from domains.tabletop.spatial.scene import (
     PerceivedScene,
     SceneCoordinate,
     VisibleActivity,
+    VisibleTradeOffer,
 )
 from kernel.application import SimulationApplication
 
@@ -144,6 +146,12 @@ def build_perceived_scene(
                 action_wait_seconds=wait_seconds(state, entity_id)
                 if entity_id == observer_entity_id
                 else None,
+                trade_offers=tuple(
+                    VisibleTradeOffer.model_validate(row)
+                    for row in visible_offers(state, observer_entity_id, entity_id)
+                )
+                if inspected
+                else (),
                 activity=VisibleActivity(
                     kind=activity["kind"],
                     status=activity["status"],
