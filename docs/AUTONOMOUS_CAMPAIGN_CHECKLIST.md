@@ -249,33 +249,43 @@ as composition glue; reusable execution services must also work from workers and
   Actual human/agent trial and runner cases, concurrent-worker/restart/rollback/replay cases,
   private receipt revocation and live browser journeys pass. The full local durable core lane
   passed158 cases; exact code/revision differences and current focused checks are explicit in
-  [the evidence packet](verification/section-c/README.md). These implementation checkboxes do
-  not substitute for native independent Task4 acceptance or authorize starting section D.
+  [the evidence packet](verification/section-c/README.md). Orderly independently accepted all
+  seven original criteria and completed Task 4 in review session
+  `42ae499e-a2b9-4a8d-9bf6-f76b2270089a`.
 
 ## D. Persistent world clock and scheduler
 
-- [ ] D1 — Define branch-scoped simulated time, units, speed, pause/resume, and advance-to boundaries.
+- [x] D1 — Define branch-scoped simulated time, units, speed, pause/resume, and advance-to boundaries.
   Wall-clock UTC remains operational metadata; unattended elapsed time is an explicit campaign policy.
-- [ ] D2 — Register typed clock/scheduling commands through [tabletop registry](../domains/tabletop/registry.py)
+- [x] D2 — Register typed clock/scheduling commands through [tabletop registry](../domains/tabletop/registry.py)
   and the kernel. Preserve stable ordering and separate worlds/branches.
-- [ ] D3 — Add a durable due-work repository with idempotent enqueue, claim/lease, retry, cancellation,
+- [x] D3 — Add a durable due-work repository with idempotent enqueue, claim/lease, retry, cancellation,
   and ordering. Use `DeterministicScheduler` as reference semantics, not as durable storage.
-- [ ] D4 — Add a world-runner CLI/service in [main.py](../main.py) and [Compose](../infra/docker-compose.yml).
+- [x] D4 — Add a world-runner CLI/service in [main.py](../main.py) and [Compose](../infra/docker-compose.yml).
   Atomically connect execution receipts, completion, next work, and clock progress; recover after crashes.
-- [ ] D5 — Enforce one authoritative execution owner per world/timeline; reject stale worker epochs.
+- [x] D5 — Enforce one authoritative execution owner per world/timeline; reject stale worker epochs.
   Refresh authoritative state between processes rather than relying on hydrated application caches.
-- [ ] D6 — Coordinate observation projection before a dependent decision. Track event/subjective cursors;
+- [x] D6 — Coordinate observation projection before a dependent decision. Track event/subjective cursors;
   prevent agents deciding on missing observations or retries applying the same causal update twice.
-- [ ] D7 — Acceptance: same seeds/order produce the same results, no viewers are required, two workers
+- [x] D7 — Acceptance: same seeds/order produce the same results, no viewers are required, two workers
   do not duplicate actions, pause stops progress, restart resumes, and catch-up honors configured time policy.
+
+Migration 014 adds one pending due clock step per durable canonical branch, with a scoped lease,
+retry backoff and cancellation. The tick and its successor commit in the existing kernel
+transaction. API and worker projectors now share the branch's first unpublished outbox row as
+their ordering boundary. The character proposal path waits for the body's exact frozen grants to
+project. Focused clock tests verify deterministic catch-up and exact pause boundaries. The
+[PostgreSQL world-runner tests](../tests/integration/test_world_time.py) verify progression
+without viewers, restart recovery, and two workers advancing one timeline without duplicates.
+Orderly tracks the full task's independent acceptance.
 
 ## E. Offscreen people and continuous activities
 
 Initial D/E foundation now persists branch time and WEED/REST activities through typed canonical
 commands, with a separate world-runner, explicit downtime policy, epoch/step fencing, deterministic
 weather boundaries and inspected scene/console progress. Tests cover no viewers, concurrent workers,
-restart, rollback and character/world execution on one branch. D3's generic leased queue,
-richer routines/vocabulary and whole D/E acceptance remain open.
+restart, rollback and character/world execution on one branch. Section D adds durable clock
+leases. Richer routines and whole section E acceptance remain open.
 See [world time and activities](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
 
 Population binding now connects materialized members to a single canonical body. Live lifecycle

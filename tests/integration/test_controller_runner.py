@@ -18,7 +18,7 @@ from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
 from cognition.projector import WorldEventProjector
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from kernel.database import transaction
 from kernel.errors import AuthorizationDenied
@@ -307,7 +307,7 @@ def test_upgrade_from_006_is_idempotent(integration_stack, tmp_path):
         for path in sorted(migrations.glob("*.sql"))[:6]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 6
-        assert migrate(url, migrations) == 7
+        assert migrate(url, migrations) == len(discover(migrations)) - 6
         assert migrate(url, migrations) == 0
     finally:
         with maintenance.cursor() as cursor:

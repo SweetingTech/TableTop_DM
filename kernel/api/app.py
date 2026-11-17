@@ -13,6 +13,7 @@ from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
+import psycopg2
 from flask import Flask, g, jsonify, make_response, request, send_from_directory
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -46,6 +47,7 @@ from cognition.planning import GoapAction
 from cognition.postgres import PostgresMindRepository
 from cognition.postgres_control import PostgresControllers
 from cognition.postgres_decisions import PostgresCharacterProposals
+from cognition.projector import WorldEventProjector
 from cognition.reflexes import ReflexRule
 from cognition.relationships import (
     RelationshipChangeRecord,
@@ -530,6 +532,18 @@ def create_app(
     subjective_pipeline = SubjectiveStatePipeline()
     decision_engine = LayeredDecisionEngine()
     relationship_engine = RelationshipEngine()
+    ordered_projector = WorldEventProjector(database_dsn) if database_dsn else None
+
+    def project_pending(topic: str | None = None) -> None:
+        if ordered_projector is not None:
+            try:
+                ordered_projector.run_once(topic=topic)
+            except psycopg2.Error as exc:
+                # Committed outbox work remains available to another projector poll.
+                app.logger.warning("subjective outbox unavailable: %s", type(exc).__name__)
+
+    def project_branch(event: Any) -> None:
+        project_pending(topic=f"world.{event.world_id}.branch.{event.branch_id}")
 
     def project_subjective_event(event: Any, grants: Any) -> None:
         for grant in grants:
@@ -548,33 +562,26 @@ def create_app(
                 update.observation.observation_id, branch_id=event.branch_id
             ):
                 continue
-            projected = minds.preview_subjective_update(
-                grant.observer_entity_id, update, branch_id=event.branch_id
-            )
-            if mind_repository is not None:
-                mind_repository.save_subjective_update(
-                    world_id=event.world_id,
-                    branch_id=event.branch_id,
-                    actor_id=profile_actor_id,
-                    state=projected,
-                    update=update,
-                )
             minds.apply_subjective_update(
                 grant.observer_entity_id, update, branch_id=event.branch_id
             )
 
-    simulation.configure_subjective_projector(
-        lambda receipt: project_subjective_event(receipt.event, receipt.perceptions)
-    )
-    for event in simulation.events.values():
-        project_subjective_event(
-            event,
-            tuple(
-                grant
-                for grant in simulation.perceptions.values()
-                if grant.event_id == event.event_id
-            ),
+    if ordered_projector is not None:
+        simulation.configure_subjective_projector(lambda receipt: project_branch(receipt.event))
+        project_pending()
+    else:
+        simulation.configure_subjective_projector(
+            lambda receipt: project_subjective_event(receipt.event, receipt.perceptions)
         )
+        for event in simulation.events.values():
+            project_subjective_event(
+                event,
+                tuple(
+                    grant
+                    for grant in simulation.perceptions.values()
+                    if grant.event_id == event.event_id
+                ),
+            )
     personas: dict[uuid.UUID, Any] = {}
     persona_versions: dict[uuid.UUID, Any] = {}
     bound_profiles: dict[tuple[uuid.UUID, uuid.UUID, str], CompiledPersona] = {}
@@ -616,6 +623,15 @@ def create_app(
             state, branch_id=scope.branch_id, observations=observations, relationships=relationships
         )
         return observed
+
+    def inspect_observer(event: Any, entity_id: uuid.UUID, actor_id: uuid.UUID) -> dict:
+        scope = ControlScope(
+            world_id=event.world_id,
+            branch_id=event.branch_id,
+            run_id=event.run_id,
+            entity_id=entity_id,
+        )
+        return controller_minds(scope, actor_id).inspect(entity_id, branch_id=event.branch_id)
 
     def store_controller_runtime(state: ControllerState) -> None:
         previous = minds.runtime_assignment(
@@ -805,39 +821,45 @@ def create_app(
             if direction is not None and proposal.command_type == "tabletop.spatial.move"
             else None
         )
-        resolved = resolve_character_context(
-            simulation=snapshot,
-            scene=scene,
-            minds=observed,
-            actor_id=proposal.actor_id,
-            run_id=proposal.run_id,
-            bindings=character_bindings,
-            cards=portal.repository,
-            profile_reader=lambda persona, version, compiler: (
-                persona_repository.get_compiled(persona, version, compiler)
-                if persona_repository
-                else bound_profiles.get((persona, version, compiler))
-            ),
-        )
         choice = None
-        state = choice_frame(scene, resolved.context.observations)
-        selected = option_key(proposal.command_type, proposal.parameters)
-        if state and (state.threats or state.speech_ready):
-            options = describe_options(resolved.context, state)
-            if selected in {option.key for option in options}:
-                choice = HumanChoiceEvidence(
-                    world_id=proposal.world_id,
-                    branch_id=proposal.branch_id,
-                    run_id=proposal.run_id,
-                    entity_id=proposal.embodied_entity_id,
-                    player_actor_id=proposal.actor_id,
-                    character_id=binding.character_id,
-                    binding_id=binding.binding_id,
-                    projection_version=before.version,
-                    frame=state,
-                    options=options,
-                    chosen_key=selected,
-                ).model_dump(mode="json")
+        try:
+            resolved = resolve_character_context(
+                simulation=snapshot,
+                scene=scene,
+                minds=observed,
+                actor_id=proposal.actor_id,
+                run_id=proposal.run_id,
+                bindings=character_bindings,
+                cards=portal.repository,
+                profile_reader=lambda persona, version, compiler: (
+                    persona_repository.get_compiled(persona, version, compiler)
+                    if persona_repository
+                    else bound_profiles.get((persona, version, compiler))
+                ),
+            )
+        except CharacterContextPending:
+            # Movement uses the locked physical scene. Contextual training needs
+            # the complete observations, which an in-flight projector may still own.
+            pass
+        else:
+            state = choice_frame(scene, resolved.context.observations)
+            selected = option_key(proposal.command_type, proposal.parameters)
+            if state and (state.threats or state.speech_ready):
+                options = describe_options(resolved.context, state)
+                if selected in {option.key for option in options}:
+                    choice = HumanChoiceEvidence(
+                        world_id=proposal.world_id,
+                        branch_id=proposal.branch_id,
+                        run_id=proposal.run_id,
+                        entity_id=proposal.embodied_entity_id,
+                        player_actor_id=proposal.actor_id,
+                        character_id=binding.character_id,
+                        binding_id=binding.binding_id,
+                        projection_version=before.version,
+                        frame=state,
+                        options=options,
+                        chosen_key=selected,
+                    ).model_dump(mode="json")
         if movement is None and choice is None:
             return None
         return {
@@ -1933,7 +1955,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "013_roster_controller_revocation.sql",
+                    "ok": version == "014_world_due_work.sql",
                     "migration": version,
                 }
             except Exception as exc:
@@ -2638,7 +2660,7 @@ def create_app(
         )
         observations: list[dict[str, Any]] = []
         for grant in grants:
-            inspection = minds.inspect(grant.observer_entity_id, branch_id=event.branch_id)
+            inspection = inspect_observer(event, grant.observer_entity_id, actor.actor_id)
             observations.extend(
                 item
                 for item in inspection["observations"]
@@ -2882,7 +2904,8 @@ def create_app(
         grant = simulation.perception_grant(event_id, body.observer_entity_id)
         if grant is None:
             return jsonify({"perceived": False, "reason": "outside_observation_scope"})
-        inspection = minds.inspect(body.observer_entity_id, branch_id=event.branch_id)
+        project_branch(event)
+        inspection = inspect_observer(event, body.observer_entity_id, observer_actor_id)
         prior = next(
             (
                 item
@@ -2914,6 +2937,8 @@ def create_app(
                     ],
                 }
             )
+        if ordered_projector is not None:
+            raise CharacterContextPending("the frozen observation has not been projected")
         existing = minds.get(body.observer_entity_id, branch_id=event.branch_id)
         update = subjective_pipeline.process(
             event,
@@ -2933,17 +2958,6 @@ def create_app(
         )
         if update.observation is None:
             return jsonify({"perceived": False, "reason": "outside_observation_scope"})
-        projected = minds.preview_subjective_update(
-            body.observer_entity_id, update, branch_id=event.branch_id
-        )
-        if mind_repository is not None:
-            mind_repository.save_subjective_update(
-                world_id=event.world_id,
-                branch_id=event.branch_id,
-                actor_id=observer_actor_id,
-                state=projected,
-                update=update,
-            )
         state = minds.apply_subjective_update(
             body.observer_entity_id, update, branch_id=event.branch_id
         )
@@ -4017,6 +4031,7 @@ def create_app(
 
     from kernel.api.npc_goals import make_goal_reader, register_npc_card_binding
     from kernel.api.world_time import register_world_time
+    from kernel.due_work import PostgresDueWork
     from kernel.world_runner import WorldRunner
 
     def goal_profile(persona, version, compiler_version):
@@ -4057,7 +4072,9 @@ def create_app(
         character_bindings,
         goal_profile,
     )
-    app.extensions["world_runner"] = WorldRunner(controller_snapshot)
+    app.extensions["world_runner"] = WorldRunner(
+        controller_snapshot, PostgresDueWork(database_dsn) if database_dsn else None
+    )
     register_npc_card_binding(
         app, controller_snapshot, current_user, current_actor_id, require_world_access, portal
     )

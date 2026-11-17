@@ -17,7 +17,7 @@ from psycopg2.extensions import make_dsn
 from cognition.character_decisions import CharacterProposalReceipt
 from cognition.postgres_decisions import PostgresCharacterProposals
 from cognition.projector import ClaimedWorldEvent, WorldEventProjector
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from kernel.database import transaction
 from tests.integration.test_clean_boot import (
@@ -200,7 +200,7 @@ def test_upgrade_from_005_and_idempotent_rerun(integration_stack, tmp_path):
         for path in sorted(migrations.glob("*.sql"))[:5]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 5
-        assert migrate(url, migrations) == 8
+        assert migrate(url, migrations) == len(discover(migrations)) - 5
         assert migrate(url, migrations) == 0
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute(

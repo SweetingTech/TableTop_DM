@@ -48,6 +48,7 @@ class TickRequest(BaseModel):
     epoch: int = Field(ge=1)
     step: int = Field(ge=0)
     wall_time: AwareDatetime
+    lease_token: uuid.UUID | None = None
 
 
 class AdvanceRequest(BaseModel):
@@ -187,7 +188,7 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
     return tuple(
         CommandDefinition(
             command_type=name,
-            version="1.5.0" if name != "tabletop.clock.configure" else "1.0.0",
+            version=version,
             required_capabilities=frozenset(
                 {"action.propose", "entity.control"}
                 if name != "tabletop.clock.tick"
@@ -197,10 +198,13 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
             handler=handler,
             request_model=model,
             result_model=ClockResult,
+            sensitive_parameters=frozenset({"lease_token"})
+            if model is TickRequest
+            else frozenset(),
         )
-        for name, handler, model in (
-            ("tabletop.clock.configure", configure, ConfigureRequest),
-            ("tabletop.clock.tick", tick, TickRequest),
-            ("tabletop.clock.advance", advance_to, AdvanceRequest),
+        for name, handler, model, version in (
+            ("tabletop.clock.configure", configure, ConfigureRequest, "1.0.0"),
+            ("tabletop.clock.tick", tick, TickRequest, "1.6.0"),
+            ("tabletop.clock.advance", advance_to, AdvanceRequest, "1.5.0"),
         )
     )

@@ -940,6 +940,9 @@ The kernel captures its locked pre-command perceived spatial features, offered m
 chosen direction and binding. Evidence insertion shares the command/event/outbox transaction.
 Rollback and duplicate submissions cannot create partial or repeated preference evidence. Neither
 hidden obstacles nor other characters' secrets are used to filter or score options.
+If subjective observations are pending during a human command, it can still commit and record
+physical movement evidence. Speech and combat choice evidence require the complete context.
+Character policy proposals wait for the pending observations.
 
 The current policy compares the latest 256 samples in this exact world/branch/run/body/player/
 character. It matches perceived zone, injury, company count, relative quadrants and distance buckets.
@@ -1071,6 +1074,12 @@ Model outputs are not promised bitwise deterministic even with seeds; saved prop
 the accepted utterance for replay. Spontaneous conversations and narrative/world planning remain open.
 
 ## World time and offscreen activities
+
+The durable world runner supplies a lease token to `tabletop.clock.tick`. The assigned executor
+can submit a due tick without a token while no worker holds an active lease. A previous token
+cannot authorize new work after reassignment, expiry or completion. A committed idempotency key
+returns its original receipt. Clock configuration creates or cancels the pending step together
+with changes to the clock. Trial clocks stay isolated from the canonical worker.
 
 World time is an integer number of simulated seconds per branch. New worlds have no running
 clock. Configure one explicitly, initially paused. Clock state, pending weather and current

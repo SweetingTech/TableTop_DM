@@ -13,7 +13,7 @@ from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
 from cognition.projector import WorldEventProjector
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from kernel.control import ControllerState
 from kernel.database import transaction
@@ -255,7 +255,7 @@ def test_upgrade_from008_is_repeatable(integration_stack, tmp_path):
         for path in sorted(migrations.glob("*.sql"))[:8]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 8
-        assert migrate(url, migrations) == 5
+        assert migrate(url, migrations) == len(discover(migrations)) - 8
         assert migrate(url, migrations) == 0
     finally:
         with maintenance.cursor() as cursor:

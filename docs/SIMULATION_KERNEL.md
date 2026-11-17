@@ -1,5 +1,20 @@
 # Simulation-kernel contract
 
+Clock leases and retry delays are operational metadata outside replay state. The repository
+locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
+The ledger redacts lease tokens. An idempotent retry returns the original receipt before
+checking the current queue.
+
+The outbox ID orders committed events within a branch. Its first unpublished ID is the
+projection boundary for that branch. If processing stops after writing some observations,
+their exact event/body identities let the retry finish without applying them a second time.
+Bounded startup recovery and post-commit projection share this queue with the dedicated worker.
+The character proposal path checks the frozen grants against the body's projected observations.
+Human input still runs during projection lag. Its physical movement evidence uses the locked
+pre-command scene, and evidence that depends on pending observations is omitted.
+Delayed writes can use a current world-scoped projector grant when the event-time controller
+loses control. The stored observation still uses the event's frozen witness and perception mask.
+
 HTTP private-receipt inspection reads current durable capability through
 `sim.has_world_capability(world_id, 'world.read.all')` with transaction-local `app.actor_id`.
 This existing RLS primitive checks the exact world and active actor. The API's cached actor model

@@ -66,8 +66,9 @@ state only after the same materialization succeeds.
 The `tabletop-dm projector` service claims world-event outbox records with `SKIP LOCKED`, projects
 their frozen grants, and marks the record published only after every subjective write succeeds.
 Partial processing and crashes are safe because observation, evidence, and memory IDs are stable
-and inserts are idempotent. The API also projects synchronously for immediate local feedback, and
-startup catch-up repairs any gap before the projector resumes.
+and inserts are idempotent. API startup and command commits use the same ordered queue for a
+bounded catch-up. The projector continues polling any pending work, including a branch whose
+oldest event is leased or waiting to retry.
 
 Every grant stores the resolver version and a SHA-256 hash over the relevant event-time state,
 including before/after hashes, emission, positions, zones, portals, occluders, sensory profiles,
