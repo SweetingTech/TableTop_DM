@@ -147,59 +147,70 @@ class WorldEventProjector:
         projection_actor: uuid.UUID | None = None
         for grant in item.perceptions:
             if grant.controller_actor_id is None and projection_actor is None:
-                # Unowned witnesses need infrastructure projection authority, not
-                # the speaker's character executor (which can access only its own mind).
-                with psycopg2.connect(self.dsn) as connection:
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            "SELECT a.id FROM sim.actor_capabilities c JOIN sim.actors a "
-                            "ON a.id=c.actor_id AND a.is_active WHERE c.world_id=%s "
-                            "AND c.capability='mind.write.all' ORDER BY "
-                            "CASE WHEN a.actor_kind='SYSTEM' THEN 0 ELSE 1 END,"
-                            "a.created_at,a.id LIMIT 1",
-                            (str(item.event.world_id),),
-                        )
-                        row = cursor.fetchone()
-                        projection_actor = uuid.UUID(str(row[0])) if row else item.event.actor_id
+                projection_actor = self._projection_actor(item.event.world_id)
             actor_id = grant.controller_actor_id or projection_actor or item.event.actor_id
-            state, observations, relationships = self.repository.load_projection(
-                world_id=item.event.world_id,
-                branch_id=item.event.branch_id,
-                entity_id=grant.observer_entity_id,
-                actor_id=actor_id,
+            try:
+                self._project_grant(item.event, grant, actor_id)
+            except psycopg2.errors.InsufficientPrivilege:
+                # Grant identity is frozen. Storage access follows current authority,
+                # so a former controller can no longer write the body's observation.
+                projection_actor = projection_actor or self._projection_actor(item.event.world_id)
+                if projection_actor is None or projection_actor == actor_id:
+                    raise
+                self._project_grant(item.event, grant, projection_actor)
+
+    def _projection_actor(self, world_id: uuid.UUID) -> uuid.UUID | None:
+        with psycopg2.connect(self.dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT a.id FROM sim.actor_capabilities c JOIN sim.actors a "
+                "ON a.id=c.actor_id AND a.is_active WHERE c.world_id=%s "
+                "AND c.capability='mind.write.all' ORDER BY "
+                "CASE WHEN a.actor_kind='SYSTEM' THEN 0 ELSE 1 END,"
+                "a.created_at,a.id LIMIT 1",
+                (str(world_id),),
             )
-            store = MindStore()
-            store.restore(
-                state,
-                branch_id=item.event.branch_id,
-                observations=observations,
-                relationships=relationships,
-            )
-            update = self.pipeline.process(
-                item.event,
-                PerceptionProfile(
-                    observer_entity_id=grant.observer_entity_id,
-                    observer_actor_id=actor_id,
-                ),
-                grant=grant,
-                existing_beliefs=state.beliefs,
-            )
-            if update.observation is None or store.has_observation(
-                update.observation.observation_id, branch_id=item.event.branch_id
-            ):
-                continue
-            projected = store.preview_subjective_update(
-                grant.observer_entity_id,
-                update,
-                branch_id=item.event.branch_id,
-            )
-            self.repository.save_subjective_update(
-                world_id=item.event.world_id,
-                branch_id=item.event.branch_id,
-                actor_id=actor_id,
-                state=projected,
-                update=update,
-            )
+            row = cursor.fetchone()
+            return uuid.UUID(str(row[0])) if row else None
+
+    def _project_grant(
+        self, event: EventEnvelopeV2, grant: PerceptionGrant, actor_id: uuid.UUID
+    ) -> None:
+        state, observations, relationships = self.repository.load_projection(
+            world_id=event.world_id,
+            branch_id=event.branch_id,
+            entity_id=grant.observer_entity_id,
+            actor_id=actor_id,
+        )
+        store = MindStore()
+        store.restore(
+            state,
+            branch_id=event.branch_id,
+            observations=observations,
+            relationships=relationships,
+        )
+        update = self.pipeline.process(
+            event,
+            PerceptionProfile(
+                observer_entity_id=grant.observer_entity_id,
+                observer_actor_id=grant.controller_actor_id or actor_id,
+            ),
+            grant=grant,
+            existing_beliefs=state.beliefs,
+        )
+        if update.observation is None or store.has_observation(
+            update.observation.observation_id, branch_id=event.branch_id
+        ):
+            return
+        projected = store.preview_subjective_update(
+            grant.observer_entity_id, update, branch_id=event.branch_id
+        )
+        self.repository.save_subjective_update(
+            world_id=event.world_id,
+            branch_id=event.branch_id,
+            actor_id=actor_id,
+            state=projected,
+            update=update,
+        )
 
 
 def run_world_event_projector() -> None:

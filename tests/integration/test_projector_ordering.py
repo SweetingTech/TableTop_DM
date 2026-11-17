@@ -112,3 +112,52 @@ def test_branch_head_blocks_later_observations_until_retry(
             (card["entity_id"], event_ids),
         )
         assert dict(cursor.fetchall()) == dict.fromkeys(event_ids, 1)
+
+
+def test_pending_observation_projects_after_roster_control_changes(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, card, path, _, target, base) = prepare(
+        integration_stack, monkeypatch, tmp_path
+    )
+    projector = WorldEventProjector(integration_stack.database_url)
+    topic = f"world.{base['world_id']}.branch.{base['branch_id']}"
+    with monkeypatch.context() as patch:
+        patch.setattr(app.extensions["simulation"], "subjective_projector", None)
+        receipt = api_command(
+            admin,
+            {**base, "embodied_entity_id": target},
+            "tabletop.dialogue.speak",
+            {"text": "The pass is open."},
+            "speak-before-control-changes",
+        )
+    event_id = receipt["event"]["event_id"]
+    (head,) = projector._claim(1, topic=topic)
+    assert str(head.event.event_id) == event_id
+    grant = next(
+        row for row in head.perceptions if str(row.observer_entity_id) == card["entity_id"]
+    )
+    assert grant.controller_actor_id is not None
+
+    api_command(
+        admin,
+        base,
+        "tabletop.entity.set_controllers",
+        {"changes": [{"entity_id": card["entity_id"], "controller_actor_id": None}]},
+        "remove-controller-before-projection",
+    )
+    assert player.get(path + "/scene").status_code == 403
+    projector._process_claim(head)
+    with transaction(dsn=integration_stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT published_at IS NOT NULL, last_error FROM sim.outbox WHERE id=%s",
+            (head.outbox_id,),
+        )
+        assert cursor.fetchone() == (True, None)
+        cursor.execute(
+            "SELECT perceived_payload->>'text' FROM cognition.observations "
+            "WHERE source_event_id=%s AND observer_entity_id=%s",
+            (event_id, card["entity_id"]),
+        )
+        assert cursor.fetchall() == [("The pass is open.",)]
+    assert projector.run_once(topic=topic) == 1

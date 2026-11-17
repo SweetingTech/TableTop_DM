@@ -11,6 +11,8 @@ their exact event/body identities let the retry finish without applying them a s
 The character proposal path checks the frozen grants against the body's projected observations.
 Human input still runs during projection lag. Its physical movement evidence uses the locked
 pre-command scene, and evidence that depends on pending observations is omitted.
+Delayed writes can use a current world-scoped projector grant when the event-time controller
+loses control. The stored observation still uses the event's frozen witness and perception mask.
 
 HTTP private-receipt inspection reads current durable capability through
 `sim.has_world_capability(world_id, 'world.read.all')` with transaction-local `app.actor_id`.
