@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -14,12 +15,13 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from population.runtime import MEMBERS
 from tests.integration.test_world_time import clock_path, prepare
 from tests.unit.kernel.test_population_runtime_api import seed_routine
-from tests.unit.kernel.test_world_time import api_command
+from tests.unit.kernel.test_speech_combat_behavior import setup_scene
+from tests.unit.kernel.test_world_time import NOW, api_command
 
 pytestmark = pytest.mark.integration
 
@@ -426,18 +428,40 @@ def test_010_upgrade_preserves_materialized_source_and_can_bind_afterwards(
         for migration in sorted(migrations.glob("*.sql"))[:10]:
             shutil.copy2(migration, prior / migration.name)
         assert migrate(url, prior) == 10
-        # Isolated upgrade database, never the user's running application database.
-        from dataclasses import replace
-
-        upgraded_stack = replace(integration_stack, database_url=url)
-        app, (admin, player, card, path, run, target, base) = prepare(
-            upgraded_stack, monkeypatch, tmp_path / "before"
-        )
-        root, member_path, body = seed_routine(app, admin, base, target, bind=False)
+        monkeypatch.setenv("DATABASE_URL", url)
+        monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
+        app = create_app(artifact_root=tmp_path / "before")
+        client = app.test_client()
+        client.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+        scope = client.post("/api/v2/worlds", json={"name": "Population upgrade"}).get_json()
+        admin, _, _, _, _, target, base = setup_scene(app, scope=scope)
+        _, member_path, body = seed_routine(app, admin, base, target, bind=False)
         before = admin.get(member_path).get_json()
-        assert migrate(url, migrations) == 3
+        assert migrate(url, migrations) == len(discover(migrations)) - 10
         assert migrate(url, migrations) == 0
         assert admin.get(member_path).get_json() == before
+        executor = admin.post(
+            "/api/v2/actors",
+            json={
+                "world_id": base["world_id"],
+                "display_name": "World clock",
+                "kind": "AGENT",
+                "roles": [],
+                "capabilities": ["world.read", "action.propose", "action.commit"],
+            },
+        )
+        assert executor.status_code == 201, executor.get_json()
+        api_command(
+            admin,
+            base,
+            "tabletop.clock.configure",
+            {
+                "expected_epoch": 0,
+                "executor_actor_id": executor.get_json()["actor_id"],
+                "wall_time": NOW.isoformat(),
+            },
+            "configure",
+        )
         accepted = admin.post(member_path + "/bind", json=body)
         assert accepted.status_code == 200, accepted.get_json()
         assert admin.get(member_path).get_json()["entity_id"] == target

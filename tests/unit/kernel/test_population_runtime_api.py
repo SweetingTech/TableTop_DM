@@ -12,14 +12,15 @@ pytestmark = pytest.mark.unit
 
 def seed_routine(app, admin, base, target, *, bind=True):
     clock_path = f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}/clock"
-    activity = admin.get(clock_path).get_json()["activities"][target]
-    api_command(
-        admin,
-        base,
-        "tabletop.activity.cancel",
-        {"entity_id": target, "activity_id": activity["activity_id"]},
-        "cancel-manual",
-    )
+    activity = admin.get(clock_path).get_json()["activities"].get(target)
+    if activity is not None:
+        api_command(
+            admin,
+            base,
+            "tabletop.activity.cancel",
+            {"entity_id": target, "activity_id": activity["activity_id"]},
+            "cancel-manual",
+        )
     response = admin.post(
         "/api/v2/populations/generate",
         json={

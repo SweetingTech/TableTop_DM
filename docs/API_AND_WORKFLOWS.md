@@ -940,6 +940,9 @@ The kernel captures its locked pre-command perceived spatial features, offered m
 chosen direction and binding. Evidence insertion shares the command/event/outbox transaction.
 Rollback and duplicate submissions cannot create partial or repeated preference evidence. Neither
 hidden obstacles nor other characters' secrets are used to filter or score options.
+If subjective observations are pending during a human command, it can still commit and record
+physical movement evidence. Speech and combat choice evidence require the complete context.
+Character policy proposals wait for the pending observations.
 
 The current policy compares the latest 256 samples in this exact world/branch/run/body/player/
 character. It matches perceived zone, injury, company count, relative quadrants and distance buckets.

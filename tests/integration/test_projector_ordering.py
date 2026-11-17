@@ -52,6 +52,23 @@ def test_branch_head_blocks_later_observations_until_retry(
     decision = {"run_id": run, "idempotency_key": "after-ordering"}
     pending = player.post(path + "/character-proposals", json=decision)
     assert pending.status_code == 409 and pending.get_json()["error"] == "character_context_pending"
+    movement = api_command(
+        player,
+        {**base, "embodied_entity_id": card["entity_id"]},
+        "tabletop.spatial.move",
+        {"dx": 0, "dy": -1},
+        "player-moves-during-projection",
+    )
+    assert movement["result"]["accepted"]
+    with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM cognition.human_movement_evidence WHERE run_id=%s", (run,)
+        )
+        assert cursor.fetchone() == (1,)
+        cursor.execute(
+            "SELECT count(*) FROM cognition.human_choice_evidence WHERE run_id=%s", (run,)
+        )
+        assert cursor.fetchone() == (0,)
 
     def project_then_interrupt(item):
         project(item)
@@ -76,9 +93,17 @@ def test_branch_head_blocks_later_observations_until_retry(
             (event_ids[0],),
         )
         assert cursor.rowcount == 1
-    assert second.run_once(topic=topic) == 2
+    assert second.run_once(topic=topic) == 3
     assert observations() == set(event_ids)
-    assert player.post(path + "/character-proposals", json=decision).status_code == 200
+    api_command(
+        admin,
+        base,
+        "tabletop.clock.advance",
+        {"expected_epoch": 1, "expected_seconds": 0, "to_seconds": 6},
+        "finish-move-recovery",
+    )
+    ready = player.post(path + "/character-proposals", json=decision)
+    assert ready.status_code == 200, ready.get_json()
     with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
         cursor.execute(
             "SELECT source_event_id,count(*) FROM cognition.observations "

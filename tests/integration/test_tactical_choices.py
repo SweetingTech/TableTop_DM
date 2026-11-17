@@ -10,7 +10,7 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from tests.integration.test_speech_combat_behavior import prepare
 from tests.unit.kernel.test_speech_combat_behavior import provoke, setup_scene
@@ -202,7 +202,7 @@ def test_009_upgrade_and_repeat_with_preserved_old_evidence(
             assert (
                 len(old_rows) == 1 and old_rows[0][0]["version"] == "speech-combat-behavior-1.0.0"
             )
-        assert migrate(url, migrations) == 4
+        assert migrate(url, migrations) == len(discover(migrations)) - 9
         assert migrate(url, migrations) == 0
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT payload FROM cognition.human_choice_evidence")

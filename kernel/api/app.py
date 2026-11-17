@@ -817,39 +817,45 @@ def create_app(
             if direction is not None and proposal.command_type == "tabletop.spatial.move"
             else None
         )
-        resolved = resolve_character_context(
-            simulation=snapshot,
-            scene=scene,
-            minds=observed,
-            actor_id=proposal.actor_id,
-            run_id=proposal.run_id,
-            bindings=character_bindings,
-            cards=portal.repository,
-            profile_reader=lambda persona, version, compiler: (
-                persona_repository.get_compiled(persona, version, compiler)
-                if persona_repository
-                else bound_profiles.get((persona, version, compiler))
-            ),
-        )
         choice = None
-        state = choice_frame(scene, resolved.context.observations)
-        selected = option_key(proposal.command_type, proposal.parameters)
-        if state and (state.threats or state.speech_ready):
-            options = describe_options(resolved.context, state)
-            if selected in {option.key for option in options}:
-                choice = HumanChoiceEvidence(
-                    world_id=proposal.world_id,
-                    branch_id=proposal.branch_id,
-                    run_id=proposal.run_id,
-                    entity_id=proposal.embodied_entity_id,
-                    player_actor_id=proposal.actor_id,
-                    character_id=binding.character_id,
-                    binding_id=binding.binding_id,
-                    projection_version=before.version,
-                    frame=state,
-                    options=options,
-                    chosen_key=selected,
-                ).model_dump(mode="json")
+        try:
+            resolved = resolve_character_context(
+                simulation=snapshot,
+                scene=scene,
+                minds=observed,
+                actor_id=proposal.actor_id,
+                run_id=proposal.run_id,
+                bindings=character_bindings,
+                cards=portal.repository,
+                profile_reader=lambda persona, version, compiler: (
+                    persona_repository.get_compiled(persona, version, compiler)
+                    if persona_repository
+                    else bound_profiles.get((persona, version, compiler))
+                ),
+            )
+        except CharacterContextPending:
+            # Movement uses the locked physical scene. Contextual training needs
+            # the complete observations, which an in-flight projector may still own.
+            pass
+        else:
+            state = choice_frame(scene, resolved.context.observations)
+            selected = option_key(proposal.command_type, proposal.parameters)
+            if state and (state.threats or state.speech_ready):
+                options = describe_options(resolved.context, state)
+                if selected in {option.key for option in options}:
+                    choice = HumanChoiceEvidence(
+                        world_id=proposal.world_id,
+                        branch_id=proposal.branch_id,
+                        run_id=proposal.run_id,
+                        entity_id=proposal.embodied_entity_id,
+                        player_actor_id=proposal.actor_id,
+                        character_id=binding.character_id,
+                        binding_id=binding.binding_id,
+                        projection_version=before.version,
+                        frame=state,
+                        options=options,
+                        chosen_key=selected,
+                    ).model_dump(mode="json")
         if movement is None and choice is None:
             return None
         return {

@@ -2,7 +2,8 @@
 
 - Lease durable clock work in PostgreSQL, recover abandoned steps, and commit each tick and its
   successor together. Apply migration 014 before upgrading.
-- Project each branch's observations in event order across workers and retries.
+- Project each branch's observations in event order across workers and retries. Human commands
+  remain available during projection lag, with contextual choice evidence recorded only when ready.
 
 - Revalidate private receipt inspection through the existing actor/world-scoped database
   capability function. Separate-process DM revocation now fences new and cached HTTP results

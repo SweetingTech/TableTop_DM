@@ -9,6 +9,8 @@ The outbox ID orders committed events within a branch. Its first unpublished ID 
 projection boundary for that branch. If processing stops after writing some observations,
 their exact event/body identities let the retry finish without applying them a second time.
 The character proposal path checks the frozen grants against the body's projected observations.
+Human input still runs during projection lag. Its physical movement evidence uses the locked
+pre-command scene, and evidence that depends on pending observations is omitted.
 
 HTTP private-receipt inspection reads current durable capability through
 `sim.has_world_capability(world_id, 'world.read.all')` with transaction-local `app.actor_id`.

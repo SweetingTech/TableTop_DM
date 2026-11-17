@@ -10,7 +10,7 @@ from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
 from cognition.projector import WorldEventProjector
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from kernel.contracts import CommandProposal
 from kernel.database import transaction
@@ -299,7 +299,7 @@ def test_upgrade_from_007_preserves_old_commands_as_unknown(integration_stack, t
         for path in sorted(migrations.glob("*.sql"))[:7]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 7
-        assert migrate(url, migrations) == 6
+        assert migrate(url, migrations) == len(discover(migrations)) - 7
         assert migrate(url, migrations) == 0
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute(
