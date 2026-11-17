@@ -802,6 +802,24 @@ def test_world_scoped_actor_grants_do_not_union_after_restart(
         _stop_runtime(second)
 
 
+def _enqueue_frozen_gate_event(cursor, event_id):
+    cursor.execute(
+        """
+        INSERT INTO sim.outbox (event_id, topic, payload)
+        SELECT event.event_id, 'world.' || event.world_id || '.branch.' || event.branch_id,
+               jsonb_build_object(
+                   'event', to_jsonb(event),
+                   'perceptions', (SELECT jsonb_agg(to_jsonb(grant_row) ORDER BY observer_entity_id)
+                                   FROM sim.event_perceptions grant_row
+                                   WHERE grant_row.event_id = event.event_id)
+               )
+        FROM sim.events event WHERE event.event_id = %s
+        """,
+        (str(event_id),),
+    )
+    assert cursor.rowcount == 1
+
+
 def test_restart_restores_belief_revision_and_relationship_accumulation(
     integration_stack,
     tmp_path: Path,
@@ -925,6 +943,7 @@ def test_restart_restores_belief_revision_and_relationship_accumulation(
                         "0" * 64,
                     ),
                 )
+                _enqueue_frozen_gate_event(cursor, event_id)
 
     first_port = _free_port()
     first_url = f"http://127.0.0.1:{first_port}"
@@ -1026,6 +1045,7 @@ def test_restart_restores_belief_revision_and_relationship_accumulation(
                     "1" * 64,
                 ),
             )
+            _enqueue_frozen_gate_event(cursor, second_event_id)
 
     second_port = _free_port()
     second_url = f"http://127.0.0.1:{second_port}"

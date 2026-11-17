@@ -534,13 +534,16 @@ def create_app(
     relationship_engine = RelationshipEngine()
     ordered_projector = WorldEventProjector(database_dsn) if database_dsn else None
 
-    def project_branch(event: Any) -> None:
+    def project_pending(topic: str | None = None) -> None:
         if ordered_projector is not None:
             try:
-                ordered_projector.run_once(topic=f"world.{event.world_id}.branch.{event.branch_id}")
+                ordered_projector.run_once(topic=topic)
             except psycopg2.Error as exc:
-                # The command is already committed. Its outbox row remains retryable.
+                # Committed outbox work remains available to another projector poll.
                 app.logger.warning("subjective outbox unavailable: %s", type(exc).__name__)
+
+    def project_branch(event: Any) -> None:
+        project_pending(topic=f"world.{event.world_id}.branch.{event.branch_id}")
 
     def project_subjective_event(event: Any, grants: Any) -> None:
         for grant in grants:
@@ -565,6 +568,7 @@ def create_app(
 
     if ordered_projector is not None:
         simulation.configure_subjective_projector(lambda receipt: project_branch(receipt.event))
+        project_pending()
     else:
         simulation.configure_subjective_projector(
             lambda receipt: project_subjective_event(receipt.event, receipt.perceptions)
@@ -602,6 +606,8 @@ def create_app(
             durable_control.load_projection,
             durable_control.persist_snapshot,
         )
+        if simulation.subjective_projector is not None:
+            fresh.configure_subjective_projector(simulation.subjective_projector)
         fresh.goal_input_reader = simulation.goal_input_reader
         return fresh
 

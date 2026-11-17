@@ -8,6 +8,7 @@ checking the current queue.
 The outbox ID orders committed events within a branch. Its first unpublished ID is the
 projection boundary for that branch. If processing stops after writing some observations,
 their exact event/body identities let the retry finish without applying them a second time.
+Bounded startup recovery and post-commit projection share this queue with the dedicated worker.
 The character proposal path checks the frozen grants against the body's projected observations.
 Human input still runs during projection lag. Its physical movement evidence uses the locked
 pre-command scene, and evidence that depends on pending observations is omitted.
