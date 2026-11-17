@@ -1,5 +1,9 @@
 # Changelog
 
+- Lease durable clock work in PostgreSQL, recover abandoned steps, and commit each tick and its
+  successor together. Apply migration 014 before upgrading.
+- Project each branch's observations in event order across workers and retries.
+
 - Revalidate private receipt inspection through the existing actor/world-scoped database
   capability function. Separate-process DM revocation now fences new and cached HTTP results
   even when the original API retains a cached grant. Preserve canonical receipt/replay bytes;

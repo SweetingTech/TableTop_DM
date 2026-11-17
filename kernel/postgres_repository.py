@@ -30,6 +30,7 @@ from kernel.control import (
     validate_controller,
 )
 from kernel.database import transaction
+from kernel.due_work import replace_clock_work, require_tick_work
 from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
 from kernel.event_factory import EventFactory
 from kernel.perception_contracts import PerceptionGrant
@@ -87,7 +88,7 @@ class PostgresCommandRepository:
 
                 cursor.execute(
                     """
-                    SELECT seed
+                    SELECT seed, run_kind
                     FROM sim.runs
                     WHERE world_id = %s AND branch_id = %s AND id = %s
                     """,
@@ -248,6 +249,8 @@ class PostgresCommandRepository:
                     and clock["paused"]
                 ):
                     raise WorldClockPaused("world clock is paused")
+                if proposal.command_type == "tabletop.clock.tick" and kind is BranchKind.CANONICAL:
+                    require_tick_work(cursor, proposal)
                 evidence = (
                     self.evidence_builder(proposal, before) if self.evidence_builder else None
                 )
@@ -360,6 +363,14 @@ class PostgresCommandRepository:
                         ),
                     ),
                 )
+                if kind is BranchKind.CANONICAL and proposal.command_type.startswith(
+                    "tabletop.clock."
+                ):
+                    from domains.tabletop.world_time import read_clock
+
+                    replace_clock_work(
+                        cursor, proposal, read_clock(state) if run["run_kind"] == "LIVE" else None
+                    )
                 return CommandReceipt(
                     result=result,
                     event=event,

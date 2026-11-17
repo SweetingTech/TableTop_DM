@@ -1072,6 +1072,12 @@ the accepted utterance for replay. Spontaneous conversations and narrative/world
 
 ## World time and offscreen activities
 
+The durable world runner supplies a lease token to `tabletop.clock.tick`. The assigned executor
+can submit a due tick without a token while no worker holds an active lease. A previous token
+cannot authorize new work after reassignment, expiry or completion. A committed idempotency key
+returns its original receipt. Clock configuration creates or cancels the pending step together
+with changes to the clock. Trial clocks stay isolated from the canonical worker.
+
 World time is an integer number of simulated seconds per branch. New worlds have no running
 clock. Configure one explicitly, initially paused. Clock state, pending weather and current
 activities live in the existing canonical projection: the normal kernel transaction commits

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from dataclasses import replace
 from pathlib import Path
 from threading import Event
 
@@ -24,6 +24,7 @@ from tests.unit.cognition.test_relationship_api import (
     check_grounded_relationships,
     physical_relationship_game,
 )
+from tests.unit.kernel.test_speech_combat_behavior import setup_scene
 from tests.unit.kernel.test_world_time import api_command
 
 pytestmark = pytest.mark.integration
@@ -257,7 +258,11 @@ def test_011_upgrade_preserves_legacy_snapshot_and_allows_metadata_identity(
         for migration in sorted(migrations.glob("*.sql"))[:11]:
             shutil.copy2(migration, prior / migration.name)
         assert migrate(url, prior) == 11
-        app, game = prepare(replace(integration_stack, database_url=url), monkeypatch, tmp_path)
+        monkeypatch.setenv("DATABASE_URL", url)
+        monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
+        app, client = fresh_client(tmp_path)
+        world = client.post("/api/v2/worlds", json={"name": "Snapshot upgrade"}).get_json()
+        game = setup_scene(app, scope=world)
         admin, base, sim = game[0], game[-1], app.extensions["simulation"]
         state = sim.states.get(uuid.UUID(base["branch_id"]))
         legacy = sim.snapshot_store.create(
@@ -269,14 +274,11 @@ def test_011_upgrade_preserves_legacy_snapshot_and_allows_metadata_identity(
         control = PostgresControlPlane(url)
         control.actor_id = app.extensions["demo_ids"]["actor_id"]
         control.persist_snapshot(legacy, state.version)
-        assert migrate(url, migrations) == 2
+        assert migrate(url, migrations) == 3
         assert migrate(url, migrations) == 0
         readiness = admin.get("/readyz")
         assert readiness.status_code == 200, readiness.get_json()
-        assert (
-            readiness.get_json()["checks"]["postgres"]["migration"]
-            == "013_roster_controller_revocation.sql"
-        )
+        assert readiness.get_json()["checks"]["postgres"]["migration"] == "014_world_due_work.sql"
         frozen = snapshot(admin, base["world_id"])
         assert frozen["state_hash"] == legacy.state_hash
         assert frozen["snapshot_id"] != str(legacy.snapshot_id)

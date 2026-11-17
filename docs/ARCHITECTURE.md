@@ -2,6 +2,17 @@
 
 ## System shape
 
+The durable clock scheduler keeps one outstanding step per canonical branch in
+`sim.world_due_work`. Workers sort due candidates by deadline and branch ID, then compete for a
+lease scoped to the assigned executor. The existing branch transaction validates the lease and
+publishes the clock, receipt, event, outbox and successor together. Completed steps remain in
+the command ledger.
+
+Subjective projection claims only the first unpublished world event on each branch topic. An
+earlier claimed event or retry blocks later events on that topic while other branches can
+continue. Claim tokens and the outbox row lock fence competing projectors. The character
+proposal service still requires each of the body's frozen observations before deciding.
+
 Durable private-receipt presentation uses the existing `sim.has_world_capability` function in an
 actor-scoped transaction. This bounded read observes current exact-world grants without hydrating
 all world state or trusting the API's cached authority. A separate-process DM revocation applies

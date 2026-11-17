@@ -1,5 +1,9 @@
 # TableTop DM
 
+The durable world runner claims the next clock step in PostgreSQL. Another worker can recover
+the step if the lease expires before commit. Pausing cancels pending work, and a successful tick
+records its result and schedules the next step together. Apply migration 014 before upgrading.
+
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.
 

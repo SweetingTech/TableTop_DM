@@ -43,8 +43,9 @@ def test_roster_revocation_clean_upgrade_rollback_and_repeat(integration_stack, 
                     "'sim.runtime_controls_entity(uuid,uuid,uuid)'::regprocedure)"
                 )
                 assert cursor.fetchone()[0] == original
-        assert migrate(url, migrations) == 1
-        assert migrate(url, migrations) == 0
+        shutil.copy2(migrations / "013_roster_controller_revocation.sql", prior)
+        assert migrate(url, prior) == 1
+        assert migrate(url, prior) == 0
         with (
             closing(psycopg2.connect(url)) as connection,
             connection,

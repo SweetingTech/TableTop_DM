@@ -1,5 +1,15 @@
 # Testing
 
+World due-work integration cases race two claims, recover an expired lease with a fresh runner,
+deny stale tokens, inject failed event publication, and verify the retry advances the clock
+once and replaces its due row. They also cover pause cancellation, actor scope and retry backoff.
+The existing world-time lane runs separate processes without viewers and tests restart.
+
+The projector-ordering integration case holds one event at the branch head while a second
+worker attempts to claim later work. It interrupts projection after persisting observations,
+checks that character advice waits through the retry, and verifies each original observation
+exists once after the second worker drains the branch.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

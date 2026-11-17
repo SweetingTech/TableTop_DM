@@ -23,6 +23,7 @@ class ClaimedWorldEvent:
     outbox_id: int
     event: EventEnvelopeV2
     perceptions: tuple[PerceptionGrant, ...]
+    claim_owner: str = ""
 
 
 class WorldEventProjector:
@@ -34,16 +35,16 @@ class WorldEventProjector:
         self.repository = PostgresMindRepository(dsn)
         self.pipeline = SubjectiveStatePipeline()
 
-    def run_once(self, *, limit: int = 20) -> int:
-        claimed = self._claim(limit)
-        for item in claimed:
-            try:
-                self._project(item)
-            except Exception as exc:
-                self._release(item.outbox_id, type(exc).__name__)
-            else:
-                self._complete(item.outbox_id)
-        return len(claimed)
+    def run_once(self, *, limit: int = 20, topic: str | None = None) -> int:
+        count = 0
+        while count < limit:
+            claimed = self._claim(limit - count, topic=topic)
+            if not claimed:
+                break
+            for item in claimed:
+                self._process_claim(item)
+            count += len(claimed)
+        return count
 
     def run_forever(self, *, idle_seconds: float = 0.5) -> None:
         while True:
@@ -51,22 +52,30 @@ class WorldEventProjector:
             if processed == 0:
                 time.sleep(idle_seconds)
 
-    def _claim(self, limit: int) -> tuple[ClaimedWorldEvent, ...]:
+    def _claim(self, limit: int, *, topic: str | None = None) -> tuple[ClaimedWorldEvent, ...]:
+        claim_owner = f"{self.worker_id}:{uuid.uuid4()}"
         with psycopg2.connect(self.dsn) as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(
                     """
-                    SELECT id, payload
-                    FROM sim.outbox
-                    WHERE published_at IS NULL
-                      AND available_at <= now()
-                      AND (claimed_at IS NULL OR claimed_at < now() - interval '5 minutes')
-                      AND topic LIKE 'world.%%'
-                    ORDER BY id
-                    FOR UPDATE SKIP LOCKED
+                    SELECT work.id, work.payload
+                    FROM sim.outbox work
+                    WHERE work.published_at IS NULL
+                      AND work.available_at <= now()
+                      AND (work.claimed_at IS NULL
+                           OR work.claimed_at < now() - interval '5 minutes')
+                      AND work.topic LIKE 'world.%%'
+                      AND (%s IS NULL OR work.topic=%s)
+                      AND NOT EXISTS (
+                        SELECT 1 FROM sim.outbox predecessor
+                        WHERE predecessor.topic=work.topic AND predecessor.id < work.id
+                          AND predecessor.published_at IS NULL
+                      )
+                    ORDER BY work.id
+                    FOR UPDATE OF work SKIP LOCKED
                     LIMIT %s
                     """,
-                    (limit,),
+                    (topic, topic, limit),
                 )
                 rows = cursor.fetchall()
                 if rows:
@@ -74,7 +83,7 @@ class WorldEventProjector:
                         """UPDATE sim.outbox
                         SET claimed_at=now(), claimed_by=%s
                         WHERE id = ANY(%s)""",
-                        (self.worker_id, [row["id"] for row in rows]),
+                        (claim_owner, [row["id"] for row in rows]),
                     )
         claimed: list[ClaimedWorldEvent] = []
         for row in rows:
@@ -88,9 +97,51 @@ class WorldEventProjector:
                     perceptions=tuple(
                         PerceptionGrant.model_validate(grant) for grant in grants_payload
                     ),
+                    claim_owner=claim_owner,
                 )
             )
         return tuple(claimed)
+
+    def _process_claim(self, item: ClaimedWorldEvent) -> None:
+        with psycopg2.connect(self.dsn) as connection, connection.cursor() as cursor:
+            # Hold the row lock through projection. A replacement may reclaim
+            # expired idle work, but cannot interleave with an already applying event.
+            cursor.execute(
+                """
+                SELECT 1 FROM sim.outbox
+                WHERE id=%s AND claimed_by=%s AND published_at IS NULL
+                  AND claimed_at >= clock_timestamp() - interval '5 minutes'
+                FOR UPDATE SKIP LOCKED
+                """,
+                (item.outbox_id, item.claim_owner),
+            )
+            if cursor.fetchone() is None:
+                return
+            try:
+                self._project(item)
+            except Exception as exc:
+                cursor.execute(
+                    """
+                    UPDATE sim.outbox
+                    SET attempts=attempts+1,
+                        available_at=clock_timestamp() + make_interval(
+                          secs => LEAST(300, power(2, LEAST(attempts, 9)))::int
+                        ),
+                        claimed_at=NULL, claimed_by=NULL, last_error=%s
+                    WHERE id=%s
+                    """,
+                    (type(exc).__name__[:120], item.outbox_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE sim.outbox
+                    SET published_at=clock_timestamp(), claimed_at=NULL,
+                        claimed_by=NULL, last_error=NULL
+                    WHERE id=%s
+                    """,
+                    (item.outbox_id,),
+                )
 
     def _project(self, item: ClaimedWorldEvent) -> None:
         projection_actor: uuid.UUID | None = None
@@ -149,30 +200,6 @@ class WorldEventProjector:
                 state=projected,
                 update=update,
             )
-
-    def _complete(self, outbox_id: int) -> None:
-        with psycopg2.connect(self.dsn) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """UPDATE sim.outbox
-                    SET published_at=now(), claimed_at=NULL, claimed_by=NULL, last_error=NULL
-                    WHERE id=%s AND claimed_by=%s""",
-                    (outbox_id, self.worker_id),
-                )
-
-    def _release(self, outbox_id: int, error_name: str) -> None:
-        with psycopg2.connect(self.dsn) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """UPDATE sim.outbox
-                    SET attempts=attempts+1,
-                        available_at=now() + make_interval(
-                          secs => LEAST(300, power(2, attempts)::int)
-                        ),
-                        claimed_at=NULL, claimed_by=NULL, last_error=%s
-                    WHERE id=%s AND claimed_by=%s""",
-                    (error_name[:120], outbox_id, self.worker_id),
-                )
 
 
 def run_world_event_projector() -> None:

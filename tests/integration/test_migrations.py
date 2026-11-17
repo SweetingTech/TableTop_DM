@@ -49,6 +49,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("011_population_body_binding.sql",),
             ("012_snapshot_entity_identity.sql",),
             ("013_roster_controller_revocation.sql",),
+            ("014_world_due_work.sql",),
         ]
         cursor.execute(
             """

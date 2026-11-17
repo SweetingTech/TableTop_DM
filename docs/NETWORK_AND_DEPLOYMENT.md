@@ -1,5 +1,8 @@
 # Network and deployment
 
+The durable world runner uses the existing PostgreSQL connection for clock work leases. Apply
+migration 014 before replacing the application and runner images.
+
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.
 

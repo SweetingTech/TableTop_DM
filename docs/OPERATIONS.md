@@ -1,5 +1,15 @@
 # Operations, storage, migrations, and security
 
+Apply migration 014 before starting the updated application and world runner. It backfills due
+work for running canonical clocks. The worker leases steps for 30 seconds on database time and
+uses exponential retry delays capped at 60 seconds. Current world grants restrict queue access
+to authorized managers and the assigned executor. Existing Compose services and settings apply.
+
+The projector processes each branch's outbox in order. Inspect that branch's first unpublished
+row when later observations are waiting. Its retry timestamp and stable error class identify the
+pending event while other branches can continue. Restarting the projector recovers expired
+claims and reuses any observations already written for the event.
+
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
 on the read transaction. Deploy the matching API/control-plane code. Role changes from a second
