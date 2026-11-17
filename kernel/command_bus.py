@@ -14,7 +14,7 @@ from kernel.contracts import (
     CommandResult,
     EventEnvelopeV2,
 )
-from kernel.errors import AuthorizationDenied, UnknownCommand
+from kernel.errors import AuthorizationDenied, BodyOutsideRelevance, UnknownCommand
 from kernel.event_factory import EmissionBuilder, EventFactory
 from kernel.perception_contracts import PerceptionGrant
 from kernel.randomness import allocate_randomness
@@ -68,6 +68,11 @@ def resolve_command(
     *,
     run_seed: int | None,
 ) -> CommandResult:
+    if proposal.decision_authorship == "CHARACTER_POLICY" and proposal.embodied_entity_id:
+        from population.routines import uses_offscreen_routine
+
+        if uses_offscreen_routine(state, proposal.embodied_entity_id):
+            raise BodyOutsideRelevance("body is following its background routine")
     if not definition.uses_randomness:
         return definition.handler(proposal, state)
     proof = allocate_randomness(run_seed, state.version + 1, proposal.command_type)

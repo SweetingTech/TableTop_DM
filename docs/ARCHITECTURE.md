@@ -498,8 +498,8 @@ physical conditions; it never reads another body's hidden cognition. Goals commi
 same world-clock handler, using the existing local movement helper and Activity execution.
 Private bounded day/goal counters measure fulfillment, not resources. Actual inventory, health,
 fatigue, work and position remain solely on the body. Fixed retry/day/need boundaries preserve
-coarse-versus-split behavior; viewer presence and population relevance do not select a different
-policy. Goal IDs/choices stay outside sensory projections.
+coarse-versus-split behavior. The same routine runs across physical relevance changes, and goal
+IDs and choices stay outside sensory projections.
 
 With `life.planning.motivated`, the trusted API composition injects an authorized input reader
 (`kernel/api/npc_goals.py`). It builds the NPC's own perception-scoped character context from
@@ -511,7 +511,7 @@ source claim, caps confidence, and derives bounded motive weights and believed-d
 `population/motivation.py` freezes these private inputs under the normal clock lock; the handler
 alone commits choices and effects. Missing authority, binding or evidence projection fails closed.
 Replay uses committed deltas rather than rereading current minds. This links subjective cognition
-to the finite physical goal menu; detailed actions and unrestricted goal invention remain E3/F work.
+to the finite physical goal menu.
 
 The DM character-card association API links an existing canonical body to a saved card without
 creating a player account or party seat. Reference locking and durable body-scoped advisory locks
@@ -535,6 +535,13 @@ boundaries inside the existing clock transaction. Deterministic phase IDs and a 
 version support replay. Physical proximity determines automatic lifecycle relevance; connection
 or camera presence is never an input. Trial copies resolve identity scope from their own branch
 and cannot bind another source. Whole-population planning and richer occupations remain separate.
+
+For an enabled routine on a bound NPC, physical relevance also selects when its explicitly
+assigned autonomous controller can submit detailed actions. The runner checks its current scene
+before policy generation. The command resolver checks it again under the same branch lock used
+for the action. Offscreen deferral only changes the controller's next poll time. The clock retains
+authority over elapsed routine work, and the NPC retains its identity, controller budget, and
+canonical body state.
 
 `population/life.py` adds an opt-in physical schedule to those same routines, under policy
 `npc-routines-1.1.0`. A bounded event loop advances all participants to shared movement, need,

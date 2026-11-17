@@ -19,6 +19,7 @@ from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from population.runtime import MEMBERS
 from tests.integration.test_world_time import clock_path, prepare
+from tests.unit.kernel.test_population_resolution import check_population_resolution
 from tests.unit.kernel.test_population_runtime_api import seed_routine
 from tests.unit.kernel.test_speech_combat_behavior import setup_scene
 from tests.unit.kernel.test_world_time import NOW, api_command
@@ -28,6 +29,15 @@ pytestmark = pytest.mark.integration
 
 def runtime_path(base):
     return f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}/population"
+
+
+def test_durable_npc_resolution_uses_live_physical_relevance(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, game = prepare(integration_stack, monkeypatch, tmp_path)
+    check_population_resolution(
+        app, game, lambda: create_app(artifact_root=tmp_path / "npc-worker"), monkeypatch
+    )
 
 
 def test_binding_rollback_retry_freeze_guards_and_source_validation(
@@ -312,7 +322,7 @@ def test_two_actual_world_workers_and_restart_do_not_reset_or_double_award_routi
         },
         "party-relevance",
     )
-    for due, raining in ((30, True), (60, False)):
+    for due, raining in ((45, True), (75, False)):
         api_command(
             admin,
             base,
@@ -361,7 +371,7 @@ def test_two_actual_world_workers_and_restart_do_not_reset_or_double_award_routi
             for process in processes:
                 process.wait(timeout=10)
 
-    first = advance_in_processes(1, 60, 2)
+    first = advance_in_processes(1, 30, 2)
     assert first["activities"][target]["progress_seconds"] == 30
     assert admin.get(member_path).get_json()["level"] == "ACTIVE"
     response = player.post(
@@ -375,8 +385,14 @@ def test_two_actual_world_workers_and_restart_do_not_reset_or_double_award_routi
         },
     )
     assert response.status_code == 200, response.get_json()
-    second = advance_in_processes(2, 90, 1)
-    assert second["activities"][target]["progress_seconds"] == 60
+    second = advance_in_processes(2, 60, 1)
+    interrupted = second["activities"][target]
+    assert interrupted["progress_seconds"] == 45
+    assert interrupted["status"] == "WAITING" and interrupted["reason"] == "RAIN"
+    assert admin.get(member_path).get_json()["level"] == "MATERIALIZED"
+    resumed = advance_in_processes(3, 90, 1)
+    assert resumed["activities"][target]["progress_seconds"] == 60
+    assert resumed["activities"][target]["activity_id"] == interrupted["activity_id"]
     assert admin.get(member_path).get_json()["level"] == "MATERIALIZED"
     response = player.post(
         "/api/v2/commands",
@@ -389,12 +405,12 @@ def test_two_actual_world_workers_and_restart_do_not_reset_or_double_award_routi
         },
     )
     assert response.status_code == 200, response.get_json()
-    third = advance_in_processes(3, 105, 1)
+    third = advance_in_processes(4, 105, 1)
     assert third["activities"][target]["progress_seconds"] == 75
     assert admin.get(member_path).get_json()["level"] == "ACTIVE"
     scene = player.get(path + "/scene").get_json()
     history = admin.get(root + "/transitions").get_json()
-    assert [item["world_step"] for item in history] == [17, 17, 17, 77, 107]
+    assert [item["world_step"] for item in history] == [17, 17, 17, 47, 107]
     visible = next(row for row in scene["perceived_entities"] if row["entity_id"] == target)
     assert visible["position"]["x"] == 1 and visible["position"]["y"] == 0
     assert (

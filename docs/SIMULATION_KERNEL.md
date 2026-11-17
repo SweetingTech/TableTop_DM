@@ -419,6 +419,11 @@ Each clock command atomically commits positions, needs, suspended work, routine 
 progress and relevance. Retrying a clock receipt cannot move a body, spend food or award attendance
 again. Travel uses the manual movement helper, a stable bounded A* route and current collision checks.
 Relevance is reconciled at actual movement boundaries even within coarse clock advances.
+The character runner and shared command resolver use that same physical rule for enabled,
+population-bound NPC routines. Detailed autonomous actions require current `ACTIVE` relevance.
+The resolver checks the current branch before executing a new action. An offscreen body follows
+its persisted routine while the controller defers its next poll without spending a step or adding
+a failure. An authorized idempotency retry resolves its original committed receipt.
 
 `tabletop.obligation.schedule` and `.cancel` use normal world management capabilities and lineage
 validation on both canonical and trial branches. Cancellation checks occurrence. Plans and obligation

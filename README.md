@@ -150,7 +150,10 @@ boundaries; returning players see inspected activity/progress in the console. A 
 transaction. Configure pause, speed, stop boundary and downtime policy through typed commands;
 see [world time and offscreen activities](docs/API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
 Population binding, finite meals, daily sleep, local travel and recurring appointments now share
-that clock. Optional [daily planning](docs/API_AND_WORKFLOWS.md#daily-goal-planning) lets NPCs choose
+that clock. A routine-bound NPC with a pinned character and an autonomous controller adds
+detailed character actions while physically relevant. Its background work continues between
+encounters, and it keeps the same controller and unfinished tasks when the party returns.
+Optional [daily planning](docs/API_AND_WORKFLOWS.md#daily-goal-planning) lets NPCs choose
 among prioritized work/rest goals with daily limits, seek shelter, recover from displacement or
 injury, and resume unfinished goals. No viewer or additional model provider is required.
 Optional [belief/persona motivation](docs/API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-goals)

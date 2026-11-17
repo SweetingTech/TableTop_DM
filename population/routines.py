@@ -241,37 +241,57 @@ def advance_routines(state: BranchState, until: int, start: int | None = None) -
             advance_body(state, key, routine, until)
 
 
-def reconcile_relevance(state: BranchState, now: int) -> None:
-    """Physical commands change state at the current simulated instant, before elapsed work."""
-    # Relevance is physical proximity, never a browser, camera, or human login.
+def routine_relevance(state: BranchState, member: dict, routine: dict) -> PopulationLevel:
+    """Resolve interaction relevance from current positions and manager overrides."""
+    if member["relevance"] != "AUTO":
+        return PopulationLevel(member["relevance"])
     bodies = state.projections.get("tabletop.entities", {})
     sensory = state.projections.get("tabletop.sensory_profiles", {})
-    for persona, member in sorted(state.projections.get(MEMBERS, {}).items()):
-        key = member["entity_id"]
-        routine = state.projections.get(ROUTINES, {}).get(key)
-        if routine is None:
+    key = member["entity_id"]
+    if int(bodies.get(key, {}).get("hp", 0)) <= 0:
+        return PopulationLevel.MATERIALIZED
+    anchors = routine["relevance_anchors"] or sorted(
+        identity for identity, row in sensory.items() if row.get("controller_actor_id")
+    )
+    origin = position(state, key)
+    for identity in anchors:
+        if identity == key or int(bodies.get(identity, {}).get("hp", 0)) <= 0:
             continue
-        anchors = routine["relevance_anchors"] or sorted(
-            identity for identity, row in sensory.items() if row.get("controller_actor_id")
-        )
-        origin = position(state, key)
-        nearby = any(
-            identity != key
-            and identity in bodies
-            and int(bodies[identity].get("hp", 0)) > 0
-            and position(state, identity)["zone_id"] == origin["zone_id"]
-            and sum(
-                (position(state, identity)[axis] - origin[axis]) ** 2 for axis in ("x", "y", "z")
-            )
+        anchor = position(state, identity)
+        if (
+            anchor["zone_id"] == origin["zone_id"]
+            and sum((anchor[axis] - origin[axis]) ** 2 for axis in ("x", "y", "z"))
             <= routine["relevance_radius"] ** 2
-            for identity in anchors
-        )
-        level = member["relevance"]
-        if level == "AUTO":
-            level = (
-                "ACTIVE" if nearby and int(bodies.get(key, {}).get("hp", 0)) > 0 else "MATERIALIZED"
+        ):
+            return PopulationLevel.ACTIVE
+    return PopulationLevel.MATERIALIZED
+
+
+def uses_offscreen_routine(state: BranchState, entity_id: uuid.UUID) -> bool:
+    key = str(entity_id)
+    body = state.projections.get("tabletop.entities", {}).get(key, {})
+    routine = state.projections.get(ROUTINES, {}).get(key)
+    if body.get("entity_type") != "NPC" or not routine or not routine["enabled"]:
+        return False
+    return any(
+        member["entity_id"] == key
+        and routine_relevance(state, member, routine) is PopulationLevel.MATERIALIZED
+        for member in state.projections.get(MEMBERS, {}).values()
+    )
+
+
+def reconcile_relevance(state: BranchState, now: int) -> None:
+    """Record the lifecycle at the same physical instant that determines action eligibility."""
+    for persona, member in sorted(state.projections.get(MEMBERS, {}).items()):
+        routine = state.projections.get(ROUTINES, {}).get(member["entity_id"])
+        if routine is not None:
+            transition(
+                state,
+                uuid.UUID(persona),
+                routine_relevance(state, member, routine),
+                now,
+                "physical_relevance",
             )
-        transition(state, uuid.UUID(persona), PopulationLevel(level), now, "physical_relevance")
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:
