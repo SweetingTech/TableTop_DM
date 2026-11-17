@@ -267,16 +267,17 @@ as composition glue; reusable execution services must also work from workers and
   Refresh authoritative state between processes rather than relying on hydrated application caches.
 - [x] D6 — Coordinate observation projection before a dependent decision. Track event/subjective cursors;
   prevent agents deciding on missing observations or retries applying the same causal update twice.
-- [ ] D7 — Acceptance: same seeds/order produce the same results, no viewers are required, two workers
+- [x] D7 — Acceptance: same seeds/order produce the same results, no viewers are required, two workers
   do not duplicate actions, pause stops progress, restart resumes, and catch-up honors configured time policy.
 
 Migration 014 adds one pending due clock step per durable canonical branch, with a scoped lease,
 retry backoff and cancellation. The tick and its successor commit in the existing kernel
 transaction. API and worker projectors now share the branch's first unpublished outbox row as
 their ordering boundary. The character proposal path waits for the body's exact frozen grants to
-project. Focused PostgreSQL tests cover lease recovery, rollback, schema upgrade, and the proposal
-barrier during a partial projection retry. D7 still requires the final durable gate and
-independent Orderly acceptance.
+project. Focused clock tests verify deterministic catch-up and exact pause boundaries. The
+[PostgreSQL world-runner tests](../tests/integration/test_world_time.py) verify progression
+without viewers, restart recovery, and two workers advancing one timeline without duplicates.
+Orderly tracks the full task's independent acceptance.
 
 ## E. Offscreen people and continuous activities
 

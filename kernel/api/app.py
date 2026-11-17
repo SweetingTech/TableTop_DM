@@ -606,8 +606,6 @@ def create_app(
             durable_control.load_projection,
             durable_control.persist_snapshot,
         )
-        if simulation.subjective_projector is not None:
-            fresh.configure_subjective_projector(simulation.subjective_projector)
         fresh.goal_input_reader = simulation.goal_input_reader
         return fresh
 

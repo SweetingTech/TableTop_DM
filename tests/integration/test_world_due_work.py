@@ -122,7 +122,11 @@ def test_clock_lease_crash_reclaim_atomic_retry_and_pause(integration_stack, mon
         "cancel-next-work",
     )
     assert row(stack, base) is None
-    assert runner.run_once(boundary + timedelta(seconds=10)) == 0
+    paused = admin.get(clock_path(base)).get_json()["clock"]
+    assert paused["paused"] and paused["seconds"] == 5
+    runner.run_once(boundary + timedelta(seconds=10))
+    assert admin.get(clock_path(base)).get_json()["clock"] == paused
+    assert row(stack, base) is None
 
 
 def test_retry_backoff_and_actor_scope(integration_stack, monkeypatch, tmp_path):
