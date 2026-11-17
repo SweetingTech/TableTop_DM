@@ -32,11 +32,13 @@ from kernel.control import ControllerState, ControlScope
 from kernel.errors import (
     BodyActionPending,
     BodyIncapacitated,
+    BodyOutsideRelevance,
     BodySleeping,
     KernelError,
     WorldClockPaused,
 )
 from persona.models import CompiledPersona
+from population.routines import uses_offscreen_routine
 
 
 class CharacterDecisionService:
@@ -86,6 +88,9 @@ class CharacterDecisionService:
             require_character_proposal_authority(source, proposal_scope, actor_id)
             if source.runs[scope.run_id].status not in {"ACTIVE", "RUNNING"}:
                 raise ValueError("character proposals require an active run")
+            branch = source.states.get(scope.branch_id)
+            if controller is not None and uses_offscreen_routine(branch, scope.entity_id):
+                raise BodyOutsideRelevance("body is following its background routine")
             minds = self.read_minds(scope, actor_id)
             scene = build_perceived_scene(
                 source,
@@ -108,14 +113,10 @@ class CharacterDecisionService:
             )
             if resolved.binding is None or resolved.profile is None:
                 raise ValueError("a pinned character binding is required")
-            body = (
-                source.states.get(scope.branch_id)
-                .projections.get("tabletop.entities", {})
-                .get(str(scope.entity_id), {})
-            )
+            body = branch.projections.get("tabletop.entities", {}).get(str(scope.entity_id), {})
             if incapacitated(body):
                 raise BodyIncapacitated("body is incapacitated")
-            if wait_seconds(source.states.get(scope.branch_id), scope.entity_id):
+            if wait_seconds(branch, scope.entity_id):
                 raise BodyActionPending("body is still completing its previous action")
             return propose_for_character(
                 scope=proposal_scope,
@@ -188,6 +189,8 @@ class CharacterRunner:
                 )
                 self.snapshot().submit(receipt.outcome.proposal)
                 committed += 1
+            except BodyOutsideRelevance:
+                self.controllers.defer(controller, None)
             except (WorldClockPaused, BodySleeping, BodyIncapacitated, BodyActionPending):
                 # Pause may win after the initial check, including during model generation.
                 # Keep epoch/step, mode and failure budget intact for clock resume.

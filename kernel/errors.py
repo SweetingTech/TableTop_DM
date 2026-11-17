@@ -22,6 +22,10 @@ class BodyActionPending(ValueError):
     """Expected shared-clock readiness wait, preserving the controller's budgets."""
 
 
+class BodyOutsideRelevance(BodyActionPending):
+    """An offscreen NPC is following its background routine."""
+
+
 class DuplicateCommand(KernelError):
     pass
 

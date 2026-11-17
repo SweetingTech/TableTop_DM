@@ -285,15 +285,16 @@ Initial D/E foundation now persists branch time and WEED/REST activities through
 commands, with a separate world-runner, explicit downtime policy, epoch/step fencing, deterministic
 weather boundaries and inspected scene/console progress. Tests cover no viewers, concurrent workers,
 restart, rollback and character/world execution on one branch. Section D adds durable clock
-leases. Richer routines and whole section E acceptance remain open.
+leases.
 See [world time and activities](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
 
 Population binding now connects materialized members to a single canonical body. Live lifecycle
 metadata is branch-local; migration 011 freezes the source rather than keeping a second mutable
 resource store. Opt-in WEED/REST/EAT routines persist hunger, fatigue, finite food consumption and
 partial work across physical relevance, lifecycle transitions and worker restart. Physical anchors
-drive automatic relevance independently of human presence. Both active and offscreen members use
-the same coarse routine. Opt-in life plans now add local home/work commutes, fixed daily sleep and
+drive automatic relevance independently of human presence. The same routine advances across both
+levels, and a bound NPC's authorized controller adds detailed actions while physically relevant.
+Opt-in life plans now add local home/work commutes, fixed daily sleep and
 joint recurring social commitments, with arrival/deadline checks and causal waits/misses. Injuries
 wake sleepers; asleep character policies retain their action budgets and humans can wake by acting.
 Opt-in daily planning now selects prioritized local work/rest goals with daily quotas, responds to
@@ -302,8 +303,9 @@ and goal fulfillment survive restart and split ticks. Optional motivation now ra
 work/rest menu using pinned CHARACTER traits and validated own beliefs. Heard importance/danger
 claims can interrupt choices without changing truth or exposing private intentions. The explicit
 NPC card association requires no player seat. Frozen inputs, effects and replay stay atomic.
-General detailed cognition-driven actions, cross-zone routes, new occupations and unrestricted goal
-generation remain open; E3 is therefore still partial.
+An offscreen NPC retains its controller budget and current work. The kernel rechecks relevance at
+commit so a prepared detailed action waits if the party leaves first.
+Cross-zone routes, additional occupations and unrestricted goal generation are future scope.
 See [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations).
 See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-goals) for setup and limits.
 
@@ -311,7 +313,7 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
   under `domains/tabletop/activities/` (proposed). Persist start/due time, progress, inputs/outputs, owner, and cause.
 - [x] E2 — Connect materialized population state to due activities and canonical entities where needed;
   statistical/materialized/active representation must not create duplicate people or resource balances.
-- [ ] E3 — Advance coarse offscreen activities from elapsed simulated time; use detailed actions when
+- [x] E3 — Advance coarse offscreen activities from elapsed simulated time; use detailed actions when
   relevant. Choose update resolution from interaction needs, not whether a human camera observes the person.
 - [x] E4 — Reconcile pending work and progress on activation/deactivation in `PopulationLifecycle`;
   neither reset activity nor award its output twice. Define how relevance is computed automatically.

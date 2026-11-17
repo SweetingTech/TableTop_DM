@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
 
 import psycopg2.extras
 
-from cognition.control import EXECUTOR_CAPABILITIES, HandoffReceipt, HandoffRequest, next_controller
+from cognition.control import (
+    EXECUTOR_CAPABILITIES,
+    HandoffReceipt,
+    HandoffRequest,
+    deferred_controller,
+    next_controller,
+)
 from kernel.control import ControllerState, ControlScope, persist_controller
 from kernel.database import transaction
 
@@ -182,7 +187,7 @@ class PostgresControllers:
                     ControllerState.model_validate(row["payload"]) for row in cursor.fetchall()
                 )
 
-    def defer(self, state: ControllerState, code: str, *, pending: bool = False) -> None:
+    def defer(self, state: ControllerState, code: str | None, *, pending: bool = False) -> None:
         with transaction(actor_id=state.executor_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
@@ -196,15 +201,4 @@ class PostgresControllers:
                     "AUTONOMOUS",
                 ):
                     return
-                failures = current.failures + 1
-                persist_controller(
-                    cursor,
-                    current.model_copy(
-                        update={
-                            "mode": "AUTONOMOUS" if pending and failures < 40 else "PAUSED",
-                            "last_error": code,
-                            "failures": failures,
-                            "next_due": datetime.now(UTC) + timedelta(milliseconds=250),
-                        }
-                    ),
-                )
+                persist_controller(cursor, deferred_controller(current, code, pending=pending))

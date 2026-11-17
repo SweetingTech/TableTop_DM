@@ -1171,7 +1171,7 @@ schedule/activity IDs and control metadata stay outside character fiction.
 
 This is a bounded activity/time foundation. General leased arbitrary due-work queues, population
 activation/deactivation reconciliation, persistent hunger/routines, travel/sleep/consumption,
-automatic detailed activity selection, weather narration and complete timeline restoration remain
+unrestricted activity planning, weather narration and complete timeline restoration remain
 open checklist work. Existing `PopulationLifecycle` records do not create a second worker/resource
 balance and are not automatically attached to this first activity vocabulary.
 
@@ -1244,8 +1244,15 @@ Relevance changes are reconciled at the start of elapsed time, using the current
 tick size and unrelated weather boundaries do not move their transition timestamps.
 Human connection and camera state are absent from the calculation. ACTIVE/MATERIALIZED changes
 use `PopulationLifecycle`, preserve mental metadata, and never recreate a body or reset its job.
-Both representations run the same coarse physical routine. Characters only see inspected physical
-activity; pool IDs, lifecycle levels, schedules and private source cognition stay operator-side.
+The same physical routine persists across relevance changes. To add detailed actions for a bound
+NPC, associate its card, pin a CHARACTER profile, and set `AUTONOMOUS` through the existing
+[controller handoff](#controller-handoff-and-runner). The character runner chooses and submits
+ordinary typed actions while the NPC is physically relevant or the manager sets it `ACTIVE`.
+Outside that window the world clock continues the background routine and the character runner
+preserves its controller budget. Current positions are checked again at commit, including when the
+party leaves after a decision was prepared. Human actions retain their existing role and body checks.
+Characters see inspected physical activity. Population IDs, lifecycle levels, schedules and private
+source cognition stay operator-side.
 
 The initial vocabulary now includes gardening, rest, meals, local travel, daily sleep and social
 attendance. Wages, tactical danger responses and a general activity planner remain incomplete.
@@ -1397,8 +1404,8 @@ showing inspected physical work, rest, sleep and travel using existing activity 
 Policy `npc-daily-planning-1.1.0` runs inside `npc-routines-1.3.0` and the existing authorized clock
 transaction; projection, effects, command/event/outbox, retries and replay remain atomic. No new
 migration, worker, provider or port is required. Without optional motivation below, this bounded
-physical planner uses authored priorities. It does not create dialogue/relationships, choose tactical combat
-responses or implement the remaining detailed cognition/scene-action planning in E3/F.
+physical planner uses authored priorities. The separate, authorized character controller handles
+bounded detailed actions when the NPC is relevant.
 
 ## Belief and persona driven NPC goals
 

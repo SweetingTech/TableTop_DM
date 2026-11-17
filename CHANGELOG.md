@@ -1,5 +1,9 @@
 # Changelog
 
+- Let population-bound NPCs use their authorized detailed character actions during physical
+  interactions. Their persistent routines continue offscreen. Recheck relevance at commit and
+  preserve the controller budget while a party is away.
+
 - Lease durable clock work in PostgreSQL, recover abandoned steps, and commit each tick and its
   successor together. Apply migration 014 before upgrading.
 - Project each branch's observations in event order across workers and retries. Human commands

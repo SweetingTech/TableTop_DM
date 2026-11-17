@@ -73,7 +73,25 @@ class ControllerRepository(Protocol):
         self, scope: ControlScope, actor_id: uuid.UUID, request: HandoffRequest
     ) -> HandoffReceipt: ...
     def due(self) -> tuple[ControllerState, ...]: ...
-    def defer(self, state: ControllerState, code: str, *, pending: bool = False) -> None: ...
+    def defer(self, state: ControllerState, code: str | None, *, pending: bool = False) -> None: ...
+
+
+def deferred_controller(
+    state: ControllerState, code: str | None, *, pending: bool
+) -> ControllerState:
+    """Reschedule a poll and record a policy failure only when one is supplied."""
+    next_due = datetime.now(UTC) + timedelta(milliseconds=250)
+    if code is None:
+        return state.model_copy(update={"next_due": next_due})
+    failures = state.failures + 1
+    return state.model_copy(
+        update={
+            "mode": "AUTONOMOUS" if pending and failures < 40 else "PAUSED",
+            "last_error": code,
+            "failures": failures,
+            "next_due": next_due,
+        }
+    )
 
 
 class InMemoryControllers:
@@ -165,7 +183,7 @@ class InMemoryControllers:
             and self.simulation.runs[row.run_id].status in {"ACTIVE", "RUNNING"}
         )
 
-    def defer(self, state: ControllerState, code: str, *, pending: bool = False) -> None:
+    def defer(self, state: ControllerState, code: str | None, *, pending: bool = False) -> None:
         def update():
             current = self.rows.get(state.key)
             if current is None or (current.epoch, current.step, current.mode) != (
@@ -174,15 +192,7 @@ class InMemoryControllers:
                 "AUTONOMOUS",
             ):
                 return
-            failures = current.failures + 1
-            changed = current.model_copy(
-                update={
-                    "mode": "AUTONOMOUS" if pending and failures < 40 else "PAUSED",
-                    "last_error": code,
-                    "failures": failures,
-                    "next_due": datetime.now(UTC) + timedelta(milliseconds=250),
-                }
-            )
+            changed = deferred_controller(current, code, pending=pending)
             self.rows[state.key] = changed
             self.simulation.controller_states[state.key] = changed
 
