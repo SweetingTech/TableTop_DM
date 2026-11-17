@@ -498,7 +498,9 @@ the user's live application database.
 offscreen-to-detailed transition through real controls and physical party movement. They check
 unattended work, an unchanged controller budget, rejection of a prepared action after departure,
 and one authorized action when the party returns. The durable case uses a fresh application
-instance and the real PostgreSQL controller store.
+instance and the real PostgreSQL controller store. The test pauses its clock and controller
+after verification so later cases sharing the test database use their own scheduled work.
+GitHub allows up to 50 minutes for the complete PostgreSQL integration lane.
 
 Life-plan coverage is in `tests/unit/population/test_life.py`,
 `tests/integration/test_population_life.py` and `tests/e2e/test_population_life_isolated.py`.

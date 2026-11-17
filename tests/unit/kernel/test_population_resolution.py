@@ -24,21 +24,25 @@ def check_population_resolution(app, game, restart, monkeypatch):
     planning = config["life"]["planning"]
     planning.update(motivated=False, goals=planning["goals"][:1])
     api_command(admin, base, "tabletop.routine.configure", config, "garden-relevance")
-    clock = admin.get(clock_path(base)).get_json()["clock"]
-    api_command(
-        admin,
-        base,
-        "tabletop.clock.configure",
-        {
-            "expected_epoch": clock["epoch"],
-            "executor_actor_id": clock["executor_actor_id"],
-            "paused": False,
-            "wall_time": NOW.isoformat(),
-            "offline_policy": "CATCH_UP",
-            "max_catch_up_ticks": 60,
-        },
-        "resume-garden",
-    )
+
+    def set_clock(*, paused, key):
+        clock = admin.get(clock_path(base)).get_json()["clock"]
+        return api_command(
+            admin,
+            base,
+            "tabletop.clock.configure",
+            {
+                "expected_epoch": clock["epoch"],
+                "executor_actor_id": clock["executor_actor_id"],
+                "paused": paused,
+                "wall_time": NOW.isoformat(),
+                "offline_policy": "CATCH_UP",
+                "max_catch_up_ticks": 60,
+            },
+            key,
+        )
+
+    set_clock(paused=False, key="resume-garden")
 
     def move_party(dx, key):
         return api_command(
@@ -120,7 +124,19 @@ def check_population_resolution(app, game, restart, monkeypatch):
     assert runner.snapshot().submit(decision.outcome.proposal).result.accepted
     assert runner.snapshot().states.get(branch).state_hash == committed
     assert runner.run_once() == 0
-    assert current_control().step == 1
+    finished = current_control()
+    assert finished.step == 1
+    stopped = admin.post(
+        npc_path + "/control",
+        json={
+            "run_id": run,
+            "mode": "PAUSED",
+            "expected_epoch": finished.epoch,
+            "idempotency_key": "pause-garden-controller",
+        },
+    )
+    assert stopped.status_code == 200, stopped.get_json()
+    set_clock(paused=True, key="pause-garden-clock")
 
 
 def test_offscreen_routine_yields_to_detailed_actions_when_party_returns(monkeypatch, tmp_path):
