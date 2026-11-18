@@ -340,10 +340,13 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
   Recovery plans record withdrawal, healing, needs, and cooldown in private receipts. Each
   decision rechecks the scene and continues only from the preceding accepted command. PostgreSQL
   verification restarts the worker between steps.
-- [ ] F3 — Implement injected model providers behind [DeliberationProvider](../cognition/deliberation.py).
-  Wire the API and worker composition; the current API passes no provider even for model runtime assignments.
-- [ ] F4 — Add timeout/retry, usage accounting, context limits, provider configuration, recorded
+- [x] F3 — Implement injected model providers behind [DeliberationProvider](../cognition/deliberation.py).
+  Wire the API and worker composition. The operator may opt in to an OpenAI-compatible model.
+  Its action choices use the existing typed allowance and normal command authority.
+- [x] F4 — Add timeout/retry, usage accounting, context limits, provider configuration, recorded
   model/prompt versions, and deterministic fallback. Keep credentials server-side and out of traces.
+  Verify a bounded retry, stable fallback, recorded request usage and concurrent world progress
+  through loopback and durable runner tests.
 - [ ] F5 — Add character dialogue generation and response scheduling. Actual speech still enters
   `tabletop.dialogue.speak`, with language/volume/perception and normal causal provenance.
 - [ ] F6 — Add narration derived from committed facts with separate operator, spectator, and character

@@ -10,6 +10,11 @@ exercise injury relief, a pursuing attacker and cooldown. The PostgreSQL case re
 between a committed withdrawal and MEND, verifies the predecessor command and rejects a receipt
 lookup for another body.
 
+Decisions with a configured model are tested through a loopback Chat Completions fixture and the
+durable runner. The tests cover scoped action selection, matching evaluation runtime, reported
+usage, bounded retry, context rejection, deterministic fallback, and one receipt per proposal key.
+A real PostgreSQL command commits while a fixture provider is waiting.
+
 The world-time and population tests exercise activity due times at start, during rain, after
 resumption, and at completion. They verify that a finished meal charges food once, preserves
 the same activity record after replacement, and survives a PostgreSQL restart and a command

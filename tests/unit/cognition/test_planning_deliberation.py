@@ -93,4 +93,5 @@ def test_typed_deliberation_accepts_allowed_proposal_and_rejects_disallowed_one(
     assert valid.model_version == "test-model-1"
     assert rejected.used_model is False
     assert rejected.response.action == "FLEE"
-    assert rejected.fallback_reason == "model_selected_disallowed_action:MUTATE_WORLD"
+    assert rejected.fallback_reason == "model_selected_disallowed_action"
+    assert rejected.provider_attempts == 1

@@ -15,9 +15,11 @@ from cognition.character_plans import CharacterPlan, PlanSelection
 from cognition.choices import ChoiceProfile, weighted_choices
 from cognition.context import CharacterContext, require_projected_experience
 from cognition.context import CharacterContextPending as CharacterContextPending
+from cognition.deliberation import DeliberationProvider
 from cognition.dialogue_generation import DialogueProvider, DialogueReceipt, generate_dialogue
 from cognition.engine import DecisionOutcome, DecisionRequest, LayeredDecisionEngine
 from cognition.models import Observation
+from cognition.openai_compatible import DELIBERATION_PROMPT
 from cognition.store import MindStore
 from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import CharacterBinding
@@ -204,6 +206,8 @@ def propose_for_character(
     choices: ChoiceProfile | None = None,
     dialogue_provider: DialogueProvider | None = None,
     plan: PlanSelection | None = None,
+    deliberation_provider: DeliberationProvider | None = None,
+    deliberation_kind: Literal["LOCAL_LLM", "HOSTED_LLM"] = "HOSTED_LLM",
 ) -> CharacterProposalReceipt:
     if (
         binding.scope != scope.key
@@ -235,21 +239,28 @@ def propose_for_character(
     )
     if plan is not None and plan.allowed_actions:
         actions = tuple(action for action in actions if action.action in plan.allowed_actions)
-    outcome = (engine or LayeredDecisionEngine()).decide(
-        DecisionRequest(
-            persona=profile,
-            world_id=scope.world_id,
-            branch_id=scope.branch_id,
-            run_id=scope.run_id,
-            actor_id=actor_id,
-            embodied_entity_id=scope.entity_id,
-            seed=seed,
-            idempotency_key="character-proposal:" + str(decision_id),
-            situation=context.situation(),
-            actions=actions,
-            allow_llm=False,
-            utility_margin=0,
-        )
+    use_deliberation = deliberation_provider is not None and not (plan and plan.allowed_actions)
+    request = DecisionRequest(
+        persona=profile,
+        world_id=scope.world_id,
+        branch_id=scope.branch_id,
+        run_id=scope.run_id,
+        actor_id=actor_id,
+        embodied_entity_id=scope.entity_id,
+        seed=seed,
+        idempotency_key="character-proposal:" + str(decision_id),
+        situation=context.situation(),
+        actions=actions,
+        allow_llm=use_deliberation,
+        utility_margin=0.15 if use_deliberation else 0,
+        llm_runtime_kind=deliberation_kind,
+        prompt_contract_version=DELIBERATION_PROMPT,
+    )
+    decision_engine = engine or LayeredDecisionEngine()
+    outcome = (
+        decision_engine.decide(request, provider=deliberation_provider)
+        if use_deliberation
+        else decision_engine.decide(request)
     )
     dialogue = None
     if dialogue_provider is not None and outcome.proposal.command_type == "tabletop.dialogue.speak":
