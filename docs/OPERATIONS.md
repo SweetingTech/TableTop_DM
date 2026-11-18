@@ -448,6 +448,10 @@ Apply migration 015 before enabling the scoped narration routes on a durable sta
 entries use the existing PostgreSQL runtime role and are append-only. Existing projector lag can
 delay character and spectator lines until their masked observations reach storage.
 
+Before resuming a paused character, inspect its controller `last_error`. Recovery pause codes
+identify repeated backtracking, ineffective melee, or an exhausted reply chain. An explicit
+handoff starts a new controller epoch under the existing action budget.
+
 Generated dialogue is off by default. To activate it, choose the endpoint/model and compatibility
 settings in [.env.example](../.env.example); see [the workflow](API_AND_WORKFLOWS.md#generated-dialogue-and-tactical-choices).
 API and runner must share configuration. The provider key remains server-only; there is no implicit

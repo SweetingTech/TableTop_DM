@@ -21,6 +21,11 @@ Narration is derived after commit. Each line identifies the world, branch, run, 
 and, for embodied views, the matching masked observation. Creating or reading a line leaves
 canonical state, character knowledge, and replay unchanged.
 
+Recovery reads the existing committed action ledger. It recognizes only contiguous successful
+controller steps in the same actor, run, body, and epoch. Speech recovery follows causal links
+only through speech in the current body's validated observation window. Recovery changes eligible
+proposals and private controller status through the existing fenced workflow.
+
 Clock leases and retry delays are operational metadata outside replay state. The repository
 locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
 The ledger redacts lease tokens. An idempotent retry returns the original receipt before

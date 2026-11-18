@@ -932,6 +932,21 @@ Runtime GET reads durable assignments fresh and adds controller metadata for man
 Handoff atomically selects HUMAN or UTILITY while preserving runtime configuration. Legacy runtime
 PUT cannot bypass explicit handoff for a managed body.
 
+### Bounded character recovery
+
+Autonomous decision policy `character-proposal-policy-1.5.0` checks the body's recent committed
+actions in the current controller epoch. After four alternating visits to the same two cells in
+one zone, it skips another step into that cycle. After three zero-damage strikes against the
+same perceived threat, it skips that melee target for the next choice. After four witnessed
+speech events in a same-run causal chain, it skips a fifth reply. A new chain can start from a
+later independent line.
+
+The decision engine scores the remaining choices with the same persona, history, and active
+plan. Authorized private proposal receipts include `recovery.reasons` and
+`recovery.skipped_actions`. If the plan has no eligible recovery, controller inspection reports
+`PAUSED` and one of `no_movement_progress`, `repeated_ineffective_attack`, or `conversation_loop`
+in `control.last_error`. A normal explicit handoff starts a new recovery window.
+
 ## Movement behavior profiles
 
 `GET /api/v2/worlds/{world}/branches/{branch}/entities/{body}/behavior-profile?run_id={run}`

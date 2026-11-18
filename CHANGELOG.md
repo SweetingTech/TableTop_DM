@@ -1,5 +1,7 @@
 # Changelog
 
+- Bound stalled character decisions using committed movement, ineffective strikes, and witnessed
+  speech chains. Record attempted recovery privately and pause when the current plan has no option.
 - Add operator, spectator, and character narration from committed events. Migration 015
   retains each line with its source and enforces actor-scoped access across restart.
 - Rebuild a character's decision after a committed world change invalidates a queued action.

@@ -20,6 +20,8 @@ on their card, backstory, and observed play history.
   to heal. The worker resumes the plan from committed actions after restart.
 - Unattended characters can respond to speech they heard. The resulting line links to the
   original utterance in the event log.
+- Character runners can change course after repeated ineffective strikes, back-and-forth
+  movement, or a long chain of replies. An unavailable recovery pauses the controller.
 - The narration API offers an operator's account, a spectator's visual account, and a
   character's own experience. Each line links to the committed event it describes.
 - The world clock advances work, meals, rest, commutes, and appointments while the party is

@@ -222,6 +222,11 @@ uses selected facts from the event ledger. Spectator and character narration use
 masked observation and frozen perception grant. The append-only presentation store retains
 actor, audience, run, and source lineage. Its text never enters replay or character cognition.
 
+Autonomous recovery derives from committed commands in the current controller epoch and the
+character's witnessed speech lineage. It narrows the current plan's candidates before local
+or model-assisted selection. The controller reports a pause when every candidate repeats the
+stall, and accepted recovery decisions retain private evidence of which choices were skipped.
+
 Generated dialogue is an optional expression layer after deterministic intent selection. An
 injected provider receives sanitized identity and sourced subjective experience, never simulation
 authority or profile/controller metadata. Its typed text/source response replaces only speech

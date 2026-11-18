@@ -355,8 +355,11 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
   scopes. Persist source event references; generated prose must not create uncommitted world facts.
   The narration API renders selected physical facts and preserves source event and viewpoint
   observation lineage across restart. Actors can retrieve their own entries with current authority.
-- [ ] F7 — Detect repeated actions, conversation loops, and lack of progress; apply bounded recovery
+- [x] F7 — Detect repeated actions, conversation loops, and lack of progress; apply bounded recovery
   policies, preserve motive consistency, and expose failures to the operator.
+  Recovery filters zero-damage repeat attacks, repeated physical backtracking, and overlong
+  grounded reply chains. The model sees eligible alternatives from the same plan. An exhausted
+  plan records a private controller pause reason.
 - [ ] F8 — Acceptance: small cast pursues goals, converses, responds to interruptions, and reaches a
   consequential stopping condition without manual API calls; provider outage does not corrupt or endlessly spin the run.
 
