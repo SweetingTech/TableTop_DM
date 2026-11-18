@@ -5,6 +5,11 @@ a queued self-heal invalid. They check that the runner rebuilds context, rejects
 and commits one replacement. The PostgreSQL test restarts the worker between attempts and checks
 the command and event ledger for duplicates.
 
+`test_character_plans.py` covers recovery planning in both verification lanes. The unit cases
+exercise injury relief, a pursuing attacker and cooldown. The PostgreSQL case restarts the worker
+between a committed withdrawal and MEND, verifies the predecessor command and rejects a receipt
+lookup for another body.
+
 The world-time and population tests exercise activity due times at start, during rain, after
 resumption, and at completion. They verify that a finished meal charges food once, preserves
 the same activity record after replacement, and survives a PostgreSQL restart and a command

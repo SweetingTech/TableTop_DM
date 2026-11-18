@@ -5,6 +5,10 @@ controller failure count to fence rejected attempts and resume replanning after 
 schema migration is required. Inspect the private controller status for `action_invalidated`,
 `action_failed`, or `step_limit` when a character stops.
 
+The worker restores personal recovery plans from existing private proposal receipts and committed
+command records. A restart uses the same controller epoch and due time. Preserve those records
+with the branch and mind stores when restoring a durable campaign.
+
 Apply migration 014 before starting the updated application and world runner. It backfills due
 work for running canonical clocks. The worker leases steps for 30 seconds on database time and
 uses exponential retry delays capped at 60 seconds. Current world grants restrict queue access

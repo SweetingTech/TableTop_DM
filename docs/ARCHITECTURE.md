@@ -18,6 +18,11 @@ its proposal. It starts a new private attempt at the same controller epoch and s
 and durable submission validate that attempt under the branch lock, so delayed workers cannot
 commit a superseded proposal. A rejected attempt publishes no world event or evidence.
 
+Character plans live in private decision receipts. The runner continues a plan only after it
+finds an accepted predecessor command in the same world, branch, run, body, controller epoch,
+and pinned binding. Fresh perception and the body's own needs determine the next available
+action. The controller's existing due time schedules the next check.
+
 Durable private-receipt presentation uses the existing `sim.has_world_capability` function in an
 actor-scoped transaction. This bounded read observes current exact-world grants without hydrating
 all world state or trusting the API's cached authority. A separate-process DM revocation applies

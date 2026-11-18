@@ -5,6 +5,10 @@ same lock as command resolution. A handler's rejection records the evaluated rev
 runner. Only a newer revision permits replanning at the same step. Committed idempotent receipts
 remain available after the controller has advanced.
 
+Personal plan progress derives from the accepted command ledger and its linked private decision
+receipt. A step still executes through the ordinary typed command and its current physical
+preconditions. The plan receipt records intent, needs, and provenance for the next decision.
+
 Clock leases and retry delays are operational metadata outside replay state. The repository
 locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
 The ledger redacts lease tokens. An idempotent retry returns the original receipt before

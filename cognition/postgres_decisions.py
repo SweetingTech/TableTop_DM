@@ -15,6 +15,19 @@ class PostgresCharacterProposals:
     def __init__(self, dsn: str) -> None:
         self.dsn = dsn
 
+    def find_decision(
+        self, scope: CharacterProposalScope, actor_id: uuid.UUID, decision_id: uuid.UUID
+    ) -> CharacterProposalReceipt | None:
+        with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT payload FROM cognition.character_proposal_receipts "
+                    "WHERE (world_id,branch_id,run_id,entity_id,actor_id,decision_id)=(%s,%s,%s,%s,%s,%s)",
+                    (*map(str, scope.key), str(actor_id), str(decision_id)),
+                )
+                row = cursor.fetchone()
+                return CharacterProposalReceipt.model_validate(row["payload"]) if row else None
+
     def get_or_create(
         self,
         scope: CharacterProposalScope,

@@ -16,6 +16,7 @@ from cognition.character_decisions import (
     require_character_proposal_authority,
     require_projected_character_experience,
 )
+from cognition.character_plans import CharacterPlan, select_character_plan
 from cognition.choices import ChoiceProfile
 from cognition.context import CharacterContext
 from cognition.control import REPLAN_LIMIT, ControllerRepository
@@ -75,6 +76,41 @@ class CharacterDecisionService:
         self.choice_reader = choice_reader
         self.dialogue_provider = dialogue_provider
 
+    def _previous_plan(
+        self,
+        source: SimulationApplication,
+        controller: ControllerState,
+        scope: CharacterProposalScope,
+        binding: CharacterBinding,
+    ) -> tuple[CharacterPlan, uuid.UUID] | None:
+        if controller.step == 0:
+            return None
+        for record in reversed(source.command_history.get(controller.branch_id, [])):
+            command = record.proposal
+            if (
+                command.world_id == controller.world_id
+                and command.run_id == controller.run_id
+                and command.actor_id == controller.executor_actor_id
+                and command.embodied_entity_id == controller.entity_id
+                and command.decision_authorship == "CHARACTER_POLICY"
+                and command.control_epoch == controller.epoch
+                and command.control_step == controller.step - 1
+                and command.decision_trace_id is not None
+                and record.result.accepted
+            ):
+                prior = self.proposals.find_decision(
+                    scope, controller.executor_actor_id, command.decision_trace_id
+                )
+                if (
+                    prior is not None
+                    and prior.binding_id == binding.binding_id
+                    and prior.outcome.proposal.command_id == command.command_id
+                    and prior.plan is not None
+                ):
+                    return prior.plan, command.command_id
+                break
+        return None
+
     def decide(
         self,
         scope: ControlScope,
@@ -119,6 +155,19 @@ class CharacterDecisionService:
                 raise BodyIncapacitated("body is incapacitated")
             if wait_seconds(branch, scope.entity_id):
                 raise BodyActionPending("body is still completing its previous action")
+            plan = (
+                select_character_plan(
+                    resolved.context,
+                    controller,
+                    hunger=max(0, int(body.get("hunger", 0))),
+                    fatigue=max(0, int(body.get("fatigue", 0))),
+                    previous=self._previous_plan(
+                        source, controller, proposal_scope, resolved.binding
+                    ),
+                )
+                if controller is not None
+                else None
+            )
             return propose_for_character(
                 scope=proposal_scope,
                 actor_id=actor_id,
@@ -129,6 +178,7 @@ class CharacterDecisionService:
                 profile=resolved.profile,
                 controller=controller,
                 dialogue_provider=self.dialogue_provider,
+                plan=plan,
                 human_epoch=source.controller_states[scope.key].epoch
                 if scope.key in source.controller_states
                 else None,
