@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cognition.behavior import BehaviorProfile, weighted_actions
 from cognition.character_plans import CharacterPlan, PlanSelection
+from cognition.choice_state import cadence_line
 from cognition.choices import ChoiceProfile, weighted_choices
 from cognition.context import CharacterContext, require_projected_experience
 from cognition.context import CharacterContextPending as CharacterContextPending
@@ -31,7 +32,7 @@ from kernel.control import ControllerState
 from kernel.state import stable_hash
 from persona.models import CompiledPersona, PersonaPurpose
 
-PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.6.0"
+PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.7.0"
 
 
 class CharacterProposalScope(BaseModel):
@@ -306,6 +307,21 @@ def propose_for_character(
                 )
             }
         )
+    cadence = choices.speech_cadence if choices is not None else None
+    if cadence is not None and outcome.proposal.command_type == "tabletop.dialogue.speak":
+        parameters = outcome.proposal.parameters
+        outcome = outcome.model_copy(
+            update={
+                "proposal": outcome.proposal.model_copy(
+                    update={
+                        "parameters": {
+                            **parameters,
+                            "text": cadence_line(parameters["text"], cadence),
+                        }
+                    }
+                )
+            }
+        )
     dialogue = None
     if dialogue_provider is not None and outcome.proposal.command_type == "tabletop.dialogue.speak":
         text, dialogue = generate_dialogue(
@@ -315,6 +331,7 @@ def propose_for_character(
             seed,
             dialogue_provider,
             reply_event_id=scheduled.source_event_id if scheduled is not None else None,
+            cadence=cadence,
         )
         proposed = outcome.proposal.model_copy(
             update={"parameters": {**outcome.proposal.parameters, "text": text, "claims": []}}

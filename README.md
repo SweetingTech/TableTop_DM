@@ -40,6 +40,9 @@ Apply migration 015 for [retained narration](docs/API_AND_WORKFLOWS.md#scoped-na
 Apply migration 016 for [private decision origins](docs/API_AND_WORKFLOWS.md#controller-handoff-and-runner).
 The ledger distinguishes human choices, operator actions, accepted advice, stand-in actions,
 and NPC decisions. Characters still act on their own perception.
+Apply migration 017 to retain how brief or elaborate a player's comparable replies tend to be.
+The stand-in uses that cadence in grounded replies, including when the configured provider is
+unavailable.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

@@ -1060,13 +1060,18 @@ receipt records its source observation and due time. The committed `tabletop.dia
 links to the originating utterance and continues its correlation. A character's own committed
 speech consumes the pending reply. Workers reconstruct this from stored experience after restart.
 
-Prompt `character-dialogue-1.2.0` supplies an anonymous reference to the exact utterance being
+Prompt `character-dialogue-1.3.0` supplies an anonymous reference to the exact utterance being
 answered. Generated replies cite that experience and use the ordinary speech command and frozen
 hearing rules. When generation is unavailable, the local speech choice uses the same reply lineage.
 
+Migration 017 adds private cadence to comparable human speech evidence. At least two matching
+replies and a strict majority can establish brief, balanced, or elaborate cadence. The private
+choice profile retains the supporting event IDs. A provider receives the cadence category with the
+selected intent and volume. Replies outside that cadence use the corresponding local line.
+
 Context `character-context-1.6.0` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
-`tabletop-character-actions-1.3.0` and proposal policy `character-proposal-policy-1.4.0` offer:
+`tabletop-character-actions-1.4.0` and proposal policy `character-proposal-policy-1.7.0` offer:
 
 - `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next
   physical attack; that attempt consumes the guard, including a miss. Guards do not stack.

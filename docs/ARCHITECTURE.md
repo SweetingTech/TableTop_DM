@@ -2,6 +2,11 @@
 
 ## System shape
 
+Comparable human speech evidence records a bounded cadence category with the accepted source event.
+The private choice profile uses a majority of comparable replies and pins the supporting events in
+the decision receipt. The dialogue provider receives the style category along with the scoped
+fiction and policy-selected intent. The typed speech command carries the resulting utterance.
+
 Decision origin is private command provenance. The HTTP boundary derives human input, accepted
 advice, or operator origin. The runner uses the player body type and its world-scoped human
 controller to identify stand-ins, and the private trace to distinguish NPC policy from model

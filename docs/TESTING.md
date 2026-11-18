@@ -1,5 +1,10 @@
 # Testing
 
+Cadence cases demonstrate short and elaborate human replies, verify the exact supporting event
+IDs, and check that autonomous speech keeps the learned intent and volume. PostgreSQL replay of
+the choice profile after restart retains the same cadence. Loopback provider cases check the
+request and exercise both a valid generated reply and a fallback for a mismatched length.
+
 Decision-origin verification checks manual choices, operator commands, separate stand-in
 authority, and NPC policy and model labels. PostgreSQL tests inspect the committed command and
 model trace after separate worker execution. The existing character experience tests check the

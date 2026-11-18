@@ -52,6 +52,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("014_world_due_work.sql",),
             ("015_scoped_narration.sql",),
             ("016_decision_origins.sql",),
+            ("017_speech_cadence_evidence.sql",),
         ]
         cursor.execute(
             """

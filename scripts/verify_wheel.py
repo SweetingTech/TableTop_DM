@@ -33,6 +33,7 @@ REQUIRED_MEMBERS = (
     "infra/sql/migrations/014_world_due_work.sql",
     "infra/sql/migrations/015_scoped_narration.sql",
     "infra/sql/migrations/016_decision_origins.sql",
+    "infra/sql/migrations/017_speech_cadence_evidence.sql",
     "static/v2/index.html",
 )
 
@@ -93,6 +94,7 @@ require([item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "014_world_due_work.sql",
     "015_scoped_narration.sql",
     "016_decision_origins.sql",
+    "017_speech_cadence_evidence.sql",
 ], "wheel migration discovery differs from the runtime contract")
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

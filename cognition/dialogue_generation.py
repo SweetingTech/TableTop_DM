@@ -8,12 +8,12 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from cognition.choice_state import speech_intent
+from cognition.choice_state import SpeechCadence, speech_cadence, speech_intent
 from cognition.context import CharacterContext, experience_summary
 from cognition.knowledge import search_known_lore
 from kernel.state import stable_hash
 
-PROMPT_VERSION = "character-dialogue-1.2.0"
+PROMPT_VERSION = "character-dialogue-1.3.0"
 _META = re.compile(
     r"\b(simulation|simulated|npc|ai|prompt|controller|stand-in|player|"
     r"timeline|rewind|language model|software|developer|system prompt|"
@@ -30,6 +30,7 @@ class DialogueRequest(BaseModel):
     intent: str
     volume: str
     language: str = "common"
+    cadence: SpeechCadence | None = Field(default=None, exclude_if=lambda v: v is None)
     reply_to: str | None = None
     experiences: tuple[dict[str, str], ...]
     nearby: tuple[dict, ...]
@@ -72,6 +73,7 @@ def generate_dialogue(
     provider: DialogueProvider,
     *,
     reply_event_id: uuid.UUID | None = None,
+    cadence: SpeechCadence | None = None,
 ) -> tuple[str, DialogueReceipt]:
     fallback = parameters["text"]
     experiences: list[dict[str, str]] = []
@@ -146,6 +148,7 @@ def generate_dialogue(
         intent=speech_intent(fallback),
         volume=parameters.get("volume", "NORMAL"),
         language=parameters.get("language", "common"),
+        cadence=cadence,
         reply_to=incoming_reference,
         experiences=tuple(experiences),
         nearby=tuple(
@@ -176,6 +179,7 @@ def generate_dialogue(
                 or not fiction(text)
                 or text.casefold() in own_lines
                 or any(marker in text for marker in ("\n", "```", "<script", "*"))
+                or (cadence is not None and speech_cadence(text) != cadence)
             ):
                 raise ValueError("invalid utterance")
             return text, DialogueReceipt(

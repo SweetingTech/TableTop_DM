@@ -1,5 +1,7 @@
 # Changelog
 
+- Learn a private speech cadence from comparable committed human replies. Use it with a
+  configured dialogue provider and deterministic fallback. Migration 017 preserves older evidence.
 - Record private stand-in, NPC policy, and NPC model decision origins through the existing
   controller workflow. Migration 016 preserves previous classifications and human-history rules.
 - Bound stalled character decisions using committed movement, ineffective strikes, and witnessed
