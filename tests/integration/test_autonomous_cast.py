@@ -163,6 +163,12 @@ def test_cast_talks_recovers_and_resumes_work_without_manual_actions(
                     assert all(worker.poll() is None for worker in workers)
                     snapshot = admin.get(clock_url).get_json()
                     states = [control(client, path, run) for client, path in cast]
+                    unexpected = [
+                        (row["step"], row["last_error"], row["failures"])
+                        for row in states
+                        if row["mode"] == "PAUSED" and row["last_error"] != "step_limit"
+                    ]
+                    assert not unexpected, unexpected
                     if snapshot["clock"]["paused"] and all(
                         row["mode"] == "PAUSED" for row in states
                     ):
@@ -178,7 +184,7 @@ def test_cast_talks_recovers_and_resumes_work_without_manual_actions(
         assert 1 <= len(requests) <= (1 if provider_status == 200 else 2)
 
     assert snapshot["clock"]["seconds"] == HORIZON
-    assert [row["step"] for row in states] == [2, 2]
+    assert [row["step"] for row in states] == [2, 2], states
     assert all(row["last_error"] == "step_limit" and row["failures"] == 0 for row in states)
     assert health(wounded, wound_path, card["entity_id"]) > hurt
     activity = snapshot["activities"][gardener]

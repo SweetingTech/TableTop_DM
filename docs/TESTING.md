@@ -257,6 +257,8 @@ The [Section F unattended cast verification](verification/section-f/acceptance.m
 production projector, character runner, and world runner against isolated PostgreSQL. It requires
 no external model account. A local OpenAI-compatible fixture returns grounded dialogue or HTTP
 503, and both scenarios must reach the same clock boundary with stable consequences on restart.
+The proposal concurrency regression forces a paused clock advance to hold the branch while
+proposal persistence acquires the run lock. Both receipts must commit and remain readable.
 
 Generated-dialogue tests use a local OpenAI-compatible HTTP fixture, never a real provider/key.
 They exercise the actual API/runner, multiple turns, sanitized subjective input, unknown sources,

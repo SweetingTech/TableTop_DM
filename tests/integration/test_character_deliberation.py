@@ -7,10 +7,65 @@ import psycopg2
 import pytest
 
 from cognition.deliberation import ModelUsage, ProviderCompletion
+from cognition.postgres_decisions import PostgresCharacterProposals
+from kernel import postgres_repository
 from kernel.api.app import create_app
 from tests.integration.test_controller_runner import setup
+from tests.integration.test_world_time import prepare as prepare_clock
+from tests.unit.kernel.test_world_time import api_command
 
 pytestmark = pytest.mark.integration
+
+
+def test_proposal_persistence_and_clock_ledger_can_share_a_run(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("TTDM_DELIBERATION_MODE", "off")
+    _, (admin, player, _, path, run, _, base) = prepare_clock(
+        isolated_integration_stack, monkeypatch, tmp_path
+    )
+    clock_has_branch = threading.Event()
+    proposal_has_run = threading.Event()
+    original_resolve = postgres_repository.resolve_command
+    original_scope = PostgresCharacterProposals._require_scope
+
+    def resolve_command(definition, proposal, state, **options):
+        if proposal.command_type == "tabletop.clock.advance":
+            clock_has_branch.set()
+            assert proposal_has_run.wait(8)
+        return original_resolve(definition, proposal, state, **options)
+
+    def require_scope(cursor, scope, *, lock_run=False):
+        original_scope(cursor, scope, lock_run=lock_run)
+        if lock_run:
+            proposal_has_run.set()
+
+    monkeypatch.setattr(postgres_repository, "resolve_command", resolve_command)
+    monkeypatch.setattr(PostgresCharacterProposals, "_require_scope", staticmethod(require_scope))
+
+    def advance():
+        return api_command(
+            admin,
+            base,
+            "tabletop.clock.advance",
+            {"expected_epoch": 1, "expected_seconds": 0, "to_seconds": 1},
+            "clock-and-proposal-locks",
+        )
+
+    def advise():
+        return player.post(
+            path + "/character-proposals", json={"run_id": run, "idempotency_key": "racing-clock"}
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        world = pool.submit(advance)
+        assert clock_has_branch.wait(8)
+        decision = pool.submit(advise)
+        clock_receipt = world.result(timeout=12)
+        advisory = decision.result(timeout=12)
+        assert advisory.status_code == 200, advisory.get_json()
+    assert clock_receipt["event"]["payload"]["seconds"] == 1
+    assert advise().get_json()["decision_id"] == advisory.get_json()["decision_id"]
 
 
 def handoff(player, path, run):

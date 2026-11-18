@@ -56,7 +56,7 @@ class PostgresCharacterProposals:
               AND (e.controller_actor_id=sim.current_actor_id()
                    OR sim.runtime_controls_entity(e.world_id,e.branch_id,e.id)))
             """
-            + ("FOR UPDATE" if lock_run else ""),
+            + ("FOR NO KEY UPDATE OF r" if lock_run else ""),
             tuple(map(str, scope.key)),
         )
         if cursor.fetchone() is None:
@@ -93,7 +93,7 @@ class PostgresCharacterProposals:
                     key,
                 ):
                     raise ValueError("character proposal receipt scope differs from its request")
-                # Recheck live authority and binding under the same lock order as the binding writer.
+                # Serialize binding changes while allowing branch writers to reference the run key.
                 self._require_scope(cursor, scope, lock_run=True)
                 cursor.execute(
                     "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
