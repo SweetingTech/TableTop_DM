@@ -18,6 +18,7 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
+from cognition import postgres_control
 from cognition.projector import WorldEventProjector
 from infra.migrate import discover, migrate
 from kernel.api.app import create_app
@@ -124,6 +125,34 @@ def test_durable_presence_restart_and_competing_timeout_workers(
             (run,),
         )
         assert cursor.fetchall() == [(str(state.executor_actor_id),)]
+
+
+def test_rejected_presence_timeout_does_not_starve_another_world(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(postgres_control, "PRESENCE_BATCH_LIMIT", 1)
+    _, (_, first_player, _, _, first_path, first_run, _) = setup(
+        isolated_integration_stack, monkeypatch, tmp_path
+    )
+    first = enable_disconnect_policy(first_player, first_path, first_run)
+    app, (_, second_player, _, _, second_path, second_run, _) = setup(
+        isolated_integration_stack, monkeypatch, tmp_path
+    )
+    second = enable_disconnect_policy(second_player, second_path, second_run)
+    assert first.presence_deadline_at < second.presence_deadline_at
+    with psycopg2.connect(isolated_integration_stack.admin_url) as conn, conn.cursor() as cursor:
+        cursor.execute(
+            "DELETE FROM sim.actor_capabilities WHERE (world_id,actor_id,capability)=(%s,%s,%s)",
+            (str(first.world_id), str(first.owner_actor_id), "entity.act"),
+        )
+
+    controllers = app.extensions["controllers"]
+    controllers.expire_disconnected(second.presence_deadline_at)
+    assert controllers.get(first.scope, first.owner_actor_id).mode == "HUMAN"
+    assert controllers.get(second.scope, second.owner_actor_id).mode == "HUMAN"
+    controllers.expire_disconnected(second.presence_deadline_at)
+    assert controllers.get(first.scope, first.owner_actor_id).mode == "HUMAN"
+    assert controllers.get(second.scope, second.owner_actor_id).mode == "AUTONOMOUS"
 
 
 def test_durable_handoff_unattended_commit_restart_and_takeover(

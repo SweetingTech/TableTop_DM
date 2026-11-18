@@ -20,10 +20,13 @@ from cognition.control import (
 from kernel.control import ControllerState, ControlScope, persist_controller
 from kernel.database import transaction
 
+PRESENCE_BATCH_LIMIT = 32
+
 
 class PostgresControllers:
     def __init__(self, dsn: str, machine_actor_id: uuid.UUID) -> None:
         self.dsn, self.machine_actor_id = dsn, machine_actor_id
+        self._last_presence_scan: tuple[datetime, str, str, str, str] | None = None
 
     @staticmethod
     def _owner(cursor, scope: ControlScope, actor_id: uuid.UUID) -> uuid.UUID:
@@ -240,6 +243,8 @@ class PostgresControllers:
                 return state
 
     def expire_disconnected(self, now: datetime) -> None:
+        # Start after the last scanned row and wrap, even when a handoff is rejected.
+        after = self._last_presence_scan or (None, None, None, None, None)
         with transaction(actor_id=self.machine_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
@@ -248,11 +253,26 @@ class PostgresControllers:
                     WHERE c.payload->>'mode'='HUMAN'
                       AND (c.payload->>'presence_deadline_at')::timestamptz<=%s
                       AND r.status IN ('ACTIVE','RUNNING')
-                    ORDER BY (c.payload->>'presence_deadline_at')::timestamptz,
-                             c.world_id,c.branch_id,c.run_id,c.entity_id LIMIT 32""",
-                    (now,),
+                    ORDER BY (
+                      ((c.payload->>'presence_deadline_at')::timestamptz,
+                       c.world_id,c.branch_id,c.run_id,c.entity_id)
+                      <= (%s::timestamptz,%s::uuid,%s::uuid,%s::uuid,%s::uuid)
+                    ), (c.payload->>'presence_deadline_at')::timestamptz,
+                             c.world_id,c.branch_id,c.run_id,c.entity_id LIMIT %s""",
+                    (now, *after, PRESENCE_BATCH_LIMIT),
                 )
                 expired = tuple(ControllerState.model_validate(row["payload"]) for row in cursor)
+        if expired and (deadline := expired[-1].presence_deadline_at) is not None:
+            last = expired[-1]
+            self._last_presence_scan = (
+                deadline,
+                str(last.world_id),
+                str(last.branch_id),
+                str(last.run_id),
+                str(last.entity_id),
+            )
+        else:
+            self._last_presence_scan = None
         for state in expired:
             try:
                 self._handoff(
