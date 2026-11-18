@@ -316,6 +316,13 @@ through the built console, then a matching autonomous move without training on t
 The tactical choice lanes verify human self-heal versus assistance priority, exclusion of
 strangers and former helpers who attack, comparable opportunities, restart stability, and
 distinct human preference versus machine execution attribution for the resulting MEND.
+An unoffered action retains its fallback when other choices have human evidence. The Section G
+campaign integration test plays solo, mixed and all-autonomous phases on one run with two
+character seats, the real projector, and competing durable workers. It also checks a
+history-free companion's backstory choice, unchanged sensory context at handoff, and trial
+history isolation after restart.
+The durable presence test offsets the API and runner clocks from PostgreSQL by two minutes,
+then exercises renewal, restart and timeout. It uses the real database trigger.
 
 Controller/runner coverage includes explicit leave/pause/takeover, missing/stale human epochs,
 captured old agent authority, two-worker idempotency, atomic canonical action and step budget,

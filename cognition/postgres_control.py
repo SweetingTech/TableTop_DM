@@ -61,6 +61,12 @@ class PostgresControllers:
         return ControllerState.model_validate(row["payload"]) if row else None
 
     @staticmethod
+    def _database_clock(cursor) -> datetime:
+        cursor.execute("SELECT clock_timestamp() AS current_time_utc")
+        current: datetime = cursor.fetchone()["current_time_utc"]
+        return current.astimezone(UTC)
+
+    @staticmethod
     def _check_player(cursor, scope: ControlScope, actor_id: uuid.UUID) -> None:
         cursor.execute(
             """
@@ -185,7 +191,13 @@ class PostgresControllers:
                             "a pinned CHARACTER binding is required before autonomous play"
                         )
                 state = next_controller(
-                    scope, actor_id, owner, request, previous, disconnected=timeout_at is not None
+                    scope,
+                    actor_id,
+                    owner,
+                    request,
+                    previous,
+                    disconnected=timeout_at is not None,
+                    presence_now=self._database_clock(cursor) if request.mode == "HUMAN" else None,
                 )
                 cursor.execute(
                     "INSERT INTO sim.actors(id,actor_kind,display_name) "
@@ -284,16 +296,18 @@ class PostgresControllers:
                 self._lock_branch(cursor, scope)
                 self._check_player(cursor, scope, actor_id)
                 previous = self._read(cursor, scope)
-                state = renew_presence(previous, expected_epoch)
+                state = renew_presence(previous, expected_epoch, now=self._database_clock(cursor))
                 if state != previous:
                     persist_controller(cursor, state)
                 return state
 
-    def expire_disconnected(self, now: datetime) -> None:
+    def expire_disconnected(self, now: datetime | None = None) -> None:
         # Start after the last scanned row and wrap, even when a handoff is rejected.
         after = self._last_presence_scan or (None, None, None, None, None)
         with transaction(actor_id=self.machine_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                if now is None:
+                    now = self._database_clock(cursor)
                 cursor.execute(
                     """SELECT c.payload FROM cognition.controller_assignments c
                     JOIN sim.runs r ON (r.world_id,r.branch_id,r.id)=(c.world_id,c.branch_id,c.run_id)
@@ -329,7 +343,7 @@ class PostgresControllers:
                 continue
 
     def due(self) -> tuple[ControllerState, ...]:
-        self.expire_disconnected(datetime.now(UTC))
+        self.expire_disconnected()
         with transaction(actor_id=self.machine_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute("""SELECT c.payload FROM cognition.controller_assignments c

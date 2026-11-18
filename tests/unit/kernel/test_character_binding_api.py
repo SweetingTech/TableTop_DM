@@ -12,7 +12,7 @@ from kernel.api.app import create_app
 pytestmark = pytest.mark.unit
 
 
-def setup_bound_character(app, token=None, *, scope=None):
+def setup_bound_character(app, token=None, *, scope=None, game=None, authored_identity=None):
     token = token or os.environ.get("TTDM_OPERATOR_TOKEN")
     admin = app.test_client()
     if token:
@@ -55,7 +55,9 @@ def setup_bound_character(app, token=None, *, scope=None):
         json={
             "world_id": world,
             "name": "Nyra History",
-            "authored_identity": {
+            "authored_identity": authored_identity
+            if authored_identity is not None
+            else {
                 "backstory": "Raised by sailors.",
                 "motives": ["Protect the crew."],
                 "secrets": ["SELF_PRIVATE_MAP"],
@@ -65,9 +67,10 @@ def setup_bound_character(app, token=None, *, scope=None):
     )
     assert response.status_code == 201
     card = response.get_json()
-    game = admin.post(
-        "/api/v2/dm/games", json={"world_id": world, "name": "History binding game"}
-    ).get_json()
+    if game is None:
+        game = admin.post(
+            "/api/v2/dm/games", json={"world_id": world, "name": "History binding game"}
+        ).get_json()
     response = admin.put(
         f"/api/v2/dm/games/{game['game_id']}/members",
         json={"user_id": user, "membership_role": "PLAYER", "character_id": card["character_id"]},

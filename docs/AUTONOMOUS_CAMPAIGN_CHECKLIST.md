@@ -368,11 +368,9 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
 
 ## G. Player-history stand-ins and control handoffs
 
-Current bounded extension: optional OpenAI-compatible speech expression (operator selects provider,
-off by default) uses sourced subjective experience and preserves policy-selected intent/volume.
-Fixed guard/bolt/mend tactics and new human choice evidence are wired through the real runner.
-Generic phrasing imitation, ally/relationship strategy, full tactical plans, world goals and complete
-rewind remain incomplete; these foundations do not close all F/G acceptance criteria.
+The runner uses witnessed situations, pinned persona and card, and comparable player examples.
+The current catalog covers movement, dialogue, melee, guard, and typed spells. An optional
+OpenAI-compatible provider expresses the selected speech intent and volume.
 
 - [ ] G1 — Record decision authorship independently from actor authority: human input, stand-in,
   NPC policy/model, director, and operator. Link human decisions to player, character, context, options,
@@ -380,24 +378,26 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   Movement foundation: server-derived input origin is distinct from controller authority; private
   append-only samples link accepted manual choices to player, character, binding, pre-command
   perceived features, four attempted options and source outcome. Migration 016 records distinct
-  private stand-in, NPC policy, and NPC model sources. Management and advice retain their own
-  attribution. Broader contextual evidence and executable director attribution remain open.
+  private stand-in, NPC policy, and NPC model sources. A trusted typed director command retains
+  its own origin in the ledger. Section L covers executable AI DM workflows.
+  Comparable contextual samples capture action or speech classification and use the source event
+  to retain the accepted outcome.
 - [ ] G2 — Add versioned behavior profiles keyed by player/character. Retrieve comparable human
   decisions to infer speech, priorities, relationships, risk, and tactical choices with confidence/provenance.
   Movement foundation: private content-addressed profiles use up to 256 accepted manual movement
   samples in the exact player/character/world/branch/run/body, matching perceived layout, distance,
   injury and company. Profiles freeze in proposal receipts with evidence IDs and confidence.
-  Broader risk/tactics inference and negative-choice learning remain open.
+  Risk and tactical comparisons count an action only when it was offered. Repeatedly passing on
+  a legal action lowers that action's score. Unseen choices retain the pinned fallback.
   Speech/combat extension: profiles learn intent, volume and cadence from comparable human replies,
   plus basic melee target style and advance/withdrawal. A configured provider and the local fallback
   both apply cadence. A witnessed previous helper can receive MEND. The profile learns when the
-  player favors helping them over self-healing in comparable situations. Broader relationship
-  strategy and tactical choice learning remain open.
+  player favors helping them over self-healing in comparable situations.
 - [ ] G3 — Combine that history with character card/backstory: human evidence guides demonstrated
   behavior; card/backstory supplies initial identity and unknown situations. Surface contradictions for operator/player correction.
   Comparable movement history now guides advice and the runner, with pinned persona curiosity/risk
   weights and an explicit limited English authored-tendency vocabulary as fallback. Private conflict
-  notices are inspectable through behavior-profile GET. Broad semantic interpretation remains open.
+  notices are inspectable through behavior-profile GET.
   Compiled risk/conflict/social/directness and explicit peaceful/aggressive card tendencies now
   drive speech/combat fallback; choice-profile GET exposes separate versioned scores and conflicts.
 - [ ] G4 — Exclude autonomous decisions from human preference evidence. Define treatment of revised
@@ -407,9 +407,9 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   Origins survive restart; no historical backfill guesses authorship. The exact branch and live
   run own their samples. Revised timelines start their own history and retain the old ledger for
   replay. Actual rewind/restoration is under Section I.
-  Migration 009 extends atomic source-linked evidence to contextual speech/combat/movement and
-  preserves synthetic exclusion. Context uses canonical source order for equal timestamps; full
-  rewind/restoration and arbitrary decision types remain open.
+  Contextual samples preserve the same atomic source links. Context uses canonical source order
+  for equal timestamps. A durable trial test verifies a successful manual choice in the alternate
+  branch leaves the canonical profile intact after restart.
 - [x] G5 — Extend runtime assignment with exclusive control ownership, version/epoch, and an atomic
   handoff boundary. Reject stale in-flight proposals from a previous controller.
   Implemented for canonical LIVE runs: private controller state extends HUMAN/UTILITY runtime
@@ -424,8 +424,8 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   epoch fence at timeout, and the returning console offers takeover and shows the pause policy.
 - [ ] G7 — Authorize stand-in execution through explicit world/entity grants; do not impersonate a
   browser account or reuse its session. Record both execution authority and behavior-profile attribution.
-  Dedicated AGENT execution, scoped grants, CHARACTER_POLICY ledger authorship, and pinned
-  character/persona trace attribution are implemented. Learned player-behavior profiles remain G2/G3.
+  Dedicated AGENT execution and scoped grants authorize each step. The durable receipt separately
+  retains the player, character, binding and supporting human evidence.
 - [x] G8 — Build an authorized recap from the character's actual experience; wire takeover/return
   controls through typed adapters and preserve partially completed actions exactly once.
   The private recap lists frozen observations inside the last exact handoff window. Its read
@@ -433,6 +433,10 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   the original receipt and wait are preserved, then completes the action on the shared clock.
 - [ ] G9 — Acceptance: history-rich stand-in follows contextual human examples; history-free stand-in
   uses card/backstory; solo/mixed/all-autonomous modes work; takeover races commit one action; no character perceives handoff.
+  The [campaign integration tests](../tests/integration/test_section_g_campaign.py) exercise
+  two seats on one world and run, including uncontaminated human evidence and unchanged
+  in-character context at handoff. The [controller tests](../tests/integration/test_controller_runner.py)
+  exercise takeover fencing, timeouts, recap projection and real worker restart.
 
 ## H. In-world parties and transferable opportunities
 

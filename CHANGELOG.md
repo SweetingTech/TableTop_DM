@@ -1,5 +1,9 @@
 # Changelog
 
+- Score human preferences using choices the player actually had. Options never offered keep the
+  character's fallback. Verify solo, mixed, and all-autonomous control in one durable campaign.
+- Use PostgreSQL time for durable presence deadlines so clock skew does not reject renewals or
+  end a player's turn early.
 - Learn whether the player favors self-healing or helping a character who previously mended
   them. Migration 020 preserves earlier choice evidence and records comparable alternatives.
 - Show a private recap of the character's witnessed experience between handoff and takeover.

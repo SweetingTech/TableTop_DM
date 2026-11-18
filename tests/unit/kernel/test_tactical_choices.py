@@ -234,6 +234,29 @@ def test_guard_history_drives_runner_and_next_attack_consumes_guard(monkeypatch,
     assert not state.projections["tabletop.entities"][card["entity_id"]]["guarded"]
 
 
+def test_an_unoffered_choice_keeps_its_pinned_fallback(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = setup_scene(app)
+    resources(app, admin, base, card["entity_id"], hp=9)
+    provoke(admin, base, target, card, "first-threat")
+    fallback = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
+    own_heal, attack = f"spell:MEND:{card['entity_id']}", f"attack:{target}"
+
+    resources(app, admin, base, card["entity_id"], hp=12)
+    for index in range(3):
+        result = command(player, base, card, "tabletop.combat.guard", {}, f"prefer-guard-{index}")
+        assert result.status_code == 200, result.get_json()
+        provoke(admin, base, target, card, f"consume-guard-{index}")
+    resources(app, admin, base, card["entity_id"], hp=9)
+    learned = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
+    assert learned["comparable_count"] == 3
+    assert learned["action_sample_counts"][own_heal] == 0
+    assert learned["action_scores"][own_heal] == fallback["action_scores"][own_heal]
+    assert learned["action_sample_counts"][attack] == 3
+    assert learned["action_scores"][attack] < fallback["action_scores"][attack]
+    assert learned["action_scores"]["guard"] > fallback["action_scores"]["guard"]
+
+
 @pytest.mark.parametrize(
     "parameters",
     [
