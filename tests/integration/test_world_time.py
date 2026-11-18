@@ -246,10 +246,10 @@ def test_scope_rls_and_executor_revocation_recheck_live_database(
 
 
 def test_actual_world_runner_processes_continue_without_viewers_and_restart(
-    integration_stack, monkeypatch, tmp_path
+    isolated_integration_stack, monkeypatch, tmp_path
 ):
     app, (admin, player, card, path, run, target, base) = prepare(
-        integration_stack, monkeypatch, tmp_path
+        isolated_integration_stack, monkeypatch, tmp_path
     )
     initial = admin.get(clock_path(base)).get_json()["clock"]
 
@@ -280,14 +280,16 @@ def test_actual_world_runner_processes_continue_without_viewers_and_restart(
         ]
         try:
             deadline = time.monotonic() + 25
+            actual_seconds = None
             while time.monotonic() < deadline:
                 current = admin.get(clock_path(base)).get_json()
-                if current["clock"]["seconds"] == until:
+                actual_seconds = current["clock"]["seconds"]
+                if actual_seconds == until:
                     assert current["clock"]["paused"]
                     return current
                 assert all(process.poll() is None for process in processes), "world runner exited"
                 time.sleep(0.1)
-            pytest.fail("world runner did not reach its configured boundary")
+            pytest.fail(f"world runner reached {actual_seconds} seconds, expected {until}")
         finally:
             for process in processes:
                 process.terminate()
@@ -315,7 +317,10 @@ def test_actual_world_runner_processes_continue_without_viewers_and_restart(
     replay = admin.get(f"/api/v2/branches/{base['branch_id']}/replay").get_json()
     assert replay["verified"]
     assert replay["projections"]["tabletop.clock"]["singleton"]["seconds"] == 9
-    with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
+    with (
+        psycopg2.connect(isolated_integration_stack.admin_url) as connection,
+        connection.cursor() as cursor,
+    ):
         cursor.execute(
             "SELECT count(*) FROM sim.command_log "
             "WHERE run_id=%s AND command_type='tabletop.clock.tick'",

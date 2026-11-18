@@ -10,6 +10,8 @@ World due-work integration cases race two claims, recover an expired lease with 
 deny stale tokens, inject failed event publication, and verify the retry advances the clock
 once and replaces its due row. They also cover pause cancellation, actor scope and retry backoff.
 The existing world-time lane runs separate processes without viewers and tests restart.
+Its restart test uses a dedicated migrated database. Both subprocesses still compete on the
+same due clock, and their deadline and exact persisted-tick assertions are unchanged.
 
 The projector-ordering integration case holds one event at the branch head while a second
 worker attempts to claim later work. It interrupts projection after persisting observations,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -44,8 +45,7 @@ def _with_database(
     return urlunsplit((parsed.scheme, netloc, f"/{database}", "", ""))
 
 
-@pytest.fixture(scope="session")
-def integration_stack() -> IntegrationStack:
+def _integration_stack() -> Iterator[IntegrationStack]:
     if os.environ.get("TTDM_INTEGRATION") != "1":
         pytest.skip("set TTDM_INTEGRATION=1 and start PostgreSQL/Redis to run integration tests")
 
@@ -105,3 +105,14 @@ def integration_stack() -> IntegrationStack:
             cursor.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(runtime_user)))
     finally:
         maintenance.close()
+
+
+@pytest.fixture(scope="session")
+def integration_stack() -> Iterator[IntegrationStack]:
+    yield from _integration_stack()
+
+
+@pytest.fixture
+def isolated_integration_stack() -> Iterator[IntegrationStack]:
+    """Give database-wide worker processes only the worlds created by their test."""
+    yield from _integration_stack()
