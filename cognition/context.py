@@ -176,6 +176,15 @@ class CharacterContext(BaseModel):
             if entity.position is not None
         }
         areas = {zone: f"area-{index}" for index, zone in enumerate(sorted(zones), 1)}
+        perceived_references = {
+            str(entity.entity_id): references[entity.entity_id]
+            for entity in self.scene.perceived_entities
+        }
+        action_targets = {}
+        for action in self.actions:
+            target = perceived_references.get(str(action.parameters.get("target_id")))
+            if target is not None:
+                action_targets[action.action] = target
         return {
             "identity": {
                 "name": self.identity.name,
@@ -244,6 +253,7 @@ class CharacterContext(BaseModel):
                 }
                 for entity in self.scene.perceived_entities
             ],
+            "action_targets": action_targets,
             "experiences": [experience_summary(item) for item in self.observations],
             "beliefs": [
                 {

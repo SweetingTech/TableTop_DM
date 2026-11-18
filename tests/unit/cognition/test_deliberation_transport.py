@@ -3,13 +3,19 @@ from __future__ import annotations
 import json
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from cognition.context import CharacterContext
 from cognition.deliberation import DeliberationRequest, TypedDeliberationGateway
+from cognition.models import Observation
 from cognition.openai_compatible import OpenAICompatibleDeliberation, configured_deliberation
+from domains.tabletop.character_actions import character_action_candidates
+from domains.tabletop.spatial.scene import PerceivedEntity, PerceivedScene, SceneCoordinate
 from kernel.api.app import create_app
+from kernel.contracts import Actor, ActorKind, BranchKind
 from tests.unit.kernel.test_character_binding_api import _app, setup_bound_character
 
 pytestmark = pytest.mark.unit
@@ -212,3 +218,82 @@ def test_live_advice_uses_configured_provider_and_reuses_scoped_receipt(
     spatial = json.loads(fiction)["situation"]["surroundings"]
     assert spatial and spatial[0]["position"]["area"] == "area-1"
     assert "zone_id" not in fiction and "apparent_type" not in fiction
+
+
+def test_two_threats_bind_action_names_to_correct_fiction_references(model_server):
+    body, nearby, distant = (uuid.UUID(int=id_number) for id_number in (100, 200, 10))
+
+    def perceived(entity_id, name, x):
+        return PerceivedEntity(
+            entity_id=entity_id,
+            name=name,
+            position=SceneCoordinate(x=x, y=0),
+            position_confidence=1,
+            knowledge_state="VISIBLE",
+            detail_level="INSPECTED",
+            health=3 if entity_id == distant else 9,
+            max_health=12,
+            mana=4 if entity_id == body else None,
+            attack_reach=2 if entity_id == body else None,
+        )
+
+    scene = PerceivedScene(
+        observer_entity_id=body,
+        world_id=uuid.uuid4(),
+        branch_id=uuid.uuid4(),
+        projection_version=1,
+        visible_zones=("world",),
+        perceived_entities=(
+            perceived(body, "Sailor", 0),
+            perceived(nearby, "Armored raider", 1),
+            perceived(distant, "Wounded scout", 2),
+        ),
+        recent_observations=(),
+        available_viewpoints=(),
+    )
+    attacks = tuple(
+        Observation(
+            observer_entity_id=body,
+            source_event_id=uuid.uuid4(),
+            perceived_payload={"attacker_id": str(threat), "target_id": str(body)},
+            confidence=1,
+        )
+        for threat in (nearby, distant)
+    )
+    actor = Actor(
+        kind=ActorKind.AGENT,
+        display_name="Fixture executor",
+        capabilities=frozenset({"action.propose", "action.commit", "entity.act"}),
+        controlled_entity_ids=frozenset({body}),
+    )
+    actions = character_action_candidates(
+        scene, actor=actor, branch_kind=BranchKind.CANONICAL, observations=attacks
+    )
+    situation = CharacterContext(
+        scene=scene, observations=attacks, beliefs=(), memories=(), actions=actions
+    ).situation()
+    choice = "Try an arcane bolt at perceived threat 2"
+    url, requests, replies = model_server
+    replies.append((200, chat_reply(choice)))
+    request = DeliberationRequest(
+        identity_summary="Defender of the harbor.",
+        situation=situation,
+        allowed_actions=tuple(action.action for action in actions),
+        seed=42,
+    )
+    outcome = TypedDeliberationGateway().decide(
+        request,
+        dict.fromkeys(request.allowed_actions, 0.0),
+        OpenAICompatibleDeliberation(url, "fixture"),
+    )
+    encoded = requests[0][1]["messages"][1]["content"]
+    assert str(nearby) not in encoded and str(distant) not in encoded
+    perceived_context = json.loads(encoded)["situation"]
+    refs = {row["name"]: row["reference"] for row in perceived_context["surroundings"]}
+    options = perceived_context["action_targets"]
+    assert refs == {"Sailor": "self", "Armored raider": "subject-2", "Wounded scout": "subject-1"}
+    assert options["Try a basic melee attack against perceived threat 1"] == refs["Armored raider"]
+    assert options[choice] == refs["Wounded scout"]
+    assert options["Try to mend my wounds"] == refs["Sailor"]
+    selected = next(action for action in actions if action.action == outcome.response.action)
+    assert outcome.used_model and selected.parameters["target_id"] == str(distant)

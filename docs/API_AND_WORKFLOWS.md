@@ -1016,7 +1016,8 @@ phrasing, spell selection, narrative planning and complete timeline restoration 
 
 Character advice and the unattended runner can consult an operator-configured OpenAI-compatible
 provider when the local policy has closely scored choices. The provider receives the body's
-scoped fiction and a list of eligible action names. It selects a name. The kernel receives the
+scoped fiction and eligible action names. Targeted choices use the same anonymous references
+as the bodies in the scene. The provider selects a name. The kernel receives the
 corresponding typed proposal with parameters built by TableTop DM. A clear local choice or active
 plan step can proceed directly. Configure the provider in [Operations](OPERATIONS.md#optional-decision-model).
 
