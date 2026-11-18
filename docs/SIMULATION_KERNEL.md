@@ -1,5 +1,10 @@
 # Simulation-kernel contract
 
+Private `sim.command_log.input_origin` identifies the decision source independently of the actor
+executing it. Stand-in and NPC origins require a character-policy command with a body, epoch,
+and step. Existing actor, run, grant, and control fences still apply. Migration 016 preserves
+legacy rows. Human preference readers retain their original positive-evidence rules.
+
 Autonomous proposal validation compares the controller epoch, step, and retry attempt under the
 same lock as command resolution. A handler's rejection records the evaluated revision for the
 runner. Only a newer revision permits replanning at the same step. Committed idempotent receipts

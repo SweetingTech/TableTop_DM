@@ -278,7 +278,8 @@ def test_011_upgrade_preserves_legacy_snapshot_and_allows_metadata_identity(
         assert migrate(url, migrations) == 0
         readiness = admin.get("/readyz")
         assert readiness.status_code == 200, readiness.get_json()
-        assert readiness.get_json()["checks"]["postgres"]["migration"] == "015_scoped_narration.sql"
+        expected_migration = discover(migrations)[-1].version
+        assert readiness.get_json()["checks"]["postgres"]["migration"] == expected_migration
         frozen = snapshot(admin, base["world_id"])
         assert frozen["state_hash"] == legacy.state_hash
         assert frozen["snapshot_id"] != str(legacy.snapshot_id)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 import shutil
 import uuid
 from pathlib import Path
@@ -84,7 +85,7 @@ def test_durable_history_survives_restart_and_controls_actual_runner(
             (run,),
         )
         parameters, origin = cursor.fetchone()
-        assert parameters == {"dx": 0, "dy": -1} and origin == "POLICY_ADVICE"
+        assert parameters == {"dx": 0, "dy": -1} and origin == "STAND_IN"
     WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
 
 
@@ -285,7 +286,7 @@ def test_evidence_option_constraints_and_composite_binding(
     WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
 
 
-def test_upgrade_from_007_preserves_old_commands_as_unknown(integration_stack, tmp_path):
+def test_origin_upgrades_preserve_legacy_classification(integration_stack, monkeypatch, tmp_path):
     name = "ttdm_behavior_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
     maintenance = psycopg2.connect(integration_stack.admin_url)
@@ -296,10 +297,32 @@ def test_upgrade_from_007_preserves_old_commands_as_unknown(integration_stack, t
         migrations = Path(__file__).resolve().parents[2] / "infra/sql/migrations"
         prior = tmp_path / "prior"
         prior.mkdir()
-        for path in sorted(migrations.glob("*.sql"))[:7]:
+        files = sorted(migrations.glob("*.sql"))
+        for path in files[:7]:
             shutil.copy2(path, prior / path.name)
         assert migrate(url, prior) == 7
-        assert migrate(url, migrations) == len(discover(migrations)) - 7
+        for path in files[7:15]:
+            shutil.copy2(path, prior / path.name)
+        assert migrate(url, prior) == 8
+        monkeypatch.setenv("DATABASE_URL", url)
+        monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
+        app = create_app(artifact_root=tmp_path / "legacy")
+        admin, player, card, _, path, run, _ = setup_bound_character(app)
+        card["branch_id"] = path.split("/")[6]
+        manual = movement(card, run, key="legacy-manual")
+        assert player.post("/api/v2/commands", json=manual).status_code == 200
+        body_key = (uuid.UUID(card["branch_id"]), uuid.UUID(card["entity_id"]))
+        owner = app.extensions["simulation"].entities[body_key].controller_actor_id
+        operator = admin.post(
+            "/api/v2/commands",
+            json={**manual, "actor_id": str(owner), "idempotency_key": "legacy-operator"},
+        )
+        assert operator.status_code == 200, operator.get_json()
+        with psycopg2.connect(url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT command_id,input_origin FROM sim.command_log ORDER BY seq_id")
+            original = cursor.fetchall()
+            assert {origin for _, origin in original} >= {"HUMAN_INPUT", "OPERATOR"}
+        assert migrate(url, migrations) == len(discover(migrations)) - 15
         assert migrate(url, migrations) == 0
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -307,6 +330,19 @@ def test_upgrade_from_007_preserves_old_commands_as_unknown(integration_stack, t
                 "AND table_name='command_log' AND column_name='input_origin'"
             )
             assert "UNSPECIFIED" in cursor.fetchone()[0]
+            cursor.execute("SELECT command_id,input_origin FROM sim.command_log ORDER BY seq_id")
+            assert cursor.fetchall() == original
+            with pytest.raises(psycopg2.errors.CheckViolation) as denied:
+                cursor.execute(
+                    "INSERT INTO sim.command_log (command_id,command_type,command_version,"
+                    "world_id,branch_id,run_id,actor_id,embodied_entity_id,parameters,result,"
+                    "resulting_state_hash,idempotency_key,correlation_id,input_origin) "
+                    "SELECT %s,command_type,command_version,world_id,branch_id,run_id,actor_id,"
+                    "embodied_entity_id,parameters,result,resulting_state_hash,%s,correlation_id,"
+                    "'NPC_POLICY' FROM sim.command_log WHERE idempotency_key='legacy-manual'",
+                    (str(uuid.uuid4()), "invalid-autonomous-attribution"),
+                )
+            assert denied.value.diag.constraint_name == "command_log_character_origin_check"
     finally:
         with maintenance.cursor() as cursor:
             cursor.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))

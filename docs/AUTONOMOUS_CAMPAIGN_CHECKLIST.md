@@ -379,8 +379,9 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   dialogue, and outcome without revealing options/facts the character did not know.
   Movement foundation: server-derived input origin is distinct from controller authority; private
   append-only samples link accepted manual choices to player, character, binding, pre-command
-  perceived features, four attempted options and source outcome. All other decision types and
-  richer authorship categories remain open.
+  perceived features, four attempted options and source outcome. Migration 016 records distinct
+  private stand-in, NPC policy, and NPC model sources. Management and advice retain their own
+  attribution. Broader contextual evidence and executable director attribution remain open.
 - [ ] G2 — Add versioned behavior profiles keyed by player/character. Retrieve comparable human
   decisions to infer speech, priorities, relationships, risk, and tactical choices with confidence/provenance.
   Movement foundation: private content-addressed profiles use up to 256 accepted manual movement

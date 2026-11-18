@@ -35,6 +35,7 @@ from domains.tabletop.portal import PortalRepository
 from domains.tabletop.rules import incapacitated
 from domains.tabletop.spatial.service import build_perceived_scene
 from kernel.application import SimulationApplication
+from kernel.contracts import ActorKind
 from kernel.control import ControllerState, ControlScope
 from kernel.errors import (
     ActionRejectedAtRevision,
@@ -192,6 +193,12 @@ class CharacterDecisionService:
                     reply,
                     source.events.get,
                 )
+            entity = source.entities[(scope.branch_id, scope.entity_id)]
+            owner = (
+                source.actors.get(entity.controller_actor_id)
+                if entity.controller_actor_id
+                else None
+            )
             return partial(
                 propose_for_character,
                 scope=proposal_scope,
@@ -202,6 +209,11 @@ class CharacterDecisionService:
                 binding=resolved.binding,
                 profile=resolved.profile,
                 controller=controller,
+                stand_in=(
+                    entity.entity_type == "PLAYER_CHARACTER"
+                    and owner is not None
+                    and owner.kind is ActorKind.HUMAN
+                ),
                 dialogue_provider=self.dialogue_provider,
                 deliberation_provider=self.deliberation_provider,
                 deliberation_kind=self.deliberation_kind,

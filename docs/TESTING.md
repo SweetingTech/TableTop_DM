@@ -1,5 +1,10 @@
 # Testing
 
+Decision-origin verification checks manual choices, operator commands, separate stand-in
+authority, and NPC policy and model labels. PostgreSQL tests inspect the committed command and
+model trace after separate worker execution. The existing character experience tests check the
+same sensory boundary, and migration tests cover the expanded ledger constraint.
+
 The controller handoff unit and PostgreSQL runner suites exercise an intervening heal that makes
 a queued self-heal invalid. They check that the runner rebuilds context, rejects the old attempt,
 and commits one replacement. The PostgreSQL test restarts the worker between attempts and checks

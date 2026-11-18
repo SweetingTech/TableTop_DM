@@ -18,6 +18,12 @@ def test_receipt_rejects_mixed_lineage_and_repository_does_not_cache_failure(mon
         path + "/character-proposals", json={"run_id": run, "idempotency_key": "receipt"}
     ).get_json()
     receipt = CharacterProposalReceipt.model_validate(raw)
+    assert receipt.outcome.proposal.input_origin == "POLICY_ADVICE"
+    for origin in ("STAND_IN", "NPC_POLICY", "NPC_MODEL"):
+        with pytest.raises(ValidationError, match="requires a character controller"):
+            type(receipt.outcome.proposal).model_validate(
+                {**raw["outcome"]["proposal"], "input_origin": origin}
+            )
     for change in [
         {"actor_id": str(uuid.uuid4())},
         {"seed": receipt.seed + 1},

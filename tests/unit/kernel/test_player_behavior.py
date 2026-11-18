@@ -32,11 +32,14 @@ def test_human_choices_drive_runner_without_learning_its_own_actions(monkeypatch
     card["branch_id"] = str(app.extensions["demo_ids"]["branch_id"])
     for i in range(4):
         body = movement(card, run, key=f"human-{i}")
-        result = player.post("/api/v2/commands", json=body)
+        result = player.post("/api/v2/commands", json={**body, "input_origin": "DIRECTOR"})
         assert result.status_code == 200, result.get_json()
         assert player.post("/api/v2/commands", json=body).get_json() == result.get_json()
     simulation = app.extensions["simulation"]
     assert len(simulation.human_decision_evidence) == 4
+    branch = uuid.UUID(card["branch_id"])
+    manual = simulation.command_history[branch][-1].proposal
+    assert manual.input_origin == "HUMAN_INPUT" and manual.decision_authorship == "HUMAN"
     profile = player.get(path + "/behavior-profile", query_string={"run_id": run}).get_json()
     # One earlier choice had a different perceived distance bucket and is not comparable.
     assert profile["comparable_count"] == 3 and profile["confidence"] == 0.5
@@ -69,6 +72,11 @@ def test_human_choices_drive_runner_without_learning_its_own_actions(monkeypatch
     assert len(simulation.events) == before + 1
     assert len(simulation.human_decision_evidence) == 4
     assert event.payload["destination"]["y"] == -6
+    autonomous = simulation.command_history[branch][-1].proposal
+    assert autonomous.input_origin == "STAND_IN"
+    assert str(autonomous.actor_id) == handed.get_json()["state"]["executor_actor_id"]
+    assert autonomous.actor_id != manual.actor_id
+    assert "STAND_IN" not in event.model_dump_json()
     assert admin.get(path + "/behavior-profile", query_string={"run_id": run}).status_code == 200
     # The lookback budget belongs to this body, not a busy unrelated world.
     before_other_world = player.get(

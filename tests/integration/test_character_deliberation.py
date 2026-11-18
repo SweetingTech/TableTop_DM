@@ -171,17 +171,23 @@ def test_live_compatible_provider_wait_allows_world_progress_and_one_cached_deci
     assert receipt.outcome.trace.runtime_kind == "LOCAL_LLM"
     assert receipt.outcome.trace.prompt_contract_version == "character-action-selection-1.0.0"
     assert receipt.outcome.proposal.parameters == {"dx": 1, "dy": 0}
+    assert receipt.outcome.proposal.input_origin == "STAND_IN"
     assert worker.run_once() == 1 and worker.run_once() == 0
     assert len(received) == 1
 
     with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
         cursor.execute(
-            "SELECT t.explanation->'deliberation',e.model_version FROM cognition.decision_traces t "
-            "JOIN sim.events e ON e.decision_trace_id=t.id WHERE t.id=%s",
+            "SELECT t.explanation->'deliberation',e.model_version,c.input_origin "
+            "FROM cognition.decision_traces t JOIN sim.events e ON e.decision_trace_id=t.id "
+            "JOIN sim.command_log c ON "
+            "(c.world_id,c.branch_id,c.run_id,c.actor_id,c.idempotency_key) "
+            "= (e.world_id,e.branch_id,e.run_id,e.actor_id,e.idempotency_key) "
+            "WHERE t.id=%s",
             (str(receipt.decision_id),),
         )
-        trace, model_version = cursor.fetchone()
+        trace, model_version, origin = cursor.fetchone()
         assert model_version == "campaign-model-fixture"
+        assert origin == "STAND_IN"
         assert trace["provider_attempts"] == 1
         assert trace["usage"] == {"prompt_tokens": 62, "completion_tokens": 12}
 

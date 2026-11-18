@@ -1,5 +1,9 @@
 # Operations, storage, migrations, and security
 
+Apply migration `016_decision_origins.sql` before rolling out the application and runners. It
+extends the existing private command ledger constraint and applies without rewriting old origins.
+Keep the application and runner on the same build so fresh decisions record matching provenance.
+
 Deploy the same application version across character runners. They use the existing durable
 controller failure count to fence rejected attempts and resume replanning after restart. No
 schema migration is required. Inspect the private controller status for `action_invalidated`,

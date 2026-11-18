@@ -113,6 +113,7 @@ def finalize_member(
             actor_id=actor.actor_id,
             parameters={"changes": changes},
             idempotency_key=f"roster-control:{uuid.uuid4()}",
+            input_origin="OPERATOR",
         )
         if connection is not None:
             publish()
