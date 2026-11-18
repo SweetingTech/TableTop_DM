@@ -170,6 +170,12 @@ class CharacterContext(BaseModel):
                 for index, subject in enumerate(sorted(subjects - {observer}, key=str), 1)
             }
         )
+        zones = {
+            str(entity.position.zone_id)
+            for entity in self.scene.perceived_entities
+            if entity.position is not None
+        }
+        areas = {zone: f"area-{index}" for index, zone in enumerate(sorted(zones), 1)}
         return {
             "identity": {
                 "name": self.identity.name,
@@ -193,14 +199,26 @@ class CharacterContext(BaseModel):
                         exclude_none=True,
                         exclude={
                             "entity_id",
+                            "apparent_type",
                             "observed_at",
                             "knowledge_state",
                             "detail_level",
                             "position_confidence",
+                            "position",
                             "trade_offers",
                             "quest_offers",
                             "quests",
                         },
+                    ),
+                    **(
+                        {
+                            "position": {
+                                **entity.position.model_dump(mode="json", exclude={"zone_id"}),
+                                "area": areas[str(entity.position.zone_id)],
+                            }
+                        }
+                        if entity.position is not None
+                        else {}
                     ),
                     "quest_offers": [
                         {

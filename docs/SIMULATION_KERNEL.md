@@ -9,6 +9,10 @@ Personal plan progress derives from the accepted command ledger and its linked p
 receipt. A step still executes through the ordinary typed command and its current physical
 preconditions. The plan receipt records intent, needs, and provenance for the next decision.
 
+Deliberation returns one eligible action name. TableTop DM supplies the typed parameters from its
+trusted action catalog. The command layer rechecks current control, authority and physical rules
+before publishing state or evidence. Private decision traces retain model usage and fallback codes.
+
 Clock leases and retry delays are operational metadata outside replay state. The repository
 locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
 The ledger redacts lease tokens. An idempotent retry returns the original receipt before

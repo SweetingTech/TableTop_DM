@@ -44,6 +44,24 @@ class PostgresCharacterProposals:
                 "character proposal could not be stored; retry the same request"
             ) from None
 
+    @staticmethod
+    def _require_scope(cursor, scope: CharacterProposalScope, *, lock_run: bool = False) -> None:
+        cursor.execute(
+            """
+            SELECT r.id FROM sim.runs r WHERE (r.world_id,r.branch_id,r.id)=(%s,%s,%s)
+            AND sim.has_world_capability(r.world_id,'action.propose')
+            AND sim.has_world_capability(r.world_id,'entity.act')
+            AND sim.can_mutate_branch(r.world_id,r.branch_id)
+            AND EXISTS (SELECT 1 FROM sim.entities e WHERE (e.world_id,e.branch_id,e.id)=(r.world_id,r.branch_id,%s)
+              AND (e.controller_actor_id=sim.current_actor_id()
+                   OR sim.runtime_controls_entity(e.world_id,e.branch_id,e.id)))
+            """
+            + ("FOR UPDATE" if lock_run else ""),
+            tuple(map(str, scope.key)),
+        )
+        if cursor.fetchone() is None:
+            raise PermissionError("actor cannot propose for this character")
+
     def _get_or_create(
         self,
         scope: CharacterProposalScope,
@@ -53,29 +71,17 @@ class PostgresCharacterProposals:
     ) -> CharacterProposalReceipt:
         with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                # Match the binding writer's run lock before the kernel's branch lock.
-                # Do not lock arbitrary worlds for an unauthorized caller.
+                self._require_scope(cursor, scope)
+                identity = (*map(str, scope.key), str(actor_id), key)
+                # Serialize the proposal key without blocking ordinary world commands.
                 cursor.execute(
-                    """
-                    SELECT r.id FROM sim.runs r WHERE (r.world_id,r.branch_id,r.id)=(%s,%s,%s)
-                    AND sim.has_world_capability(r.world_id,'action.propose')
-                    AND sim.has_world_capability(r.world_id,'entity.act')
-                    AND sim.can_mutate_branch(r.world_id,r.branch_id)
-                    AND EXISTS (SELECT 1 FROM sim.entities e WHERE (e.world_id,e.branch_id,e.id)=(r.world_id,r.branch_id,%s)
-                      AND (e.controller_actor_id=sim.current_actor_id()
-                           OR sim.runtime_controls_entity(e.world_id,e.branch_id,e.id))) FOR UPDATE
-                    """,
-                    tuple(map(str, scope.key)),
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    ("ttdm:character-proposal:" + ":".join(identity),),
                 )
-                if cursor.fetchone() is None:
-                    raise PermissionError("actor cannot propose for this character")
-                cursor.execute(
-                    "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
-                    (str(scope.world_id), str(scope.branch_id)),
-                )
+                self._require_scope(cursor, scope)
                 cursor.execute(
                     "SELECT payload FROM cognition.character_proposal_receipts WHERE (world_id,branch_id,run_id,entity_id,actor_id,idempotency_key)=(%s,%s,%s,%s,%s,%s)",
-                    (*map(str, scope.key), str(actor_id), key),
+                    identity,
                 )
                 previous = cursor.fetchone()
                 if previous:
@@ -87,6 +93,20 @@ class PostgresCharacterProposals:
                     key,
                 ):
                     raise ValueError("character proposal receipt scope differs from its request")
+                # Recheck live authority and binding under the same lock order as the binding writer.
+                self._require_scope(cursor, scope, lock_run=True)
+                cursor.execute(
+                    "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
+                    (str(scope.world_id), str(scope.branch_id)),
+                )
+                cursor.execute(
+                    "SELECT 1 FROM tabletop.character_bindings "
+                    "WHERE (world_id,branch_id,run_id,entity_id,replaces_binding_id)=(%s,%s,%s,%s,%s) "
+                    "LIMIT 1",
+                    (*map(str, scope.key), str(receipt.binding_id)),
+                )
+                if cursor.fetchone() is not None:
+                    raise ValueError("character binding changed while preparing the proposal")
                 PostgresMindRepository(self.dsn).save_decision(
                     receipt.outcome, connection=connection
                 )

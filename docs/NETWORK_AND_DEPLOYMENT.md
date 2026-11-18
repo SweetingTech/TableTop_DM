@@ -29,12 +29,11 @@ private proposal receipts, controller ownership and human choice evidence. Revis
 records stay in PostgreSQL under actor-scoped forced RLS; no new port or external service is added.
 The migration owner remains separate from the runtime login. Card revisions are authored source
 material, while binding rows are private controller configuration outside the sensory event stream.
-Character advice uses local deterministic policy; it makes no external model call. Receipt routes
-require authenticated world/body control and preserve the browser origin boundary. Apply migrations
-and verify readiness before routing traffic to the upgraded API; no network topology changes.
+Character advice uses deterministic policy by default. Receipt routes require authenticated
+world/body control. Apply migrations and verify readiness before routing traffic to the upgraded API.
 
 Character execution adds an internal `runner` service using the runtime database role and artifact
-volume. It has no listening port or provider connection. The perception `projector` delivers frozen
+volume. The service runs without a listening port. The perception `projector` delivers frozen
 observations before dependent decisions. Managed startup and full-stack CI include both services.
 Autonomy is explicit per body; old runtime selections do not activate it.
 
@@ -57,6 +56,11 @@ subjective identity/experience, not hidden world state, card secrets or controll
 Choose a trusted endpoint. Redirects are rejected; calls have bounded timeout/response size and
 no automatic retry. Existing ports and inbound authentication remain unchanged. Deterministic
 actions and template fallback work with the default `off` mode and no provider access.
+
+Optional `TTDM_DELIBERATION_MODE=openai-compatible` allows the API and runner to make bounded
+outbound requests to the chosen `/chat/completions` endpoint. The provider receives the eligible
+action names and scoped character fiction for live decisions. Assign provider credentials to
+the server environment. Transport rejects redirects and bounds request size, retries and elapsed time.
 
 Movement and speech/combat profiles use private forced-RLS evidence stored atomically with source
 commands. Profile inspection requires body control or the same world's explicit mind-read authority

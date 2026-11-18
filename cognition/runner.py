@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
+from functools import partial
+from typing import Literal
 
 from cognition.behavior import BehaviorProfile
 from cognition.character_decisions import (
@@ -20,6 +22,7 @@ from cognition.character_plans import CharacterPlan, select_character_plan
 from cognition.choices import ChoiceProfile
 from cognition.context import CharacterContext
 from cognition.control import REPLAN_LIMIT, ControllerRepository
+from cognition.deliberation import DeliberationProvider
 from cognition.dialogue_generation import DialogueProvider
 from cognition.store import MindStore
 from domains.tabletop.action_time import wait_seconds
@@ -68,6 +71,8 @@ class CharacterDecisionService:
         | None = None,
         choice_reader: Callable[..., ChoiceProfile] | None = None,
         dialogue_provider: DialogueProvider | None = None,
+        deliberation_provider: DeliberationProvider | None = None,
+        deliberation_kind: Literal["LOCAL_LLM", "HOSTED_LLM"] = "HOSTED_LLM",
     ) -> None:
         self.snapshot, self.read_minds = snapshot, read_minds
         self.bindings, self.cards, self.profiles = bindings, cards, profiles
@@ -75,6 +80,8 @@ class CharacterDecisionService:
         self.behavior_reader = behavior_reader
         self.choice_reader = choice_reader
         self.dialogue_provider = dialogue_provider
+        self.deliberation_provider = deliberation_provider
+        self.deliberation_kind = deliberation_kind
 
     def _previous_plan(
         self,
@@ -119,8 +126,9 @@ class CharacterDecisionService:
         controller: ControllerState | None = None,
     ) -> CharacterProposalReceipt:
         proposal_scope = CharacterProposalScope.model_validate(scope.model_dump())
+        reference = self.reference
 
-        def generate():
+        def prepare() -> Callable[[], CharacterProposalReceipt]:
             source = self.snapshot()
             require_character_proposal_authority(source, proposal_scope, actor_id)
             if source.runs[scope.run_id].status not in {"ACTIVE", "RUNNING"}:
@@ -168,7 +176,8 @@ class CharacterDecisionService:
                 if controller is not None
                 else None
             )
-            return propose_for_character(
+            return partial(
+                propose_for_character,
                 scope=proposal_scope,
                 actor_id=actor_id,
                 key=key,
@@ -178,6 +187,8 @@ class CharacterDecisionService:
                 profile=resolved.profile,
                 controller=controller,
                 dialogue_provider=self.dialogue_provider,
+                deliberation_provider=self.deliberation_provider,
+                deliberation_kind=self.deliberation_kind,
                 plan=plan,
                 human_epoch=source.controller_states[scope.key].epoch
                 if scope.key in source.controller_states
@@ -194,12 +205,29 @@ class CharacterDecisionService:
                 else None,
             )
 
-        def create():
-            if self.reference is not None:
-                require_character_proposal_authority(self.reference, proposal_scope, actor_id)
-            return self.proposals.get_or_create(proposal_scope, actor_id, key, generate)
+        def generate() -> CharacterProposalReceipt:
+            decision = reference.read_reference(prepare) if reference else prepare()
+            receipt = decision()
+            if reference is not None:
+                current = reference.read_reference(
+                    lambda: self.bindings.latest(scope.key, actor_id=actor_id)
+                )
+                if current is None or current.binding_id != receipt.binding_id:
+                    raise ValueError("character binding changed while preparing the proposal")
+            return receipt
 
-        return self.reference.read_reference(create) if self.reference else create()
+        def check_reference() -> None:
+            if reference is not None:
+                reference.read_reference(
+                    lambda: require_character_proposal_authority(
+                        reference, proposal_scope, actor_id
+                    )
+                )
+
+        check_reference()
+        receipt = self.proposals.get_or_create(proposal_scope, actor_id, key, generate)
+        check_reference()
+        return receipt
 
 
 class CharacterRunner:

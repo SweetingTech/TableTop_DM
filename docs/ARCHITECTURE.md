@@ -23,6 +23,13 @@ finds an accepted predecessor command in the same world, branch, run, body, cont
 and pinned binding. Fresh perception and the body's own needs determine the next available
 action. The controller's existing due time schedules the next check.
 
+Optional model deliberation receives a frozen fiction view and names from the engine's eligible
+action list. Anonymous references preserve relative locations and known characters. A scoped
+PostgreSQL advisory lock serializes the same proposal key while the model
+responds. World writes keep their separate run and branch locks. Before persisting a new proposal,
+the service rechecks the live actor scope and latest pinned binding. The receipt and its typed
+provenance commit together.
+
 Durable private-receipt presentation uses the existing `sim.has_world_capability` function in an
 actor-scoped transaction. This bounded read observes current exact-world grants without hydrating
 all world state or trusting the API's cached authority. A separate-process DM revocation applies

@@ -31,6 +31,7 @@ class PostgresMindRepository:
         self, outcome: DecisionOutcome, *, connection: PgConnection | None = None
     ) -> None:
         proposal, trace = outcome.proposal, outcome.trace
+        deliberation = outcome.deliberation
         if proposal.embodied_entity_id is None:
             raise ValueError("durable decision traces require an embodied entity")
         boundary = (
@@ -72,6 +73,15 @@ class PostgresMindRepository:
                                 "rationale": trace.rationale,
                                 "fallback_reason": trace.fallback_reason,
                                 "plan": trace.plan,
+                                **(
+                                    {
+                                        "deliberation": deliberation.model_dump(
+                                            mode="json", exclude={"response"}
+                                        )
+                                    }
+                                    if deliberation is not None
+                                    else {}
+                                ),
                             }
                         ),
                     ),

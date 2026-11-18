@@ -1012,6 +1012,20 @@ Operator/profile/handoff metadata is kept
 outside sensory fiction, character prompts and speech. Full tactical plans, learned arbitrary
 phrasing, spell selection, narrative planning and complete timeline restoration remain open.
 
+## Model-assisted character decisions
+
+Character advice and the unattended runner can consult an operator-configured OpenAI-compatible
+provider when the local policy has closely scored choices. The provider receives the body's
+scoped fiction and a list of eligible action names. It selects a name. The kernel receives the
+corresponding typed proposal with parameters built by TableTop DM. A clear local choice or active
+plan step can proceed directly. Configure the provider in [Operations](OPERATIONS.md#optional-decision-model).
+
+The privileged evaluation route uses the configured provider when its runtime kind matches an
+explicit `LOCAL_LLM` or `HOSTED_LLM` assignment. A decision receipt records the selected action,
+policy and prompt version, model label, request count, and any token usage reported by the endpoint.
+An invalid choice, unavailable service, or exceeded request limit falls back to scored utility.
+Evaluation and advice return proposals. The live runner submits through ordinary command authority.
+
 ## Generated dialogue and tactical choices
 
 Context `character-context-1.6.0` includes the body's own mana/reach/learned spell IDs and inspected

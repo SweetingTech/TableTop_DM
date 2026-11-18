@@ -12,8 +12,8 @@ on their card, backstory, and observed play history.
 ## What works today
 
 - Hosted games support world-scoped roles, character binding, and a live perception-scoped console.
-- Explicit character handoff lets a configured runner act while a player is away. Optional
-  dialogue generation uses an endpoint and model chosen by the operator.
+- Explicit character handoff lets a configured runner act while a player is away. The operator
+  can choose OpenAI-compatible endpoints for model-assisted decisions and generated dialogue.
 - When committed events invalidate a queued action, the runner can rebuild the character's
   context and choose again within a bounded retry budget.
 - A critically injured character can withdraw from a perceived attacker and reassess whether

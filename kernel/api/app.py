@@ -22,17 +22,14 @@ from cognition.behavior_store import PostgresBehaviorEvidence
 from cognition.character_decisions import (
     CharacterContextPending,
     CharacterProposalRepository,
-    CharacterProposalScope,
     InMemoryCharacterProposals,
-    propose_for_character,
-    require_character_proposal_authority,
-    require_projected_character_experience,
 )
 from cognition.choice_state import choice_frame
 from cognition.choice_store import PostgresChoiceEvidence, persist_choice_bundle
 from cognition.choices import HumanChoiceEvidence, choice_profile, describe_options, option_key
 from cognition.context import require_projected_experience
 from cognition.control import ControlConflict, HandoffRequest, InMemoryControllers
+from cognition.deliberation import DeliberationProvider
 from cognition.engine import (
     DecisionAction,
     DecisionRequest,
@@ -41,7 +38,11 @@ from cognition.engine import (
 )
 from cognition.knowledge import KNOWLEDGE_VERSION, search_known_lore
 from cognition.models import Observation, RelationshipVector, RuntimeAssignment, RuntimeKind
-from cognition.openai_compatible import configured_dialogue
+from cognition.openai_compatible import (
+    DELIBERATION_PROMPT,
+    configured_deliberation,
+    configured_dialogue,
+)
 from cognition.perception import PerceptionProfile
 from cognition.planning import GoapAction
 from cognition.postgres import PostgresMindRepository
@@ -460,6 +461,7 @@ def create_app(
     simulation: SimulationApplication | None = None,
     *,
     artifact_root: Path | None = None,
+    deliberation_provider: DeliberationProvider | None = None,
 ) -> Flask:
     root = (artifact_root or Path(os.environ.get("TTDM_ARTIFACT_ROOT", "artifacts"))).resolve()
     static_root = Path(__file__).resolve().parents[2] / "static" / "v2"
@@ -880,6 +882,12 @@ def create_app(
         simulation.durable_repository.evidence_persister = persist_choice_bundle
 
     dialogue_provider = configured_dialogue()
+    active_deliberation = deliberation_provider or configured_deliberation()
+    deliberation_kind: Literal["LOCAL_LLM", "HOSTED_LLM"] = (
+        "LOCAL_LLM"
+        if getattr(active_deliberation, "runtime_kind", None) == "LOCAL_LLM"
+        else "HOSTED_LLM"
+    )
     live_decisions = CharacterDecisionService(
         snapshot=controller_snapshot,
         read_minds=controller_minds,
@@ -895,6 +903,8 @@ def create_app(
         behavior_reader=read_behavior,
         choice_reader=read_choices,
         dialogue_provider=dialogue_provider,
+        deliberation_provider=active_deliberation,
+        deliberation_kind=deliberation_kind,
     )
     app.extensions["controllers"] = controllers
     app.extensions["character_decisions"] = live_decisions
@@ -2333,58 +2343,11 @@ def create_app(
         body: CharacterProposalRequest,
     ):
         actor_id = current_actor_id()
-        scope = CharacterProposalScope(
+        scope = ControlScope(
             world_id=world_id, branch_id=branch_id, run_id=body.run_id, entity_id=observer_entity_id
         )
         require_world_access(world_id)
-
-        def generate():
-            source = simulation
-            if durable_control is not None:
-                # The receipt repository holds the authorized run and branch locks.
-                # Read fresh canonical state without replacing a shared worker cache.
-                source = SimulationApplication(simulation.snapshot_store.root)
-                durable_control.hydrate(source)
-            require_character_proposal_authority(source, scope, actor_id)
-            if source.runs[scope.run_id].status not in {"ACTIVE", "RUNNING"}:
-                raise ValueError("character proposals require an active run")
-            scene, observed_minds = read_scene(world_id, branch_id, observer_entity_id, source)
-            require_projected_character_experience(source, observed_minds, scope, actor_id)
-            resolved = resolve_frame(source, scene, observed_minds, body.run_id)
-            if resolved.binding is None or resolved.profile is None:
-                raise ValueError("a pinned character binding is required")
-            return propose_for_character(
-                scope=scope,
-                actor_id=actor_id,
-                key=body.idempotency_key,
-                run_seed=source.runs[scope.run_id].seed,
-                context=resolved.context,
-                binding=resolved.binding,
-                profile=resolved.profile,
-                human_epoch=source.controller_states[scope.key].epoch
-                if scope.key in source.controller_states
-                else None,
-                behavior=read_behavior(
-                    source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
-                ),
-                choices=read_choices(
-                    source, scope, actor_id, resolved.context, resolved.binding, resolved.profile
-                ),
-                dialogue_provider=dialogue_provider,
-            )
-
-        def reference_proposal():
-            # Recheck current authority even when returning a prior receipt.
-            require_character_proposal_authority(simulation, scope, actor_id)
-            return character_proposals.get_or_create(
-                scope, actor_id, body.idempotency_key, generate
-            )
-
-        receipt = (
-            character_proposals.get_or_create(scope, actor_id, body.idempotency_key, generate)
-            if durable_control is not None
-            else simulation.read_reference(reference_proposal)
-        )
+        receipt = live_decisions.decide(scope, actor_id, body.idempotency_key)
         minds.record_decision(receipt.outcome)
         response = jsonify(receipt.model_dump(mode="json"))
         response.headers["Cache-Control"] = "no-store"
@@ -2724,7 +2687,7 @@ def create_app(
             entity_id=body.embodied_entity_id,
         )
         allow_llm = body.allow_llm
-        llm_runtime_kind: Literal["LOCAL_LLM", "HOSTED_LLM"] = "HOSTED_LLM"
+        llm_runtime_kind = deliberation_kind
         planning_goal = body.planning_goal
         planning_actions = body.planning_actions
         if runtime_assignment is not None:
@@ -2749,6 +2712,7 @@ def create_app(
             "cognition:"
             + str(uuid.uuid5(uuid.NAMESPACE_URL, body.model_dump_json(exclude_none=True)))
         )
+        evaluation_provider = active_deliberation if llm_runtime_kind == deliberation_kind else None
         outcome = decision_engine.decide(
             DecisionRequest(
                 persona=evaluation_persona,
@@ -2765,12 +2729,18 @@ def create_app(
                 novel_or_ambiguous=body.novel_or_ambiguous,
                 allow_llm=allow_llm,
                 llm_runtime_kind=llm_runtime_kind,
+                prompt_contract_version=(
+                    DELIBERATION_PROMPT
+                    if evaluation_provider is not None
+                    else "deliberation-prompt-1.0.0"
+                ),
                 reflex_rules=body.reflex_rules,
                 planning_goal=planning_goal,
                 planning_actions=planning_actions,
                 planner_max_depth=body.planner_max_depth,
                 planner_max_nodes=body.planner_max_nodes,
-            )
+            ),
+            provider=evaluation_provider,
         )
         if mind_repository is not None:
             mind_repository.save_decision(outcome)
