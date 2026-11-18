@@ -13,7 +13,7 @@ from cognition.context import CharacterContext, experience_summary
 from cognition.knowledge import search_known_lore
 from kernel.state import stable_hash
 
-PROMPT_VERSION = "character-dialogue-1.1.0"
+PROMPT_VERSION = "character-dialogue-1.2.0"
 _META = re.compile(
     r"\b(simulation|simulated|npc|ai|prompt|controller|stand-in|player|"
     r"timeline|rewind|language model|software|developer|system prompt|"
@@ -29,6 +29,8 @@ class DialogueRequest(BaseModel):
     traits: dict
     intent: str
     volume: str
+    language: str = "common"
+    reply_to: str | None = None
     experiences: tuple[dict[str, str], ...]
     nearby: tuple[dict, ...]
     seed: int
@@ -63,18 +65,34 @@ def fiction(text: str) -> str:
 
 
 def generate_dialogue(
-    context: CharacterContext, parameters: dict, traits: dict, seed: int, provider: DialogueProvider
+    context: CharacterContext,
+    parameters: dict,
+    traits: dict,
+    seed: int,
+    provider: DialogueProvider,
+    *,
+    reply_event_id: uuid.UUID | None = None,
 ) -> tuple[str, DialogueReceipt]:
     fallback = parameters["text"]
     experiences: list[dict[str, str]] = []
     sources = {}
     own_lines = set()
     incoming_reference = None
+    observations = context.observations[-12:]
+    if reply_event_id is not None and all(
+        item.source_event_id != reply_event_id for item in observations
+    ):
+        scheduled = next(
+            (item for item in context.observations if item.source_event_id == reply_event_id), None
+        )
+        if scheduled is not None:
+            observations = (scheduled, *observations[-11:])
     query = next(
         (
             str(item.perceived_payload["text"])
             for item in reversed(context.observations)
             if isinstance(item.perceived_payload.get("text"), str)
+            and (reply_event_id is None or item.source_event_id == reply_event_id)
             and str(item.perceived_payload.get("speaker_entity_id"))
             != str(context.scene.observer_entity_id)
         ),
@@ -92,7 +110,7 @@ def generate_dialogue(
             reference = "m" + str(len(experiences))
             experiences.append({"reference": reference, "text": text, "speaker": "recollection"})
             sources[reference] = memory.source_event_id
-    for observation in context.observations[-12:]:
+    for observation in observations:
         text = fiction(experience_summary(observation))
         if not text:
             continue
@@ -106,7 +124,9 @@ def generate_dialogue(
         sources[reference] = observation.source_event_id
         if own:
             own_lines.add(text.casefold().strip())
-        elif observation.perceived_payload.get("speaker_entity_id"):
+        elif observation.perceived_payload.get("speaker_entity_id") and (
+            reply_event_id is None or observation.source_event_id == reply_event_id
+        ):
             incoming_reference = reference
     identity = context.identity
     authored = identity.authored_identity if identity else None
@@ -125,6 +145,8 @@ def generate_dialogue(
         },
         intent=speech_intent(fallback),
         volume=parameters.get("volume", "NORMAL"),
+        language=parameters.get("language", "common"),
+        reply_to=incoming_reference,
         experiences=tuple(experiences),
         nearby=tuple(
             {
@@ -141,7 +163,7 @@ def generate_dialogue(
         seed=seed,
     )
     reason = "no_grounded_experience"
-    if experiences:
+    if experiences and (reply_event_id is None or incoming_reference is not None):
         try:
             answer = DialogueAnswer.model_validate(provider.complete(request))
             if any(reference not in sources for reference in answer.sources) or (
