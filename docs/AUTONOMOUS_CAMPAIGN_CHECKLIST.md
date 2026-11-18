@@ -360,8 +360,11 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
   Recovery filters zero-damage repeat attacks, repeated physical backtracking, and overlong
   grounded reply chains. The model sees eligible alternatives from the same plan. An exhausted
   plan records a private controller pause reason.
-- [ ] F8 — Acceptance: small cast pursues goals, converses, responds to interruptions, and reaches a
+- [x] F8 — Acceptance: small cast pursues goals, converses, responds to interruptions, and reaches a
   consequential stopping condition without manual API calls; provider outage does not corrupt or endlessly spin the run.
+  The [unattended cast test](verification/section-f/acceptance.md) launches real workers to heal,
+  converse, and resume weather-interrupted work before an authored stopping boundary. It covers a
+  working dialogue provider and HTTP 503 fallback, with stable results after restart.
 
 ## G. Player-history stand-ins and control handoffs
 
