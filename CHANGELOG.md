@@ -2,6 +2,8 @@
 
 - Rebuild a character's decision after a committed world change invalidates a queued action.
   Fence superseded attempts across workers and restarts, and pause when the retry budget is spent.
+- Carry a critically wounded character's withdrawal and healing plan across worker restart.
+  Recheck perceived threats and bodily needs before each action and record the private cooldown.
 
 - Persist runnable activity due times and actual resource inputs and outputs. Clock events retain
   accounting for work, meals, rest, travel, sleep, and social phases replaced within one advance.

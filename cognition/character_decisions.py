@@ -11,6 +11,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cognition.behavior import BehaviorProfile, weighted_actions
+from cognition.character_plans import CharacterPlan, PlanSelection
 from cognition.choices import ChoiceProfile, weighted_choices
 from cognition.context import CharacterContext, require_projected_experience
 from cognition.context import CharacterContextPending as CharacterContextPending
@@ -64,11 +65,25 @@ class CharacterProposalReceipt(BaseModel):
     behavior: BehaviorProfile | None = None
     choices: ChoiceProfile | None = None
     dialogue: DialogueReceipt | None = None
+    plan: CharacterPlan | None = Field(default=None, exclude_if=lambda value: value is None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
     def validate_proposal_lineage(self) -> CharacterProposalReceipt:
         proposal = self.outcome.proposal
+        if self.plan is not None and (
+            proposal.decision_authorship != "CHARACTER_POLICY"
+            or (self.plan.action == "WITHDRAW" and proposal.command_type != "tabletop.spatial.move")
+            or (
+                self.plan.action == "MEND"
+                and (
+                    proposal.command_type != "tabletop.magic.invoke"
+                    or proposal.parameters.get("spell_id") != "MEND"
+                    or proposal.parameters.get("target_id") != str(self.scope.entity_id)
+                )
+            )
+        ):
+            raise ValueError("plan step differs from its scoped character proposal")
         if self.dialogue is not None and (
             proposal.command_type != "tabletop.dialogue.speak"
             or self.dialogue.output_hash != stable_hash(proposal.parameters.get("text"))
@@ -188,6 +203,7 @@ def propose_for_character(
     behavior: BehaviorProfile | None = None,
     choices: ChoiceProfile | None = None,
     dialogue_provider: DialogueProvider | None = None,
+    plan: PlanSelection | None = None,
 ) -> CharacterProposalReceipt:
     if (
         binding.scope != scope.key
@@ -213,6 +229,12 @@ def propose_for_character(
     seed = int(
         stable_hash({**identity, "run_seed": run_seed if run_seed is not None else 0})[:16], 16
     ) & ((1 << 63) - 1)
+    actions = weighted_choices(
+        weighted_actions(context.actions, behavior) if behavior else context.actions,
+        choices,
+    )
+    if plan is not None and plan.allowed_actions:
+        actions = tuple(action for action in actions if action.action in plan.allowed_actions)
     outcome = (engine or LayeredDecisionEngine()).decide(
         DecisionRequest(
             persona=profile,
@@ -224,10 +246,7 @@ def propose_for_character(
             seed=seed,
             idempotency_key="character-proposal:" + str(decision_id),
             situation=context.situation(),
-            actions=weighted_choices(
-                weighted_actions(context.actions, behavior) if behavior else context.actions,
-                choices,
-            ),
+            actions=actions,
             allow_llm=False,
             utility_margin=0,
         )
@@ -298,10 +317,15 @@ def propose_for_character(
         behavior=behavior,
         choices=choices,
         dialogue=dialogue,
+        plan=plan.plan if plan is not None else None,
     )
 
 
 class CharacterProposalRepository(Protocol):
+    def find_decision(
+        self, scope: CharacterProposalScope, actor_id: uuid.UUID, decision_id: uuid.UUID
+    ) -> CharacterProposalReceipt | None: ...
+
     def get_or_create(
         self,
         scope: CharacterProposalScope,
@@ -315,6 +339,19 @@ class InMemoryCharacterProposals:
     def __init__(self) -> None:
         self._rows: dict[tuple, CharacterProposalReceipt] = {}
         self._lock = threading.RLock()
+
+    def find_decision(
+        self, scope: CharacterProposalScope, actor_id: uuid.UUID, decision_id: uuid.UUID
+    ) -> CharacterProposalReceipt | None:
+        with self._lock:
+            for receipt in self._rows.values():
+                if (receipt.scope, receipt.actor_id, receipt.decision_id) == (
+                    scope,
+                    actor_id,
+                    decision_id,
+                ):
+                    return receipt.model_copy(deep=True)
+        return None
 
     def get_or_create(
         self,

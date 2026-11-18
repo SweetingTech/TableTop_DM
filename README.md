@@ -16,6 +16,8 @@ on their card, backstory, and observed play history.
   dialogue generation uses an endpoint and model chosen by the operator.
 - When committed events invalidate a queued action, the runner can rebuild the character's
   context and choose again within a bounded retry budget.
+- A critically injured character can withdraw from a perceived attacker and reassess whether
+  to heal. The worker resumes the plan from committed actions after restart.
 - The world clock advances work, meals, rest, commutes, and appointments while the party is
   elsewhere. Changes in weather, danger, or bodily needs can interrupt and resume that activity.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The

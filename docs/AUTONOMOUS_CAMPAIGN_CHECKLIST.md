@@ -335,8 +335,11 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
   A failed physical action evaluated against a newer committed revision rebuilds the character's
   scoped context under a bounded retry budget. Reference and PostgreSQL tests cover a conflicting
   heal, a fresh decision, and rejection of the superseded attempt after worker restart.
-- [ ] F2 — Persist goals, plan progress, needs, cooldowns, and next-decision time. Execute plans stepwise;
+- [x] F2 — Persist goals, plan progress, needs, cooldowns, and next-decision time. Execute plans stepwise;
   recheck preconditions rather than blindly applying an entire generated plan.
+  Recovery plans record withdrawal, healing, needs, and cooldown in private receipts. Each
+  decision rechecks the scene and continues only from the preceding accepted command. PostgreSQL
+  verification restarts the worker between steps.
 - [ ] F3 — Implement injected model providers behind [DeliberationProvider](../cognition/deliberation.py).
   Wire the API and worker composition; the current API passes no provider even for model runtime assignments.
 - [ ] F4 — Add timeout/retry, usage accounting, context limits, provider configuration, recorded

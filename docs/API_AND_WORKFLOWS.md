@@ -914,6 +914,13 @@ observations defer every 250 ms and pause after 40 unsuccessful checks. A succes
 clears the failure count. The action budget pauses with `step_limit`. Resume a paused body with
 a new handoff key and the current epoch.
 
+The autonomous runner can start a recovery plan when a capable character is critically wounded,
+perceives an adjacent attacker, and has a valid self-heal available. It takes one step away,
+rebuilds context, and uses MEND when the threat is no longer adjacent and healing is still urgent.
+If conditions change, the runner reassesses and returns to ordinary choices. The private receipt
+records the goal, bodily needs, completed step count, and preceding command. Completion and
+interruption both start a two-decision cooldown in that controller epoch.
+
 The Game Console exposes Let character act, Pause autonomy, Take control, and an action limit.
 It polls status, refreshes the authorized scene on progress, and disables human submission until
 takeover. Saved mode survives browser closure and process restart. Closing a browser while HUMAN
