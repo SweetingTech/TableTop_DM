@@ -26,6 +26,14 @@ class BodyOutsideRelevance(BodyActionPending):
     """An offscreen NPC is following its background routine."""
 
 
+class ActionRejectedAtRevision(ValueError):
+    """An autonomous action failed validation against this committed branch revision."""
+
+    def __init__(self, revision: int) -> None:
+        super().__init__("character action rejected")
+        self.revision = revision
+
+
 class DuplicateCommand(KernelError):
     pass
 

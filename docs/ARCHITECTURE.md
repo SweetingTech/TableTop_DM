@@ -13,6 +13,11 @@ earlier claimed event or retry blocks later events on that topic while other bra
 continue. Claim tokens and the outbox row lock fence competing projectors. The character
 proposal service still requires each of the body's frozen observations before deciding.
 
+The character runner can replan after a typed action fails against a branch revision newer than
+its proposal. It starts a new private attempt at the same controller epoch and step. Reference
+and durable submission validate that attempt under the branch lock, so delayed workers cannot
+commit a superseded proposal. A rejected attempt publishes no world event or evidence.
+
 Durable private-receipt presentation uses the existing `sim.has_world_capability` function in an
 actor-scoped transaction. This bounded read observes current exact-world grants without hydrating
 all world state or trusting the API's cached authority. A separate-process DM revocation applies

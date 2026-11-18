@@ -7,6 +7,8 @@ import pytest
 
 from kernel.errors import AuthorizationDenied
 from tests.unit.kernel.test_character_binding_api import _app, setup_bound_character
+from tests.unit.kernel.test_speech_combat_behavior import provoke, setup_scene
+from tests.unit.kernel.test_tactical_choices import command, resources
 
 pytestmark = pytest.mark.unit
 
@@ -139,6 +141,85 @@ def test_invalidated_action_pauses_instead_of_spinning(monkeypatch, tmp_path):
     )
     assert app.extensions["character_runner"].run_once() == 0
     assert len(app.extensions["simulation"].events) == count
+
+
+def queue_heal(app, player, path, run):
+    handed = player.post(
+        path + "/control",
+        json={
+            "run_id": run,
+            "expected_epoch": 0,
+            "mode": "AUTONOMOUS",
+            "max_steps": 1,
+            "idempotency_key": "leave",
+        },
+    )
+    assert handed.status_code == 200, handed.get_json()
+    state = next(row for row in app.extensions["controllers"].due() if str(row.run_id) == run)
+    proposal = app.extensions["character_decisions"].decide(
+        state.scope, state.executor_actor_id, state.decision_key, state
+    )
+    assert proposal.outcome.proposal.parameters == {
+        "spell_id": "MEND",
+        "target_id": str(state.entity_id),
+    }
+    return state, proposal
+
+
+def prepare_wounded_body(app, admin, card, target, base):
+    resources(app, admin, base, card["entity_id"], known_spells=("MEND",))
+    resources(app, admin, base, target)
+    provoke(admin, base, target, card, "threat-before-intervention")
+
+
+def heal_from_nearby_body(admin, card, target, base):
+    for index in range(2):
+        response = command(
+            admin,
+            base,
+            {"entity_id": target},
+            "tabletop.magic.invoke",
+            {"spell_id": "MEND", "target_id": card["entity_id"]},
+            f"heal-first-{index}",
+        )
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()["event"]["payload"]["power"] == 4
+
+
+def test_committed_heal_invalidates_queued_self_heal_and_replans(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, target, base = setup_scene(app)
+    prepare_wounded_body(app, admin, card, target, base)
+    initial, rejected = queue_heal(app, player, path, run)
+    heal_from_nearby_body(admin, card, target, base)
+
+    runner = app.extensions["character_runner"]
+    sim = app.extensions["simulation"]
+    count = len(sim.events)
+    assert runner.run_once() == 0
+    retry = sim.controller_states[initial.key]
+    assert (retry.mode, retry.step, retry.failures, retry.last_error) == (
+        "AUTONOMOUS",
+        0,
+        1,
+        "action_invalidated",
+    )
+    runner.controllers.defer(initial, "action_failed")
+    assert sim.controller_states[initial.key] == retry
+    due = retry.model_copy(update={"next_due": datetime.now(UTC)})
+    sim.controller_states[initial.key] = due
+    with pytest.raises(AuthorizationDenied):
+        sim.submit(rejected.outcome.proposal)
+    assert len(sim.events) == count
+
+    assert runner.run_once() == 1
+    assert runner.run_once() == 0
+    result = list(sim.events.values())[-1]
+    assert len(sim.events) == count + 1
+    assert result.decision_trace_id != rejected.decision_id
+    assert result.event_type != "tabletop.magic.invoke"
+    stopped = sim.controller_states[initial.key]
+    assert (stopped.step, stopped.failures, stopped.last_error) == (1, 0, "step_limit")
 
 
 def test_paused_run_and_projection_circuit_are_bounded(monkeypatch, tmp_path):

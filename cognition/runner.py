@@ -18,7 +18,7 @@ from cognition.character_decisions import (
 )
 from cognition.choices import ChoiceProfile
 from cognition.context import CharacterContext
-from cognition.control import ControllerRepository
+from cognition.control import REPLAN_LIMIT, ControllerRepository
 from cognition.dialogue_generation import DialogueProvider
 from cognition.store import MindStore
 from domains.tabletop.action_time import wait_seconds
@@ -30,6 +30,7 @@ from domains.tabletop.spatial.service import build_perceived_scene
 from kernel.application import SimulationApplication
 from kernel.control import ControllerState, ControlScope
 from kernel.errors import (
+    ActionRejectedAtRevision,
     BodyActionPending,
     BodyIncapacitated,
     BodyOutsideRelevance,
@@ -184,10 +185,18 @@ class CharacterRunner:
                 receipt = self.decisions.decide(
                     controller.scope,
                     controller.executor_actor_id,
-                    f"controller:{controller.epoch}:step:{controller.step}",
+                    controller.decision_key,
                     controller,
                 )
-                self.snapshot().submit(receipt.outcome.proposal)
+                try:
+                    self.snapshot().submit(receipt.outcome.proposal)
+                except ActionRejectedAtRevision as error:
+                    if error.revision <= receipt.projection_version:
+                        raise
+                    self.controllers.defer(
+                        controller, "action_invalidated", retry_limit=REPLAN_LIMIT
+                    )
+                    continue
                 committed += 1
             except BodyOutsideRelevance:
                 self.controllers.defer(controller, None)
@@ -196,7 +205,7 @@ class CharacterRunner:
                 # Keep epoch/step, mode and failure budget intact for clock resume.
                 continue
             except CharacterContextPending:
-                self.controllers.defer(controller, "character_context_pending", pending=True)
+                self.controllers.defer(controller, "character_context_pending", retry_limit=39)
             except (ValueError, PermissionError, KernelError):
                 # Diagnostic details may contain hidden state. Store a stable operator code.
                 self.controllers.defer(controller, "action_failed")

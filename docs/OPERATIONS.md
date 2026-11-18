@@ -1,5 +1,10 @@
 # Operations, storage, migrations, and security
 
+Deploy the same application version across character runners. They use the existing durable
+controller failure count to fence rejected attempts and resume replanning after restart. No
+schema migration is required. Inspect the private controller status for `action_invalidated`,
+`action_failed`, or `step_limit` when a character stops.
+
 Apply migration 014 before starting the updated application and world runner. It backfills due
 work for running canonical clocks. The worker leases steps for 30 seconds on database time and
 uses exponential retry delays capped at 60 seconds. Current world grants restrict queue access

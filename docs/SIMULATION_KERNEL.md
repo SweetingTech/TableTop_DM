@@ -1,5 +1,10 @@
 # Simulation-kernel contract
 
+Autonomous proposal validation compares the controller epoch, step, and retry attempt under the
+same lock as command resolution. A handler's rejection records the evaluated revision for the
+runner. Only a newer revision permits replanning at the same step. Committed idempotent receipts
+remain available after the controller has advanced.
+
 Clock leases and retry delays are operational metadata outside replay state. The repository
 locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
 The ledger redacts lease tokens. An idempotent retry returns the original receipt before

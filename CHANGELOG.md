@@ -1,5 +1,8 @@
 # Changelog
 
+- Rebuild a character's decision after a committed world change invalidates a queued action.
+  Fence superseded attempts across workers and restarts, and pause when the retry budget is spent.
+
 - Persist runnable activity due times and actual resource inputs and outputs. Clock events retain
   accounting for work, meals, rest, travel, sleep, and social phases replaced within one advance.
 - Record why a routine switches activities and retain the interruption cause and time when

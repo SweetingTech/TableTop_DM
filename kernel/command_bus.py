@@ -14,7 +14,14 @@ from kernel.contracts import (
     CommandResult,
     EventEnvelopeV2,
 )
-from kernel.errors import AuthorizationDenied, BodyOutsideRelevance, UnknownCommand
+from kernel.errors import (
+    ActionRejectedAtRevision,
+    AuthorizationDenied,
+    BodyActionPending,
+    BodyIncapacitated,
+    BodyOutsideRelevance,
+    UnknownCommand,
+)
 from kernel.event_factory import EmissionBuilder, EventFactory
 from kernel.perception_contracts import PerceptionGrant
 from kernel.randomness import allocate_randomness
@@ -73,12 +80,24 @@ def resolve_command(
 
         if uses_offscreen_routine(state, proposal.embodied_entity_id):
             raise BodyOutsideRelevance("body is following its background routine")
-    if not definition.uses_randomness:
-        return definition.handler(proposal, state)
-    proof = allocate_randomness(run_seed, state.version + 1, proposal.command_type)
+    proof = (
+        allocate_randomness(run_seed, state.version + 1, proposal.command_type)
+        if definition.uses_randomness
+        else None
+    )
     # Keep the original policy/decision seed on its proposal and trace. Only the
     # mechanics handler receives the independently allocated physical-action seed.
-    result = definition.handler(proposal.model_copy(update={"seed": proof.action_seed}), state)
+    mechanics = proposal.model_copy(update={"seed": proof.action_seed}) if proof else proposal
+    try:
+        result = definition.handler(mechanics, state)
+    except (BodyIncapacitated, BodyActionPending):
+        raise
+    except ValueError:
+        if proposal.decision_authorship == "CHARACTER_POLICY":
+            raise ActionRejectedAtRevision(state.version) from None
+        raise
+    if proof is None:
+        return result
     return result.model_copy(
         update={"result": {**result.result, "randomness": proof.model_dump(mode="json")}}
     )

@@ -42,12 +42,18 @@ class ControllerState(ControlScope):
     def scope(self) -> ControlScope:
         return ControlScope.model_validate(self.model_dump())
 
+    @property
+    def decision_key(self) -> str:
+        key = f"controller:{self.epoch}:step:{self.step}"
+        return f"{key}:retry:{self.failures}" if self.failures else key
+
 
 def validate_controller(proposal: CommandProposal, state: ControllerState | None) -> None:
     if state is None:
         if (
             proposal.control_epoch is not None
             or proposal.control_step is not None
+            or proposal.control_attempt is not None
             or proposal.decision_authorship != "HUMAN"
         ):
             raise AuthorizationDenied("controller assignment is unavailable")
@@ -59,6 +65,7 @@ def validate_controller(proposal: CommandProposal, state: ControllerState | None
             proposal.actor_id == state.owner_actor_id
             and proposal.decision_authorship == "HUMAN"
             and proposal.control_step is None
+            and proposal.control_attempt is None
         )
     else:
         allowed = (
@@ -66,6 +73,7 @@ def validate_controller(proposal: CommandProposal, state: ControllerState | None
             and proposal.actor_id == state.executor_actor_id
             and proposal.decision_authorship == "CHARACTER_POLICY"
             and proposal.control_step == state.step
+            and (proposal.control_attempt or 0) == state.failures
             and state.step < state.max_steps
             and state.next_due <= datetime.now(UTC)
             and proposal.decision_trace_id is not None
