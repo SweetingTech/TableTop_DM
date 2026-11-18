@@ -384,6 +384,10 @@ amounts. Body projections remain authoritative for balances. When a clock comman
 phase, its accounting goes into the same committed clock event. Replay consumes the recorded
 deltas and never grants an output a second time.
 
+When an NPC routine suspends a phase, the kernel records the trigger and exact simulated
+second before switching. The replacement records its own cause. A resumed phase carries that
+history forward while its current wait reason clears.
+
 Daily planning uses the existing typed routine configuration and fenced clock command. Its
 bounded intention menu and private `planner` metadata are not additional authority. Actual goal
 time, route steps, needs, daily resets, choices and canonical effects commit atomically with the

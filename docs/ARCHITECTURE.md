@@ -532,6 +532,10 @@ an activity in the same command, that activity's last accounting record goes int
 event with its existing restricted audience. This keeps the physical projections independent
 of clock-step partitioning.
 
+An automatic phase switch records its trigger on the new activity and that trigger's cause and
+time on the displaced phase. Resuming the previous activity preserves its identity, outputs
+and recorded interruption.
+
 Migration 011 adds source binding evidence, scoped foreign keys and freeze guards. The command
 transaction locks and hashes the materialized source, commits the binding with projection/event/
 outbox, then prevents legacy state or transition writers from changing that source. Reference

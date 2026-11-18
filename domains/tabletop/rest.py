@@ -85,6 +85,7 @@ def start(proposal: CommandProposal, state: BranchState) -> CommandResult:
         started_seconds=now,
         updated_seconds=now,
         origin=position(state, key),
+        cause="MANUAL",
     )
     return CommandResult(
         result=RestResult(

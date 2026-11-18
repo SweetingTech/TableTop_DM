@@ -10,7 +10,14 @@ import uuid
 
 from cognition.goal_motivation import GoalMotivation
 from domains.tabletop.action_time import wait_seconds
-from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position
+from domains.tabletop.activities import (
+    ACTIVITIES,
+    WEATHER,
+    Activity,
+    ActivityCause,
+    ActivityRecords,
+    position,
+)
 from domains.tabletop.rules import incapacitated
 from kernel.state import BranchState
 from population.life import DAY, due_obligation, route, sleeping, switch, travel
@@ -18,7 +25,9 @@ from population.life import DAY, due_obligation, route, sleeping, switch, travel
 POLICY_VERSION = "npc-daily-planning-1.2.0"
 
 
-def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
+def prepare_plan(
+    state: BranchState, key: str, row: dict, now: int, records: ActivityRecords
+) -> None:
     body = state.projections["tabletop.entities"][key]
     plan = row["life"]
     options = plan["planning"]
@@ -72,7 +81,14 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
     interval = options["retry_seconds"]
     slot = now // interval
 
-    def choose(task: str, kind: str, place: dict, duration: int, reason: str, details=None):
+    def choose(
+        task: str,
+        kind: str,
+        place: dict,
+        duration: int,
+        reason: ActivityCause,
+        details: dict | None = None,
+    ) -> tuple[Activity, ActivityCause]:
         if (
             motivation
             and place == plan["home"]
@@ -93,9 +109,13 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
                 if place == plan["home"] and task.startswith(("fallback:", "safe:", "sleep:"))
                 else task
             )
-            activity = travel(state, key, row, travel_task, place, now)
+            activity = travel(
+                state, key, row, travel_task, place, now, cause=reason, records=records
+            )
         else:
-            activity = switch(state, key, row, task, kind, now, duration, details)
+            activity = switch(
+                state, key, row, task, kind, now, duration, details, cause=reason, records=records
+            )
         return activity, reason
 
     if danger:
@@ -178,14 +198,16 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
                 {"planning_goal": identity},
             )
         else:
-            reason = (
+            fallback_reason: ActivityCause = (
                 "RAIN"
                 if raining
                 else "BELIEF_AVOIDANCE"
                 if motivation and motivation.avoided
                 else "DAY_COMPLETE"
             )
-            activity, reason = choose(f"fallback:{slot}", "REST", plan["home"], interval, reason)
+            activity, reason = choose(
+                f"fallback:{slot}", "REST", plan["home"], interval, fallback_reason
+            )
 
     activity = activity.model_copy(update={"status": "RUNNING", "reason": None})
     expected = activity.details.get("expected") if activity.kind == "TRAVEL" else activity.origin

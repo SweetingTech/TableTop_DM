@@ -1082,6 +1082,11 @@ work, a null due time during an interruption or cancellation, and the actual fin
 after completion. Inputs and outputs are cumulative for that activity ID. Food is recorded
 only when a meal completes. Rest records actual recoveries within the body's limits.
 
+`cause` records why the activity started. When a routine switches from work to a meal,
+the meal's cause is `HUNGER` and the suspended work records that cause and its exact simulated
+second in `last_interruption`. Work resumes with the same ID and progress. It clears the current
+wait reason and keeps the recorded interruption.
+
 When one advance replaces a phase, the clock command result and its restricted event include
 that phase's last record in `activity_records`. Earlier records for the same ID describe earlier
 cumulative totals. Player scenes still carry the perceived activity summary. Older stored

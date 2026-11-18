@@ -18,6 +18,29 @@ ACTIVITIES = "tabletop.activities"
 WEATHER = "tabletop.weather"
 SCHEDULE = "tabletop.weather_schedule"
 
+ActivityCause = Literal[
+    "MANUAL",
+    "ROUTINE",
+    "HUNGER",
+    "FATIGUE",
+    "SLEEP",
+    "COMMUTE",
+    "OBLIGATION",
+    "DAILY_GOAL",
+    "INJURY",
+    "BELIEVED_DANGER",
+    "NO_FOOD",
+    "RAIN",
+    "BELIEF_AVOIDANCE",
+    "DAY_COMPLETE",
+]
+
+
+class ActivityInterruption(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    cause: ActivityCause
+    at_seconds: int = Field(ge=0)
+
 
 class ActivityInputs(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -58,12 +81,11 @@ class ActivityRecord(BaseModel):
     progress_seconds: int = Field(default=0, ge=0)
     status: Literal["RUNNING", "WAITING", "COMPLETED", "CANCELLED"] = "RUNNING"
     reason: (
-        Literal[
-            "RAIN",
+        ActivityCause
+        | Literal[
             "INCAPACITATED",
             "ACTION_BUSY",
             "MOVED",
-            "NO_FOOD",
             "PATH_BLOCKED",
             "PARTNER_UNAVAILABLE",
             "NOT_STARTED",
@@ -71,6 +93,8 @@ class ActivityRecord(BaseModel):
         ]
         | None
     ) = None
+    cause: ActivityCause | None = None
+    last_interruption: ActivityInterruption | None = None
     due_seconds: int | None = Field(default_factory=activity_due, ge=0)
     inputs: ActivityInputs = Field(default_factory=ActivityInputs)
     outputs: ActivityOutputs = Field(default_factory=ActivityOutputs)
@@ -111,6 +135,14 @@ class Activity(ActivityRecord):
                     }
                 ),
             }
+        )
+
+    def suspend(self, cause: ActivityCause, now: int) -> Activity:
+        return self.evolve(
+            status="WAITING",
+            reason=cause,
+            updated_seconds=now,
+            last_interruption=ActivityInterruption(cause=cause, at_seconds=now),
         )
 
 
@@ -204,6 +236,7 @@ def start(proposal: CommandProposal, state: BranchState) -> CommandResult:
         started_seconds=now,
         updated_seconds=now,
         origin=origin,
+        cause="MANUAL",
     )
     return CommandResult(
         result={"activity_id": str(activity.activity_id)},

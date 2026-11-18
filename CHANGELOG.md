@@ -2,6 +2,8 @@
 
 - Persist runnable activity due times and actual resource inputs and outputs. Clock events retain
   accounting for work, meals, rest, travel, sleep, and social phases replaced within one advance.
+- Record why a routine switches activities and retain the interruption cause and time when
+  the original work resumes.
 - Refresh the GitHub README, add campaign artwork, and bring the campaign checklist and operator
   guides up to date.
 
