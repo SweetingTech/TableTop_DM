@@ -26,6 +26,7 @@ _CADENCE_LINES = {
         "DEESCALATE": "Let's talk.",
         "ASSERT": "Stay back.",
     },
+    "BALANCED": {"ASK": "Tell me, what do you need?"},
     "ELABORATE": {
         "GREET": "Hello. I am glad our paths crossed. It is good to see you here today.",
         "ASK": "Tell me what you came here for. Is there something I can do to help you?",

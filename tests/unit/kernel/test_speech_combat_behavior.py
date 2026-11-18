@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from cognition.choice_state import SPEECH, cadence_line, speech_cadence, speech_intent
 from cognition.choices import choice_profile, weighted_choices
 from cognition.context import CharacterContext
 from cognition.engine import DecisionAction, DecisionRequest, LayeredDecisionEngine
@@ -75,10 +76,23 @@ def provoke(admin, base, target, card, key):
     assert response.status_code == 200, response.get_json()
 
 
+def test_speech_fallback_preserves_cadence_and_intent():
+    for intent, template in SPEECH.items():
+        for cadence in ("BRIEF", "BALANCED", "ELABORATE"):
+            line = cadence_line(template, cadence)
+            assert speech_cadence(line) == cadence
+            assert speech_intent(line) == intent
+
+
 @pytest.mark.parametrize(
     ("manual_text", "cadence", "expected"),
     [
         ("Hello, friend.", "BRIEF", "Hello."),
+        (
+            "Which of these roads should we take from here?",
+            "BALANCED",
+            "Tell me, what do you need?",
+        ),
         (
             "Hello to you, friend. I'm glad the road brought our small company here today.",
             "ELABORATE",
