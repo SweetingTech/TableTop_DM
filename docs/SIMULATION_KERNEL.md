@@ -26,6 +26,9 @@ controller steps in the same actor, run, body, and epoch. Speech recovery follow
 only through speech in the current body's validated observation window. Recovery changes eligible
 proposals and private controller status through the existing fenced workflow.
 
+Run locks for proposal storage, binding and handoff admit foreign-key references from canonical
+commands. Clock commits can finish while a proposal waits to acquire the branch lock.
+
 Clock leases and retry delays are operational metadata outside replay state. The repository
 locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
 The ledger redacts lease tokens. An idempotent retry returns the original receipt before

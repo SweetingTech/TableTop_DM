@@ -71,7 +71,8 @@ class PostgresControllers:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 self._owner(cursor, scope, actor_id)
                 cursor.execute(
-                    "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) FOR UPDATE",
+                    "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) "
+                    "FOR NO KEY UPDATE",
                     tuple(map(str, scope.key[:3])),
                 )
                 cursor.execute(

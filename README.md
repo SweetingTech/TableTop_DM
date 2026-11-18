@@ -26,6 +26,8 @@ on their card, backstory, and observed play history.
   character's own experience. Each line links to the committed event it describes.
 - The world clock advances work, meals, rest, commutes, and appointments while the party is
   elsewhere. Changes in weather, danger, or bodily needs can interrupt and resume that activity.
+- The [unattended cast test](docs/verification/section-f/acceptance.md) verifies character recovery,
+  conversation, weather interruptions, and a finite stopping condition with the production workers.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
   campaign roadmap tracks complete rewind, authored story direction, and an executable AI DM.
 

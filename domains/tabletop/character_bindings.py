@@ -101,7 +101,8 @@ class PostgresCharacterBindings:
         with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
-                    "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) FOR UPDATE",
+                    "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) "
+                    "FOR NO KEY UPDATE",
                     tuple(map(str, binding.scope[:3])),
                 )
                 if cursor.fetchone() is None:

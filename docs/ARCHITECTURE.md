@@ -227,6 +227,10 @@ character's witnessed speech lineage. It narrows the current plan's candidates b
 or model-assisted selection. The controller reports a pause when every candidate repeats the
 stall, and accepted recovery decisions retain private evidence of which choices were skipped.
 
+Character proposal persistence, binding changes, and controller handoffs serialize run writes
+with `FOR NO KEY UPDATE`. Canonical branch commits can concurrently check their command and
+event foreign keys against that run. The branch lock still fences changes to physical state.
+
 Generated dialogue is an optional expression layer after deterministic intent selection. An
 injected provider receives sanitized identity and sourced subjective experience, never simulation
 authority or profile/controller metadata. Its typed text/source response replaces only speech
