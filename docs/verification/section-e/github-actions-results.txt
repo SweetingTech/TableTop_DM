@@ -1,0 +1,58 @@
+Original section E execution evidence
+Tested revision: 798d7ef110aeb1a10ec67f5cfd362c66baff97dd
+Reviewed application: https://github.com/SweetingTech/TableTop_DM/pull/111
+This report retains original GitHub job output excerpts, with ANSI and terminal controls removed.
+The targeted supplemental PostgreSQL report adds direct assertions for E1, E2, E4, and E5.
+
+quality
+Job: https://github.com/SweetingTech/TableTop_DM/actions/runs/44216484534/job/134507476941
+Tested revision: 798d7ef110aeb1a10ec67f5cfd362c66baff97dd
+GitHub conclusion: success
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy kernel persona cognition population experiments domains main.py
+uv run pytest -m "unit or contracts"
+npm --prefix frontend run lint
+npm --prefix frontend run test
+npm --prefix frontend run build
+Original output:
+quality	Python lint and format	2026-11-18T01:32:31.8772039Z All checks passed!
+quality	Python lint and format	2026-11-18T01:32:31.9316074Z 341 files already formatted
+quality	Python types	2026-11-18T01:32:37.4473710Z Success: no issues found in 145 source files
+quality	Unit and contract tests	2026-11-18T01:34:12.8860883Z 713 passed, 215 deselected in 94.72s (0:01:34)
+quality	Build and smoke-test the installable wheel	2026-11-18T01:34:14.6827296Z wheel runtime assets verified: tabletop_dm-2.0.0-py3-none-any.whl
+quality	Frontend lint, unit tests, and production build	2026-11-18T01:34:26.4578811Z ^[[2m      Tests ^[[22m ^[[1m^[[32m70 passed^[[39m^[[22m^[[90m (70)^[[39m
+quality	Frontend lint, unit tests, and production build	2026-11-18T01:34:30.1523733Z ^[[32m✓ built in 204ms^[[39m
+
+integration
+Job: https://github.com/SweetingTech/TableTop_DM/actions/runs/44216484534/job/134507477324
+Tested revision: 798d7ef110aeb1a10ec67f5cfd362c66baff97dd
+GitHub conclusion: success
+uv run pytest -m integration -v
+Original output:
+integration	Run PostgreSQL, RLS, migration, and worker integration tests	2026-11-18T01:42:45.9607942Z tests/integration/test_population_life.py .....                          [ 59%]
+integration	Run PostgreSQL, RLS, migration, and worker integration tests	2026-11-18T01:43:59.7832576Z tests/integration/test_population_planning.py ...                        [ 60%]
+integration	Run PostgreSQL, RLS, migration, and worker integration tests	2026-11-18T01:46:31.0259720Z tests/integration/test_population_runtime.py .......                     [ 65%]
+integration	Run PostgreSQL, RLS, migration, and worker integration tests	2026-11-18T02:05:10.5510521Z tests/integration/test_world_time.py ......                              [100%]
+integration	Run PostgreSQL, RLS, migration, and worker integration tests	2026-11-18T02:05:10.5511239Z ========= 166 passed, 762 deselected, 1 warning in 1985.74s (0:33:05) ==========
+
+playwright
+Job: https://github.com/SweetingTech/TableTop_DM/actions/runs/44216484462/job/134507476730
+Tested revision: 798d7ef110aeb1a10ec67f5cfd362c66baff97dd
+GitHub conclusion: success
+uv run pytest -m e2e tests/e2e -v
+Original output:
+playwright	Build and start the full v2 stack	2026-11-18T01:38:25.8679509Z #20 4.333 ✓ built in 227ms
+playwright	Run user-level journeys	2026-11-18T01:40:52.6732117Z tests/e2e/test_population_routines_isolated.py .                         [ 59%]
+playwright	Run user-level journeys	2026-11-18T01:41:38.0381222Z ======================== 49 passed in 171.57s (0:02:51) ========================
+
+image
+Job: https://github.com/SweetingTech/TableTop_DM/actions/runs/44216484534/job/134507477258
+Tested revision: 798d7ef110aeb1a10ec67f5cfd362c66baff97dd
+GitHub conclusion: success
+docker build --tag tabletop-dm-v2:ci .
+Original output:
+image	Build production image	2026-11-18T01:32:36.5042259Z #19 4.145 ✓ built in 221ms
+image	Build production image	2026-11-18T01:32:44.7958275Z #22 exporting manifest sha256:9d765a4cdf7091707272e7bad5bb2faadc39508cfcde8557211a8b870a124470 done
+image	Build production image	2026-11-18T01:32:44.7961362Z #22 exporting manifest list sha256:1caabe3e1325177ca86ea36e0386e9eb061ab5fdade77d79d0d9c59218ca7f0d done
+image	Build production image	2026-11-18T01:32:44.7962069Z #22 naming to docker.io/library/tabletop-dm-v2:ci done

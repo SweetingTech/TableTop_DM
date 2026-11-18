@@ -1,0 +1,229 @@
+Supplemental execution evidence for Orderly Task 6
+Tested revision: 798d7ef110aeb1a10ec67f5cfd362c66baff97dd
+Reviewed application: https://github.com/SweetingTech/TableTop_DM/pull/111
+Original claim: aecca583-6ee5-491d-88c1-51681cb0cc47
+
+Three targeted pytest probes ran on a detached checkout of the reviewed commit.
+The helper started isolated PostgreSQL 16 and Redis 7 containers, created a
+fresh migrated database, and invoked the test runner from the detached checkout.
+All tested modules came from that checkout. The probe code and original output
+are retained below. Local directory prefixes were replaced in the output.
+Two exploratory executions changed only the probe inputs and expectations:
+the activation request needs an empty active_state, and the first clock
+advance had already automatically activated the nearby character.
+
+Executed with local paths normalized:
+uv run python <temp>/ttdm-e-proof-isolated.py <detached reviewed checkout> -s -c <detached reviewed checkout>/pyproject.toml -p tests.integration.conftest <temp>/test_ttdm_e_proof_798d7ef.py
+Helper invokes: python -m pytest -v --tb=short with those pytest arguments.
+
+Original output for the passing run:
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: <detached tested worktree>
+configfile: pyproject.toml
+plugins: anyio-4.12.1, base-url-2.1.0, cov-7.1.0, playwright-0.9.0
+collected 3 items
+
+. applied 001_simulation_kernel.sql
+applied 002_identity_and_tabletop_workspaces.sql
+applied 003_spatial_epistemics.sql
+applied 004_persona_purpose.sql
+applied 005_character_history_and_bindings.sql
+applied 006_character_proposal_receipts.sql
+applied 007_controller_handoff_runner.sql
+applied 008_player_behavior_evidence.sql
+applied 009_speech_combat_evidence.sql
+applied 010_tactical_choice_evidence.sql
+applied 011_population_body_binding.sql
+applied 012_snapshot_entity_identity.sql
+applied 013_roster_controller_revocation.sql
+applied 014_world_due_work.sql
+migration state current (14 migrations)
+E1 observed after fresh API: owner matches canonical body; start=10, due=110, progress=24, cause=MANUAL, inputs.food=0, outputs.weeded_units=24, stable activity ID
+.E2 observed pool size/materialized/active: (4,1,0) -> (4,1,1) -> (4,1,0) -> (4,1,1); statistical sample has 4 distinct IDs; SQL has one person, one persona, one existing body; duplicate bind returned the same receipt; source finances absent from live member; only body owns the 70 weeded units
+E4 observed real PopulationLifecycle.deactivate/activate/deactivate/activate calls; each transition retained identical waiting activity, ID, progress=30 and outputs; fresh API retained work, clearing rain resumed the same phase to 70, retry retained original receipt and verified replay left body total=70
+.E5 observed fatigue preemption at second 60: the same work ID waited with progress=60, cause=FATIGUE; rest started at 60 and recovered one fatigue unit by 61; after API restart rest finished and the work resumed at progress=61.
+E5 runtime typed vocabulary: WEED, REST, EAT, TRAVEL, SLEEP, SOCIAL
+.
+
+============================= 3 passed in 27.46s ==============================
+
+Exact probe assertions and observation code:
+import os
+from pathlib import Path
+from typing import get_args
+from uuid import UUID
+
+import psycopg2
+import pytest
+
+from domains.tabletop.activities import Activity, ActivityRecord
+from kernel.api.app import create_app
+from population.lifecycle import PopulationLifecycle
+from tests.integration.test_world_time import clock_path, prepare
+from tests.unit.kernel.test_population_runtime_api import seed_routine
+from tests.unit.kernel.test_world_time import api_command
+
+pytestmark = pytest.mark.integration
+
+
+def fresh_client(path):
+    app = create_app(artifact_root=path)
+    client = app.test_client()
+    client.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    return client
+
+
+def tick(client, base, prior, current):
+    return api_command(
+        client, base, "tabletop.clock.advance",
+        {"expected_epoch": 1, "expected_seconds": prior, "to_seconds": current},
+        f"proof-clock-{current}",
+    )
+
+
+def test_e1_typed_activity_and_nonzero_start_owner_survive_restart(
+    integration_stack, monkeypatch, tmp_path
+):
+    assert Path.cwd().name == "TableTop_DM-proof-798d7ef"
+    import inspect
+    assert Path(inspect.getfile(Activity)).resolve().is_relative_to(Path.cwd())
+    app, (admin, _, _, _, _, body, base) = prepare(integration_stack, monkeypatch, tmp_path)
+    initial = admin.get(clock_path(base)).get_json()["activities"][body]
+    api_command(admin, base, "tabletop.activity.cancel",
+                {"entity_id": body, "activity_id": initial["activity_id"]}, "proof-cancel")
+    tick(admin, base, 0, 10)
+    api_command(admin, base, "tabletop.activity.start",
+                {"entity_id": body, "kind": "WEED", "duration_seconds": 100}, "proof-start")
+    tick(admin, base, 10, 34)
+    before = admin.get(clock_path(base)).get_json()["activities"][body]
+    restored = fresh_client(tmp_path)
+    after = restored.get(clock_path(base)).get_json()["activities"][body]
+    assert before == after
+    row = Activity.model_validate(after)
+    assert row.entity_id == UUID(body) and row.started_seconds == 10
+    assert row.due_seconds == 110 and row.progress_seconds == 24
+    assert row.cause == "MANUAL" and row.inputs.food == 0 and row.outputs.weeded_units == 24
+    assert type(row.activity_id) is UUID
+    assert {"cause", "at_seconds"} == set(ActivityRecord.model_json_schema()["$defs"][
+        "ActivityInterruption"]["properties"])
+    print("E1 observed after fresh API: owner matches canonical body; start=10, due=110, "
+          "progress=24, cause=MANUAL, inputs.food=0, outputs.weeded_units=24, stable activity ID")
+
+
+def test_e2_e4_population_counts_resources_and_exact_work_across_lifecycle(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, _, _, _, _, target, base) = prepare(integration_stack, monkeypatch, tmp_path)
+    root, member_path, binding = seed_routine(app, admin, base, target, bind=False)
+    pool, persona = root.rsplit("/", 1)[-1], member_path.rsplit("/", 1)[-1]
+
+    def counts(client):
+        info = next(row for row in client.get("/api/v2/populations").get_json()
+                    if row["population_id"] == pool)
+        return info["size"], info["materialized"], info["active"]
+
+    sample = admin.post(root + "/sample", json={"strata": [], "per_cell": 4, "seed": 1})
+    assert sample.status_code == 200
+    ids = [item["persona_id"] for item in sample.get_json()["items"]]
+    assert len(ids) == len(set(ids)) == 4 and persona in ids
+    assert counts(admin) == (4, 1, 0)
+    response = admin.post(member_path + "/bind", json=binding)
+    assert response.status_code == 200, response.get_json()
+    assert admin.post(member_path + "/bind", json=binding).get_json() == response.get_json()
+    api_command(admin, base, "tabletop.routine.configure",
+                {"entity_id": target, "expected_version": 0, "work_seconds": 120,
+                 "hunger_limit": 1000, "fatigue_limit": 1000}, "proof-routine")
+    for seconds, raining in [(30, True), (90, False)]:
+        api_command(admin, base, "tabletop.weather.schedule",
+                    {"due_seconds": seconds, "zone_id": "world", "raining": raining},
+                    f"proof-weather-{seconds}")
+    tick(admin, base, 0, 40)
+    pending = admin.get(clock_path(base)).get_json()["activities"][target]
+    assert pending["status"] == "WAITING" and pending["reason"] == "RAIN"
+    assert pending["progress_seconds"] == pending["outputs"]["weeded_units"] == 30
+    assert counts(admin) == (4, 1, 1)
+    observed = []
+    for name in ("activate", "deactivate"):
+        original = getattr(PopulationLifecycle, name)
+        def observe(self, persona_id, *, _original=original, _name=name, **kwargs):
+            before = self.get(persona_id)
+            result = _original(self, persona_id, **kwargs)
+            if str(persona_id) == persona:
+                observed.append((_name, before.level.value, result.level.value, kwargs["world_step"]))
+            return result
+        monkeypatch.setattr(PopulationLifecycle, name, observe)
+    transitions = []
+    for action, expected in [("deactivate", 0), ("activate", 1), ("deactivate", 0), ("activate", 1)]:
+        request = {"world_step": 40, "active_state": {}} if action == "activate" else {"world_step": 40}
+        response = admin.post(member_path + "/" + action, json=request)
+        assert response.status_code == 200, response.get_json()
+        info = response.get_json()
+        transitions.append(info["level"])
+        assert info["entity_id"] == target and counts(admin) == (4, 1, expected)
+        assert info["persistent_state"] == {"memories": ["PRIVATE_GARDEN_HISTORY"]}
+        assert info["active_state"] == {} and info["compressed_state"] == {}
+        assert admin.get(clock_path(base)).get_json()["activities"][target] == pending
+    assert transitions == ["MATERIALIZED", "ACTIVE", "MATERIALIZED", "ACTIVE"]
+    assert observed == [("deactivate", "ACTIVE", "MATERIALIZED", 57),
+                        ("activate", "MATERIALIZED", "ACTIVE", 57),
+                        ("deactivate", "ACTIVE", "MATERIALIZED", 57),
+                        ("activate", "MATERIALIZED", "ACTIVE", 57)]
+    restored = fresh_client(tmp_path)
+    assert counts(restored) == (4, 1, 1)
+    assert restored.get(clock_path(base)).get_json()["activities"][target] == pending
+    reply = tick(restored, base, 40, 130)
+    assert tick(restored, base, 40, 130) == reply
+    current = restored.get(clock_path(base)).get_json()["activities"][target]
+    assert current["activity_id"] == pending["activity_id"]
+    assert current["progress_seconds"] == current["outputs"]["weeded_units"] == 70
+    replay = restored.get(f"/api/v2/branches/{base['branch_id']}/replay").get_json()
+    assert replay["verified"]
+    assert replay["projections"]["tabletop.entities"][target]["weeded_units"] == 70
+    with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*), count(DISTINCT persona_id), count(DISTINCT entity_id) "
+            "FROM population.materialized_people WHERE population_id=%s", (pool,)
+        )
+        assert cursor.fetchone() == (1, 1, 1)
+    print("E2 observed pool size/materialized/active: (4,1,0) -> (4,1,1) -> "
+          "(4,1,0) -> (4,1,1); statistical sample has 4 distinct IDs; SQL has one person, "
+          "one persona, one existing body; duplicate bind returned the same receipt; "
+          "source finances absent from live member; only body owns the 70 weeded units")
+    print("E4 observed real PopulationLifecycle.deactivate/activate/deactivate/activate calls; "
+          "each transition retained identical waiting activity, ID, progress=30 and outputs; "
+          "fresh API retained work, clearing rain resumed the same phase to 70, retry "
+          "retained original receipt and verified replay left body total=70")
+
+
+def test_e5_fatigue_suspends_work_and_vocabulary_is_bounded(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, _, _, _, _, body, base) = prepare(integration_stack, monkeypatch, tmp_path)
+    seed_routine(app, admin, base, body)
+    api_command(admin, base, "tabletop.routine.configure",
+                {"entity_id": body, "expected_version": 1, "work_seconds": 120, "rest_seconds": 60,
+                 "fatigue_limit": 60, "hunger_limit": 1000}, "proof-fatigue")
+    original = admin.get(clock_path(base)).get_json()["activities"][body]
+    edge = tick(admin, base, 0, 61)
+    relief = admin.get(clock_path(base)).get_json()["activities"][body]
+    assert relief["kind"] == "REST" and relief["cause"] == "FATIGUE"
+    assert relief["started_seconds"] == 60 and relief["due_seconds"] == 120
+    assert relief["outputs"]["fatigue_relieved"] == 1
+    paused = next(row for row in edge["event"]["payload"]["activity_records"]
+                  if row["activity_id"] == original["activity_id"])
+    assert paused["status"] == "WAITING" and paused["due_seconds"] is None
+    assert paused["reason"] == "FATIGUE" and paused["progress_seconds"] == 60
+    assert paused["last_interruption"] == {"cause": "FATIGUE", "at_seconds": 60}
+    restored = fresh_client(tmp_path)
+    assert restored.get(clock_path(base)).get_json()["activities"][body] == relief
+    tick(restored, base, 61, 121)
+    after = restored.get(clock_path(base)).get_json()["activities"][body]
+    assert after["activity_id"] == original["activity_id"] and after["progress_seconds"] == 61
+    assert after["last_interruption"] == paused["last_interruption"]
+    vocabulary = get_args(ActivityRecord.model_fields["kind"].annotation)
+    assert set(vocabulary) == {"WEED", "REST", "EAT", "TRAVEL", "SLEEP", "SOCIAL"}
+    print("E5 observed fatigue preemption at second 60: the same work ID waited with "
+          "progress=60, cause=FATIGUE; rest started at 60 and recovered one fatigue unit "
+          "by 61; after API restart rest finished and the work resumed at progress=61.")
+    print("E5 runtime typed vocabulary:", ", ".join(vocabulary))
