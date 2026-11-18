@@ -387,10 +387,12 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   Movement foundation: private content-addressed profiles use up to 256 accepted manual movement
   samples in the exact player/character/world/branch/run/body, matching perceived layout, distance,
   injury and company. Profiles freeze in proposal receipts with evidence IDs and confidence.
-  Relationships, broader risk/tactics inference and negative-choice learning remain open.
+  Broader risk/tactics inference and negative-choice learning remain open.
   Speech/combat extension: profiles learn intent, volume and cadence from comparable human replies,
   plus basic melee target style and advance/withdrawal. A configured provider and the local fallback
-  both apply cadence. Relationship strategy and fuller tactical choice learning remain open.
+  both apply cadence. A witnessed previous helper can receive MEND. The profile learns when the
+  player favors helping them over self-healing in comparable situations. Broader relationship
+  strategy and tactical choice learning remain open.
 - [ ] G3 — Combine that history with character card/backstory: human evidence guides demonstrated
   behavior; card/backstory supplies initial identity and unknown situations. Surface contradictions for operator/player correction.
   Comparable movement history now guides advice and the runner, with pinned persona curiosity/risk
@@ -402,8 +404,9 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   timelines and retain human-vs-stand-in provenance across restart and profile rebuilding.
   Migration 008 atomically records only untraced accepted HUMAN_INPUT movement. Operator automation,
   submitted policy advice, autonomous actions, unknown legacy origin and foreign scope are excluded.
-  Origins survive restart; no historical backfill guesses authorship. Complete rewind/restoration
-  and broader decision types remain open.
+  Origins survive restart; no historical backfill guesses authorship. The exact branch and live
+  run own their samples. Revised timelines start their own history and retain the old ledger for
+  replay. Actual rewind/restoration is under Section I.
   Migration 009 extends atomic source-linked evidence to contextual speech/combat/movement and
   preserves synthetic exclusion. Context uses canonical source order for equal timestamps; full
   rewind/restoration and arbitrary decision types remain open.

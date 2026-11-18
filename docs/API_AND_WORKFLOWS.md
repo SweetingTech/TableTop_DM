@@ -1029,11 +1029,20 @@ remain planned. Normal dialogue or mere presence does not authorize an autonomou
 
 `GET /api/v2/worlds/{world}/branches/{branch}/entities/{body}/choice-profile?run_id={run}` is a
 private no-store inspection with the same body/mind authorization as behavior-profile. It returns
-version `speech-combat-behavior-1.0.0`, confidence, matching source IDs, per-candidate scores and
+version `speech-combat-behavior-1.3.0`, confidence, matching source IDs, per-candidate scores and
 conflicts. Receipts freeze this profile separately under `choices`; legacy `behavior` hashes and
 receipts stay readable. Speech/combat matching includes perceived layout, injury, company, threat
 count and conversation readiness. Calm movement keeps its existing policy; active conversation
-and combat use contextual choice scores instead of unrelated calm-direction habits.
+combat, and assistance choices use contextual choice scores instead of unrelated calm-direction
+habits. Assistance contexts must offer the same kinds of healing, including self-healing when
+available. The catalog offers help only to visible, wounded recipients in MEND range who
+previously healed this character and whom the character has not observed attacking them.
+It considers up to two recipients, nearest first.
+
+Migration 020 records contextual help options alongside the chosen human action. The profile
+uses only the selected world, branch, live run, player, character and body. Archived, trial,
+superseded or sibling timelines keep their own history. A profile rebuilt on a new branch or run
+starts with that timeline's own examples.
 
 Migration 009 records new accepted human replies, known-threat basic attacks and contextual
 movement choices atomically with their canonical source event. Speech preferences store only

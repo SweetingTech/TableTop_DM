@@ -1,5 +1,8 @@
 # Operations, storage, migrations, and security
 
+Apply `020_contextual_support_evidence.sql` before updating the app and character runner.
+The migration preserves existing choice rows and expands the source guard for the new version.
+
 Apply `019_character_recap_boundaries.sql` before updating the app and runner. New command rows
 receive revision stamps with their existing transaction. Prior command rows and control receipts
 retain their history. Keep the ledger, handoffs, and frozen mind observations when restoring a run.

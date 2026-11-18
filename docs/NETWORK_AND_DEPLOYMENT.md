@@ -1,7 +1,7 @@
 # Network and deployment
 
 The durable world runner uses the existing PostgreSQL connection for clock work leases.
-Apply migrations through 019 before replacing the application and runner images. Scoped
+Apply migrations through 020 before replacing the application and runner images. Scoped
 narration uses the same authenticated API and PostgreSQL connection. Prose is generated locally.
 Decision origins use the existing private command ledger in that PostgreSQL database.
 Speech cadence uses the existing private choice evidence and optional dialogue provider.

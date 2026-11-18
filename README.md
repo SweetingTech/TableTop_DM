@@ -47,6 +47,9 @@ Apply migration 018 to let a player opt into automatic handoff when their consol
 Choose a timeout in Character control. On return, **Take control** restores manual play.
 Apply migration 019 for **Show character recap**, which lists what the character perceived
 during the last recorded handoff.
+Apply migration 020 so a stand-in can learn when the player mends their own wounds and when
+they help someone who previously helped them. It considers help the character perceived and
+people within visible spell reach.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

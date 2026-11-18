@@ -14,7 +14,7 @@ from cognition.engine import DecisionAction
 from kernel.state import stable_hash
 from persona.models import CompiledPersona
 
-CHOICE_VERSION = "speech-combat-behavior-1.2.0"
+CHOICE_VERSION = "speech-combat-behavior-1.3.0"
 
 
 class ChoiceOption(BaseModel):
@@ -77,7 +77,12 @@ def describe_options(context: CharacterContext, frame: ChoiceFrame) -> tuple[Cho
         elif key == "guard":
             result.append(ChoiceOption(key=key, kind="GUARD", style="DEFEND"))
         elif key.startswith("spell:MEND:"):
-            result.append(ChoiceOption(key=key, kind="SPELL", style="HEAL_SELF"))
+            style = (
+                "HEAL_SELF"
+                if str(action.parameters["target_id"]) == str(body.entity_id)
+                else "HEAL_HELPER"
+            )
+            result.append(ChoiceOption(key=key, kind="SPELL", style=style))
         elif key.startswith("attack:") or key.startswith("spell:ARCANE_BOLT:"):
             target = next(
                 (
@@ -120,6 +125,7 @@ class HumanChoiceEvidence(BaseModel):
         "speech-combat-behavior-1.0.0",
         "speech-combat-behavior-1.1.0",
         "speech-combat-behavior-1.2.0",
+        "speech-combat-behavior-1.3.0",
     ] = "speech-combat-behavior-1.1.0"
     world_id: uuid.UUID
     branch_id: uuid.UUID
@@ -136,7 +142,19 @@ class HumanChoiceEvidence(BaseModel):
 
     @model_validator(mode="after")
     def selected_option(self) -> HumanChoiceEvidence:
-        if self.version == "speech-combat-behavior-1.2.0":
+        if self.version == CHOICE_VERSION:
+            if not self.frame.support_targets or (
+                self.chosen_key.startswith("speech:") != (self.utterance_cadence is not None)
+            ):
+                raise ValueError(
+                    "support evidence requires a support option and speech cadence when relevant"
+                )
+            aid_keys = {f"spell:MEND:{target}" for target in self.frame.support_targets}
+            if {row.key for row in self.options if row.style == "HEAL_HELPER"} != aid_keys:
+                raise ValueError("support choices must match the perceived helpers")
+        elif self.frame.support_targets or any(row.style == "HEAL_HELPER" for row in self.options):
+            raise ValueError("support options require the current evidence version")
+        elif self.version == "speech-combat-behavior-1.2.0":
             if self.utterance_cadence is None or not self.chosen_key.startswith("speech:"):
                 raise ValueError("cadence evidence requires a human speech choice")
         elif self.utterance_cadence is not None:
@@ -193,6 +211,10 @@ def choice_profile(
 ) -> ChoiceProfile:
     frame = choice_frame(context.scene, context.observations)
     options = describe_options(context, frame) if frame else ()
+    # Compare priorities only when both contexts offered the same kind of healing.
+    # Identities can differ while the observed relationship is the same.
+    healing = {"HEAL_SELF", "HEAL_HELPER"}
+    available_healing = {option.style for option in options if option.style in healing}
     scope = (
         context.scene.world_id,
         context.scene.branch_id,
@@ -207,6 +229,12 @@ def choice_profile(
             for event, row in evidence
             if frame
             and row.frame.signature == frame.signature
+            and bool(row.frame.support_targets) == bool(frame.support_targets)
+            and (
+                not frame.support_targets
+                or {option.style for option in row.options if option.style in healing}
+                == available_healing
+            )
             and (
                 row.world_id,
                 row.branch_id,
@@ -248,6 +276,9 @@ def choice_profile(
     )
     peaceful = any(word in text for word in ("pacifist", "peaceful", "mercy", "avoid violence"))
     aggressive = any(word in text for word in ("aggressive", "vengeful", "warrior", "bold"))
+    protective = any(
+        word in text for word in ("protect others", "help others", "protect my friends")
+    )
     levels = {"LOW": 0.25, "MEDIUM": 0.55, "HIGH": 0.85}
     risk = levels.get(str(persona.deep_traits.get("risk_tolerance")), 0.55)
     social = levels.get(str(persona.deep_traits.get("extraversion")), 0.55)
@@ -260,6 +291,8 @@ def choice_profile(
             base = 0.8 + (1 if frame and frame.spatial.injured else 0) + (0.6 if avoid else 0)
         elif option.kind == "SPELL" and option.style == "HEAL_SELF":
             base = 3.5 if frame and frame.spatial.injured else 0.5
+        elif option.kind == "SPELL" and option.style == "HEAL_HELPER":
+            base = 2.0 if protective else 1.1
         elif option.kind in {"ATTACK", "SPELL"}:
             base = (
                 1
@@ -329,7 +362,7 @@ def choice_profile(
         binding_id=binding_id,
         context_hash=context.evidence_hash,
         persona_version=persona.persona_version,
-        active=bool(frame and (frame.threats or frame.speech_ready)),
+        active=bool(frame and (frame.threats or frame.speech_ready or frame.support_targets)),
         comparable_count=len(matching),
         confidence=confidence,
         evidence_event_ids=tuple(event for event, _ in matching),
