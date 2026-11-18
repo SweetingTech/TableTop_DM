@@ -24,7 +24,13 @@ from kernel.database import transaction
 from kernel.errors import AuthorizationDenied
 from kernel.postgres_repository import PostgresCommandRepository
 from tests.integration.test_clean_boot import _stop_runtime
+from tests.integration.test_speech_combat_behavior import prepare
 from tests.unit.kernel.test_character_binding_api import setup_bound_character
+from tests.unit.kernel.test_controller_handoff import (
+    heal_from_nearby_body,
+    prepare_wounded_body,
+    queue_heal,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -546,3 +552,65 @@ def test_controller_step_rolls_back_with_failed_canonical_commit(
         player.get(path + "/control", query_string={"run_id": run}).get_json()["control"]["step"]
         == 1
     )
+
+
+def test_invalidated_proposal_stays_fenced_across_runner_restart(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, card, path, run, target, base) = prepare(
+        integration_stack, monkeypatch, tmp_path
+    )
+    prepare_wounded_body(app, admin, card, target, base)
+    projector = WorldEventProjector(integration_stack.database_url)
+    projector.run_once(limit=1000)
+    initial, rejected = queue_heal(app, player, path, run)
+    heal_from_nearby_body(admin, card, target, base)
+    projector.run_once(limit=1000)
+
+    def worker_for_run():
+        worker = create_app(artifact_root=tmp_path).extensions["character_runner"]
+        due = worker.controllers.due
+        monkeypatch.setattr(
+            worker.controllers, "due", lambda: tuple(row for row in due() if str(row.run_id) == run)
+        )
+        return worker
+
+    first = worker_for_run()
+    assert first.run_once() == 0
+    first.controllers.defer(initial, "action_failed")
+    state = player.get(path + "/control", query_string={"run_id": run}).get_json()["control"]
+    assert (state["mode"], state["step"], state["failures"], state["last_error"]) == (
+        "AUTONOMOUS",
+        0,
+        1,
+        "action_invalidated",
+    )
+
+    restarted = worker_for_run()
+    deadline = time.monotonic() + 3
+    while not (due := restarted.controllers.due()):
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
+    retry = due[0]
+    assert retry.epoch == initial.epoch and retry.decision_key != initial.decision_key
+    replacement = restarted.decisions.decide(
+        retry.scope, retry.executor_actor_id, retry.decision_key, retry
+    )
+    assert replacement.projection_version > rejected.projection_version
+    assert replacement.outcome.proposal.control_attempt == 1
+    assert replacement.outcome.proposal.command_type != "tabletop.magic.invoke"
+    with pytest.raises(AuthorizationDenied):
+        restarted.snapshot().submit(rejected.outcome.proposal)
+
+    assert restarted.run_once() == 1
+    assert restarted.run_once() == 0
+    with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT c.command_id, e.decision_trace_id FROM sim.command_log c "
+            "JOIN sim.events e USING (run_id, actor_id, idempotency_key) "
+            "WHERE c.run_id=%s AND c.decision_authorship='CHARACTER_POLICY'",
+            (run,),
+        )
+        assert cursor.fetchall() == [
+            (str(replacement.outcome.proposal.command_id), str(replacement.decision_id))
+        ]

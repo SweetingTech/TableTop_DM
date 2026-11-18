@@ -187,7 +187,7 @@ class PostgresControllers:
                     ControllerState.model_validate(row["payload"]) for row in cursor.fetchall()
                 )
 
-    def defer(self, state: ControllerState, code: str | None, *, pending: bool = False) -> None:
+    def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None:
         with transaction(actor_id=state.executor_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
@@ -195,10 +195,8 @@ class PostgresControllers:
                     tuple(map(str, state.key[:2])),
                 )
                 current = self._read(cursor, state.scope)
-                if current is None or (current.epoch, current.step, current.mode) != (
-                    state.epoch,
-                    state.step,
-                    "AUTONOMOUS",
-                ):
+                if current != state or state.mode != "AUTONOMOUS":
                     return
-                persist_controller(cursor, deferred_controller(current, code, pending=pending))
+                persist_controller(
+                    cursor, deferred_controller(state, code, retry_limit=retry_limit)
+                )

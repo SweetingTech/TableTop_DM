@@ -45,6 +45,7 @@ class CommandProposal(BaseModel):
     command_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     control_epoch: int | None = Field(default=None, ge=1)
     control_step: int | None = Field(default=None, ge=0)
+    control_attempt: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
     decision_authorship: Literal["HUMAN", "CHARACTER_POLICY"] = "HUMAN"
     input_origin: Literal["UNSPECIFIED", "HUMAN_INPUT", "POLICY_ADVICE", "OPERATOR"] = "UNSPECIFIED"
     command_type: str = Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")

@@ -13,6 +13,7 @@ from kernel.contracts import ActorKind
 from kernel.control import ControllerState, ControlMode, ControlScope
 
 EXECUTOR_CAPABILITIES = frozenset({"world.read", "action.propose", "action.commit", "entity.act"})
+REPLAN_LIMIT = 3
 
 
 class HandoffRequest(BaseModel):
@@ -73,11 +74,11 @@ class ControllerRepository(Protocol):
         self, scope: ControlScope, actor_id: uuid.UUID, request: HandoffRequest
     ) -> HandoffReceipt: ...
     def due(self) -> tuple[ControllerState, ...]: ...
-    def defer(self, state: ControllerState, code: str | None, *, pending: bool = False) -> None: ...
+    def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None: ...
 
 
 def deferred_controller(
-    state: ControllerState, code: str | None, *, pending: bool
+    state: ControllerState, code: str | None, *, retry_limit: int
 ) -> ControllerState:
     """Reschedule a poll and record a policy failure only when one is supplied."""
     next_due = datetime.now(UTC) + timedelta(milliseconds=250)
@@ -86,7 +87,7 @@ def deferred_controller(
     failures = state.failures + 1
     return state.model_copy(
         update={
-            "mode": "AUTONOMOUS" if pending and failures < 40 else "PAUSED",
+            "mode": "AUTONOMOUS" if failures <= retry_limit else "PAUSED",
             "last_error": code,
             "failures": failures,
             "next_due": next_due,
@@ -183,16 +184,12 @@ class InMemoryControllers:
             and self.simulation.runs[row.run_id].status in {"ACTIVE", "RUNNING"}
         )
 
-    def defer(self, state: ControllerState, code: str | None, *, pending: bool = False) -> None:
+    def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None:
         def update():
             current = self.rows.get(state.key)
-            if current is None or (current.epoch, current.step, current.mode) != (
-                state.epoch,
-                state.step,
-                "AUTONOMOUS",
-            ):
+            if current != state or state.mode != "AUTONOMOUS":
                 return
-            changed = deferred_controller(current, code, pending=pending)
+            changed = deferred_controller(state, code, retry_limit=retry_limit)
             self.rows[state.key] = changed
             self.simulation.controller_states[state.key] = changed
 

@@ -330,10 +330,11 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
 
 ## F. Autonomous decisions, models, and narration
 
-- [ ] F1 — Connect due character work to context builder → candidate actions → layered cognition →
+- [x] F1 — Connect due character work to context builder → candidate actions → layered cognition →
   typed proposal → normal command submission → observations → next work. Replan on invalidated actions.
-  The bounded local movement loop is wired through these boundaries. Invalid actions pause visibly;
-  richer replanning, goals, and activity scheduling remain open.
+  A failed physical action evaluated against a newer committed revision rebuilds the character's
+  scoped context under a bounded retry budget. Reference and PostgreSQL tests cover a conflicting
+  heal, a fresh decision, and rejection of the superseded attempt after worker restart.
 - [ ] F2 — Persist goals, plan progress, needs, cooldowns, and next-decision time. Execute plans stepwise;
   recheck preconditions rather than blindly applying an entire generated plan.
 - [ ] F3 — Implement injected model providers behind [DeliberationProvider](../cognition/deliberation.py).

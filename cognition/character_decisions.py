@@ -276,6 +276,7 @@ def propose_for_character(
             update={
                 "control_epoch": controller.epoch,
                 "control_step": controller.step,
+                "control_attempt": controller.failures or None,
                 "decision_authorship": "CHARACTER_POLICY",
             }
         )

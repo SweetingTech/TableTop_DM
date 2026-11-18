@@ -905,9 +905,14 @@ Old controllers cannot act after takeover; committed retries cannot advance the 
 local utility candidates and optional configured speech generation, then submits through the kernel.
 No browser cookie is used. Canonical commit and budget advance share one database transaction.
 Epoch/step proposal keys survive crashes and concurrent workers. Observations still flow through
-the frozen perception outbox; the next decision waits for them. Invalid actions pause with
-`action_failed`; pending observations defer every 250 ms and pause after 40 unsuccessful checks.
-The budget pauses with `step_limit`. Resume explicitly with a new handoff/key/current epoch.
+the frozen perception outbox, and the next decision waits for them. If a physical handler rejects
+a proposal against a newer branch revision, the runner rebuilds context and chooses again for
+the same step. The private controller status shows `action_invalidated`. The runner permits
+up to three retries within the step's failure count. The attempt is included in the proposal
+key and checked by the kernel. Other action failures pause with `action_failed`. Pending
+observations defer every 250 ms and pause after 40 unsuccessful checks. A successful action
+clears the failure count. The action budget pauses with `step_limit`. Resume a paused body with
+a new handoff key and the current epoch.
 
 The Game Console exposes Let character act, Pause autonomy, Take control, and an action limit.
 It polls status, refreshes the authorized scene on progress, and disables human submission until

@@ -1,5 +1,10 @@
 # Testing
 
+The controller handoff unit and PostgreSQL runner suites exercise an intervening heal that makes
+a queued self-heal invalid. They check that the runner rebuilds context, rejects the old attempt,
+and commits one replacement. The PostgreSQL test restarts the worker between attempts and checks
+the command and event ledger for duplicates.
+
 The world-time and population tests exercise activity due times at start, during rain, after
 resumption, and at completion. They verify that a finished meal charges food once, preserves
 the same activity record after replacement, and survives a PostgreSQL restart and a command

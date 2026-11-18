@@ -14,6 +14,8 @@ on their card, backstory, and observed play history.
 - Hosted games support world-scoped roles, character binding, and a live perception-scoped console.
 - Explicit character handoff lets a configured runner act while a player is away. Optional
   dialogue generation uses an endpoint and model chosen by the operator.
+- When committed events invalidate a queued action, the runner can rebuild the character's
+  context and choose again within a bounded retry budget.
 - The world clock advances work, meals, rest, commutes, and appointments while the party is
   elsewhere. Changes in weather, danger, or bodily needs can interrupt and resume that activity.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
