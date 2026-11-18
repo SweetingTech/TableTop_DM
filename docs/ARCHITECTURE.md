@@ -2,6 +2,11 @@
 
 ## System shape
 
+An opted-in player's authenticated console renews its private controller deadline under the branch
+lock. The runner checks expired deadlines and uses the normal handoff transaction after rechecking
+the current owner, grants, run status, and epoch. A reconnect keeps human control if renewal
+arrives first. After an automatic handoff, the player explicitly takes control at the new epoch.
+
 Comparable human speech evidence records a bounded cadence category with the accepted source event.
 The private choice profile uses a majority of comparable replies and pins the supporting events in
 the decision receipt. The dialogue provider receives the style category along with the scoped

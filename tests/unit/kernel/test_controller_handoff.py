@@ -5,12 +5,89 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from cognition import control
+from kernel.control import ControllerState
 from kernel.errors import AuthorizationDenied
 from tests.unit.kernel.test_character_binding_api import _app, setup_bound_character
 from tests.unit.kernel.test_speech_combat_behavior import provoke, setup_scene
 from tests.unit.kernel.test_tactical_choices import command, resources
 
 pytestmark = pytest.mark.unit
+
+
+def enable_disconnect_policy(player, path, run):
+    response = player.post(
+        path + "/control",
+        json={
+            "run_id": run,
+            "expected_epoch": 0,
+            "mode": "HUMAN",
+            "max_steps": 1,
+            "disconnect_after_seconds": 15,
+            "idempotency_key": "opt-in-disconnect",
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    return ControllerState.model_validate(response.get_json()["state"])
+
+
+def test_opt_in_presence_renews_epoch_and_reconnect_preserves_identity(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, _, _, path, run, _ = setup_bound_character(app)
+    controllers = app.extensions["controllers"]
+    sim = app.extensions["simulation"]
+    body = {"run_id": run, "expected_epoch": 1}
+    assert player.get(path + "/control", query_string={"run_id": run}).get_json() == {
+        "control": None,
+        "disconnect_policy": "EXPLICIT_HANDOFF",
+    }
+    state = enable_disconnect_policy(player, path, run)
+    assert state.presence_deadline_at is not None
+
+    class PresenceClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return state.presence_deadline_at - timedelta(seconds=14)
+
+    monkeypatch.setattr(control, "datetime", PresenceClock)
+    events = len(sim.events)
+    assert admin.post(path + "/control/presence", json=body).status_code == 403
+    response = player.post(path + "/control/presence", json=body)
+    assert response.status_code == 200, response.get_json()
+    renewed = ControllerState.model_validate(response.get_json()["state"])
+    assert renewed.epoch == state.epoch
+    assert renewed.presence_deadline_at is not None
+    assert renewed.presence_deadline_at > state.presence_deadline_at
+    controllers.expire_disconnected(state.presence_deadline_at)
+    assert controllers.get(state.scope, state.owner_actor_id) == renewed
+    controllers.expire_disconnected(renewed.presence_deadline_at)
+    absent = controllers.get(state.scope, state.owner_actor_id)
+    assert (absent.mode, absent.epoch, absent.handoff_reason) == (
+        "AUTONOMOUS",
+        2,
+        "DISCONNECT_TIMEOUT",
+    )
+    assert (
+        absent.entity_id == state.entity_id and absent.executor_actor_id == state.executor_actor_id
+    )
+    assert len(sim.events) == events
+    assert player.post(path + "/control/presence", json=body).status_code == 409
+    assert app.extensions["character_runner"].run_once() == 1
+    assert len(sim.events) == events + 1
+    response = player.post(
+        path + "/control",
+        json={
+            "run_id": run,
+            "expected_epoch": 2,
+            "mode": "HUMAN",
+            "disconnect_after_seconds": None,
+            "idempotency_key": "return-and-disable",
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    returned = ControllerState.model_validate(response.get_json()["state"])
+    assert (returned.mode, returned.epoch, returned.entity_id) == ("HUMAN", 3, state.entity_id)
+    assert returned.disconnect_after_seconds is None
 
 
 def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path):

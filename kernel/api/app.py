@@ -28,7 +28,7 @@ from cognition.choice_state import choice_frame, speech_cadence
 from cognition.choice_store import PostgresChoiceEvidence, persist_choice_bundle
 from cognition.choices import HumanChoiceEvidence, choice_profile, describe_options, option_key
 from cognition.context import require_projected_experience
-from cognition.control import ControlConflict, HandoffRequest, InMemoryControllers
+from cognition.control import ControlConflict, HandoffRequest, InMemoryControllers, PresenceRequest
 from cognition.deliberation import DeliberationProvider
 from cognition.engine import (
     DecisionAction,
@@ -674,6 +674,7 @@ def create_app(
             simulation,
             lambda scope, actor: character_bindings.latest(scope.key, actor_id=actor) is not None,
             store_controller_runtime,
+            machine_actor_id=demo["actor_id"],
         )
     )
     evidence_reader = PostgresBehaviorEvidence(database_dsn) if database_dsn else None
@@ -2535,15 +2536,36 @@ def create_app(
             response = jsonify(
                 {
                     "control": state.model_dump(mode="json") if state else None,
-                    "disconnect_policy": "EXPLICIT_HANDOFF",
+                    "disconnect_policy": "AUTOPLAY_ON_DISCONNECT"
+                    if state and state.disconnect_after_seconds is not None
+                    else "EXPLICIT_HANDOFF",
                 }
             )
         else:
             body = HandoffRequest.model_validate(request.get_json(silent=True) or {})
+            if automation_boundary() and "disconnect_after_seconds" in body.model_fields_set:
+                raise PermissionError("disconnect policy requires the player's session")
             scope = ControlScope(
                 world_id=world_id, branch_id=branch_id, entity_id=entity_id, run_id=body.run_id
             )
             response = jsonify(controllers.handoff(scope, actor_id, body).model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
+        "/entities/<uuid:entity_id>/control/presence"
+    )
+    def character_presence(world_id: uuid.UUID, branch_id: uuid.UUID, entity_id: uuid.UUID):
+        require_world_access(world_id)
+        if automation_boundary():
+            raise PermissionError("controller presence requires the player's session")
+        body = PresenceRequest.model_validate(request.get_json(silent=True) or {})
+        scope = ControlScope(
+            world_id=world_id, branch_id=branch_id, entity_id=entity_id, run_id=body.run_id
+        )
+        state = controllers.presence(scope, current_actor_id(), body.expected_epoch)
+        response = jsonify({"state": state.model_dump(mode="json")})
         response.headers["Cache-Control"] = "no-store"
         return response
 

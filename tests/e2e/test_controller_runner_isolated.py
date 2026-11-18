@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import threading
+import time
 
 import pytest
 from playwright.sync_api import expect
@@ -20,7 +21,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
     token = secrets.token_urlsafe(32)
     monkeypatch.setenv("TTDM_OPERATOR_TOKEN", token)
     app = create_app(artifact_root=tmp_path / "app")
-    _, player, _, _, _, _, _ = setup_bound_character(app, token)
+    _, player, _, _, control_path, run_id, _ = setup_bound_character(app, token)
     server = make_server("127.0.0.1", 0, app, request_handler=_QuietRequests)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     stop = threading.Event()
@@ -79,6 +80,32 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.screenshot(path=str(tmp_path / "controller-mobile.png"), full_page=True)
         page.screenshot(path=str(tmp_path / "controller-mobile-viewport.png"), full_page=False)
+        setting = page.get_by_label("On disconnect", exact=True)
+        expect(setting).to_have_value("0")
+        with page.expect_response(
+            lambda response: "/control/presence" in response.url and response.ok
+        ):
+            setting.select_option("15")
+        expect(setting).to_have_value("15")
+        page.goto("about:blank")
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            state = player.get(
+                control_path + "/control", query_string={"run_id": run_id}
+            ).get_json()["control"]
+            if state["mode"] == "PAUSED" and state.get("handoff_reason") == "DISCONNECT_TIMEOUT":
+                break
+            time.sleep(0.15)
+        else:
+            pytest.fail("the disconnected character did not take its bounded turn")
+        page.goto(f"http://127.0.0.1:{server.server_port}/v2/game", wait_until="networkidle")
+        expect(page.get_by_text("Connection timed out. Take control when ready.")).to_be_visible()
+        expect(page.locator(".event-row")).to_have_count(5)
+        assert "timeout" not in page.locator(".event-feed").inner_text().lower()
+        page.screenshot(path=str(tmp_path / "controller-reconnected.png"), full_page=True)
+        page.get_by_role("button", name="Take control", exact=True).click()
+        expect(page.get_by_text("You are playing", exact=True)).to_be_visible()
+        expect(setting).to_have_value("15")
         assert not errors
     finally:
         context.close()

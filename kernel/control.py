@@ -12,6 +12,8 @@ from kernel.contracts import CommandProposal
 from kernel.errors import AuthorizationDenied
 
 ControlMode = Literal["HUMAN", "AUTONOMOUS", "PAUSED"]
+MIN_DISCONNECT_SECONDS = 15
+MAX_DISCONNECT_SECONDS = 600
 
 
 class ControlScope(BaseModel):
@@ -37,6 +39,18 @@ class ControllerState(ControlScope):
     next_due: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     failures: int = Field(default=0, ge=0)
     last_error: str | None = None
+    disconnect_after_seconds: int | None = Field(
+        default=None,
+        ge=MIN_DISCONNECT_SECONDS,
+        le=MAX_DISCONNECT_SECONDS,
+        exclude_if=lambda value: value is None,
+    )
+    presence_deadline_at: AwareDatetime | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    handoff_reason: Literal["DISCONNECT_TIMEOUT"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @property
     def scope(self) -> ControlScope:
@@ -105,6 +119,9 @@ def reassigned(state: ControllerState, controller_actor_id: uuid.UUID | None) ->
             "mode": "HUMAN" if controller_actor_id is not None else "PAUSED",
             "failures": 0,
             "last_error": None if controller_actor_id is not None else "seat_removed",
+            "disconnect_after_seconds": None,
+            "presence_deadline_at": None,
+            "handoff_reason": None,
         }
     )
 

@@ -10,7 +10,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from kernel.application import SimulationApplication, stable_id
 from kernel.contracts import ActorKind
-from kernel.control import ControllerState, ControlMode, ControlScope
+from kernel.control import (
+    MAX_DISCONNECT_SECONDS,
+    MIN_DISCONNECT_SECONDS,
+    ControllerState,
+    ControlMode,
+    ControlScope,
+)
 
 EXECUTOR_CAPABILITIES = frozenset({"world.read", "action.propose", "action.commit", "entity.act"})
 REPLAN_LIMIT = 3
@@ -24,6 +30,15 @@ class HandoffRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=200)
     max_steps: int = Field(default=20, ge=1, le=1000)
     interval_ms: int = Field(default=1000, ge=100, le=60000)
+    disconnect_after_seconds: int | None = Field(
+        default=None, ge=MIN_DISCONNECT_SECONDS, le=MAX_DISCONNECT_SECONDS
+    )
+
+
+class PresenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: uuid.UUID
+    expected_epoch: int = Field(ge=1)
 
 
 class HandoffReceipt(BaseModel):
@@ -48,10 +63,17 @@ def next_controller(
     owner: uuid.UUID,
     request: HandoffRequest,
     previous: ControllerState | None,
+    *,
+    disconnected: bool = False,
 ) -> ControllerState:
     epoch = previous.epoch if previous else 0
     if request.expected_epoch != epoch:
         raise ControlConflict("controller changed; reload before handing off")
+    timeout = previous.disconnect_after_seconds if previous else None
+    if "disconnect_after_seconds" in request.model_fields_set:
+        if actor_id != owner or request.mode != "HUMAN":
+            raise PermissionError("only the human controller can configure disconnect handling")
+        timeout = request.disconnect_after_seconds
     return ControllerState(
         **scope.model_dump(),
         owner_actor_id=owner,
@@ -65,6 +87,11 @@ def next_controller(
         if request.mode == "PAUSED" and previous
         else request.interval_ms,
         step=previous.step if request.mode == "PAUSED" and previous else 0,
+        disconnect_after_seconds=timeout,
+        presence_deadline_at=datetime.now(UTC) + timedelta(seconds=timeout)
+        if timeout is not None and request.mode == "HUMAN"
+        else None,
+        handoff_reason="DISCONNECT_TIMEOUT" if disconnected else None,
     )
 
 
@@ -73,8 +100,45 @@ class ControllerRepository(Protocol):
     def handoff(
         self, scope: ControlScope, actor_id: uuid.UUID, request: HandoffRequest
     ) -> HandoffReceipt: ...
+    def presence(
+        self, scope: ControlScope, actor_id: uuid.UUID, expected_epoch: int
+    ) -> ControllerState: ...
     def due(self) -> tuple[ControllerState, ...]: ...
     def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None: ...
+
+
+def renew_presence(state: ControllerState | None, expected_epoch: int) -> ControllerState:
+    if (
+        state is None
+        or state.epoch != expected_epoch
+        or state.mode != "HUMAN"
+        or state.disconnect_after_seconds is None
+    ):
+        raise ControlConflict("controller changed; reload before renewing presence")
+    deadline = datetime.now(UTC) + timedelta(seconds=state.disconnect_after_seconds)
+    if state.presence_deadline_at is not None and deadline <= state.presence_deadline_at:
+        return state
+    return state.model_copy(update={"presence_deadline_at": deadline})
+
+
+def disconnect_due(state: ControllerState, now: datetime) -> bool:
+    return bool(
+        state.mode == "HUMAN"
+        and state.disconnect_after_seconds is not None
+        and state.presence_deadline_at is not None
+        and state.presence_deadline_at <= now
+    )
+
+
+def disconnect_handoff(state: ControllerState) -> HandoffRequest:
+    return HandoffRequest(
+        run_id=state.run_id,
+        expected_epoch=state.epoch,
+        mode="AUTONOMOUS",
+        idempotency_key=f"presence-timeout:{state.epoch}",
+        max_steps=state.max_steps,
+        interval_ms=state.interval_ms,
+    )
 
 
 def deferred_controller(
@@ -101,10 +165,13 @@ class InMemoryControllers:
         simulation: SimulationApplication,
         binding_exists: Callable[[ControlScope, uuid.UUID], bool],
         on_handoff: Callable[[ControllerState], None] | None = None,
+        *,
+        machine_actor_id: uuid.UUID,
     ) -> None:
         self.simulation = simulation
         self.binding_exists = binding_exists
         self.on_handoff = on_handoff
+        self.machine_actor_id = machine_actor_id
         self.rows = simulation.controller_states
         self.receipts: dict[tuple, HandoffReceipt] = {}
         self._lock = threading.RLock()
@@ -132,6 +199,27 @@ class InMemoryControllers:
     def handoff(
         self, scope: ControlScope, actor_id: uuid.UUID, request: HandoffRequest
     ) -> HandoffReceipt:
+        return self._handoff(scope, actor_id, request)
+
+    def _check_player(self, scope: ControlScope, actor_id: uuid.UUID) -> None:
+        entity = self.simulation.entities[(scope.branch_id, scope.entity_id)]
+        actor = self.simulation.authority(scope.world_id, actor_id)
+        if (
+            entity.controller_actor_id != actor_id
+            or entity.entity_type != "PLAYER_CHARACTER"
+            or actor.kind is not ActorKind.HUMAN
+            or not actor.has_capabilities(EXECUTOR_CAPABILITIES)
+        ):
+            raise PermissionError("controller presence requires the current human player")
+
+    def _handoff(
+        self,
+        scope: ControlScope,
+        actor_id: uuid.UUID,
+        request: HandoffRequest,
+        *,
+        timeout_at: datetime | None = None,
+    ) -> HandoffReceipt:
         def transition():
             with self._lock:
                 owner = self._owner(scope, actor_id)
@@ -148,11 +236,27 @@ class InMemoryControllers:
                 key = (*scope.key, actor_id, request.idempotency_key)
                 if key in self.receipts:
                     return self.receipts[key]
-                if request.mode == "AUTONOMOUS" and not self.binding_exists(scope, actor_id):
+                previous = self.rows.get(scope.key)
+                if "disconnect_after_seconds" in request.model_fields_set:
+                    self._check_player(scope, actor_id)
+                if timeout_at is not None:
+                    self._check_player(scope, owner)
+                    if (
+                        previous is None
+                        or previous.owner_actor_id != owner
+                        or not disconnect_due(previous, timeout_at)
+                        or self.simulation.runs[scope.run_id].status not in {"ACTIVE", "RUNNING"}
+                    ):
+                        raise ControlConflict("controller presence changed")
+                if (
+                    request.mode == "AUTONOMOUS" or request.disconnect_after_seconds is not None
+                ) and not self.binding_exists(scope, actor_id):
                     raise ValueError(
                         "a pinned CHARACTER binding is required before autonomous play"
                     )
-                state = next_controller(scope, actor_id, owner, request, self.rows.get(scope.key))
+                state = next_controller(
+                    scope, actor_id, owner, request, previous, disconnected=timeout_at is not None
+                )
                 if state.executor_actor_id not in self.simulation.actors:
                     self.simulation.create_actor(
                         "Character policy executor",
@@ -175,7 +279,33 @@ class InMemoryControllers:
 
         return self.simulation.read_reference(transition)
 
+    def presence(
+        self, scope: ControlScope, actor_id: uuid.UUID, expected_epoch: int
+    ) -> ControllerState:
+        def transition():
+            self._owner(scope, actor_id)
+            self._check_player(scope, actor_id)
+            state = renew_presence(self.rows.get(scope.key), expected_epoch)
+            self.rows[scope.key] = state
+            return state
+
+        return self.simulation.read_reference(transition)
+
+    def expire_disconnected(self, now: datetime) -> None:
+        for state in tuple(self.rows.values()):
+            if disconnect_due(state, now):
+                try:
+                    self._handoff(
+                        state.scope,
+                        self.machine_actor_id,
+                        disconnect_handoff(state),
+                        timeout_at=now,
+                    )
+                except (ControlConflict, PermissionError, ValueError):
+                    continue
+
     def due(self) -> tuple[ControllerState, ...]:
+        self.expire_disconnected(datetime.now(UTC))
         return tuple(
             row
             for _, row in sorted(self.rows.items(), key=lambda pair: str(pair[0]))

@@ -1,5 +1,10 @@
 # Simulation-kernel contract
 
+Controller presence is operational state. An active human owner may update only the private
+deadline at the existing epoch. The normal handoff fence remains responsible for replacing
+authority after timeout. A paused campaign still fences autonomous actions, and a roster seat
+change clears its old presence policy and deadline. Presence and handoff publish no sensory event.
+
 Migration 017 stores a cadence bucket within the current append-only human choice evidence.
 The existing source guard requires accepted manual same-branch speech for the new evidence version.
 No speech text is duplicated into the training row. Cadence affects expression of an already

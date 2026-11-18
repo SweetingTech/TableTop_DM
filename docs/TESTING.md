@@ -1,5 +1,10 @@
 # Testing
 
+Controller presence cases exercise default manual control, owner opt-in and renewal, stale epochs,
+competing PostgreSQL timeout workers and same-epoch write restrictions. The browser journey leaves
+the actual console for the configured deadline, returns after one autonomous action, and takes
+control of the same character. Its visible event feed contains the action and no handoff metadata.
+
 Cadence cases demonstrate short and elaborate human replies, verify the exact supporting event
 IDs, and check that autonomous speech keeps the learned intent and volume. PostgreSQL replay of
 the choice profile after restart retains the same cadence. Loopback provider cases check the

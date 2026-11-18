@@ -2,23 +2,31 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import psycopg2.extras
 
 from cognition.control import (
     EXECUTOR_CAPABILITIES,
+    ControlConflict,
     HandoffReceipt,
     HandoffRequest,
     deferred_controller,
+    disconnect_due,
+    disconnect_handoff,
     next_controller,
+    renew_presence,
 )
 from kernel.control import ControllerState, ControlScope, persist_controller
 from kernel.database import transaction
+
+PRESENCE_BATCH_LIMIT = 32
 
 
 class PostgresControllers:
     def __init__(self, dsn: str, machine_actor_id: uuid.UUID) -> None:
         self.dsn, self.machine_actor_id = dsn, machine_actor_id
+        self._last_presence_scan: tuple[datetime, str, str, str, str] | None = None
 
     @staticmethod
     def _owner(cursor, scope: ControlScope, actor_id: uuid.UUID) -> uuid.UUID:
@@ -50,6 +58,36 @@ class PostgresControllers:
         row = cursor.fetchone()
         return ControllerState.model_validate(row["payload"]) if row else None
 
+    @staticmethod
+    def _check_player(cursor, scope: ControlScope, actor_id: uuid.UUID) -> None:
+        cursor.execute(
+            """
+            SELECT 1 FROM sim.entities e JOIN sim.actors a ON a.id=e.controller_actor_id
+            WHERE (e.world_id,e.branch_id,e.id)=(%s,%s,%s) AND a.id=%s
+              AND e.entity_type='PLAYER_CHARACTER' AND a.actor_kind='HUMAN' AND a.is_active
+              AND (SELECT count(DISTINCT ac.capability) FROM sim.actor_capabilities ac
+                   WHERE ac.world_id=e.world_id AND ac.actor_id=a.id
+                   AND ac.capability=ANY(%s::text[]))=%s
+            """,
+            (
+                str(scope.world_id),
+                str(scope.branch_id),
+                str(scope.entity_id),
+                str(actor_id),
+                sorted(EXECUTOR_CAPABILITIES),
+                len(EXECUTOR_CAPABILITIES),
+            ),
+        )
+        if cursor.fetchone() is None:
+            raise PermissionError("controller presence requires the current human player")
+
+    @staticmethod
+    def _lock_branch(cursor, scope: ControlScope) -> None:
+        cursor.execute(
+            "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
+            tuple(map(str, scope.key[:2])),
+        )
+
     def get(self, scope: ControlScope, actor_id: uuid.UUID) -> ControllerState | None:
         with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
@@ -65,7 +103,12 @@ class PostgresControllers:
             raise ValueError("controller handoff could not be stored; reload and retry") from None
 
     def _handoff(
-        self, scope: ControlScope, actor_id: uuid.UUID, request: HandoffRequest
+        self,
+        scope: ControlScope,
+        actor_id: uuid.UUID,
+        request: HandoffRequest,
+        *,
+        timeout_at: datetime | None = None,
     ) -> HandoffReceipt:
         with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
@@ -75,10 +118,7 @@ class PostgresControllers:
                     "FOR NO KEY UPDATE",
                     tuple(map(str, scope.key[:3])),
                 )
-                cursor.execute(
-                    "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
-                    tuple(map(str, scope.key[:2])),
-                )
+                self._lock_branch(cursor, scope)
                 owner = self._owner(cursor, scope, actor_id)
                 cursor.execute(
                     "SELECT sim.has_world_capability(%s,'action.propose') AND "
@@ -90,7 +130,7 @@ class PostgresControllers:
                 if permission is None or not permission["allowed"]:
                     raise PermissionError("actor lacks controller execution capabilities")
                 cursor.execute(
-                    "SELECT r.run_kind,b.branch_kind FROM sim.runs r "
+                    "SELECT r.run_kind,r.status,b.branch_kind FROM sim.runs r "
                     "JOIN sim.branches b ON (b.world_id,b.id)=(r.world_id,r.branch_id) "
                     "WHERE (r.world_id,r.branch_id,r.id)=(%s,%s,%s)",
                     tuple(map(str, scope.key[:3])),
@@ -109,7 +149,19 @@ class PostgresControllers:
                 prior = cursor.fetchone()
                 if prior:
                     return HandoffReceipt.model_validate(prior["payload"])
-                if request.mode == "AUTONOMOUS":
+                previous = self._read(cursor, scope)
+                if "disconnect_after_seconds" in request.model_fields_set:
+                    self._check_player(cursor, scope, actor_id)
+                if timeout_at is not None:
+                    self._check_player(cursor, scope, owner)
+                    if (
+                        previous is None
+                        or previous.owner_actor_id != owner
+                        or not disconnect_due(previous, timeout_at)
+                        or lineage["status"] not in {"ACTIVE", "RUNNING"}
+                    ):
+                        raise ControlConflict("controller presence changed")
+                if request.mode == "AUTONOMOUS" or request.disconnect_after_seconds is not None:
                     cursor.execute(
                         "SELECT 1 FROM tabletop.character_bindings WHERE "
                         "(world_id,branch_id,run_id,entity_id)=(%s,%s,%s,%s) LIMIT 1",
@@ -119,7 +171,9 @@ class PostgresControllers:
                         raise ValueError(
                             "a pinned CHARACTER binding is required before autonomous play"
                         )
-                state = next_controller(scope, actor_id, owner, request, self._read(cursor, scope))
+                state = next_controller(
+                    scope, actor_id, owner, request, previous, disconnected=timeout_at is not None
+                )
                 cursor.execute(
                     "INSERT INTO sim.actors(id,actor_kind,display_name) "
                     "VALUES (%s,'AGENT','Character policy executor') ON CONFLICT (id) DO NOTHING",
@@ -174,7 +228,61 @@ class PostgresControllers:
                 )
                 return receipt
 
+    def presence(
+        self, scope: ControlScope, actor_id: uuid.UUID, expected_epoch: int
+    ) -> ControllerState:
+        with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                self._owner(cursor, scope, actor_id)
+                self._lock_branch(cursor, scope)
+                self._check_player(cursor, scope, actor_id)
+                previous = self._read(cursor, scope)
+                state = renew_presence(previous, expected_epoch)
+                if state != previous:
+                    persist_controller(cursor, state)
+                return state
+
+    def expire_disconnected(self, now: datetime) -> None:
+        # Start after the last scanned row and wrap, even when a handoff is rejected.
+        after = self._last_presence_scan or (None, None, None, None, None)
+        with transaction(actor_id=self.machine_actor_id, dsn=self.dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    """SELECT c.payload FROM cognition.controller_assignments c
+                    JOIN sim.runs r ON (r.world_id,r.branch_id,r.id)=(c.world_id,c.branch_id,c.run_id)
+                    WHERE c.payload->>'mode'='HUMAN'
+                      AND (c.payload->>'presence_deadline_at')::timestamptz<=%s
+                      AND r.status IN ('ACTIVE','RUNNING')
+                    ORDER BY (
+                      ((c.payload->>'presence_deadline_at')::timestamptz,
+                       c.world_id,c.branch_id,c.run_id,c.entity_id)
+                      <= (%s::timestamptz,%s::uuid,%s::uuid,%s::uuid,%s::uuid)
+                    ), (c.payload->>'presence_deadline_at')::timestamptz,
+                             c.world_id,c.branch_id,c.run_id,c.entity_id LIMIT %s""",
+                    (now, *after, PRESENCE_BATCH_LIMIT),
+                )
+                expired = tuple(ControllerState.model_validate(row["payload"]) for row in cursor)
+        if expired and (deadline := expired[-1].presence_deadline_at) is not None:
+            last = expired[-1]
+            self._last_presence_scan = (
+                deadline,
+                str(last.world_id),
+                str(last.branch_id),
+                str(last.run_id),
+                str(last.entity_id),
+            )
+        else:
+            self._last_presence_scan = None
+        for state in expired:
+            try:
+                self._handoff(
+                    state.scope, self.machine_actor_id, disconnect_handoff(state), timeout_at=now
+                )
+            except (ControlConflict, PermissionError, ValueError, psycopg2.Error):
+                continue
+
     def due(self) -> tuple[ControllerState, ...]:
+        self.expire_disconnected(datetime.now(UTC))
         with transaction(actor_id=self.machine_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute("""SELECT c.payload FROM cognition.controller_assignments c
@@ -191,10 +299,7 @@ class PostgresControllers:
     def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None:
         with transaction(actor_id=state.executor_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
-                    "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
-                    tuple(map(str, state.key[:2])),
-                )
+                self._lock_branch(cursor, state.scope)
                 current = self._read(cursor, state.scope)
                 if current != state or state.mode != "AUTONOMOUS":
                     return

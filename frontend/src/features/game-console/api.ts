@@ -7,6 +7,9 @@ export type ControlMode = "HUMAN" | "AUTONOMOUS" | "PAUSED";
 export type ControllerState = {
   epoch: number; mode: ControlMode; step: number; max_steps: number;
   last_error: string | null; next_due: string;
+  disconnect_after_seconds?: number;
+  presence_deadline_at?: string;
+  handoff_reason?: "DISCONNECT_TIMEOUT";
 };
 export type ControllerScope = { world: string; branch: string; run: string; entity: string };
 function controlPath(scope: ControllerScope): string {
@@ -17,10 +20,18 @@ export async function loadController(scope: ControllerScope, signal?: AbortSigna
     controlPath(scope) + `?run_id=${encodeURIComponent(scope.run)}`, { signal, cache: "no-store" });
 }
 export async function handoffController(scope: ControllerScope, mode: ControlMode, epoch: number,
-                                      maxSteps: number, idempotencyKey: string) {
+                                      maxSteps: number, idempotencyKey: string,
+                                      disconnectAfterSeconds?: number | null) {
   return apiRequest<{ state: ControllerState }>(controlPath(scope), { method: "POST",
     body: JSON.stringify({ run_id: scope.run, mode, expected_epoch: epoch,
-      max_steps: maxSteps, interval_ms: 1000, idempotency_key: idempotencyKey }) });
+      max_steps: maxSteps, interval_ms: 1000, idempotency_key: idempotencyKey,
+      disconnect_after_seconds: disconnectAfterSeconds }) });
+}
+export async function renewControllerPresence(scope: ControllerScope, epoch: number,
+                                             signal?: AbortSignal) {
+  return apiRequest<{ state: ControllerState }>(controlPath(scope) + "/presence", {
+    method: "POST", signal, body: JSON.stringify({ run_id: scope.run, expected_epoch: epoch }),
+  });
 }
 
 function normalizeEvent(raw: Record<string, unknown>): EventRecord {

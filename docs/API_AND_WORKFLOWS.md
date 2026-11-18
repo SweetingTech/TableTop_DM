@@ -932,8 +932,16 @@ interruption both start a two-decision cooldown in that controller epoch.
 
 The Game Console exposes Let character act, Pause autonomy, Take control, and an action limit.
 It polls status, refreshes the authorized scene on progress, and disables human submission until
-takeover. Saved mode survives browser closure and process restart. Closing a browser while HUMAN
-does not enable autonomy. Presence timeouts/reconnect policies, broader human-history inference, richer
+takeover. Saved mode survives browser closure and process restart. By default a disconnected
+player retains manual control. An owner can opt in with `disconnect_after_seconds` set to 15–600
+on a `HUMAN` handoff, or pass `null` to disable it. Omitting the field retains the saved policy.
+`POST /control/presence` accepts `{run_id, expected_epoch}` and refreshes the deadline for the
+authenticated current player. The console renews it while playing that body.
+
+An expired deadline starts bounded autonomy using the same dedicated executor. Timeout changes
+the epoch, and the returning browser shows **Take control**. A reconnect before a timeout handoff
+can renew the current epoch. A paused campaign still stops autonomous action commits. Broader
+human-history inference, richer
 actions, narrative goals, and the canonical world clock remain separate work; due times here are
 operational wall-clock scheduling only.
 
