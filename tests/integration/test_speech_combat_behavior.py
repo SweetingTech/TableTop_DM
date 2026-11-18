@@ -71,6 +71,8 @@ def test_speech_history_clock_ties_restart_and_unattended_reply(
     prompt(admin, base, target, "new-prompt")
     before = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
     assert before["comparable_count"] == 4
+    assert before["speech_cadence"] == "BRIEF"
+    assert len(before["cadence_evidence_event_ids"]) == 4
     advice = player.post(
         path + "/character-proposals", json={"run_id": run, "idempotency_key": "speech"}
     )
@@ -107,11 +109,13 @@ def test_speech_history_clock_ties_restart_and_unattended_reply(
             (run,),
         )
         parameters = cursor.fetchone()[0]
-        assert parameters["volume"] == "WHISPER" and parameters["text"] == "Hello. Good to see you."
+        assert parameters["volume"] == "WHISPER" and parameters["text"] == "Hello."
         cursor.execute(
-            "SELECT count(*) FROM cognition.human_choice_evidence WHERE run_id=%s", (run,)
+            "SELECT payload->>'version',payload->>'utterance_cadence' "
+            "FROM cognition.human_choice_evidence WHERE run_id=%s",
+            (run,),
         )
-        assert cursor.fetchone()[0] == 4
+        assert cursor.fetchall() == [("speech-combat-behavior-1.2.0", "BRIEF")] * 4
 
 
 def test_combat_history_executes_and_stale_takeover_cannot_commit(
@@ -241,7 +245,8 @@ def test_choice_evidence_failure_rolls_back_action_and_private_rls(
             )
 
 
-def test_upgrade_from008_is_repeatable(integration_stack, tmp_path):
+@pytest.mark.parametrize("prior_count", [8, 16])
+def test_choice_schema_upgrade_is_repeatable(integration_stack, tmp_path, prior_count):
     name = "ttdm_choice_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
     maintenance = psycopg2.connect(integration_stack.admin_url)
@@ -252,10 +257,10 @@ def test_upgrade_from008_is_repeatable(integration_stack, tmp_path):
         migrations = Path(__file__).resolve().parents[2] / "infra/sql/migrations"
         prior = tmp_path / "prior"
         prior.mkdir()
-        for path in sorted(migrations.glob("*.sql"))[:8]:
+        for path in sorted(migrations.glob("*.sql"))[:prior_count]:
             shutil.copy2(path, prior / path.name)
-        assert migrate(url, prior) == 8
-        assert migrate(url, migrations) == len(discover(migrations)) - 8
+        assert migrate(url, prior) == prior_count
+        assert migrate(url, migrations) == len(discover(migrations)) - prior_count
         assert migrate(url, migrations) == 0
     finally:
         with maintenance.cursor() as cursor:
@@ -283,8 +288,9 @@ def test_choice_source_payload_and_binding_constraints(integration_stack, monkey
     selected = (
         "event_id,world_id,branch_id,run_id,entity_id,player_actor_id,character_id,binding_id,"
     )
-    with pytest.raises(psycopg2.errors.CheckViolation):
+    for field, value in (("projection_version", "-1"), ("utterance_cadence", '"MYSTERY"')):
         with (
+            pytest.raises(psycopg2.errors.CheckViolation),
             psycopg2.connect(integration_stack.admin_url) as connection,
             connection.cursor() as cursor,
         ):
@@ -293,9 +299,9 @@ def test_choice_source_payload_and_binding_constraints(integration_stack, monkey
                 + columns
                 + ") SELECT "
                 + selected
-                + "jsonb_set(payload,'{projection_version}','-1') "
+                + "jsonb_set(payload,ARRAY[%s],%s::jsonb) "
                 "FROM cognition.human_choice_evidence WHERE run_id=%s",
-                (run,),
+                (field, value, run),
             )
     with pytest.raises(psycopg2.errors.RaiseException, match="absent"):
         with (

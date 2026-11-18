@@ -1,5 +1,10 @@
 # Simulation-kernel contract
 
+Migration 017 stores a cadence bucket within the current append-only human choice evidence.
+The existing source guard requires accepted manual same-branch speech for the new evidence version.
+No speech text is duplicated into the training row. Cadence affects expression of an already
+selected speech intent; the ordinary command still authorizes speech and freezes hearing.
+
 Private `sim.command_log.input_origin` identifies the decision source independently of the actor
 executing it. Stand-in and NPC origins require a character-policy command with a body, epoch,
 and step. Existing actor, run, grant, and control fences still apply. Migration 016 preserves

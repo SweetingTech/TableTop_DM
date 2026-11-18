@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from cognition.choice_state import ChoiceFrame, choice_frame, speech_intent
+from cognition.choice_state import ChoiceFrame, SpeechCadence, choice_frame, speech_intent
 from cognition.context import CharacterContext
 from cognition.engine import DecisionAction
 from kernel.state import stable_hash
 from persona.models import CompiledPersona
 
-CHOICE_VERSION = "speech-combat-behavior-1.1.0"
+CHOICE_VERSION = "speech-combat-behavior-1.2.0"
 
 
 class ChoiceOption(BaseModel):
@@ -115,9 +116,11 @@ def describe_options(context: CharacterContext, frame: ChoiceFrame) -> tuple[Cho
 
 class HumanChoiceEvidence(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    version: Literal["speech-combat-behavior-1.0.0", "speech-combat-behavior-1.1.0"] = (
-        "speech-combat-behavior-1.1.0"
-    )
+    version: Literal[
+        "speech-combat-behavior-1.0.0",
+        "speech-combat-behavior-1.1.0",
+        "speech-combat-behavior-1.2.0",
+    ] = "speech-combat-behavior-1.1.0"
     world_id: uuid.UUID
     branch_id: uuid.UUID
     run_id: uuid.UUID
@@ -129,9 +132,15 @@ class HumanChoiceEvidence(BaseModel):
     frame: ChoiceFrame
     options: tuple[ChoiceOption, ...]
     chosen_key: str
+    utterance_cadence: SpeechCadence | None = Field(default=None, exclude_if=lambda v: v is None)
 
     @model_validator(mode="after")
     def selected_option(self) -> HumanChoiceEvidence:
+        if self.version == "speech-combat-behavior-1.2.0":
+            if self.utterance_cadence is None or not self.chosen_key.startswith("speech:"):
+                raise ValueError("cadence evidence requires a human speech choice")
+        elif self.utterance_cadence is not None:
+            raise ValueError("utterance cadence requires the current speech evidence version")
         if self.version == "speech-combat-behavior-1.0.0" and any(
             row.kind in {"GUARD", "SPELL"} for row in self.options
         ):
@@ -160,6 +169,10 @@ class ChoiceProfile(BaseModel):
     evidence_event_ids: tuple[uuid.UUID, ...]
     action_scores: dict[str, float]
     conflicts: tuple[str, ...]
+    speech_cadence: SpeechCadence | None = Field(default=None, exclude_if=lambda v: v is None)
+    cadence_evidence_event_ids: tuple[uuid.UUID, ...] = Field(
+        default=(), exclude_if=lambda v: not v
+    )
 
     @model_validator(mode="after")
     def content_address(self) -> ChoiceProfile:
@@ -210,6 +223,22 @@ def choice_profile(
         next(option for option in row.options if option.key == row.chosen_key)
         for _, row in matching
     ]
+    cadence_samples = [
+        (event, row.utterance_cadence)
+        for event, row in matching
+        if row.utterance_cadence is not None
+    ]
+    cadence_counts = Counter(cadence for _, cadence in cadence_samples)
+    cadence_fields = {}
+    if cadence_counts:
+        cadence, count = cadence_counts.most_common(1)[0]
+        if count >= 2 and count * 2 > len(cadence_samples):
+            cadence_fields = {
+                "speech_cadence": cadence,
+                "cadence_evidence_event_ids": tuple(
+                    event for event, sample in cadence_samples if sample == cadence
+                ),
+            }
     confidence = len(matching) / (len(matching) + 3)
     identity = context.identity.authored_identity if context.identity else None
     text = (
@@ -306,6 +335,7 @@ def choice_profile(
         evidence_event_ids=tuple(event for event, _ in matching),
         action_scores=scores,
         conflicts=conflicts,
+        **cadence_fields,
     )
     return ChoiceProfile(profile_id=stable_hash(payload), **payload)
 

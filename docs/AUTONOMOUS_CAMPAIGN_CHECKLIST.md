@@ -388,9 +388,9 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   samples in the exact player/character/world/branch/run/body, matching perceived layout, distance,
   injury and company. Profiles freeze in proposal receipts with evidence IDs and confidence.
   Relationships, broader risk/tactics inference and negative-choice learning remain open.
-  Speech/combat extension: new profiles now learn template intent/volume, basic melee target style,
-  advance/withdrawal from matching new human choices. Open-ended phrasing, relationship strategy,
-  spells and full tactical planning remain open.
+  Speech/combat extension: profiles learn intent, volume and cadence from comparable human replies,
+  plus basic melee target style and advance/withdrawal. A configured provider and the local fallback
+  both apply cadence. Relationship strategy and fuller tactical choice learning remain open.
 - [ ] G3 — Combine that history with character card/backstory: human evidence guides demonstrated
   behavior; card/backstory supplies initial identity and unknown situations. Surface contradictions for operator/player correction.
   Comparable movement history now guides advice and the runner, with pinned persona curiosity/risk

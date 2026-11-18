@@ -1,5 +1,8 @@
 # Operations, storage, migrations, and security
 
+Apply `017_speech_cadence_evidence.sql` before upgrading the application and character runner.
+The expanded constraint retains prior evidence variants and protects the optional cadence category.
+
 Apply migration `016_decision_origins.sql` before rolling out the application and runners. It
 extends the existing private command ledger constraint and applies without rewriting old origins.
 Keep the application and runner on the same build so fresh decisions record matching provenance.

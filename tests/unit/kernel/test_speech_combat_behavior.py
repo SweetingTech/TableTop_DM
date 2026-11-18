@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from cognition.choice_state import SPEECH, cadence_line, speech_cadence, speech_intent
 from cognition.choices import choice_profile, weighted_choices
 from cognition.context import CharacterContext
 from cognition.engine import DecisionAction, DecisionRequest, LayeredDecisionEngine
@@ -75,9 +76,36 @@ def provoke(admin, base, target, card, key):
     assert response.status_code == 200, response.get_json()
 
 
-def test_human_reply_volume_and_intent_drive_actual_runner_speech(monkeypatch, tmp_path):
+def test_speech_fallback_preserves_cadence_and_intent():
+    for intent, template in SPEECH.items():
+        for cadence in ("BRIEF", "BALANCED", "ELABORATE"):
+            line = cadence_line(template, cadence)
+            assert speech_cadence(line) == cadence
+            assert speech_intent(line) == intent
+
+
+@pytest.mark.parametrize(
+    ("manual_text", "cadence", "expected"),
+    [
+        ("Hello, friend.", "BRIEF", "Hello."),
+        (
+            "Which of these roads should we take from here?",
+            "BALANCED",
+            "Tell me, what do you need?",
+        ),
+        (
+            "Hello to you, friend. I'm glad the road brought our small company here today.",
+            "ELABORATE",
+            "Hello. I am glad our paths crossed. It is good to see you here today.",
+        ),
+    ],
+)
+def test_human_reply_volume_and_intent_drive_actual_runner_speech(
+    monkeypatch, tmp_path, manual_text, cadence, expected
+):
     app = _app(monkeypatch, tmp_path)
     admin, player, card, path, run, target, base = setup_scene(app)
+    sources = set()
     for index in range(4):
         prompt(admin, base, target, f"prompt-{index}")
         response = player.post(
@@ -86,20 +114,24 @@ def test_human_reply_volume_and_intent_drive_actual_runner_speech(monkeypatch, t
                 **base,
                 "embodied_entity_id": card["entity_id"],
                 "command_type": "tabletop.dialogue.speak",
-                "parameters": {"text": "Hello, friend.", "volume": "WHISPER"},
+                "parameters": {"text": manual_text, "volume": "WHISPER"},
                 "idempotency_key": f"reply-{index}",
             },
         )
         assert response.status_code == 200, response.get_json()
+        sources.add(response.get_json()["event"]["event_id"])
     prompt(admin, base, target, "new-prompt")
     profile = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
     assert profile["comparable_count"] == 4
-    assert "Hello, friend." not in str(profile)
+    assert manual_text not in str(profile)
+    assert profile["speech_cadence"] == cadence
+    assert set(profile["cadence_evidence_event_ids"]) == sources
     advice = player.post(
         path + "/character-proposals", json={"run_id": run, "idempotency_key": "reply-choice"}
     ).get_json()
     assert advice["outcome"]["proposal"]["command_type"] == "tabletop.dialogue.speak"
     assert advice["outcome"]["proposal"]["parameters"]["volume"] == "WHISPER"
+    assert advice["outcome"]["proposal"]["parameters"]["text"] == expected
     assert (
         "reply"
         not in str(
@@ -122,12 +154,15 @@ def test_human_reply_volume_and_intent_drive_actual_runner_speech(monkeypatch, t
     assert app.extensions["character_runner"].run_once() == 1
     last = list(app.extensions["simulation"].events.values())[-1]
     assert last.event_type == "tabletop.dialogue.speak" and last.payload["volume"] == "WHISPER"
+    assert last.payload["text"] == expected
+    assert "cadence" not in last.payload
     evidence = [
         row["choices"]
         for row in app.extensions["simulation"].human_decision_evidence.values()
         if row.get("choices")
     ]
     assert len(evidence) == 4
+    assert all(row["utterance_cadence"] == cadence for row in evidence)
     # A reply consumes the pending conversational turn; there is no self-response loop.
     after = player.get(path + "/context", query_string={"run_id": run}).get_json()
     assert all(

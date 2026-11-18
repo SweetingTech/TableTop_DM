@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +18,22 @@ SPEECH = {
     "ASSERT": "Stay back. I am ready to defend myself.",
 }
 VOLUMES = ("WHISPER", "NORMAL", "LOUD", "SHOUT")
+SpeechCadence = Literal["BRIEF", "BALANCED", "ELABORATE"]
+_CADENCE_LINES = {
+    "BRIEF": {
+        "GREET": "Hello.",
+        "ASK": "What is it?",
+        "DEESCALATE": "Let's talk.",
+        "ASSERT": "Stay back.",
+    },
+    "BALANCED": {"ASK": "Tell me, what do you need?"},
+    "ELABORATE": {
+        "GREET": "Hello. I am glad our paths crossed. It is good to see you here today.",
+        "ASK": "Tell me what you came here for. Is there something I can do to help you?",
+        "DEESCALATE": "I do not want a fight. Let us put that aside and talk for a moment.",
+        "ASSERT": "Stay back. If you come any closer, I will defend myself. Keep your distance.",
+    },
+}
 
 
 def speech_intent(text: str) -> str:
@@ -30,6 +47,19 @@ def speech_intent(text: str) -> str:
     if any(word in lowered for word in ("back", "fight", "attack", "defend", "stop")):
         return "ASSERT"
     return "GREET"
+
+
+def speech_cadence(text: str) -> SpeechCadence:
+    words = len(text.split())
+    if words <= 4:
+        return "BRIEF"
+    if words >= 12:
+        return "ELABORATE"
+    return "BALANCED"
+
+
+def cadence_line(text: str, cadence: SpeechCadence) -> str:
+    return _CADENCE_LINES.get(cadence, {}).get(speech_intent(text), text)
 
 
 class KnownThreat(BaseModel):
