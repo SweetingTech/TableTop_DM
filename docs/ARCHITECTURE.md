@@ -2,6 +2,12 @@
 
 ## System shape
 
+Decision origin is private command provenance. The HTTP boundary derives human input, accepted
+advice, or operator origin. The runner uses the player body type and its world-scoped human
+controller to identify stand-ins, and the private trace to distinguish NPC policy from model
+assistance. The controller epoch and agent grant still authorize execution. Origin labels stay
+outside sensory events.
+
 The durable clock scheduler keeps one outstanding step per canonical branch in
 `sim.world_due_work`. Workers sort due candidates by deadline and branch ID, then compete for a
 lease scoped to the assigned executor. The existing branch transaction validates the lease and

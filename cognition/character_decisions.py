@@ -26,12 +26,12 @@ from cognition.store import MindStore
 from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import CharacterBinding
 from kernel.application import SimulationApplication
-from kernel.contracts import BranchKind
+from kernel.contracts import BranchKind, DecisionOrigin
 from kernel.control import ControllerState
 from kernel.state import stable_hash
 from persona.models import CompiledPersona, PersonaPurpose
 
-PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.5.0"
+PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.6.0"
 
 
 class CharacterProposalScope(BaseModel):
@@ -218,6 +218,7 @@ def propose_for_character(
     profile: CompiledPersona,
     engine: LayeredDecisionEngine | None = None,
     controller: ControllerState | None = None,
+    stand_in: bool = False,
     human_epoch: int | None = None,
     behavior: BehaviorProfile | None = None,
     choices: ChoiceProfile | None = None,
@@ -350,12 +351,16 @@ def propose_for_character(
         }
     )
     if controller is not None:
+        origin: DecisionOrigin = "NPC_MODEL" if trace.model_version else "NPC_POLICY"
+        if stand_in:
+            origin = "STAND_IN"
         proposal = proposal.model_copy(
             update={
                 "control_epoch": controller.epoch,
                 "control_step": controller.step,
                 "control_attempt": controller.failures or None,
                 "decision_authorship": "CHARACTER_POLICY",
+                "input_origin": origin,
             }
         )
     outcome = outcome.model_copy(update={"trace": trace, "proposal": proposal})

@@ -37,6 +37,9 @@ The durable world runner claims the next clock step in PostgreSQL. Another worke
 the step if the lease expires before commit. Pausing cancels pending work, and a successful tick
 records its result and schedules the next step together. Apply migration 014 before upgrading.
 Apply migration 015 for [retained narration](docs/API_AND_WORKFLOWS.md#scoped-narration).
+Apply migration 016 for [private decision origins](docs/API_AND_WORKFLOWS.md#controller-handoff-and-runner).
+The ledger distinguishes human choices, operator actions, accepted advice, stand-in actions,
+and NPC decisions. Characters still act on their own perception.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

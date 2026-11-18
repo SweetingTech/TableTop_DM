@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ActorKind(StrEnum):
@@ -23,6 +23,18 @@ class RunKind(StrEnum):
     LIVE = "LIVE"
     POPULATION = "POPULATION"
     EVALUATION = "EVALUATION"
+
+
+DecisionOrigin = Literal[
+    "UNSPECIFIED",
+    "HUMAN_INPUT",
+    "POLICY_ADVICE",
+    "OPERATOR",
+    "STAND_IN",
+    "NPC_POLICY",
+    "NPC_MODEL",
+    "DIRECTOR",
+]
 
 
 class Actor(BaseModel):
@@ -47,7 +59,7 @@ class CommandProposal(BaseModel):
     control_step: int | None = Field(default=None, ge=0)
     control_attempt: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
     decision_authorship: Literal["HUMAN", "CHARACTER_POLICY"] = "HUMAN"
-    input_origin: Literal["UNSPECIFIED", "HUMAN_INPUT", "POLICY_ADVICE", "OPERATOR"] = "UNSPECIFIED"
+    input_origin: DecisionOrigin = "UNSPECIFIED"
     command_type: str = Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
     world_id: uuid.UUID
     branch_id: uuid.UUID
@@ -65,6 +77,17 @@ class CommandProposal(BaseModel):
     policy_version: str | None = None
     prompt_contract_version: str | None = None
     model_version: str | None = None
+
+    @model_validator(mode="after")
+    def character_origin_requires_control(self) -> CommandProposal:
+        if self.input_origin in {"STAND_IN", "NPC_POLICY", "NPC_MODEL"} and (
+            self.decision_authorship != "CHARACTER_POLICY"
+            or self.embodied_entity_id is None
+            or self.control_epoch is None
+            or self.control_step is None
+        ):
+            raise ValueError("autonomous decision origin requires a character controller")
+        return self
 
 
 class StateDelta(BaseModel):

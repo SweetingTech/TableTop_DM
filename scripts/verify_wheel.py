@@ -32,6 +32,7 @@ REQUIRED_MEMBERS = (
     "infra/sql/migrations/013_roster_controller_revocation.sql",
     "infra/sql/migrations/014_world_due_work.sql",
     "infra/sql/migrations/015_scoped_narration.sql",
+    "infra/sql/migrations/016_decision_origins.sql",
     "static/v2/index.html",
 )
 
@@ -91,6 +92,7 @@ require([item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "013_roster_controller_revocation.sql",
     "014_world_due_work.sql",
     "015_scoped_narration.sql",
+    "016_decision_origins.sql",
 ], "wheel migration discovery differs from the runtime contract")
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

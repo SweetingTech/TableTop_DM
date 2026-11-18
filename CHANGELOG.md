@@ -1,5 +1,7 @@
 # Changelog
 
+- Record private stand-in, NPC policy, and NPC model decision origins through the existing
+  controller workflow. Migration 016 preserves previous classifications and human-history rules.
 - Bound stalled character decisions using committed movement, ineffective strikes, and witnessed
   speech chains. Record attempted recovery privately and pause when the current plan has no option.
 - Add operator, spectator, and character narration from committed events. Migration 015

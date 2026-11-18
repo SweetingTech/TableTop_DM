@@ -2185,6 +2185,7 @@ def create_app(
                     "controller_actor_id": body.controller_actor_id,
                 },
                 idempotency_key=f"entity-spawn:{entity_id}",
+                input_origin="OPERATOR",
             )
         )
         entity = simulation.entities[(world.canonical_branch_id, entity_id)]
@@ -2665,6 +2666,11 @@ def create_app(
         )
         proposal = CommandProposal.model_validate(payload)
         require_world_access(proposal.world_id)
+        if (
+            proposal.input_origin == "HUMAN_INPUT"
+            and not simulation.bus.definition(proposal.command_type).requires_controlled_entity
+        ):
+            proposal = proposal.model_copy(update={"input_origin": "OPERATOR"})
         receipt = simulation.submit(proposal)
         include_private = (
             durable_control.has_world_capability(
@@ -3285,6 +3291,7 @@ def create_app(
                 actor_id=actor_id,
                 parameters=package.model_dump(mode="json"),
                 idempotency_key=f"promotion:{key}",
+                input_origin="OPERATOR",
             )
         )
         return jsonify(

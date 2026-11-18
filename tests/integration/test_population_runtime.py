@@ -15,6 +15,7 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
+from cognition.deliberation import ProviderCompletion
 from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from population.runtime import MEMBERS
@@ -31,13 +32,47 @@ def runtime_path(base):
     return f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}/population"
 
 
+@pytest.mark.parametrize("use_model", [False, True])
 def test_durable_npc_resolution_uses_live_physical_relevance(
-    integration_stack, monkeypatch, tmp_path
+    integration_stack, monkeypatch, tmp_path, use_model
 ):
+    monkeypatch.setenv("TTDM_DELIBERATION_MODE", "off")
     app, game = prepare(integration_stack, monkeypatch, tmp_path)
+
+    class Provider:
+        model_version = "garden-model-fixture"
+
+        def complete(self, request):
+            return ProviderCompletion(
+                content={
+                    "action": request.allowed_actions[0],
+                    "rationale": "Act nearby.",
+                    "confidence": 0.8,
+                },
+                attempts=1,
+            )
+
     check_population_resolution(
-        app, game, lambda: create_app(artifact_root=tmp_path / "npc-worker"), monkeypatch
+        app,
+        game,
+        lambda: create_app(
+            artifact_root=tmp_path / "npc-worker",
+            deliberation_provider=Provider() if use_model else None,
+        ),
+        monkeypatch,
     )
+    _, _, _, _, run, target, _ = game
+    with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT c.input_origin,e.model_version FROM sim.command_log c "
+            "JOIN sim.events e USING(world_id,branch_id,run_id,actor_id,idempotency_key) "
+            "WHERE c.run_id=%s AND c.embodied_entity_id=%s "
+            "AND c.decision_authorship='CHARACTER_POLICY'",
+            (run, target),
+        )
+        assert cursor.fetchall() == [
+            ("NPC_MODEL", Provider.model_version) if use_model else ("NPC_POLICY", None)
+        ]
 
 
 def test_binding_rollback_retry_freeze_guards_and_source_validation(

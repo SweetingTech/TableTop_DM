@@ -866,6 +866,15 @@ speech/combat imitation remain planned.
 
 ## Controller handoff and runner
 
+For `POST /api/v2/commands`, the server derives the private ledger origin from the authenticated
+input path and registered command. Direct human body actions use `HUMAN_INPUT`. Submitted
+advice uses `POLICY_ADVICE`. Management commands and operator automation use `OPERATOR`.
+The runner marks an autonomous action for a human-controlled player body `STAND_IN`. Other autonomous
+bodies use `NPC_POLICY` or `NPC_MODEL` according to the recorded decision. `DIRECTOR` is reserved
+for typed story direction and has no current command route. The current controller and world grant
+still govern whether a command can commit. The origin stays private and only accepted manual
+choices are eligible for the existing human preference profiles.
+
 `GET /api/v2/worlds/{world}/branches/{branch}/entities/{body}/control?run_id={run}` reads private
 controller status for the body owner or a world-scoped `mind.write.all` operator. An unconfigured
 body returns `control: null`; use expected epoch zero for its first handoff.
