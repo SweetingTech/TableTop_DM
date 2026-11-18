@@ -371,8 +371,10 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
 The runner uses witnessed situations, pinned persona and card, and comparable player examples.
 The current catalog covers movement, dialogue, melee, guard, and typed spells. An optional
 OpenAI-compatible provider expresses the selected speech intent and volume.
+The [acceptance report](verification/section-g/acceptance.md) links all nine criteria to their
+implementation and verification.
 
-- [ ] G1 — Record decision authorship independently from actor authority: human input, stand-in,
+- [x] G1 — Record decision authorship independently from actor authority: human input, stand-in,
   NPC policy/model, director, and operator. Link human decisions to player, character, context, options,
   dialogue, and outcome without revealing options/facts the character did not know.
   Movement foundation: server-derived input origin is distinct from controller authority; private
@@ -382,7 +384,7 @@ OpenAI-compatible provider expresses the selected speech intent and volume.
   its own origin in the ledger. Section L covers executable AI DM workflows.
   Comparable contextual samples capture action or speech classification and use the source event
   to retain the accepted outcome.
-- [ ] G2 — Add versioned behavior profiles keyed by player/character. Retrieve comparable human
+- [x] G2 — Add versioned behavior profiles keyed by player/character. Retrieve comparable human
   decisions to infer speech, priorities, relationships, risk, and tactical choices with confidence/provenance.
   Movement foundation: private content-addressed profiles use up to 256 accepted manual movement
   samples in the exact player/character/world/branch/run/body, matching perceived layout, distance,
@@ -393,14 +395,14 @@ OpenAI-compatible provider expresses the selected speech intent and volume.
   plus basic melee target style and advance/withdrawal. A configured provider and the local fallback
   both apply cadence. A witnessed previous helper can receive MEND. The profile learns when the
   player favors helping them over self-healing in comparable situations.
-- [ ] G3 — Combine that history with character card/backstory: human evidence guides demonstrated
+- [x] G3 — Combine that history with character card/backstory: human evidence guides demonstrated
   behavior; card/backstory supplies initial identity and unknown situations. Surface contradictions for operator/player correction.
   Comparable movement history now guides advice and the runner, with pinned persona curiosity/risk
   weights and an explicit limited English authored-tendency vocabulary as fallback. Private conflict
   notices are inspectable through behavior-profile GET.
   Compiled risk/conflict/social/directness and explicit peaceful/aggressive card tendencies now
   drive speech/combat fallback; choice-profile GET exposes separate versioned scores and conflicts.
-- [ ] G4 — Exclude autonomous decisions from human preference evidence. Define treatment of revised
+- [x] G4 — Exclude autonomous decisions from human preference evidence. Define treatment of revised
   timelines and retain human-vs-stand-in provenance across restart and profile rebuilding.
   Migration 008 atomically records only untraced accepted HUMAN_INPUT movement. Operator automation,
   submitted policy advice, autonomous actions, unknown legacy origin and foreign scope are excluded.
@@ -422,7 +424,7 @@ OpenAI-compatible provider expresses the selected speech intent and volume.
   Explicit Let character act / Pause autonomy / Take control retain their prior behavior. An
   owner can opt into a presence timeout for the same character. The runner uses the normal
   epoch fence at timeout, and the returning console offers takeover and shows the pause policy.
-- [ ] G7 — Authorize stand-in execution through explicit world/entity grants; do not impersonate a
+- [x] G7 — Authorize stand-in execution through explicit world/entity grants; do not impersonate a
   browser account or reuse its session. Record both execution authority and behavior-profile attribution.
   Dedicated AGENT execution and scoped grants authorize each step. The durable receipt separately
   retains the player, character, binding and supporting human evidence.
@@ -431,7 +433,7 @@ OpenAI-compatible provider expresses the selected speech intent and volume.
   The private recap lists frozen observations inside the last exact handoff window. Its read
   uses the typed console. A durable test retries an in-progress action after takeover, verifies
   the original receipt and wait are preserved, then completes the action on the shared clock.
-- [ ] G9 — Acceptance: history-rich stand-in follows contextual human examples; history-free stand-in
+- [x] G9 — Acceptance: history-rich stand-in follows contextual human examples; history-free stand-in
   uses card/backstory; solo/mixed/all-autonomous modes work; takeover races commit one action; no character perceives handoff.
   The [campaign integration tests](../tests/integration/test_section_g_campaign.py) exercise
   two seats on one world and run, including uncontaminated human evidence and unchanged

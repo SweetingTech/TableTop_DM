@@ -1,0 +1,47 @@
+TableTop DM Section G verification
+Exact final candidate a59f133483e4fe9fcd9707dea7ef04789ae493e7
+Candidate pull request https://github.com/SweetingTech/TableTop_DM/pull/126
+Candidate PostgreSQL integration job https://github.com/SweetingTech/TableTop_DM/actions/runs/44310001317/job/134821368571
+
+Local isolated PostgreSQL verification after the presence clock repair
+tests\integration\test_section_g_campaign.py ..                          [  6%]
+tests\integration\test_tactical_choices.py .....                         [ 21%]
+tests\integration\test_controller_runner.py ..............               [ 65%]
+tests\integration\test_player_behavior.py .....                          [ 81%]
+tests\integration\test_speech_combat_behavior.py ......                  [100%]
+======================= 32 passed in 293.50s (0:04:53) ========================
+
+Local Python unit and contract gate
+736 passed, 239 deselected in 129.37s (0:02:09)
+Ruff: All checks passed!
+mypy: Success: no issues found in 157 source files
+
+Local Chromium through the built console
+4 passed in 41.78s
+
+Hosted Chromium on the exact candidate
+https://github.com/SweetingTech/TableTop_DM/actions/runs/44310001247/job/134821367024
+2026-11-18T13:07:53.1707393Z tests/e2e/test_controller_runner_isolated.py .                           [ 38%]
+2026-11-18T13:08:57.5369477Z tests/e2e/test_player_behavior_isolated.py .                             [ 53%]
+2026-11-18T13:09:35.4672465Z tests/e2e/test_speech_combat_behavior_isolated.py .                      [ 69%]
+2026-11-18T13:09:38.2602741Z tests/e2e/test_tactical_choices_isolated.py .                            [ 71%]
+2026-11-18T13:09:55.0928440Z tests/e2e/test_speech_combat_behavior_isolated.py .                      [ 81%]
+2026-11-18T13:10:02.3358772Z ======================== 49 passed in 219.44s (0:03:39) ========================
+
+Earlier hosted controller-presence baseline 97bbf666e8da38c52766ab55d3c53e927c3f5263
+Merged revision 076553d8ae5f7ca0f78a14d6fa321ac6c1e68142
+https://github.com/SweetingTech/TableTop_DM/actions/runs/44299430332/job/134784968660
+2026-11-18T12:04:06.5875538Z tests/integration/test_controller_runner.py ............                 [ 29%]
+2026-11-18T12:11:26.9488147Z tests/integration/test_player_behavior.py .....                          [ 59%]
+2026-11-18T12:29:37.2301218Z tests/integration/test_speech_combat_behavior.py ......                  [ 89%]
+2026-11-18T12:30:45.6054320Z tests/integration/test_tactical_choices.py ...                           [ 90%]
+2026-11-18T12:38:38.4387337Z tests/integration/test_world_time.py ......                              [100%]
+2026-11-18T12:38:38.4389462Z ========= 184 passed, 782 deselected, 1 warning in 2421.61s (0:40:21) ==========
+https://github.com/SweetingTech/TableTop_DM/actions/runs/44299430403/job/134784969737
+2026-11-18T12:01:22.3597683Z tests/e2e/test_controller_runner_isolated.py .                           [ 38%]
+2026-11-18T12:02:10.0040488Z tests/e2e/test_player_behavior_isolated.py .                             [ 53%]
+2026-11-18T12:02:42.9342069Z tests/e2e/test_speech_combat_behavior_isolated.py .                      [ 69%]
+2026-11-18T12:02:46.3606081Z tests/e2e/test_tactical_choices_isolated.py .                            [ 71%]
+2026-11-18T12:02:54.1695676Z tests/e2e/test_world_time_isolated.py .                                  [ 77%]
+2026-11-18T12:03:01.0718009Z tests/e2e/test_speech_combat_behavior_isolated.py .                      [ 81%]
+2026-11-18T12:03:06.9533290Z ======================== 49 passed in 185.26s (0:03:05) ========================
