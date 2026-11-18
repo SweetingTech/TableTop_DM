@@ -20,6 +20,8 @@ on their card, backstory, and observed play history.
   to heal. The worker resumes the plan from committed actions after restart.
 - Unattended characters can respond to speech they heard. The resulting line links to the
   original utterance in the event log.
+- The narration API offers an operator's account, a spectator's visual account, and a
+  character's own experience. Each line links to the committed event it describes.
 - The world clock advances work, meals, rest, commutes, and appointments while the party is
   elsewhere. Changes in weather, danger, or bodily needs can interrupt and resume that activity.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
@@ -30,6 +32,7 @@ on their card, backstory, and observed play history.
 The durable world runner claims the next clock step in PostgreSQL. Another worker can recover
 the step if the lease expires before commit. Pausing cancels pending work, and a successful tick
 records its result and schedules the next step together. Apply migration 014 before upgrading.
+Apply migration 015 for [retained narration](docs/API_AND_WORKFLOWS.md#scoped-narration).
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

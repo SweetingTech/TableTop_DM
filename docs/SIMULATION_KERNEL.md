@@ -17,6 +17,10 @@ Scheduled replies reuse `tabletop.dialogue.speak` and event-time physical hearin
 attaches the exact same-run speech cause and correlation built from the body's authorized
 observation. Scheduling metadata stays in the private proposal receipt.
 
+Narration is derived after commit. Each line identifies the world, branch, run, source event,
+and, for embodied views, the matching masked observation. Creating or reading a line leaves
+canonical state, character knowledge, and replay unchanged.
+
 Clock leases and retry delays are operational metadata outside replay state. The repository
 locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
 The ledger redacts lease tokens. An idempotent retry returns the original receipt before

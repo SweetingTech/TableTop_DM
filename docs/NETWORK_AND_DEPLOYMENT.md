@@ -1,7 +1,8 @@
 # Network and deployment
 
-The durable world runner uses the existing PostgreSQL connection for clock work leases. Apply
-migration 014 before replacing the application and runner images.
+The durable world runner uses the existing PostgreSQL connection for clock work leases.
+Apply migrations through 015 before replacing the application and runner images. Scoped
+narration uses the same authenticated API and PostgreSQL connection. Prose is generated locally.
 
 This document describes the default managed topology, trust boundaries, ports, and primary data
 flows. The default deployment is intentionally local-only.

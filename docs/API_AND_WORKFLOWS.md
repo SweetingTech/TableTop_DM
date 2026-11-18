@@ -1111,6 +1111,30 @@ The endpoint must support the selected options; see the [official Chat Completio
 Model outputs are not promised bitwise deterministic even with seeds; saved proposals/events retain
 the accepted utterance for replay. Spontaneous conversations and narrative/world planning remain open.
 
+## Scoped narration
+
+`POST /api/v2/worlds/{world_id}/branches/{branch_id}/narration` accepts `run_id`, `audience`,
+an optional `limit` from 1 to 32 (default 12), and an optional `after_event_id`. With no cursor
+the response contains the latest eligible lines in event order. Use `next_after_event_id`
+to request later lines from the same scope. A cursor outside that scope returns 404.
+
+| Audience | Authority and source |
+| --- | --- |
+| `OPERATOR` | World-wide read capability. Renders selected committed movement, speech, strikes, and spells across the requested run. |
+| `SPECTATOR` | Requires `observer_entity_id` and access to that body. Renders visual facts from its event-time masked observations. |
+| `CHARACTER` | Requires `observer_entity_id` and access to that body. Renders the body's event-time masked experience, including speech it heard. |
+
+Each entry has a stable `narration_id`, `source_event_id`, timestamp, and rendering `version`.
+Viewpoint entries include the `source_observation_id`. Speech is quoted as testimony. With
+durable asynchronous projection, a witnessed event becomes eligible after its observation is
+projected. When consuming a stream, read the latest window again if a newly projected line may
+have an event earlier than your saved cursor.
+
+`GET /api/v2/worlds/{world_id}/branches/{branch_id}/narration/{narration_id}` retrieves a
+retained entry for the requesting actor under current world and viewpoint permissions. Both
+routes use `Cache-Control: no-store`. Narration is derived locally from typed facts and stays
+outside canonical commands and character cognition.
+
 ## World time and offscreen activities
 
 World managers can inspect typed activity rows in the branch clock response. Each row includes
