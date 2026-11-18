@@ -26,6 +26,7 @@ from cognition.control import REPLAN_LIMIT, ControllerRepository
 from cognition.conversation import due_reply
 from cognition.deliberation import DeliberationProvider
 from cognition.dialogue_generation import DialogueProvider
+from cognition.recovery import CharacterStalled, progress_constraints
 from cognition.store import MindStore
 from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.character_bindings import CharacterBinding, CharacterBindingRepository
@@ -178,6 +179,19 @@ class CharacterDecisionService:
                 if controller is not None
                 else None
             )
+            reply = None
+            recovery = None
+            if controller is not None:
+                reply = due_reply(
+                    resolved.context, controller, source.events.get, now=datetime.now(UTC)
+                )
+                recovery = progress_constraints(
+                    controller,
+                    resolved.context,
+                    source.command_history.get(scope.branch_id, ()),
+                    reply,
+                    source.events.get,
+                )
             return partial(
                 propose_for_character,
                 scope=proposal_scope,
@@ -192,11 +206,8 @@ class CharacterDecisionService:
                 deliberation_provider=self.deliberation_provider,
                 deliberation_kind=self.deliberation_kind,
                 plan=plan,
-                reply=due_reply(
-                    resolved.context, controller, source.events.get, now=datetime.now(UTC)
-                )
-                if controller is not None
-                else None,
+                reply=reply,
+                recovery_constraints=recovery,
                 human_epoch=source.controller_states[scope.key].epoch
                 if scope.key in source.controller_states
                 else None,
@@ -291,6 +302,8 @@ class CharacterRunner:
                 continue
             except CharacterContextPending:
                 self.controllers.defer(controller, "character_context_pending", retry_limit=39)
+            except CharacterStalled as error:
+                self.controllers.defer(controller, error.reason)
             except (ValueError, PermissionError, KernelError):
                 # Diagnostic details may contain hidden state. Store a stable operator code.
                 self.controllers.defer(controller, "action_failed")

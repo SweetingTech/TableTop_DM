@@ -248,6 +248,11 @@ movement. The durable lane covers retention across restart, current authorizatio
 source constraints, append-only grants, and upgrade from migration 014. The wheel gate checks
 that migration 015 ships with the application.
 
+Character recovery tests cover an isolated movement cycle, repeated no-damage attempts and a
+bounded speech chain with missing or foreign observations. The PostgreSQL test commits a
+movement cycle, restarts the runner, verifies the alternative offered to its provider, and checks
+the final controller step and pause after one committed recovery.
+
 Generated-dialogue tests use a local OpenAI-compatible HTTP fixture, never a real provider/key.
 They exercise the actual API/runner, multiple turns, sanitized subjective input, unknown sources,
 metafiction/extra-field rejection, outage fallback, immutable retries and separate-worker/restart

@@ -21,6 +21,7 @@ from cognition.dialogue_generation import DialogueProvider, DialogueReceipt, gen
 from cognition.engine import DecisionOutcome, DecisionRequest, LayeredDecisionEngine
 from cognition.models import Observation
 from cognition.openai_compatible import DELIBERATION_PROMPT
+from cognition.recovery import RecoveryConstraints, RecoveryReceipt
 from cognition.store import MindStore
 from domains.tabletop.character_actions import ACTION_CATALOG_VERSION
 from domains.tabletop.character_bindings import CharacterBinding
@@ -30,7 +31,7 @@ from kernel.control import ControllerState
 from kernel.state import stable_hash
 from persona.models import CompiledPersona, PersonaPurpose
 
-PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.4.0"
+PROPOSAL_POLICY_VERSION = "character-proposal-policy-1.5.0"
 
 
 class CharacterProposalScope(BaseModel):
@@ -70,6 +71,7 @@ class CharacterProposalReceipt(BaseModel):
     dialogue: DialogueReceipt | None = None
     plan: CharacterPlan | None = Field(default=None, exclude_if=lambda value: value is None)
     reply: ReplySchedule | None = Field(default=None, exclude_if=lambda value: value is None)
+    recovery: RecoveryReceipt | None = Field(default=None, exclude_if=lambda value: value is None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
@@ -224,6 +226,7 @@ def propose_for_character(
     deliberation_provider: DeliberationProvider | None = None,
     deliberation_kind: Literal["LOCAL_LLM", "HOSTED_LLM"] = "HOSTED_LLM",
     reply: ReplySchedule | None = None,
+    recovery_constraints: RecoveryConstraints | None = None,
 ) -> CharacterProposalReceipt:
     if (
         binding.scope != scope.key
@@ -255,6 +258,9 @@ def propose_for_character(
     )
     if plan is not None and plan.allowed_actions:
         actions = tuple(action for action in actions if action.action in plan.allowed_actions)
+    recovery = None
+    if recovery_constraints is not None:
+        actions, recovery = recovery_constraints.eligible(actions)
     if reply is not None:
         actions = tuple(
             action.model_copy(
@@ -372,6 +378,7 @@ def propose_for_character(
         dialogue=dialogue,
         plan=plan.plan if plan is not None else None,
         reply=scheduled,
+        recovery=recovery,
     )
 
 
