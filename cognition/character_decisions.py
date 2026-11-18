@@ -15,6 +15,7 @@ from cognition.character_plans import CharacterPlan, PlanSelection
 from cognition.choices import ChoiceProfile, weighted_choices
 from cognition.context import CharacterContext, require_projected_experience
 from cognition.context import CharacterContextPending as CharacterContextPending
+from cognition.conversation import ReplySchedule
 from cognition.deliberation import DeliberationProvider
 from cognition.dialogue_generation import DialogueProvider, DialogueReceipt, generate_dialogue
 from cognition.engine import DecisionOutcome, DecisionRequest, LayeredDecisionEngine
@@ -68,6 +69,7 @@ class CharacterProposalReceipt(BaseModel):
     choices: ChoiceProfile | None = None
     dialogue: DialogueReceipt | None = None
     plan: CharacterPlan | None = Field(default=None, exclude_if=lambda value: value is None)
+    reply: ReplySchedule | None = Field(default=None, exclude_if=lambda value: value is None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
@@ -101,6 +103,19 @@ class CharacterProposalReceipt(BaseModel):
             )
         ):
             raise ValueError("dialogue receipt differs from its speech proposal")
+        if self.reply is not None and (
+            proposal.decision_authorship != "CHARACTER_POLICY"
+            or proposal.command_type != "tabletop.dialogue.speak"
+            or proposal.causation_id != self.reply.source_event_id
+            or proposal.correlation_id != self.reply.correlation_id
+            or self.reply.speaker_entity_id == self.scope.entity_id
+            or (
+                self.dialogue is not None
+                and self.dialogue.status == "GENERATED"
+                and self.reply.source_event_id not in self.dialogue.source_event_ids
+            )
+        ):
+            raise ValueError("scheduled reply differs from its causal speech proposal")
         if self.choices is not None and (
             (
                 self.choices.world_id,
@@ -208,6 +223,7 @@ def propose_for_character(
     plan: PlanSelection | None = None,
     deliberation_provider: DeliberationProvider | None = None,
     deliberation_kind: Literal["LOCAL_LLM", "HOSTED_LLM"] = "HOSTED_LLM",
+    reply: ReplySchedule | None = None,
 ) -> CharacterProposalReceipt:
     if (
         binding.scope != scope.key
@@ -239,6 +255,15 @@ def propose_for_character(
     )
     if plan is not None and plan.allowed_actions:
         actions = tuple(action for action in actions if action.action in plan.allowed_actions)
+    if reply is not None:
+        actions = tuple(
+            action.model_copy(
+                update={"utility_factors": {**action.utility_factors, "reply_due": 0.35}}
+            )
+            if action.command_type == "tabletop.dialogue.speak"
+            else action
+            for action in actions
+        )
     use_deliberation = deliberation_provider is not None and not (plan and plan.allowed_actions)
     request = DecisionRequest(
         persona=profile,
@@ -262,10 +287,27 @@ def propose_for_character(
         if use_deliberation
         else decision_engine.decide(request)
     )
+    scheduled = reply if outcome.proposal.command_type == "tabletop.dialogue.speak" else None
+    if scheduled is not None:
+        outcome = outcome.model_copy(
+            update={
+                "proposal": outcome.proposal.model_copy(
+                    update={
+                        "causation_id": scheduled.source_event_id,
+                        "correlation_id": scheduled.correlation_id,
+                    }
+                )
+            }
+        )
     dialogue = None
     if dialogue_provider is not None and outcome.proposal.command_type == "tabletop.dialogue.speak":
         text, dialogue = generate_dialogue(
-            context, outcome.proposal.parameters, profile.deep_traits, seed, dialogue_provider
+            context,
+            outcome.proposal.parameters,
+            profile.deep_traits,
+            seed,
+            dialogue_provider,
+            reply_event_id=scheduled.source_event_id if scheduled is not None else None,
         )
         proposed = outcome.proposal.model_copy(
             update={"parameters": {**outcome.proposal.parameters, "text": text, "claims": []}}
@@ -329,6 +371,7 @@ def propose_for_character(
         choices=choices,
         dialogue=dialogue,
         plan=plan.plan if plan is not None else None,
+        reply=scheduled,
     )
 
 

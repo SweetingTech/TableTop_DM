@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from functools import partial
 from typing import Literal
 
@@ -22,6 +23,7 @@ from cognition.character_plans import CharacterPlan, select_character_plan
 from cognition.choices import ChoiceProfile
 from cognition.context import CharacterContext
 from cognition.control import REPLAN_LIMIT, ControllerRepository
+from cognition.conversation import due_reply
 from cognition.deliberation import DeliberationProvider
 from cognition.dialogue_generation import DialogueProvider
 from cognition.store import MindStore
@@ -190,6 +192,11 @@ class CharacterDecisionService:
                 deliberation_provider=self.deliberation_provider,
                 deliberation_kind=self.deliberation_kind,
                 plan=plan,
+                reply=due_reply(
+                    resolved.context, controller, source.events.get, now=datetime.now(UTC)
+                )
+                if controller is not None
+                else None,
                 human_epoch=source.controller_states[scope.key].epoch
                 if scope.key in source.controller_states
                 else None,

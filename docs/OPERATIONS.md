@@ -9,6 +9,10 @@ The worker restores personal recovery plans from existing private proposal recei
 command records. A restart uses the same controller epoch and due time. Preserve those records
 with the branch and mind stores when restoring a durable campaign.
 
+Scheduled replies use the existing controller and perception records. A new worker waits for
+the source observation to publish and recovers the reply from that evidence. Inspect the exact
+branch's projector status when private control reports `character_context_pending`.
+
 Apply migration 014 before starting the updated application and world runner. It backfills due
 work for running canonical clocks. The worker leases steps for 30 seconds on database time and
 uses exponential retry delays capped at 60 seconds. Current world grants restrict queue access

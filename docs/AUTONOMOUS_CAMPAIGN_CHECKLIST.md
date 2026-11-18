@@ -347,8 +347,10 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
   model/prompt versions, and deterministic fallback. Keep credentials server-side and out of traces.
   Verify a bounded retry, stable fallback, recorded request usage and concurrent world progress
   through loopback and durable runner tests.
-- [ ] F5 — Add character dialogue generation and response scheduling. Actual speech still enters
+- [x] F5 — Add character dialogue generation and response scheduling. Actual speech still enters
   `tabletop.dialogue.speak`, with language/volume/perception and normal causal provenance.
+  A due character can respond to scoped speech. The receipt records the observation and due time,
+  and the committed command retains the source and conversation correlation across restart.
 - [ ] F6 — Add narration derived from committed facts with separate operator, spectator, and character
   scopes. Persist source event references; generated prose must not create uncommitted world facts.
 - [ ] F7 — Detect repeated actions, conversation loops, and lack of progress; apply bounded recovery
