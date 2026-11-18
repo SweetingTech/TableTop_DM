@@ -5,6 +5,10 @@ checks the returning owner's access to a machine-recorded timeout handoff across
 matches the narrated source to the committed revision. The built console shows the recap after
 reconnect and isolates it across viewpoint changes.
 
+The [Section G supplemental checks](verification/section-g/four-criteria.md) verify profile
+versions and rebuilds, concurrent takeover, recap authorization, and the actual console requests
+for handoff and return.
+
 Controller presence cases exercise default manual control, owner opt-in and renewal, stale epochs,
 competing PostgreSQL timeout workers and same-epoch write restrictions. The browser journey leaves
 the actual console for the configured deadline, returns after one autonomous action, and takes

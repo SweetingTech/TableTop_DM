@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 import threading
 import time
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from playwright.sync_api import expect
@@ -54,7 +55,26 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         expect(page.get_by_role("heading", name="Game Console", exact=True)).to_be_visible()
         expect(page.get_by_text("You are playing", exact=True)).to_be_visible()
         page.get_by_label("Autonomous action limit", exact=True).fill("2")
-        page.get_by_role("button", name="Let character act", exact=True).click()
+        with page.expect_response(
+            lambda response: (
+                urlsplit(response.url).path == control_path + "/control"
+                and response.request.method == "POST"
+            )
+        ) as leaving:
+            page.get_by_role("button", name="Let character act", exact=True).click()
+        assert leaving.value.ok
+        leave_request = leaving.value.request.post_data_json
+        assert (
+            leave_request["run_id"],
+            leave_request["mode"],
+            leave_request["expected_epoch"],
+        ) == (
+            run_id,
+            "AUTONOMOUS",
+            0,
+        )
+        assert leave_request["max_steps"] == 2 and leave_request["idempotency_key"]
+        assert leaving.value.json()["state"]["epoch"] == 1
         expect(page.get_by_text("Autonomy paused", exact=True)).to_be_visible(timeout=12000)
         expect(page.get_by_text("2 / 2 autonomous actions", exact=False)).to_be_visible()
         expect(page.locator(".event-row")).to_have_count(2)
@@ -102,12 +122,36 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         expect(page.get_by_text("Connection timed out. Take control when ready.")).to_be_visible()
         expect(page.locator(".event-row")).to_have_count(5)
         assert "timeout" not in page.locator(".event-feed").inner_text().lower()
-        page.get_by_role("button", name="Show character recap", exact=True).click()
+        with page.expect_response(
+            lambda response: (
+                urlsplit(response.url).path == control_path + "/control/recap"
+                and response.request.method == "GET"
+            )
+        ) as recap:
+            page.get_by_role("button", name="Show character recap", exact=True).click()
+        assert recap.value.ok and recap.value.json()["available"]
+        assert parse_qs(urlsplit(recap.value.url).query) == {"run_id": [run_id]}
         experience = page.get_by_role("region", name="Character recap", exact=True)
         expect(experience.get_by_role("listitem")).to_have_count(1)
         expect(experience.get_by_role("listitem")).to_contain_text("You see someone move")
         page.screenshot(path=str(tmp_path / "controller-reconnected.png"), full_page=True)
-        page.get_by_role("button", name="Take control", exact=True).click()
+        with page.expect_response(
+            lambda response: (
+                urlsplit(response.url).path == control_path + "/control"
+                and response.request.method == "POST"
+            )
+        ) as returning:
+            page.get_by_role("button", name="Take control", exact=True).click()
+        assert returning.value.ok
+        return_request = returning.value.request.post_data_json
+        assert (
+            return_request["run_id"],
+            return_request["mode"],
+            return_request["expected_epoch"],
+        ) == (run_id, "HUMAN", state["epoch"])
+        assert return_request["idempotency_key"] != leave_request["idempotency_key"]
+        confirmed = returning.value.json()["state"]
+        assert (confirmed["mode"], confirmed["epoch"]) == ("HUMAN", state["epoch"] + 1)
         expect(page.get_by_text("You are playing", exact=True)).to_be_visible()
         expect(setting).to_have_value("15")
         assert not errors
