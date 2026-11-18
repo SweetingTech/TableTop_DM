@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from kernel.contracts import CommandProposal, CommandResult
 from kernel.state import BranchState
@@ -12,6 +12,7 @@ class ReplayRecord(BaseModel):
     proposal: CommandProposal
     result: CommandResult
     expected_state_hash: str
+    committed_revision: int | None = Field(default=None, ge=1, exclude_if=lambda v: v is None)
 
 
 class ReplayDivergence(RuntimeError):

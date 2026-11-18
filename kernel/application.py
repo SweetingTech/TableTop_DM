@@ -579,6 +579,7 @@ class SimulationApplication:
                     proposal=proposal,
                     result=receipt.result,
                     expected_state_hash=receipt.state_hash,
+                    committed_revision=receipt.committed_revision,
                 )
             )
         for grant in receipt.perceptions:

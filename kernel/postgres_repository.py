@@ -376,6 +376,7 @@ class PostgresCommandRepository:
                     event=event,
                     state_hash=state_hash,
                     perceptions=materialized.perceptions,
+                    committed_revision=next_version,
                 )
 
     @staticmethod
@@ -451,6 +452,7 @@ class PostgresCommandRepository:
         cursor.execute(
             """
             SELECT c.result, c.resulting_state_hash, e.*,
+                   (to_jsonb(c)->>'committed_revision')::bigint AS committed_revision,
                    e.observed_by::text[] AS observed_by,
                    e.visible_to::text[] AS visible_to
             FROM sim.command_log c
@@ -480,6 +482,7 @@ class PostgresCommandRepository:
             result=result,
             event=EventEnvelopeV2.model_validate(event_payload),
             state_hash=str(row["resulting_state_hash"]),
+            committed_revision=row["committed_revision"],
             perceptions=PostgresCommandRepository._load_perceptions_with_cursor(
                 cursor, uuid.UUID(str(row["event_id"]))
             ),

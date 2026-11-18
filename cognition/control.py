@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
@@ -47,6 +48,30 @@ class HandoffReceipt(BaseModel):
     idempotency_key: str
     state: ControllerState
     sensory_event: bool = False
+    recap_revision: int | None = Field(default=None, ge=0, exclude_if=lambda v: v is None)
+
+
+@dataclass(frozen=True)
+class RecapWindow:
+    after_revision: int
+    through_revision: int
+
+
+def recap_bounds(
+    start: HandoffReceipt,
+    end: HandoffReceipt | None,
+    current: ControllerState,
+    current_revision: int,
+) -> RecapWindow | None:
+    if (end is None and current.epoch != start.state.epoch) or (
+        end is not None and end.state.epoch != start.state.epoch + 1
+    ):
+        return None
+    after = start.recap_revision
+    through = end.recap_revision if end is not None else current_revision
+    if after is None or through is None or through < after:
+        return None
+    return RecapWindow(after, through)
 
 
 class ControlConflict(ValueError):
@@ -103,6 +128,7 @@ class ControllerRepository(Protocol):
     def presence(
         self, scope: ControlScope, actor_id: uuid.UUID, expected_epoch: int
     ) -> ControllerState: ...
+    def recap_window(self, scope: ControlScope, actor_id: uuid.UUID) -> RecapWindow | None: ...
     def due(self) -> tuple[ControllerState, ...]: ...
     def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None: ...
 
@@ -272,12 +298,33 @@ class InMemoryControllers:
                 self.rows[scope.key] = state
                 self.simulation.controller_states[scope.key] = state
                 receipt = HandoffReceipt(
-                    actor_id=actor_id, idempotency_key=request.idempotency_key, state=state
+                    actor_id=actor_id,
+                    idempotency_key=request.idempotency_key,
+                    state=state,
+                    recap_revision=self.simulation.states.get(scope.branch_id).version,
                 )
                 self.receipts[key] = receipt
                 return receipt
 
         return self.simulation.read_reference(transition)
+
+    def recap_window(self, scope: ControlScope, actor_id: uuid.UUID) -> RecapWindow | None:
+        def read() -> RecapWindow | None:
+            self._owner(scope, actor_id)
+            current = self.rows.get(scope.key)
+            rows = sorted(
+                (row for row in self.receipts.values() if row.state.key == scope.key),
+                key=lambda row: row.state.epoch,
+            )
+            if current is None or not any(row.state.mode == "AUTONOMOUS" for row in rows):
+                return None
+            index = max(i for i, row in enumerate(rows) if row.state.mode == "AUTONOMOUS")
+            end = rows[index + 1] if index + 1 < len(rows) else None
+            return recap_bounds(
+                rows[index], end, current, self.simulation.states.get(scope.branch_id).version
+            )
+
+        return self.simulation.read_reference(read)
 
     def presence(
         self, scope: ControlScope, actor_id: uuid.UUID, expected_epoch: int

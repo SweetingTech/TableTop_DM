@@ -672,6 +672,7 @@ class PostgresControlPlane:
                             proposal=proposal,
                             result=CommandResult.model_validate(row["result"]),
                             expected_state_hash=row["resulting_state_hash"],
+                            committed_revision=row.get("committed_revision"),
                         )
                     )
 

@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Panel } from "../../components/ui/Primitives";
-import { handoffController, loadController, renewControllerPresence, type ControllerScope, type ControllerState, type ControlMode } from "./api";
+import { handoffController, loadCharacterRecap, loadController, renewControllerPresence,
+  type CharacterRecap, type ControllerScope, type ControllerState, type ControlMode } from "./api";
 
 const disconnectOptions = [15, 60, 300];
+type RecapRead = { key: string } & (
+  { status: "loading" } | { status: "failed"; message: string } |
+  { status: "ready"; data: CharacterRecap }
+);
 
 export default function ControlPanel({ scope, onModeChange, onProgress }: {
   scope: ControllerScope;
@@ -13,6 +18,7 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recap, setRecap] = useState<RecapRead | null>(null);
   const [limitText, setLimitText] = useState("20");
   const limit = Number(limitText);
   const [revision, setRevision] = useState(0);
@@ -21,7 +27,11 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
   const retry = useRef<{
     mode: ControlMode; epoch: number; limit: number; key: string; timeout?: number | null;
   } | null>(null);
+  const recapRequest = useRef<AbortController | null>(null);
   const { world, branch, run, entity } = scope;
+  const recapKey = `${world}/${branch}/${run}/${entity}`;
+
+  useEffect(() => () => recapRequest.current?.abort(), [world, branch, run, entity]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,9 +91,24 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
     }
   }
 
+  async function reviewRecap() {
+    recapRequest.current?.abort();
+    const controller = new AbortController();
+    recapRequest.current = controller;
+    setRecap({ key: recapKey, status: "loading" });
+    try {
+      const data = await loadCharacterRecap(scope, controller.signal);
+      if (!controller.signal.aborted) setRecap({ key: recapKey, status: "ready", data });
+    } catch (failure) {
+      if (!controller.signal.aborted) setRecap({ key: recapKey, status: "failed",
+        message: failure instanceof Error ? failure.message : "Could not read character recap." });
+    }
+  }
+
   const mode = control?.mode ?? "HUMAN";
   const timeout = control?.disconnect_after_seconds ?? 0;
   const validLimit = Number.isInteger(limit) && limit >= 1 && limit <= 1000;
+  const activeRecap = recap?.key === recapKey ? recap : null;
   return <Panel title="Character control" meta={<span role="status">{loaded ? mode === "HUMAN" ? "You are playing" : mode === "AUTONOMOUS" ? "Character is acting" : "Autonomy paused" : "Loading control…"}</span>}>
     <p>Your character draws on your play history and its persona. A paused world stops autonomous actions.</p>
     <p>{control ? `${control.step} / ${control.max_steps} autonomous actions` : "Autonomy is off until you enable it."}{control?.last_error ? ` · ${control.last_error === "step_limit" ? "Action limit reached." : "The runner paused or is waiting. Take control or explicitly resume."}` : ""}</p>
@@ -100,7 +125,16 @@ export default function ControlPanel({ scope, onModeChange, onProgress }: {
       <button className="button" type="button" disabled={!loaded || busy || Boolean(error) || mode === "AUTONOMOUS" || !validLimit} onClick={() => void change("AUTONOMOUS")}>Let character act</button>
       <button className="button" type="button" disabled={!loaded || busy || mode === "HUMAN"} onClick={() => void change("HUMAN")}>Take control</button>
       <button className="button" type="button" disabled={!loaded || busy || mode !== "AUTONOMOUS"} onClick={() => void change("PAUSED")}>Pause autonomy</button>
+      {control && (mode !== "HUMAN" || control.epoch > 1) ? <button className="button" type="button"
+        disabled={activeRecap?.status === "loading"} onClick={() => void reviewRecap()}>Show character recap</button> : null}
     </div>
+    {activeRecap?.status === "failed" ? <p className="field-error" role="alert">{activeRecap.message}</p> : null}
+    {activeRecap?.status === "loading" ? <p role="status">Reading character recap…</p> : null}
+    {activeRecap?.status === "ready" ? <section aria-label="Character recap">
+      {activeRecap.data.entries.length ? <ul>{activeRecap.data.entries.map((entry) =>
+        <li key={entry.narration_id}>{entry.text}</li>)}</ul> :
+        <p>{activeRecap.data.available ? "No narrated experiences during this handoff." : "No recorded handoff recap yet."}</p>}
+    </section> : null}
     {error ? <p className="field-error" role="alert">{error} <button type="button" className="button" onClick={() => setRevision((value) => value + 1)}>Reload control</button></p> : null}
   </Panel>;
 }

@@ -2,6 +2,11 @@
 
 ## System shape
 
+Character recap uses private branch revision boundaries captured under the normal handoff lock.
+New command ledger rows carry the exact committed revision. A recap matches same-run commands
+within the most recent autonomous interval and renders only their validated frozen observations.
+The typed console receives the resulting narration entries.
+
 An opted-in player's authenticated console renews its private controller deadline under the branch
 lock. The runner checks expired deadlines and uses the normal handoff transaction after rechecking
 the current owner, grants, run status, and epoch. A reconnect keeps human control if renewal

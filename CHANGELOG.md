@@ -1,5 +1,7 @@
 # Changelog
 
+- Show a private recap of the character's witnessed experience between handoff and takeover.
+  Migration 019 records exact committed revision bounds for new handoffs.
 - Add opt-in disconnect timeout and explicit reconnect takeover in Character control. Migration
   018 protects the private presence deadline and preserves the existing controller epoch fence.
 - Learn a private speech cadence from comparable committed human replies. Use it with a

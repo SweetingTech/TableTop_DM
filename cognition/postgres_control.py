@@ -11,10 +11,12 @@ from cognition.control import (
     ControlConflict,
     HandoffReceipt,
     HandoffRequest,
+    RecapWindow,
     deferred_controller,
     disconnect_due,
     disconnect_handoff,
     next_controller,
+    recap_bounds,
     renew_presence,
 )
 from kernel.control import ControllerState, ControlScope, persist_controller
@@ -87,6 +89,17 @@ class PostgresControllers:
             "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
             tuple(map(str, scope.key[:2])),
         )
+
+    @staticmethod
+    def _branch_revision(cursor, scope: ControlScope) -> int:
+        cursor.execute(
+            "SELECT version FROM sim.branch_projections WHERE (world_id,branch_id)=(%s,%s)",
+            tuple(map(str, scope.key[:2])),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise ControlConflict("controller branch is unavailable")
+        return int(row["version"])
 
     def get(self, scope: ControlScope, actor_id: uuid.UUID) -> ControllerState | None:
         with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
@@ -212,7 +225,10 @@ class PostgresControllers:
                     ),
                 )
                 receipt = HandoffReceipt(
-                    actor_id=actor_id, idempotency_key=request.idempotency_key, state=state
+                    actor_id=actor_id,
+                    idempotency_key=request.idempotency_key,
+                    state=state,
+                    recap_revision=self._branch_revision(cursor, scope),
                 )
                 cursor.execute(
                     """INSERT INTO cognition.controller_handoffs
@@ -227,6 +243,37 @@ class PostgresControllers:
                     ),
                 )
                 return receipt
+
+    def recap_window(self, scope: ControlScope, actor_id: uuid.UUID) -> RecapWindow | None:
+        with transaction(actor_id=actor_id, dsn=self.dsn) as connection:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                self._owner(cursor, scope, actor_id)
+                self._lock_branch(cursor, scope)
+                self._owner(cursor, scope, actor_id)
+                current = self._read(cursor, scope)
+                if current is None:
+                    return None
+                cursor.execute(
+                    "SELECT payload FROM cognition.controller_handoffs "
+                    "WHERE (world_id,branch_id,run_id,entity_id)=(%s,%s,%s,%s) "
+                    "AND payload->'state'->>'mode'='AUTONOMOUS' "
+                    "ORDER BY (payload->'state'->>'epoch')::bigint DESC LIMIT 1",
+                    tuple(map(str, scope.key)),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                start = HandoffReceipt.model_validate(row["payload"])
+                cursor.execute(
+                    "SELECT payload FROM cognition.controller_handoffs "
+                    "WHERE (world_id,branch_id,run_id,entity_id)=(%s,%s,%s,%s) "
+                    "AND (payload->'state'->>'epoch')::bigint>%s "
+                    "ORDER BY (payload->'state'->>'epoch')::bigint LIMIT 1",
+                    (*map(str, scope.key), start.state.epoch),
+                )
+                row = cursor.fetchone()
+                end = HandoffReceipt.model_validate(row["payload"]) if row else None
+                return recap_bounds(start, end, current, self._branch_revision(cursor, scope))
 
     def presence(
         self, scope: ControlScope, actor_id: uuid.UUID, expected_epoch: int

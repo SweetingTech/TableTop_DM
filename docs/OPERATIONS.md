@@ -1,5 +1,9 @@
 # Operations, storage, migrations, and security
 
+Apply `019_character_recap_boundaries.sql` before updating the app and runner. New command rows
+receive revision stamps with their existing transaction. Prior command rows and control receipts
+retain their history. Keep the ledger, handoffs, and frozen mind observations when restoring a run.
+
 Apply `018_controller_presence.sql` before updating the server and character runner. The
 controller record contains the persisted deadline. The normal runner checks it after restart.
 The same-epoch database write is limited to the current owner's deadline renewal. The handoff

@@ -28,6 +28,7 @@ from kernel.errors import AuthorizationDenied
 from kernel.postgres_repository import PostgresCommandRepository
 from tests.integration.test_clean_boot import _stop_runtime
 from tests.integration.test_speech_combat_behavior import prepare
+from tests.integration.test_world_time import prepare as prepare_clock
 from tests.unit.kernel.test_character_binding_api import setup_bound_character
 from tests.unit.kernel.test_controller_handoff import (
     enable_disconnect_policy,
@@ -35,6 +36,7 @@ from tests.unit.kernel.test_controller_handoff import (
     prepare_wounded_body,
     queue_heal,
 )
+from tests.unit.kernel.test_world_time import NOW, api_command
 
 pytestmark = pytest.mark.integration
 
@@ -113,6 +115,16 @@ def test_durable_presence_restart_and_competing_timeout_workers(
     )
     assert player.post(path + "/control/presence", json=request).status_code == 409
     assert restarted.extensions["character_runner"].run_once() == 1
+    restored = restarted.test_client()
+    restored.set_cookie("ttdm_session", player.get_cookie("ttdm_session").value)
+    pending = restored.get(path + "/control/recap", query_string={"run_id": run})
+    assert pending.status_code == 409, pending.get_json()
+    assert pending.get_json()["error"] == "character_context_pending"
+    WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
+    recap = restored.get(path + "/control/recap", query_string={"run_id": run})
+    assert recap.status_code == 200, recap.get_json()
+    entries = recap.get_json()["entries"]
+    assert len(entries) == 1 and entries[0]["audience"] == "CHARACTER"
     with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
         cursor.execute(
             "SELECT actor_id FROM cognition.controller_handoffs "
@@ -121,10 +133,14 @@ def test_durable_presence_restart_and_competing_timeout_workers(
         )
         assert cursor.fetchall() == [(str(app.extensions["demo_ids"]["actor_id"]),)]
         cursor.execute(
-            "SELECT actor_id FROM sim.command_log WHERE run_id=%s AND input_origin='STAND_IN'",
+            "SELECT c.actor_id,c.committed_revision,e.event_id FROM sim.command_log c "
+            "JOIN sim.events e USING(world_id,branch_id,run_id,actor_id,idempotency_key) "
+            "WHERE c.run_id=%s AND c.input_origin='STAND_IN'",
             (run,),
         )
-        assert cursor.fetchall() == [(str(state.executor_actor_id),)]
+        executor, revision, event = cursor.fetchone()
+        assert executor == str(state.executor_actor_id) and revision >= 1
+        assert entries[0]["source_event_id"] == event
 
 
 def test_rejected_presence_timeout_does_not_starve_another_world(
@@ -153,6 +169,82 @@ def test_rejected_presence_timeout_does_not_starve_another_world(
     controllers.expire_disconnected(second.presence_deadline_at)
     assert controllers.get(first.scope, first.owner_actor_id).mode == "HUMAN"
     assert controllers.get(second.scope, second.owner_actor_id).mode == "AUTONOMOUS"
+
+
+def test_recap_return_preserves_in_progress_action_once(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, card, path, run, _, base) = prepare_clock(
+        isolated_integration_stack, monkeypatch, tmp_path
+    )
+    clock_url = f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}/clock"
+    clock = admin.get(clock_url).get_json()["clock"]
+    api_command(
+        admin,
+        base,
+        "tabletop.clock.configure",
+        {
+            "expected_epoch": clock["epoch"],
+            "executor_actor_id": clock["executor_actor_id"],
+            "wall_time": NOW.isoformat(),
+            "paused": False,
+            "seconds_per_tick": 6,
+        },
+        "resume-recap-clock",
+    )
+    leave = {
+        "run_id": run,
+        "expected_epoch": 0,
+        "mode": "AUTONOMOUS",
+        "max_steps": 1,
+        "idempotency_key": "recap-leave",
+    }
+    assert player.post(path + "/control", json=leave).status_code == 200
+    runner = app.extensions["character_runner"]
+    assert runner.run_once() == 1
+    branch_id = uuid.UUID(base["branch_id"])
+    source = runner.snapshot()
+    proposal = source.command_history[branch_id][-1].proposal
+    assert proposal.decision_authorship == "CHARACTER_POLICY"
+
+    def own_ready():
+        scene = player.get(path + "/scene").get_json()
+        return next(
+            row["action_wait_seconds"]
+            for row in scene["perceived_entities"]
+            if row["entity_id"] == card["entity_id"]
+        )
+
+    pending = own_ready()
+    assert pending > 0
+    take = {**leave, "mode": "HUMAN", "expected_epoch": 1, "idempotency_key": "recap-return"}
+    assert player.post(path + "/control", json=take).status_code == 200
+    first = runner.snapshot().submit(proposal)
+    second = runner.snapshot().submit(proposal)
+    assert first.event.event_id == second.event.event_id and own_ready() == pending
+    assert len(runner.snapshot().command_history[branch_id]) == len(
+        source.command_history[branch_id]
+    )
+    manual = {
+        **base,
+        "embodied_entity_id": card["entity_id"],
+        "control_epoch": 2,
+        "command_type": "tabletop.spatial.move",
+        "parameters": {"dx": 1, "dy": 0},
+        "idempotency_key": "recap-player-after",
+    }
+    blocked = player.post("/api/v2/commands", json=manual)
+    assert blocked.status_code == 400, blocked.get_json()
+    assert blocked.get_json()["details"] == "body is still completing its previous action"
+    assert app.extensions["world_runner"].run_once(NOW + timedelta(seconds=1)) == 1
+    result = player.post("/api/v2/commands", json=manual)
+    assert result.status_code == 200, result.get_json()
+    WorldEventProjector(isolated_integration_stack.database_url).run_once(limit=1000)
+    recap = player.get(path + "/control/recap", query_string={"run_id": run})
+    assert recap.status_code == 200, recap.get_json()
+    assert [item["source_event_id"] for item in recap.get_json()["entries"]] == [
+        str(first.event.event_id)
+    ]
 
 
 def test_durable_handoff_unattended_commit_restart_and_takeover(
@@ -400,7 +492,7 @@ def test_private_control_rls_grants_and_handoff_rollback(integration_stack, monk
             )
 
 
-@pytest.mark.parametrize("prior_count", [6, 17])
+@pytest.mark.parametrize("prior_count", [6, 17, 18])
 def test_controller_upgrade_is_idempotent(integration_stack, tmp_path, prior_count):
     name = "ttdm_control_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)

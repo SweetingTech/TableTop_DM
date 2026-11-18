@@ -423,8 +423,11 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   browser account or reuse its session. Record both execution authority and behavior-profile attribution.
   Dedicated AGENT execution, scoped grants, CHARACTER_POLICY ledger authorship, and pinned
   character/persona trace attribution are implemented. Learned player-behavior profiles remain G2/G3.
-- [ ] G8 — Build an authorized recap from the character's actual experience; wire takeover/return
+- [x] G8 — Build an authorized recap from the character's actual experience; wire takeover/return
   controls through typed adapters and preserve partially completed actions exactly once.
+  The private recap lists frozen observations inside the last exact handoff window. Its read
+  uses the typed console. A durable test retries an in-progress action after takeover, verifies
+  the original receipt and wait are preserved, then completes the action on the shared clock.
 - [ ] G9 — Acceptance: history-rich stand-in follows contextual human examples; history-free stand-in
   uses card/backstory; solo/mixed/all-autonomous modes work; takeover races commit one action; no character perceives handoff.
 

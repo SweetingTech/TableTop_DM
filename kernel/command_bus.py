@@ -52,6 +52,7 @@ class CommandReceipt:
     state_hash: str
     perceptions: tuple[PerceptionGrant, ...] = ()
     decision_evidence: dict[str, Any] | None = None
+    committed_revision: int | None = None
 
 
 def normalized_proposal(
@@ -215,6 +216,7 @@ class CommandBus:
                 state_hash=state.state_hash,
                 perceptions=materialized.perceptions,
                 decision_evidence=evidence if result.accepted else None,
+                committed_revision=state.version + 1,
             )
 
         receipt, _duplicate = self.states.execute_atomic(proposal.branch_id, key, run)

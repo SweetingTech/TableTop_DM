@@ -12,6 +12,10 @@ export type ControllerState = {
   handoff_reason?: "DISCONNECT_TIMEOUT";
 };
 export type ControllerScope = { world: string; branch: string; run: string; entity: string };
+export type CharacterRecap = {
+  available: boolean;
+  entries: { narration_id: string; text: string }[];
+};
 function controlPath(scope: ControllerScope): string {
   return `/worlds/${encodeURIComponent(scope.world)}/branches/${encodeURIComponent(scope.branch)}/entities/${encodeURIComponent(scope.entity)}/control`;
 }
@@ -32,6 +36,17 @@ export async function renewControllerPresence(scope: ControllerScope, epoch: num
   return apiRequest<{ state: ControllerState }>(controlPath(scope) + "/presence", {
     method: "POST", signal, body: JSON.stringify({ run_id: scope.run, expected_epoch: epoch }),
   });
+}
+export async function loadCharacterRecap(scope: ControllerScope, signal?: AbortSignal) {
+  try {
+    return await apiRequest<CharacterRecap>(
+      controlPath(scope) + `/recap?run_id=${encodeURIComponent(scope.run)}`, { signal, cache: "no-store" });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409 && error.message === "character_context_pending") {
+      throw new Error("Your character's recap is still updating. Try again in a moment.", { cause: error });
+    }
+    throw error;
+  }
 }
 
 function normalizeEvent(raw: Record<string, unknown>): EventRecord {
