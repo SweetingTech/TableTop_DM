@@ -1,7 +1,10 @@
 # Section G supplemental verification
 
 This evidence addresses G2, G4, G5, and G8 on the original Task 8 claim.
-The checks exercise the runtime merged by PR #126 and documented by PR #127.
+The tested runtime is `a59f133483e4fe9fcd9707dea7ef04789ae493e7`, merged by PR #126.
+The supplemental cases ran from `0ec72785906111dbcb1f9f99604983bd9f880af9`.
+The revisions have identical application code and compiled frontend assets. The supplemental
+commit adds test assertions and documentation.
 
 ## G2. Profile versions and identity
 
@@ -59,3 +62,4 @@ with migrations 001–020 applied. Pytest reported `5 passed in 54.17s`.
 
 Chromium ran `test_player_leaves_autonomy_acts_and_player_returns[chromium]` against the
 built console and isolated application. Pytest reported `1 passed in 27.27s`.
+The same journey then passed in the [hosted Chromium suite](https://github.com/SweetingTech/TableTop_DM/actions/runs/44337608463/job/134918451293), which reported `49 passed in 200.23s`.
