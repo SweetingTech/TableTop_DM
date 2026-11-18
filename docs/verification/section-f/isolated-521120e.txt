@@ -1,0 +1,30 @@
+TableTop DM Section F focused test output
+Tested revision 521120ee490225b1cf3d17b4e581c3b2cdee7ab7
+Merged revision 651f40126c34e49aead0e65be1a2163a04ba44a5
+Linux PostgreSQL 16 and Redis 7 ran in disposable Docker containers. Pytest ran on the host.
+The harness scoped credentials to the disposable services. These results are selected from stdout.
+
+$env:TTDM_INTEGRATION = '1'
+uv run --no-sync python -m pytest -v --tb=short -vv tests/integration/test_controller_runner.py::test_invalidated_proposal_stays_fenced_across_runner_restart tests/integration/test_character_plans.py tests/integration/test_character_deliberation.py tests/unit/cognition/test_deliberation_transport.py tests/integration/test_conversation.py tests/integration/test_narration.py tests/unit/cognition/test_recovery.py tests/integration/test_character_recovery.py tests/integration/test_autonomous_cast.py
+
+tests/integration/test_controller_runner.py::test_invalidated_proposal_stays_fenced_across_runner_restart PASSED [  5%]
+tests/integration/test_character_plans.py::test_committed_recovery_plan_continues_across_runner_restart PASSED [ 10%]
+tests/integration/test_character_deliberation.py::test_proposal_persistence_and_clock_ledger_can_share_a_run PASSED [ 15%]
+tests/integration/test_character_deliberation.py::test_live_compatible_provider_wait_allows_world_progress_and_one_cached_decision PASSED [ 20%]
+tests/integration/test_character_deliberation.py::test_worker_outage_commits_one_deterministic_action_and_records_fallback PASSED [ 25%]
+tests/unit/cognition/test_deliberation_transport.py::test_retry_uses_same_bounded_payload_and_records_real_usage PASSED [ 30%]
+tests/unit/cognition/test_deliberation_transport.py::test_unknown_action_and_oversized_context_fall_back_using_stable_codes PASSED [ 35%]
+tests/unit/cognition/test_deliberation_transport.py::test_deadline_limits_failed_model_attempts_and_configuration_is_opt_in PASSED [ 40%]
+tests/unit/cognition/test_deliberation_transport.py::test_privileged_api_uses_only_a_provider_matching_the_runtime_kind PASSED [ 45%]
+tests/unit/cognition/test_deliberation_transport.py::test_live_advice_uses_configured_provider_and_reuses_scoped_receipt PASSED [ 50%]
+tests/unit/cognition/test_deliberation_transport.py::test_two_threats_bind_action_names_to_correct_fiction_references PASSED [ 55%]
+tests/integration/test_conversation.py::test_due_reply_waits_for_perception_and_commits_once_across_restart PASSED [ 60%]
+tests/integration/test_narration.py::test_scoped_narration_persists_across_restart_and_enforces_lineage PASSED [ 65%]
+tests/integration/test_narration.py::test_migration_015_upgrade_can_roll_back_and_reapply PASSED [ 70%]
+tests/unit/cognition/test_recovery.py::test_movement_avoids_a_proven_cycle_and_keeps_other_plan_actions PASSED [ 75%]
+tests/unit/cognition/test_recovery.py::test_attack_recovery_requires_three_recent_zero_damage_attempts_at_the_same_threat PASSED [ 80%]
+tests/unit/cognition/test_recovery.py::test_conversation_budget_requires_four_same_run_witnessed_turns PASSED [ 85%]
+tests/integration/test_character_recovery.py::test_movement_recovery_uses_committed_history_after_runner_restart PASSED [ 90%]
+tests/integration/test_autonomous_cast.py::test_cast_talks_recovers_and_resumes_work_without_manual_actions[guided-speech] PASSED [ 95%]
+tests/integration/test_autonomous_cast.py::test_cast_talks_recovers_and_resumes_work_without_manual_actions[provider-outage] PASSED [100%]
+======================= 20 passed in 150.36s (0:02:30) ========================

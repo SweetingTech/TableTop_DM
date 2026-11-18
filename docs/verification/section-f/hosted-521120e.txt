@@ -1,0 +1,144 @@
+TableTop DM Section F hosted test output
+Tested revision 521120ee490225b1cf3d17b4e581c3b2cdee7ab7
+Merged revision 651f40126c34e49aead0e65be1a2163a04ba44a5
+Selected uncolored stdout from the cited GitHub jobs. The timestamps and test results are retained.
+
+PostgreSQL integration
+https://github.com/SweetingTech/TableTop_DM/actions/runs/44270866646/job/134686838756
+2026-11-18T08:53:46.4329263Z ##[group]Run uv run pytest -m integration -v
+2026-11-18T08:53:55.1183604Z tests/integration/test_action_randomness.py .                            [  0%]
+2026-11-18T08:54:06.6759892Z tests/integration/test_action_rules.py ...                               [  2%]
+2026-11-18T08:54:26.8901101Z tests/integration/test_action_time.py ....                               [  4%]
+2026-11-18T08:55:10.8665160Z tests/integration/test_autonomous_cast.py ..                             [  5%]
+2026-11-18T08:55:23.3530668Z tests/integration/test_body_capability.py ..                             [  6%]
+2026-11-18T08:55:40.3619465Z tests/integration/test_character_bindings.py ....                        [  9%]
+2026-11-18T08:56:05.6937918Z tests/integration/test_character_decisions.py ......                     [ 12%]
+2026-11-18T08:56:19.4578650Z tests/integration/test_character_deliberation.py ...                     [ 14%]
+2026-11-18T08:56:38.9555724Z tests/integration/test_character_knowledge.py ...                        [ 15%]
+2026-11-18T08:56:45.5199121Z tests/integration/test_character_live_state.py .                         [ 16%]
+2026-11-18T08:56:56.4458090Z tests/integration/test_character_plans.py .                              [ 16%]
+2026-11-18T08:57:07.6875563Z tests/integration/test_character_recovery.py .                           [ 17%]
+2026-11-18T08:57:14.9830442Z tests/integration/test_character_resource_ownership.py .                 [ 18%]
+2026-11-18T08:58:01.1768714Z tests/integration/test_clean_boot.py ......                              [ 21%]
+2026-11-18T08:58:08.2838275Z tests/integration/test_cognition_character_entrypoint.py .               [ 22%]
+2026-11-18T08:58:08.7711852Z tests/integration/test_cognition_repository.py ...                       [ 23%]
+2026-11-18T08:59:18.0676374Z tests/integration/test_controller_runner.py .........                    [ 28%]
+2026-11-18T08:59:34.4892070Z tests/integration/test_conversation.py .                                 [ 29%]
+2026-11-18T08:59:55.2314112Z tests/integration/test_death_recovery.py ..                              [ 30%]
+2026-11-18T09:00:19.3274803Z tests/integration/test_derived_combat.py ..                              [ 31%]
+2026-11-18T09:00:23.3663064Z tests/integration/test_durable_authorization.py .......                  [ 35%]
+2026-11-18T09:00:23.9051648Z tests/integration/test_durable_command_repository.py ....                [ 37%]
+2026-11-18T09:00:49.3918335Z tests/integration/test_generated_dialogue.py ..                          [ 38%]
+2026-11-18T09:00:59.1415392Z tests/integration/test_identity_portal.py .                              [ 39%]
+2026-11-18T09:01:37.7236583Z tests/integration/test_initiative.py ...                                 [ 41%]
+2026-11-18T09:01:38.9814436Z tests/integration/test_migration_013.py .                                [ 41%]
+2026-11-18T09:01:39.0618932Z tests/integration/test_migrations.py ....                                [ 44%]
+2026-11-18T09:01:53.8644669Z tests/integration/test_narration.py ..                                   [ 45%]
+2026-11-18T09:05:00.2415904Z tests/integration/test_npc_goals.py ........                             [ 49%]
+2026-11-18T09:05:03.5781921Z tests/integration/test_persona_repository.py ...........                 [ 55%]
+2026-11-18T09:05:55.7569664Z tests/integration/test_player_behavior.py .....                          [ 58%]
+2026-11-18T09:07:26.8140848Z tests/integration/test_population_life.py .....                          [ 61%]
+2026-11-18T09:08:46.0808221Z tests/integration/test_population_planning.py ...                        [ 63%]
+2026-11-18T09:08:46.3269630Z tests/integration/test_population_repository.py .                        [ 63%]
+2026-11-18T09:11:23.3613793Z tests/integration/test_population_runtime.py .......                     [ 67%]
+2026-11-18T09:11:48.2522299Z tests/integration/test_projector_ordering.py ..                          [ 68%]
+2026-11-18T09:14:26.3799845Z tests/integration/test_quest_evidence.py .....                           [ 71%]
+2026-11-18T09:16:58.8739312Z tests/integration/test_relationship_snapshot_repairs.py ........         [ 76%]
+2026-11-18T09:17:49.8241743Z tests/integration/test_rest_recovery.py ..                               [ 77%]
+2026-11-18T09:19:39.6594958Z tests/integration/test_roster_recovery.py .....                          [ 80%]
+2026-11-18T09:20:24.4080800Z tests/integration/test_scenario_branch_restoration.py ..                 [ 81%]
+2026-11-18T09:20:51.3591191Z tests/integration/test_scene_refresh.py .                                [ 81%]
+2026-11-18T09:20:51.7304254Z tests/integration/test_schema_invariants.py .......                      [ 85%]
+2026-11-18T09:22:36.1959417Z tests/integration/test_speech_combat_behavior.py .....                   [ 88%]
+2026-11-18T09:23:41.1474729Z tests/integration/test_tactical_choices.py ...                           [ 90%]
+2026-11-18T09:23:41.2733542Z tests/integration/test_telemetry_repository.py .                         [ 90%]
+2026-11-18T09:25:12.6042567Z tests/integration/test_timed_effects.py ...                              [ 92%]
+2026-11-18T09:27:45.6027439Z tests/integration/test_trade_offers.py ...                               [ 94%]
+2026-11-18T09:27:45.6329346Z tests/integration/test_worker.py .                                       [ 94%]
+2026-11-18T09:28:40.2792138Z tests/integration/test_world_due_work.py ...                             [ 96%]
+2026-11-18T09:31:10.5097441Z tests/integration/test_world_time.py ......                              [100%]
+2026-11-18T09:31:10.5099757Z ========= 177 passed, 778 deselected, 1 warning in 2243.02s (0:37:23) ==========
+
+Quality and package verification
+https://github.com/SweetingTech/TableTop_DM/actions/runs/44270866646/job/134686839239
+2026-11-18T08:54:19.3168351Z ##[group]Run uv run ruff check .
+2026-11-18T08:54:19.4058166Z All checks passed!
+2026-11-18T08:54:19.4588122Z 358 files already formatted
+2026-11-18T08:54:19.4630062Z ##[group]Run uv run mypy kernel persona cognition population experiments domains main.py
+2026-11-18T08:54:24.7528382Z Success: no issues found in 150 source files
+2026-11-18T08:54:24.7663768Z ##[group]Run uv run pytest -m "unit or contracts"
+2026-11-18T08:56:02.8779835Z 729 passed, 226 deselected in 97.45s (0:01:37)
+2026-11-18T08:56:03.0630265Z ##[group]Run uv build --wheel --out-dir dist
+2026-11-18T08:56:04.6746115Z wheel runtime assets verified: tabletop_dm-2.0.0-py3-none-any.whl
+2026-11-18T08:56:04.6839898Z ##[group]Run npm --prefix frontend run lint
+2026-11-18T08:56:16.5410182Z  Test Files  13 passed (13)
+2026-11-18T08:56:16.5410901Z       Tests  70 passed (70)
+2026-11-18T08:56:20.2429512Z ✓ built in 203ms
+
+Browser journeys
+https://github.com/SweetingTech/TableTop_DM/actions/runs/44270866531/job/134686838682
+2026-11-18T08:55:24.9690281Z ##[group]Run uv run python scripts/wait_ready.py --url http://127.0.0.1:8000/readyz --timeout 180
+2026-11-18T08:55:30.7617608Z ##[group]Run uv run pytest -m e2e tests/e2e -v
+2026-11-18T08:55:37.2389587Z tests/e2e/test_action_rules_isolated.py .                                [  2%]
+2026-11-18T08:55:39.8755332Z tests/e2e/test_action_time_isolated.py .                                 [  4%]
+2026-11-18T08:56:18.6124326Z tests/e2e/test_application_journeys.py ............                      [ 28%]
+2026-11-18T08:56:22.8411831Z tests/e2e/test_character_binding_isolated.py .                           [ 30%]
+2026-11-18T08:56:26.5382345Z tests/e2e/test_character_identity_isolated.py .                          [ 32%]
+2026-11-18T08:56:34.9187068Z tests/e2e/test_character_live_sheet_isolated.py .                        [ 34%]
+2026-11-18T08:56:38.0289852Z tests/e2e/test_character_proposal_isolated.py .                          [ 36%]
+2026-11-18T08:56:42.4549758Z tests/e2e/test_controller_runner_isolated.py .                           [ 38%]
+2026-11-18T08:56:47.5009842Z tests/e2e/test_death_recovery_isolated.py .                              [ 40%]
+2026-11-18T08:56:52.2051221Z tests/e2e/test_derived_combat_isolated.py .                              [ 42%]
+2026-11-18T08:56:55.8959428Z tests/e2e/test_generated_dialogue_isolated.py .                          [ 44%]
+2026-11-18T08:57:34.6869438Z tests/e2e/test_human_play_closeout.py .                                  [ 46%]
+2026-11-18T08:57:37.9780292Z tests/e2e/test_initiative_isolated.py .                                  [ 48%]
+2026-11-18T08:57:41.2199911Z tests/e2e/test_npc_goals_isolated.py .                                   [ 51%]
+2026-11-18T08:57:45.3325175Z tests/e2e/test_player_behavior_isolated.py .                             [ 53%]
+2026-11-18T08:57:49.3287538Z tests/e2e/test_population_life_isolated.py .                             [ 55%]
+2026-11-18T08:57:54.4829624Z tests/e2e/test_population_planning_isolated.py .                         [ 57%]
+2026-11-18T08:57:58.7435079Z tests/e2e/test_population_routines_isolated.py .                         [ 59%]
+2026-11-18T08:58:01.8133967Z tests/e2e/test_quest_evidence_isolated.py .                              [ 61%]
+2026-11-18T08:58:08.2200372Z tests/e2e/test_rest_recovery_isolated.py .                               [ 63%]
+2026-11-18T08:58:11.1520676Z tests/e2e/test_roster_assignment_isolated.py .                           [ 65%]
+2026-11-18T08:58:14.9459178Z tests/e2e/test_scene_refresh_isolated.py .                               [ 67%]
+2026-11-18T08:58:22.8094986Z tests/e2e/test_speech_combat_behavior_isolated.py .                      [ 69%]
+2026-11-18T08:58:26.8199396Z tests/e2e/test_tactical_choices_isolated.py .                            [ 71%]
+2026-11-18T08:58:29.0949033Z tests/e2e/test_timed_effects_isolated.py .                               [ 73%]
+2026-11-18T08:58:32.8204306Z tests/e2e/test_trade_offers_isolated.py .                                [ 75%]
+2026-11-18T08:58:35.8286958Z tests/e2e/test_world_time_isolated.py .                                  [ 77%]
+2026-11-18T08:58:36.4991932Z tests/e2e/test_application_journeys.py .                                 [ 79%]
+2026-11-18T08:58:43.4184435Z tests/e2e/test_speech_combat_behavior_isolated.py .                      [ 81%]
+2026-11-18T08:58:50.6160846Z tests/e2e/test_application_journeys.py .........                         [100%]
+2026-11-18T08:58:50.6161884Z ======================== 49 passed in 198.86s (0:03:18) ========================
+
+Production image
+https://github.com/SweetingTech/TableTop_DM/actions/runs/44270866646/job/134686839555
+2026-11-18T08:53:29.6964284Z ##[group]Run docker build --tag tabletop-dm-v2:ci .
+2026-11-18T08:53:30.3800357Z #1 DONE 0.0s
+2026-11-18T08:53:30.5300086Z #2 DONE 0.0s
+2026-11-18T08:53:30.5300971Z #3 DONE 0.0s
+2026-11-18T08:53:30.9489414Z #5 DONE 0.7s
+2026-11-18T08:53:31.0502175Z #4 DONE 0.7s
+2026-11-18T08:53:31.0505062Z #6 DONE 0.0s
+2026-11-18T08:53:31.0508888Z #7 DONE 0.1s
+2026-11-18T08:53:31.0512351Z #8 DONE 0.1s
+2026-11-18T08:53:31.1886831Z #9 DONE 0.1s
+2026-11-18T08:53:32.3406412Z #8 DONE 1.4s
+2026-11-18T08:53:32.7662655Z #7 DONE 1.8s
+2026-11-18T08:53:32.9613419Z #7 DONE 1.8s
+2026-11-18T08:53:33.0567129Z #8 DONE 2.1s
+2026-11-18T08:53:33.2969352Z #8 DONE 2.2s
+2026-11-18T08:53:33.4417190Z #10 DONE 0.6s
+2026-11-18T08:53:33.6115176Z #11 DONE 0.3s
+2026-11-18T08:53:33.6130196Z #12 DONE 0.0s
+2026-11-18T08:53:38.1770119Z #14 DONE 4.7s
+2026-11-18T08:53:38.3659044Z #15 DONE 0.1s
+2026-11-18T08:53:43.8989641Z #16 DONE 5.7s
+2026-11-18T08:53:44.1464699Z #17 DONE 0.1s
+2026-11-18T08:54:23.4337553Z #13 DONE 50.0s
+2026-11-18T08:54:23.5570667Z #18 DONE 0.1s
+2026-11-18T08:54:30.2014919Z #19 DONE 6.6s
+2026-11-18T08:54:30.2017008Z #20 DONE 0.0s
+2026-11-18T08:54:30.3395847Z #21 DONE 0.1s
+2026-11-18T08:54:40.7067022Z #22 naming to docker.io/library/tabletop-dm-v2:ci done
+2026-11-18T08:54:42.3509077Z #22 DONE 12.0s
