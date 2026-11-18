@@ -13,7 +13,7 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from kernel.application import stable_id
 from kernel.errors import BranchIsolationError
@@ -274,7 +274,7 @@ def test_011_upgrade_preserves_legacy_snapshot_and_allows_metadata_identity(
         control = PostgresControlPlane(url)
         control.actor_id = app.extensions["demo_ids"]["actor_id"]
         control.persist_snapshot(legacy, state.version)
-        assert migrate(url, migrations) == 3
+        assert migrate(url, migrations) == len(discover(migrations)) - 11
         assert migrate(url, migrations) == 0
         readiness = admin.get("/readyz")
         assert readiness.status_code == 200, readiness.get_json()

@@ -14,7 +14,7 @@ from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
 from domains.tabletop.world_time import read_clock
-from infra.migrate import migrate
+from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from kernel.contracts import CommandProposal
 from kernel.database import transaction
@@ -213,7 +213,7 @@ def test_upgrade_backfills_only_running_canonical_clocks(integration_stack, tmp_
                         "VALUES(%s,%s,%s,%s)",
                         (branch_id, world_id, json.dumps(state), "0" * 64),
                     )
-            assert migrate(url, migrations) == 1
+            assert migrate(url, migrations) == len(discover(migrations)) - 13
             assert migrate(url, migrations) == 0
             with transaction(dsn=url) as connection, connection.cursor() as cursor:
                 cursor.execute(

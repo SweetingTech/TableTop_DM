@@ -115,6 +115,7 @@ from identity.repository import (
     kernel_authority,
 )
 from identity.service import AuthenticationError, IdentityService
+from infra.migrate import DEFAULT_MIGRATIONS_DIR, discover
 from kernel.api.roster import finalize_member
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
@@ -478,6 +479,7 @@ def create_app(
     simulation = simulation or SimulationApplication(root / "snapshots")
     demo = simulation.bootstrap_demo()
     database_dsn = os.environ.get("DATABASE_URL")
+    expected_migration = discover(DEFAULT_MIGRATIONS_DIR)[-1].version if database_dsn else None
     identity_repository = (
         PostgresIdentityRepository(database_dsn, bootstrap_actor_id=demo["actor_id"])
         if database_dsn
@@ -1977,7 +1979,7 @@ def create_app(
                 )
                 version = row["version"] if row else None
                 checks["postgres"] = {
-                    "ok": version == "014_world_due_work.sql",
+                    "ok": version == expected_migration,
                     "migration": version,
                 }
             except Exception as exc:
