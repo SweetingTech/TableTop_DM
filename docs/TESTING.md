@@ -15,6 +15,11 @@ durable runner. The tests cover scoped action selection, matching evaluation run
 usage, bounded retry, context rejection, deterministic fallback, and one receipt per proposal key.
 A real PostgreSQL command commits while a fixture provider is waiting.
 
+Conversation verification checks the frozen speech cue, due time, and reply grounding. The
+PostgreSQL case holds the original perception delivery, restarts the worker, and verifies one
+committed reply with the same language, volume, cause, and correlation. Existing generated
+dialogue tests also exercise fallback through the normal speech handler.
+
 The world-time and population tests exercise activity due times at start, during rain, after
 resumption, and at completion. They verify that a finished meal charges food once, preserves
 the same activity record after replacement, and survives a PostgreSQL restart and a command

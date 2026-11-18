@@ -30,6 +30,11 @@ responds. World writes keep their separate run and branch locks. Before persisti
 the service rechecks the live actor scope and latest pinned binding. The receipt and its typed
 provenance commit together.
 
+Conversation scheduling recovers its next cue from ordered, masked same-run speech observations
+and the controller's persisted due time. Reply receipts link that cue to the typed speech proposal.
+Its committed speech event becomes the next source of conversation history. The model sees an
+anonymous reference to the cue and the chosen language and volume.
+
 Durable private-receipt presentation uses the existing `sim.has_world_capability` function in an
 actor-scoped transaction. This bounded read observes current exact-world grants without hydrating
 all world state or trusting the API's cached authority. A separate-process DM revocation applies

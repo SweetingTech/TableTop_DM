@@ -1029,6 +1029,17 @@ Evaluation and advice return proposals. The live runner submits through ordinary
 
 ## Generated dialogue and tactical choices
 
+An autonomous character can answer its latest permitted speech observation from the current run
+when its controller is due. The reply keeps the policy's selected language and volume. An active
+plan or stronger tactical choice can take priority. When a reply is selected, the private proposal
+receipt records its source observation and due time. The committed `tabletop.dialogue.speak` event
+links to the originating utterance and continues its correlation. A character's own committed
+speech consumes the pending reply. Workers reconstruct this from stored experience after restart.
+
+Prompt `character-dialogue-1.2.0` supplies an anonymous reference to the exact utterance being
+answered. Generated replies cite that experience and use the ordinary speech command and frozen
+hearing rules. When generation is unavailable, the local speech choice uses the same reply lineage.
+
 Context `character-context-1.6.0` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
 `tabletop-character-actions-1.3.0` and proposal policy `character-proposal-policy-1.4.0` offer:

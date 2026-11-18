@@ -13,6 +13,10 @@ Deliberation returns one eligible action name. TableTop DM supplies the typed pa
 trusted action catalog. The command layer rechecks current control, authority and physical rules
 before publishing state or evidence. Private decision traces retain model usage and fallback codes.
 
+Scheduled replies reuse `tabletop.dialogue.speak` and event-time physical hearing. The runner
+attaches the exact same-run speech cause and correlation built from the body's authorized
+observation. Scheduling metadata stays in the private proposal receipt.
+
 Clock leases and retry delays are operational metadata outside replay state. The repository
 locks pending work under the branch lock and checks its run, executor, epoch, step and lease.
 The ledger redacts lease tokens. An idempotent retry returns the original receipt before

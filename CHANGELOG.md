@@ -6,6 +6,8 @@
   Recheck perceived threats and bodily needs before each action and record the private cooldown.
 - Add optional OpenAI-compatible action selection for the API and runner. Bound provider input,
   deadline and retries, record reported usage, and use deterministic utility during outages.
+- Schedule replies from the character's own perceived speech. Link each committed response to
+  the utterance it answers and consume the cue after the response commits.
 
 - Persist runnable activity due times and actual resource inputs and outputs. Clock events retain
   accounting for work, meals, rest, travel, sleep, and social phases replaced within one advance.
