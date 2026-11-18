@@ -38,8 +38,15 @@ export async function renewControllerPresence(scope: ControllerScope, epoch: num
   });
 }
 export async function loadCharacterRecap(scope: ControllerScope, signal?: AbortSignal) {
-  return apiRequest<CharacterRecap>(
-    controlPath(scope) + `/recap?run_id=${encodeURIComponent(scope.run)}`, { signal, cache: "no-store" });
+  try {
+    return await apiRequest<CharacterRecap>(
+      controlPath(scope) + `/recap?run_id=${encodeURIComponent(scope.run)}`, { signal, cache: "no-store" });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409 && error.message === "character_context_pending") {
+      throw new Error("Your character's recap is still updating. Try again in a moment.", { cause: error });
+    }
+    throw error;
+  }
 }
 
 function normalizeEvent(raw: Record<string, unknown>): EventRecord {

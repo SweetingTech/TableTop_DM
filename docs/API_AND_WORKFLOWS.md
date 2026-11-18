@@ -871,6 +871,8 @@ returns `{available, entries}` for the authorized character. Entries are the lat
 experiences from the last autonomous window. An active window ends at the read's locked boundary.
 A takeover closes the window at its own revision. Historical handoffs without recorded boundaries
 return `available: false`. Entries carry their own frozen observation sources.
+If observations in that window are still projecting, the route returns
+`409 character_context_pending`. Retry after projection catches up.
 
 For `POST /api/v2/commands`, the server derives the private ledger origin from the authenticated
 input path and registered command. Direct human body actions use `HUMAN_INPUT`. Submitted

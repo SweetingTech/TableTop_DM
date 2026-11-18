@@ -2603,11 +2603,28 @@ def create_app(
                     == (world_id, branch_id, scope.run_id)
                     and (event.actor_id, event.idempotency_key) in commands
                 }
-                observed = controller_minds(scope, actor_id).inspect(entity_id, branch_id=branch_id)
+                mind = controller_minds(scope, actor_id)
                 observations = tuple(
                     row
-                    for item in observed["observations"]
+                    for item in mind.inspect(entity_id, branch_id=branch_id)["observations"]
                     if (row := Observation.model_validate(item)).source_event_id in event_ids
+                )
+                require_projected_experience(
+                    world_id=world_id,
+                    branch_id=branch_id,
+                    entity_id=entity_id,
+                    actor_id=actor_id,
+                    grants=(
+                        grant
+                        for event_id in event_ids
+                        if (grant := source.perceptions.get((event_id, entity_id))) is not None
+                    ),
+                    event_reader=source.events.get,
+                    observation_exists=lambda observation: mind.has_observation(
+                        observation, branch_id=branch_id
+                    ),
+                    recorded_observations=observations,
+                    stored_confidence_precision=source.durable_repository is not None,
                 )
                 return build_narration(
                     source,

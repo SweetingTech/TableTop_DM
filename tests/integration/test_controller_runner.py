@@ -115,9 +115,12 @@ def test_durable_presence_restart_and_competing_timeout_workers(
     )
     assert player.post(path + "/control/presence", json=request).status_code == 409
     assert restarted.extensions["character_runner"].run_once() == 1
-    WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
     restored = restarted.test_client()
     restored.set_cookie("ttdm_session", player.get_cookie("ttdm_session").value)
+    pending = restored.get(path + "/control/recap", query_string={"run_id": run})
+    assert pending.status_code == 409, pending.get_json()
+    assert pending.get_json()["error"] == "character_context_pending"
+    WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
     recap = restored.get(path + "/control/recap", query_string={"run_id": run})
     assert recap.status_code == 200, recap.get_json()
     entries = recap.get_json()["entries"]

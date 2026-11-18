@@ -92,12 +92,16 @@ describe("explicit character control", () => {
       disconnect_policy: "EXPLICIT_HANDOFF",
       control: { epoch: 3, mode: "HUMAN", step: 0, max_steps: 10, next_due: "", last_error: null },
     });
-    vi.mocked(api.loadCharacterRecap).mockResolvedValue({
-      available: true, entries: [{ narration_id: "line", text: "You hear the bell." }],
-    });
+    vi.mocked(api.loadCharacterRecap)
+      .mockRejectedValueOnce(new Error("Your character's recap is still updating. Try again in a moment."))
+      .mockResolvedValue({ available: true, entries: [{ narration_id: "line", text: "You hear the bell." }] });
     const user = userEvent.setup(); const mode = vi.fn(); const progress = vi.fn();
     const view = render(<ControlPanel scope={scope} onModeChange={mode} onProgress={progress} />);
-    await user.click(await screen.findByRole("button", { name: "Show character recap" }));
+    const show = await screen.findByRole("button", { name: "Show character recap" });
+    await user.click(show);
+    expect(await screen.findByRole("alert")).toHaveTextContent("recap is still updating");
+    expect(screen.queryByRole("region", { name: "Character recap" })).not.toBeInTheDocument();
+    await user.click(show);
     expect(await screen.findByRole("region", { name: "Character recap" })).toHaveTextContent("You hear the bell.");
     expect(api.loadCharacterRecap).toHaveBeenCalledWith(scope, expect.any(AbortSignal));
     view.rerender(<ControlPanel scope={{ ...scope, entity: "other" }} onModeChange={mode} onProgress={progress} />);
