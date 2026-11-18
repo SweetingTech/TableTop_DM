@@ -151,7 +151,9 @@ def test_work_rain_lifecycle_and_needs_survive_restart_and_atomic_failure(
         {"expected_epoch": 1, "expected_seconds": 0, "to_seconds": 40},
         "forty",
     )
-    assert admin.get(clock_path(base)).get_json()["activities"][target]["progress_seconds"] == 30
+    interrupted = admin.get(clock_path(base)).get_json()["activities"][target]
+    assert interrupted["progress_seconds"] == 30 and interrupted["due_seconds"] is None
+    assert interrupted["outputs"]["weeded_units"] == 30
     response = admin.post(member_path + "/activate", json={"active_state": {}, "world_step": 40})
     assert response.status_code == 200, response.get_json()
     assert admin.post(member_path + "/deactivate", json={"world_step": 40}).status_code == 200
@@ -182,7 +184,9 @@ def test_work_rain_lifecycle_and_needs_survive_restart_and_atomic_failure(
     restarted = create_app(artifact_root=tmp_path)
     restored = restarted.test_client()
     restored.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
-    assert restored.get(clock_path(base)).get_json()["activities"][target]["progress_seconds"] == 40
+    resumed = restored.get(clock_path(base)).get_json()["activities"][target]
+    assert resumed["progress_seconds"] == 40 and resumed["due_seconds"] == 180
+    assert resumed["outputs"]["weeded_units"] == 40
     assert restored.get(member_path).get_json()["persistent_state"] == {
         "memories": ["PRIVATE_GARDEN_HISTORY"]
     }
@@ -200,6 +204,91 @@ def test_work_rain_lifecycle_and_needs_survive_restart_and_atomic_failure(
     assert "PRIVATE_GARDEN_HISTORY" not in str(scene) and "routine_id" not in str(scene)
     replay = restored.get(f"/api/v2/branches/{base['branch_id']}/replay").get_json()
     assert replay["verified"]
+
+
+def test_meal_accounting_survives_restart_rollback_and_replacement(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, _, _, _, _, base) = prepare(integration_stack, monkeypatch, tmp_path)
+    body = str(uuid.uuid4())
+    api_command(
+        admin,
+        base,
+        "tabletop.entity.spawn",
+        {
+            "entity_id": body,
+            "name": "Gardener with a meal",
+            "entity_type": "villager",
+            "public_state": {"hp": 100, "x": 8, "inventory": {"food": 1}},
+        },
+        "meal-gardener",
+    )
+    seed_routine(app, admin, base, body)
+    api_command(
+        admin,
+        base,
+        "tabletop.clock.advance",
+        {"expected_epoch": 1, "expected_seconds": 0, "to_seconds": 302},
+        "meal-start",
+    )
+    restarted = create_app(artifact_root=tmp_path)
+    restored = restarted.test_client()
+    restored.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
+    before = restored.get(clock_path(base)).get_json()
+    pending = before["activities"][body]
+    assert pending["kind"] == "EAT" and pending["due_seconds"] == 305
+    assert pending["progress_seconds"] == 2 and pending["inputs"]["food"] == 0
+
+    command = {
+        **base,
+        "command_type": "tabletop.clock.advance",
+        "idempotency_key": "finish-meal",
+        "parameters": {"expected_epoch": 1, "expected_seconds": 302, "to_seconds": 310},
+    }
+    repo = restarted.extensions["simulation"].durable_repository
+    original = repo._insert_perceptions
+
+    def fail(*args):
+        raise RuntimeError("test meal accounting rollback")
+
+    repo._insert_perceptions = fail
+    try:
+        assert restored.post("/api/v2/commands", json=command).status_code == 500
+    finally:
+        repo._insert_perceptions = original
+    assert restored.get(clock_path(base)).get_json() == before
+
+    response = restored.post("/api/v2/commands", json=command)
+    assert response.status_code == 200, response.get_json()
+    accepted = response.get_json()
+    assert restored.post("/api/v2/commands", json=command).get_json() == accepted
+    event_id = accepted["event"]["event_id"]
+    with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT payload FROM sim.events WHERE event_id=%s", (event_id,))
+        (payload,) = cursor.fetchone()
+        assert cursor.fetchone() is None
+    assert payload == accepted["event"]["payload"]
+    meal = next(
+        item
+        for item in payload["activity_records"]
+        if item["activity_id"] == pending["activity_id"]
+    )
+    assert meal["status"] == "COMPLETED" and meal["due_seconds"] == 305
+    assert meal["inputs"]["food"] == 1 and meal["outputs"]["meals_eaten"] == 1
+    player_after_restart = restarted.test_client()
+    session_cookie = player.get_cookie("ttdm_session")
+    assert session_cookie is not None
+    player_after_restart.set_cookie(session_cookie.key, session_cookie.value)
+    visible = player_after_restart.get(
+        "/api/v2/events", query_string={"branch_id": base["branch_id"]}
+    )
+    assert visible.status_code == 200
+    assert all(item["event_id"] != event_id for item in visible.get_json())
+    replay = restored.get(f"/api/v2/branches/{base['branch_id']}/replay").get_json()
+    assert replay["verified"]
+    physical = replay["projections"]["tabletop.entities"][body]
+    assert physical["inventory"]["food"] == 0 and physical["meals_eaten"] == 1
+    assert replay["projections"]["tabletop.activities"][body]["activity_id"] != meal["activity_id"]
 
 
 def test_source_binding_constraints_and_branch_isolation(integration_stack, monkeypatch, tmp_path):

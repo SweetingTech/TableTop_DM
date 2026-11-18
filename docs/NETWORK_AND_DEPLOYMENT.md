@@ -45,6 +45,11 @@ world AGENT; UTC cadence and offline policy are operational, simulated time is b
 It is idle for unconfigured/paused clocks. No schema migration or new store is added; projection,
 activity effects and next work commit with the existing ledger/outbox.
 
+Activity timing and resource accounting travel through that same transaction. The app and
+world runner should use the same image revision. The branch clock inspection route requires
+world-management authority, and detailed accounting in a clock event uses the event's
+existing restricted audience.
+
 Optional dialogue generation adds outbound HTTP(S) only when `TTDM_DIALOGUE_MODE=openai-compatible`
 is explicitly configured with an endpoint/model. API and runner call that chosen base's
 `/chat/completions`; the browser receives no provider credential. Requests contain sanitized

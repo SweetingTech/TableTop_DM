@@ -58,14 +58,22 @@ def test_atomic_travel_sleep_and_social_state_survive_restart_and_retry(
     restored.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
     current = restored.get(clock_path(base)).get_json()
     assert current["activities"][target]["kind"] == "TRAVEL"
-    api_command(
+    assert current["activities"][target]["due_seconds"] == 80
+    assert current["activities"][target]["outputs"]["travel_steps"] == 1
+    arrival = api_command(
         restored,
         base,
         "tabletop.clock.advance",
         {"expected_epoch": 1, "expected_seconds": 70, "to_seconds": 90},
         "sleep",
     )
-    assert restored.get(clock_path(base)).get_json()["activities"][target]["kind"] == "SLEEP"
+    records = arrival["event"]["payload"]["activity_records"]
+    journey = next(item for item in records if item["kind"] == "TRAVEL")
+    assert journey["status"] == "COMPLETED" and journey["due_seconds"] == 80
+    assert journey["outputs"]["travel_steps"] == 2
+    sleep = restored.get(clock_path(base)).get_json()["activities"][target]
+    assert sleep["kind"] == "SLEEP" and sleep["due_seconds"] == 120
+    assert sleep["outputs"]["sleep_seconds"] == 10
     api_command(
         restored,
         base,

@@ -1,11 +1,13 @@
 # Autonomous campaign implementation checklist
 
-Code review baseline: commit `9d5a26a`, 2026-11-10. This is a proposed implementation
-backlog, not a description of released behavior. Unchecked items remain work or verification.
-Existing foundations are identified separately; their presence does not establish an end-to-end flow.
+The original review started at commit `9d5a26a` on November 10, 2026. This checklist tracks
+implementation and verification for the full campaign scope. The README describes the shipped
+features and links to the operator guides.
 
 Implementation tracking: [Orderly campaign board](http://jarvis:8080/b/tabletop-dm-autonomous-campaign).
 Checked items mean locally implemented and verified; Orderly acceptance and live deployment are separate.
+Orderly has completed Tasks 1–5. Task 6 tracks offscreen activities. The board shows
+live acceptance and the open items that follow it.
 
 ## Product contract
 
@@ -28,19 +30,19 @@ Checked items mean locally implemented and verified; Orderly acceptance and live
 
 | Area | Existing wiring | Gap established by inspection |
 | --- | --- | --- |
-| Character binding | [Roster finalization](../kernel/api/roster.py) prepares a retryable uncontrolled body/binding, then publishes the seat and typed control changes atomically | A2/A3 are locally verified; independent Task2 acceptance and deployment remain separate |
-| Console | [Page](../frontend/src/features/game-console/GameConsolePage.tsx) polls authorized versioned scenes, fences stale responses, and renders all positioned perceived tokens using zone map configuration | Full A2–A8 local acceptance is verified below; current-head PR/CI and independent Task2 acceptance remain separate |
+| Character binding | [Roster finalization](../kernel/api/roster.py) prepares a retryable uncontrolled body/binding, then publishes the seat and typed control changes atomically | In-world party membership independent of the roster remains H1 |
+| Console | [Page](../frontend/src/features/game-console/GameConsolePage.tsx) polls authorized versioned scenes, ignores stale responses, and renders all positioned perceived tokens using zone map configuration | Campaign supervision and intervention experience remain section M |
 | Commands | [Bus](../kernel/command_bus.py), [application](../kernel/application.py), [durable repository](../kernel/postgres_repository.py) | No connected autonomous campaign driver |
-| Scheduling | [DeterministicScheduler](../kernel/scheduling.py) | In-memory queue; production call sites were not found; only its test imports it |
-| Population | [Lifecycle](../population/lifecycle.py), [repository](../population/postgres.py) | Explicit transitions retain state; `world_step` is supplied by callers, not a world clock; no activity progression |
-| Background process | [WorldEventProjector](../cognition/projector.py), [CLI](../main.py) | Projects existing events into minds; does not generate next actions |
-| Decisions | [LayeredDecisionEngine](../cognition/engine.py), API `cognition_decide` | Caller supplies situation/actions; returns `committed: false`; API calls engine without a model provider |
-| Personas | B1 adds distinct character/playtester purpose and [compiler](../persona/compilation/compiler.py) trait filtering | Trusted live context, authored character identity, and player-history imitation remain unfinished |
-| Runtime assignment | [MindStore](../cognition/store.py), [durable minds](../cognition/postgres.py), entity runtime API | Assignment exists; presence, exclusive control, and safe handoff are not a complete flow |
+| Scheduling | [World runner](../kernel/world_runner.py) and [clock commands](../domains/tabletop/world_time.py) advance one branch clock through leased PostgreSQL work | Persistent character plans and their own next-decision work remain F2 |
+| Population | [Lifecycle](../population/lifecycle.py), [routines](../population/routines.py), and [life plans](../population/life.py) share the clock and each bound body's physical resources | The activity vocabulary is bounded to work, rest, meals, local travel, sleep, and social obligations |
+| Background process | [World event projector](../cognition/projector.py), [character runner](../cognition/runner.py), and [world runner](../kernel/world_runner.py) run independently of a viewer | A complete cast-and-story stopping condition remains F8 |
+| Decisions | [Character context and proposals](API_AND_WORKFLOWS.md#trusted-character-proposals) supply trusted perception and a typed candidate set | The broader deliberation provider, bounded replanning, and scoped narration remain section F |
+| Personas | Purpose-separated [compiler](../persona/compilation/compiler.py), pinned character cards, and scoped human choice evidence | Broader longitudinal player-history behavior remains section G |
+| Runtime assignment | [Controller handoff](API_AND_WORKFLOWS.md#controller-handoff-and-runner) fences exclusive human/runner ownership by epoch | Configurable unattended and multiplayer policies remain section G |
 | Experiments | [ApplicationBranchExecutor.execute](../experiments/executor.py) | Applies a single scenario intervention, returns `steps=1`; horizon metadata is not a live campaign loop |
 | Factions/gods/quests | [Reputation](../domains/tabletop/factions/__init__.py), [blessing](../domains/tabletop/divine/__init__.py), [funded quest contracts](../domains/tabletop/quests/__init__.py) | Quest evidence is kernel-derived; autonomous faction/divine agendas and pursuit of quest opportunities still require later checklist work |
 | History | [Snapshots](../kernel/snapshots.py), [replay](../kernel/replay.py), [branching](../kernel/branching.py) | Snapshots contain projections; replay applies committed deltas; neither provides complete campaign revision |
-| Lore | [Lore indexes](../kernel/lore.py) | Search primitives exist; character-specific, timeline-safe retrieval must be wired and tested |
+| Lore | [Character knowledge](API_AND_WORKFLOWS.md#character-knowledge) retrieves from learned testimony and pinned starting claims | Authored campaign direction and story set pieces remain section J |
 
 ## Delivery order and dependencies
 
@@ -108,8 +110,7 @@ as composition glue; reusable execution services must also work from workers and
   draft/feed isolation, offline recovery, app restart and mobile speech after restart (47.81 seconds).
   Final local gates: 596 Python unit/contracts, 63 frontend tests, lint/build, 143 typed modules, clean wheel and
   90 documentation links. Full durable run: 136 passed before the final owner-fence correction; all 6 affected
-  roster/migration tests then passed on corrected source. PR/current-head CI, independent original seven
-  Task2 criteria and live deployment are separate; these checked boxes do not assert native acceptance.
+  roster/migration tests then passed on corrected source. Orderly subsequently completed Task 2.
 
 ## B. Separate character knowledge from player and operator knowledge
 
@@ -240,10 +241,9 @@ as composition glue; reusable execution services must also work from workers and
   progress, targets or payout terms. Controlled physical acceptance and READY reward claims,
   public receipt redaction with world-scoped privileged inspection,
   manager cancellation/refund, private evidence provenance and perceived offers/personal journal
-  have actual unit/durable/browser coverage. PR104/105 are merged; tested PR106 closes
-  separate-process grant revocation for private receipt inspection. Its current CI/merge and
-  independent whole-C acceptance still precede task closure or any later section. Autonomous
-  pursuit remains section F. See [exact revisions and evidence](verification/section-c/README.md).
+  have unit, durable and browser coverage. PRs 104–107 are merged. PR 106 closes
+  separate-process grant revocation for private receipt inspection. Autonomous pursuit remains
+  section F. See [exact revisions and evidence](verification/section-c/README.md).
 - [x] C7 — Acceptance: human and autonomous actors use identical rule enforcement; invalid or impossible
   actions leave no writes; retries spend resources once; distinct seeded actions replay correctly.
   Actual human/agent trial and runner cases, concurrent-worker/restart/rollback/replay cases,
@@ -277,7 +277,8 @@ their ordering boundary. The character proposal path waits for the body's exact 
 project. Focused clock tests verify deterministic catch-up and exact pause boundaries. The
 [PostgreSQL world-runner tests](../tests/integration/test_world_time.py) verify progression
 without viewers, restart recovery, and two workers advancing one timeline without duplicates.
-Orderly tracks the full task's independent acceptance.
+PR 108 merged the complete scheduler work. Orderly accepted all seven criteria and completed
+Task 5 in review session `a41d2017-ceef-42b8-b545-a6274247f57c`.
 
 ## E. Offscreen people and continuous activities
 
@@ -305,6 +306,10 @@ claims can interrupt choices without changing truth or exposing private intentio
 NPC card association requires no player seat. Frozen inputs, effects and replay stay atomic.
 An offscreen NPC retains its controller budget and current work. The kernel rechecks relevance at
 commit so a prepared detailed action waits if the party leaves first.
+The first independent review passed E2–E6 and reopened E1 for due-time and resource accounting.
+The E1 repair persists those fields, records phases replaced within one clock command in its
+immutable event, and preserves replay of older activity rows. The
+[Orderly task](http://jarvis:8080/b/tabletop-dm-autonomous-campaign/t/6/w/1) shows acceptance.
 Cross-zone routes, additional occupations and unrestricted goal generation are future scope.
 See [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations).
 See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-goals) for setup and limits.

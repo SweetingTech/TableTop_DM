@@ -1,5 +1,10 @@
 # Changelog
 
+- Persist runnable activity due times and actual resource inputs and outputs. Clock events retain
+  accounting for work, meals, rest, travel, sleep, and social phases replaced within one advance.
+- Refresh the GitHub README, add campaign artwork, and bring the campaign checklist and operator
+  guides up to date.
+
 - Let population-bound NPCs use their authorized detailed character actions during physical
   interactions. Their persistent routines continue offscreen. Recheck relevance at commit and
   preserve the controller budget while a party is away.

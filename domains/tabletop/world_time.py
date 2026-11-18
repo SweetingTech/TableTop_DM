@@ -8,7 +8,13 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from domains.tabletop.activities import ACTIVITIES, SCHEDULE, WEATHER, advance_activities
+from domains.tabletop.activities import (
+    ACTIVITIES,
+    SCHEDULE,
+    WEATHER,
+    ActivityRecord,
+    advance_activities,
+)
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
 from kernel.state import BranchState
@@ -62,6 +68,7 @@ class ClockResult(BaseModel):
     seconds: int = Field(ge=0)
     epoch: int = Field(ge=1)
     step: int = Field(default=0, ge=0)
+    activity_records: tuple[ActivityRecord, ...] = ()
 
 
 def read_clock(state: BranchState) -> Clock | None:
@@ -95,9 +102,18 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
 
 def advance_result(state: BranchState, clock: Clock, until: int, **updates) -> CommandResult:
     working = state.working_copy()
-    advance_activities(working, until)
+    records = advance_activities(working, until)
     updated = clock.model_copy(update={"seconds": until, "step": clock.step + 1, **updates})
     deltas = [StateDelta(projection=CLOCK, operation="SET", values=updated.model_dump(mode="json"))]
+    current = working.projections.get(ACTIVITIES, {})
+    ordered = sorted(records.values(), key=lambda row: (row.updated_seconds, row.activity_id))
+    # Clock events are restricted to their submitting actor and world read-all.
+    # Persist phases replaced within the same command without growing branch state.
+    replaced = tuple(
+        ActivityRecord.model_validate(phase, from_attributes=True)
+        for phase in ordered
+        if current.get(str(phase.entity_id), {}).get("activity_id") != str(phase.activity_id)
+    )
     for projection in (
         ACTIVITIES,
         WEATHER,
@@ -131,7 +147,12 @@ def advance_result(state: BranchState, clock: Clock, until: int, **updates) -> C
                     )
                 )
     return CommandResult(
-        result={"seconds": until, "epoch": updated.epoch, "step": updated.step},
+        result=ClockResult(
+            seconds=until,
+            epoch=updated.epoch,
+            step=updated.step,
+            activity_records=replaced,
+        ).model_dump(mode="json", exclude=None if replaced else {"activity_records"}),
         deltas=tuple(deltas),
         domain_tags=("operator", "world_time"),
     )
@@ -204,7 +225,7 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
         )
         for name, handler, model, version in (
             ("tabletop.clock.configure", configure, ConfigureRequest, "1.0.0"),
-            ("tabletop.clock.tick", tick, TickRequest, "1.6.0"),
-            ("tabletop.clock.advance", advance_to, AdvanceRequest, "1.5.0"),
+            ("tabletop.clock.tick", tick, TickRequest, "1.7.0"),
+            ("tabletop.clock.advance", advance_to, AdvanceRequest, "1.6.0"),
         )
     )

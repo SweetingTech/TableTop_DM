@@ -376,6 +376,14 @@ and typed API contracts are authoritative for interaction behavior.
 
 ## Population binding and continuous routines
 
+Activity timing and resource accounting are canonical clock outputs. A runnable activity's
+`due_seconds` is its expected completion given uninterrupted progress. A waiting or cancelled
+activity has a null due time, and a completed activity retains its actual completion second.
+The kernel records food consumed, work produced, and recovery as cumulative per-activity
+amounts. Body projections remain authoritative for balances. When a clock command replaces a
+phase, its accounting goes into the same committed clock event. Replay consumes the recorded
+deltas and never grants an output a second time.
+
 Daily planning uses the existing typed routine configuration and fenced clock command. Its
 bounded intention menu and private `planner` metadata are not additional authority. Actual goal
 time, route steps, needs, daily resets, choices and canonical effects commit atomically with the

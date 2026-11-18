@@ -1,5 +1,26 @@
 # TableTop DM
 
+![A coastal village comes to life from a tabletop map as a party crosses a bridge and a gardener keeps working.](docs/images/tabletop-dm-banner.png)
+
+TableTop DM is a local-first tabletop platform with a persistent world that can keep moving
+between sessions. Host a game with friends or play with characters whose autonomous choices draw
+on their card, backstory, and observed play history.
+
+[Quick start](#quick-start) · [Role setup](docs/ROLE_SETUP_GUIDE.md) ·
+[Campaign roadmap](docs/AUTONOMOUS_CAMPAIGN_CHECKLIST.md) · [Documentation](#documentation)
+
+## What works today
+
+- Hosted games support world-scoped roles, character binding, and a live perception-scoped console.
+- Explicit character handoff lets a configured runner act while a player is away. Optional
+  dialogue generation uses an endpoint and model chosen by the operator.
+- The world clock advances work, meals, rest, commutes, and appointments while the party is
+  elsewhere. Changes in weather, danger, or bodily needs can interrupt and resume that activity.
+- Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
+  campaign roadmap tracks complete rewind, authored story direction, and an executable AI DM.
+
+## Implementation details
+
 The durable world runner claims the next clock step in PostgreSQL. Another worker can recover
 the step if the lease expires before commit. Pausing cancels pending work, and a successful tick
 records its result and schedules the next step together. Apply migration 014 before upgrading.
@@ -42,10 +63,6 @@ interrupts rest. Offscreen NPC rest and sleep use the same recovery rules. World
 start an encounter with kernel-rolled initiative: six-second action windows rotate on the same
 world clock, so absent participants never freeze offscreen life. These versioned continuous-time
 rules retain ordinary per-body movement/action costs; they are not every tabletop ruleset.
-
-TableTop DM is a local-first tabletop platform built on a deterministic simulation kernel. It
-supports authenticated Administrator, Dungeon Master, and Player workspaces alongside persistent
-world state, synthetic personas, population simulation, and isolated scenario evaluation.
 
 Roster assignments prepare an uncontrolled body and pinned character binding before publishing
 the seat and human control together. Failed preparation can be retried. Removing the last seat
@@ -153,6 +170,8 @@ Population binding, finite meals, daily sleep, local travel and recurring appoin
 that clock. A routine-bound NPC with a pinned character and an autonomous controller adds
 detailed character actions while physically relevant. Its background work continues between
 encounters, and it keeps the same controller and unfinished tasks when the party returns.
+Activities retain their next completion time while runnable and record actual resources consumed
+or produced. When a clock step replaces an activity, its accounting remains in the clock event.
 Optional [daily planning](docs/API_AND_WORKFLOWS.md#daily-goal-planning) lets NPCs choose
 among prioritized work/rest goals with daily limits, seek shelter, recover from displacement or
 injury, and resume unfinished goals. No viewer or additional model provider is required.

@@ -8,7 +8,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from domains.tabletop.action_time import wait_seconds
-from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position, seconds
+from domains.tabletop.activities import (
+    ACTIVITIES,
+    WEATHER,
+    Activity,
+    ActivityOutputs,
+    ActivityRecords,
+    eat_meal,
+    position,
+    seconds,
+)
 from domains.tabletop.rules import incapacitated
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult
@@ -82,7 +91,11 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
     }
     working.projections.setdefault(ROUTINES, {})[key] = row
     if activity and activity.get("routine_id"):
-        working.projections[ACTIVITIES][key] = {**activity, "status": "CANCELLED", "reason": None}
+        working.projections[ACTIVITIES][key] = (
+            Activity.model_validate(activity)
+            .evolve(status="CANCELLED", reason=None, updated_seconds=now)
+            .model_dump(mode="json")
+        )
     if request.enabled:
         new_phase(working, key, row, "WEED", now)
     return CommandResult(
@@ -118,7 +131,9 @@ def food(body: dict) -> int:
     return max(0, int(body.get("inventory", {}).get("food", 0)))
 
 
-def advance_body(state: BranchState, key: str, routine: dict, until: int) -> None:
+def advance_body(
+    state: BranchState, key: str, routine: dict, until: int, records: ActivityRecords
+) -> None:
     from domains.tabletop.rest import recover
 
     body = state.projections.get("tabletop.entities", {}).get(key)
@@ -128,17 +143,18 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
     busy = bool(wait_seconds(state, uuid.UUID(key), at_seconds=cursor))
     unavailable = body is None or int(body.get("hp", 0)) <= 0 or incapacitated(body)
     if body is None or unavailable or busy:
-        raw = state.projections[ACTIVITIES][key]
-        if body is not None:
-            raw = recover(
-                Activity.model_validate(raw), body, cursor, until, allowed=False
-            ).model_dump(mode="json")
-            state.projections[ACTIVITIES][key] = raw
-        raw.update(
-            status="WAITING",
-            reason="INCAPACITATED" if unavailable else "ACTION_BUSY",
-            updated_seconds=until,
-        )
+        activity = Activity.model_validate(state.projections[ACTIVITIES][key])
+        if activity.status != "COMPLETED":
+            if body is not None:
+                activity = recover(activity, body, cursor, until, allowed=False)
+            updated = activity.evolve(
+                status="WAITING",
+                reason="INCAPACITATED" if unavailable else "ACTION_BUSY",
+                updated_seconds=until,
+            )
+            state.projections[ACTIVITIES][key] = updated.model_dump(mode="json")
+            if updated.activity_id in records:
+                records[updated.activity_id] = updated
         if body is not None and int(body.get("hp", 0)) > 0:
             body["hunger"] = int(body.get("hunger", 0)) + until - cursor
         routine["updated_seconds"] = until
@@ -147,17 +163,9 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
         activity = Activity.model_validate(state.projections[ACTIVITIES][key])
         hunger, fatigue = int(body.get("hunger", 0)), int(body.get("fatigue", 0))
         if activity.status == "COMPLETED":
-            if activity.kind == "EAT":
-                # Food is charged at this boundary, once, before choosing the next phase.
-                inventory = dict(body.get("inventory", {}))
-                inventory["food"] = food(body) - 1
-                body["inventory"] = inventory
-                body["hunger"] = max(0, hunger - 14400)
-                body["meals_eaten"] = int(body.get("meals_eaten", 0)) + 1
-                hunger = int(body["hunger"])
             if activity.kind != "WEED" and routine["resume_work"] is not None:
-                resumed = Activity.model_validate(routine["resume_work"]).model_copy(
-                    update={"updated_seconds": cursor, "status": "RUNNING", "reason": None}
+                resumed = Activity.model_validate(routine["resume_work"]).evolve(
+                    updated_seconds=cursor, status="RUNNING", reason=None
                 )
                 state.projections[ACTIVITIES][key] = resumed.model_dump(mode="json")
                 routine["resume_work"] = None
@@ -191,19 +199,23 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
             if reason and activity.kind != "EAT" and hunger < routine["hunger_limit"]:
                 stop = min(until, cursor + routine["hunger_limit"] - hunger)
             body["hunger"] = hunger + stop - cursor
-            state.projections[ACTIVITIES][key] = activity.model_copy(
-                update={
-                    "status": "WAITING" if reason else "RUNNING",
-                    "reason": reason,
-                    "updated_seconds": stop,
-                }
-            ).model_dump(mode="json")
+            updated = activity.evolve(
+                status="WAITING" if reason else "RUNNING",
+                reason=reason,
+                updated_seconds=stop,
+            )
+            state.projections[ACTIVITIES][key] = updated.model_dump(mode="json")
+            if updated.activity_id in records:
+                records[updated.activity_id] = updated
             if stop != cursor:
                 cursor = stop
                 # Re-evaluate needs even at an exact end boundary, matching split ticks.
                 continue
             break
-        duration = min(until - cursor, activity.duration_seconds - activity.progress_seconds)
+        if activity.due_seconds is None:
+            activity = activity.evolve(status="RUNNING", reason=None, updated_seconds=cursor)
+        assert activity.due_seconds is not None
+        duration = min(until, activity.due_seconds) - cursor
         if activity.kind != "EAT" and hunger < routine["hunger_limit"]:
             duration = min(duration, routine["hunger_limit"] - hunger)
         if activity.kind == "WEED" and fatigue < routine["fatigue_limit"]:
@@ -212,33 +224,40 @@ def advance_body(state: BranchState, key: str, routine: dict, until: int) -> Non
         if activity.kind == "WEED":
             body["weeded_units"] = int(body.get("weeded_units", 0)) + duration
             body["fatigue"] = fatigue + duration
+            activity = activity.account(ActivityOutputs(weeded_units=duration))
         elif activity.kind == "REST":
             body["fatigue"] = max(0, fatigue - duration)
+            activity = activity.account(ActivityOutputs(fatigue_relieved=fatigue - body["fatigue"]))
         activity = recover(activity, body, cursor, cursor + duration, allowed=True)
         cursor += duration
         total = activity.progress_seconds + duration
-        state.projections[ACTIVITIES][key] = activity.model_copy(
-            update={
-                "progress_seconds": total,
-                "updated_seconds": cursor,
-                "status": "COMPLETED" if total == activity.duration_seconds else "RUNNING",
-                "reason": None,
-            }
-        ).model_dump(mode="json")
+        complete = total == activity.duration_seconds
+        if complete and activity.kind == "EAT":
+            activity = eat_meal(activity, body)
+        updated = activity.evolve(
+            progress_seconds=total,
+            updated_seconds=cursor,
+            status="COMPLETED" if complete else "RUNNING",
+            reason=None,
+        )
+        state.projections[ACTIVITIES][key] = updated.model_dump(mode="json")
+        records[updated.activity_id] = updated
     routine["updated_seconds"] = until
 
 
-def advance_routines(state: BranchState, until: int, start: int | None = None) -> None:
+def advance_routines(
+    state: BranchState, until: int, records: ActivityRecords, start: int | None = None
+) -> None:
     if state.projections.get("tabletop.obligations") or any(
         row["enabled"] and row.get("life") for row in state.projections.get(ROUTINES, {}).values()
     ):
         from population.life import advance_life
 
-        advance_life(state, until, start)
+        advance_life(state, until, records, start)
         return
     for key, routine in sorted(state.projections.get(ROUTINES, {}).items()):
         if routine["enabled"]:
-            advance_body(state, key, routine, until)
+            advance_body(state, key, routine, until, records)
 
 
 def routine_relevance(state: BranchState, member: dict, routine: dict) -> PopulationLevel:

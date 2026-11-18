@@ -19,14 +19,39 @@ WEATHER = "tabletop.weather"
 SCHEDULE = "tabletop.weather_schedule"
 
 
-class Activity(BaseModel):
+class ActivityInputs(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    food: int = Field(default=0, ge=0)
+
+
+class ActivityOutputs(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    weeded_units: int = Field(default=0, ge=0)
+    meals_eaten: int = Field(default=0, ge=0)
+    hunger_relieved: int = Field(default=0, ge=0)
+    fatigue_relieved: int = Field(default=0, ge=0)
+    hp_restored: int = Field(default=0, ge=0)
+    mana_restored: int = Field(default=0, ge=0)
+    travel_steps: int = Field(default=0, ge=0)
+    sleep_seconds: int = Field(default=0, ge=0)
+    social_seconds: int = Field(default=0, ge=0)
+
+
+def activity_due(fields: dict) -> int | None:
+    if fields["status"] == "COMPLETED":
+        return fields["updated_seconds"]
+    if fields["status"] == "RUNNING":
+        return fields["updated_seconds"] + max(
+            0, fields["duration_seconds"] - fields["progress_seconds"]
+        )
+    return None
+
+
+class ActivityRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     activity_id: uuid.UUID
     entity_id: uuid.UUID
     kind: Literal["WEED", "REST", "EAT", "TRAVEL", "SLEEP", "SOCIAL"]
-    task_key: str | None = None
-    details: dict = Field(default_factory=dict)
-    routine_id: uuid.UUID | None = None
     duration_seconds: int = Field(ge=1, le=86400)
     started_seconds: int = Field(ge=0)
     updated_seconds: int = Field(ge=0)
@@ -46,7 +71,62 @@ class Activity(BaseModel):
         ]
         | None
     ) = None
+    due_seconds: int | None = Field(default_factory=activity_due, ge=0)
+    inputs: ActivityInputs = Field(default_factory=ActivityInputs)
+    outputs: ActivityOutputs = Field(default_factory=ActivityOutputs)
+
+
+class Activity(ActivityRecord):
+    task_key: str | None = None
+    details: dict = Field(default_factory=dict)
+    routine_id: uuid.UUID | None = None
     origin: dict
+
+    def evolve(self, **changes: object) -> Activity:
+        updated = self.model_copy(update=changes)
+        return updated.model_copy(
+            update={
+                "due_seconds": activity_due(
+                    {
+                        "status": updated.status,
+                        "updated_seconds": updated.updated_seconds,
+                        "duration_seconds": updated.duration_seconds,
+                        "progress_seconds": updated.progress_seconds,
+                    }
+                )
+            }
+        )
+
+    def account(self, outputs: ActivityOutputs, *, food: int = 0) -> Activity:
+        increments = outputs.model_dump(exclude_defaults=True)
+        if not increments and not food:
+            return self
+        return self.model_copy(
+            update={
+                "inputs": self.inputs.model_copy(update={"food": self.inputs.food + food}),
+                "outputs": self.outputs.model_copy(
+                    update={
+                        name: getattr(self.outputs, name) + amount
+                        for name, amount in increments.items()
+                    }
+                ),
+            }
+        )
+
+
+ActivityRecords = dict[uuid.UUID, Activity]
+
+
+def eat_meal(activity: Activity, body: dict) -> Activity:
+    inventory = dict(body["inventory"])
+    inventory["food"] = int(inventory["food"]) - 1
+    body["inventory"] = inventory
+    hunger = int(body["hunger"])
+    body["hunger"] = max(0, hunger - 14400)
+    body["meals_eaten"] = int(body.get("meals_eaten", 0)) + 1
+    return activity.account(
+        ActivityOutputs(meals_eaten=1, hunger_relieved=hunger - body["hunger"]), food=1
+    )
 
 
 class StartRequest(BaseModel):
@@ -155,9 +235,11 @@ def cancel(proposal: CommandProposal, state: BranchState) -> CommandResult:
         deltas=(
             StateDelta(
                 projection=ACTIVITIES,
-                operation="MERGE",
+                operation="SET",
                 entity_id=request.entity_id,
-                values={"status": "CANCELLED", "reason": None},
+                values=Activity.model_validate(row)
+                .evolve(status="CANCELLED", reason=None, updated_seconds=seconds(state))
+                .model_dump(mode="json"),
             ),
         ),
         domain_tags=("operator", "activity_configuration"),
@@ -208,10 +290,12 @@ def cancel_weather(proposal: CommandProposal, state: BranchState) -> CommandResu
     )
 
 
-def progress(state: BranchState, until: int) -> None:
+def progress(state: BranchState, until: int, records: ActivityRecords | None = None) -> None:
     """Advance a private working copy; never persist or inspect cameras/minds."""
     from domains.tabletop.rest import recover
 
+    if records is None:
+        records = {}
     for key, raw in sorted(state.projections.get(ACTIVITIES, {}).items()):
         activity = Activity.model_validate(raw)
         if activity.routine_id is not None:
@@ -233,14 +317,12 @@ def progress(state: BranchState, until: int) -> None:
             .get(activity.origin["zone_id"], False)
             else None
         )
-        elapsed = (
-            0
-            if reason
-            else min(
-                until - activity.updated_seconds,
-                activity.duration_seconds - activity.progress_seconds,
-            )
-        )
+        elapsed = 0
+        if reason is None:
+            if activity.due_seconds is None:
+                activity = activity.evolve(status="RUNNING", reason=None)
+            assert activity.due_seconds is not None
+            elapsed = min(until, activity.due_seconds) - activity.updated_seconds
         if elapsed < 0:
             raise ValueError("activity time cannot move backward")
         if body is not None:
@@ -254,28 +336,35 @@ def progress(state: BranchState, until: int) -> None:
         if elapsed and body is not None:
             if activity.kind == "WEED":
                 body["weeded_units"] = int(body.get("weeded_units", 0)) + elapsed
+                activity = activity.account(ActivityOutputs(weeded_units=elapsed))
             else:
-                body["fatigue"] = max(0, int(body.get("fatigue", 0)) - elapsed)
+                fatigue = int(body.get("fatigue", 0))
+                body["fatigue"] = max(0, fatigue - elapsed)
+                activity = activity.account(
+                    ActivityOutputs(fatigue_relieved=fatigue - body["fatigue"])
+                )
         total = activity.progress_seconds + elapsed
-        state.projections[ACTIVITIES][key] = activity.model_copy(
-            update={
-                "progress_seconds": total,
-                "updated_seconds": activity.updated_seconds + elapsed
-                if total == activity.duration_seconds
-                else until,
-                "status": "CANCELLED"
+        complete = total == activity.duration_seconds
+        updated = activity.evolve(
+            progress_seconds=total,
+            updated_seconds=activity.updated_seconds + elapsed if complete else until,
+            status=(
+                "CANCELLED"
                 if reason and activity.details.get("rest_kind")
                 else "COMPLETED"
-                if total == activity.duration_seconds
+                if complete
                 else "WAITING"
                 if reason
-                else "RUNNING",
-                "reason": reason,
-            }
-        ).model_dump(mode="json")
+                else "RUNNING"
+            ),
+            reason=reason,
+        )
+        state.projections[ACTIVITIES][key] = updated.model_dump(mode="json")
+        if elapsed or updated.activity_id in records:
+            records[updated.activity_id] = updated
 
 
-def advance_activities(state: BranchState, until: int) -> None:
+def advance_activities(state: BranchState, until: int) -> ActivityRecords:
     from domains.tabletop.rest import boundaries as rest_boundaries
     from population.routines import advance_routines, reconcile_relevance
 
@@ -296,23 +385,25 @@ def advance_activities(state: BranchState, until: int) -> None:
                 ] = row["raining"]
                 del pending[key]
 
+    records: ActivityRecords = {}
     apply_weather(cursor)
-    progress(state, cursor)
-    advance_routines(state, cursor, cursor)
+    progress(state, cursor, records)
+    advance_routines(state, cursor, records, cursor)
     stops = (
         set(boundaries(state, cursor, until))
         | set(rest_boundaries(state, cursor, until))
         | {int(row["due_seconds"]) for _, row in weather if cursor < row["due_seconds"] <= until}
     )
     for stop in sorted(stops):
-        progress(state, stop)
-        advance_routines(state, stop, cursor)
+        progress(state, stop, records)
+        advance_routines(state, stop, records, cursor)
         expire(state, stop)
         apply_weather(stop)
         # Reconcile without elapsed work so split and whole advances agree at the boundary.
-        progress(state, stop)
-        advance_routines(state, stop, stop)
+        progress(state, stop, records)
+        advance_routines(state, stop, records, stop)
         cursor = stop
+    return records
 
 
 def command_definitions() -> tuple[CommandDefinition, ...]:

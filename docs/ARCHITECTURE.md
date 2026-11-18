@@ -524,6 +524,14 @@ projections hold identity, lifecycle and selected mental metadata; the body's ca
 alone owns health, inventory, hunger, fatigue and work output. Binding preserves the independently
 pinned character card/persona/mind. Archived source finances are never imported.
 
+Each physical activity stores its own identity, body, start, progress, completion time, and
+actual resource inputs and outputs. The due time forecasts completion while work can proceed.
+An interruption clears it until work resumes, and a completed activity records its finish time.
+Accounting describes changes already applied to the body's resources. When the clock replaces
+an activity in the same command, that activity's last accounting record goes into the clock
+event with its existing restricted audience. This keeps the physical projections independent
+of clock-step partitioning.
+
 Migration 011 adds source binding evidence, scoped foreign keys and freeze guards. The command
 transaction locks and hashes the materialized source, commits the binding with projection/event/
 outbox, then prevents legacy state or transition writers from changing that source. Reference

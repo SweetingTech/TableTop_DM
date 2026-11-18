@@ -1,5 +1,11 @@
 # Testing
 
+The world-time and population tests exercise activity due times at start, during rain, after
+resumption, and at completion. They verify that a finished meal charges food once, preserves
+the same activity record after replacement, and survives a PostgreSQL restart and a command
+retry. The existing rest and life-plan cases compare physical state across whole and split
+clock advances. A player view must still reveal only the perceived activity summary.
+
 World due-work integration cases race two claims, recover an expired lease with a fresh runner,
 deny stale tokens, inject failed event publication, and verify the retry advances the clock
 once and replaces its due row. They also cover pause cancellation, actor scope and retry backoff.
