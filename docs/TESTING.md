@@ -1,5 +1,10 @@
 # Testing
 
+Recap cases compare pre-handoff, in-window, and post-takeover actions. The PostgreSQL case
+checks the returning owner's access to a machine-recorded timeout handoff across restart and
+matches the narrated source to the committed revision. The built console shows the recap after
+reconnect and isolates it across viewpoint changes.
+
 Controller presence cases exercise default manual control, owner opt-in and renewal, stale epochs,
 competing PostgreSQL timeout workers and same-epoch write restrictions. The browser journey leaves
 the actual console for the configured deadline, returns after one autonomous action, and takes

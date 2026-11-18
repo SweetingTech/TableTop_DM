@@ -45,6 +45,8 @@ The stand-in uses that cadence in grounded replies, including when the configure
 unavailable.
 Apply migration 018 to let a player opt into automatic handoff when their console disconnects.
 Choose a timeout in Character control. On return, **Take control** restores manual play.
+Apply migration 019 for **Show character recap**, which lists what the character perceived
+during the last recorded handoff.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

@@ -5,13 +5,14 @@ import ControlPanel from "../features/game-console/ControlPanel";
 import * as api from "../features/game-console/api";
 
 vi.mock("../features/game-console/api", () => ({
-  loadController: vi.fn(), handoffController: vi.fn(), renewControllerPresence: vi.fn(),
+  loadController: vi.fn(), handoffController: vi.fn(), renewControllerPresence: vi.fn(), loadCharacterRecap: vi.fn(),
 }));
 const scope = { world: "world", branch: "branch", run: "run", entity: "body" };
 beforeEach(() => {
   vi.mocked(api.loadController).mockReset().mockResolvedValue({ control: null, disconnect_policy: "EXPLICIT_HANDOFF" });
   vi.mocked(api.handoffController).mockReset();
   vi.mocked(api.renewControllerPresence).mockReset();
+  vi.mocked(api.loadCharacterRecap).mockReset();
 });
 
 describe("explicit character control", () => {
@@ -84,5 +85,22 @@ describe("explicit character control", () => {
     await act(async () => resolve({ control: { epoch: 8, mode: "AUTONOMOUS", step: 9, max_steps: 10, next_due: "", last_error: null }, disconnect_policy: "EXPLICIT_HANDOFF" }));
     expect(mode).toHaveBeenLastCalledWith("HUMAN", undefined);
     expect(screen.queryByText("Character is acting")).not.toBeInTheDocument();
+  });
+
+  it("shows the scoped recap and clears it when changing characters", async () => {
+    vi.mocked(api.loadController).mockResolvedValue({
+      disconnect_policy: "EXPLICIT_HANDOFF",
+      control: { epoch: 3, mode: "HUMAN", step: 0, max_steps: 10, next_due: "", last_error: null },
+    });
+    vi.mocked(api.loadCharacterRecap).mockResolvedValue({
+      available: true, entries: [{ narration_id: "line", text: "You hear the bell." }],
+    });
+    const user = userEvent.setup(); const mode = vi.fn(); const progress = vi.fn();
+    const view = render(<ControlPanel scope={scope} onModeChange={mode} onProgress={progress} />);
+    await user.click(await screen.findByRole("button", { name: "Show character recap" }));
+    expect(await screen.findByRole("region", { name: "Character recap" })).toHaveTextContent("You hear the bell.");
+    expect(api.loadCharacterRecap).toHaveBeenCalledWith(scope, expect.any(AbortSignal));
+    view.rerender(<ControlPanel scope={{ ...scope, entity: "other" }} onModeChange={mode} onProgress={progress} />);
+    expect(screen.queryByRole("region", { name: "Character recap" })).not.toBeInTheDocument();
   });
 });

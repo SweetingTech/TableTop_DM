@@ -1,5 +1,10 @@
 # Simulation-kernel contract
 
+Migration 019 stamps the resulting branch projection revision into new commands during their
+existing atomic transaction. Handoff records capture the active revision under the same branch
+fence. Character recap bounds are private. Recap is a perception-scoped read and leaves command,
+action timing, authority, and replay state intact through resume and takeover.
+
 Controller presence is operational state. An active human owner may update only the private
 deadline at the existing epoch. The normal handoff fence remains responsible for replacing
 authority after timeout. A paused campaign still fences autonomous actions, and a roster seat

@@ -95,6 +95,27 @@ def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path
     _, player, card, _, path, run, _ = setup_bound_character(app)
     sim = app.extensions["simulation"]
     ids = app.extensions["demo_ids"]
+    body = {
+        "command_type": "tabletop.spatial.move",
+        "world_id": card["world_id"],
+        "branch_id": str(ids["branch_id"]),
+        "run_id": run,
+        "embodied_entity_id": card["entity_id"],
+        "parameters": {"dx": 1, "dy": 0},
+        "idempotency_key": "human-while-away",
+    }
+
+    def recap():
+        reply = player.get(path + "/control/recap", query_string={"run_id": run})
+        assert reply.status_code == 200, reply.get_json()
+        assert reply.headers["Cache-Control"] == "no-store"
+        return reply.get_json()
+
+    assert recap() == {"available": False, "entries": []}
+    assert (
+        player.post("/api/v2/commands", json={**body, "idempotency_key": "before"}).status_code
+        == 200
+    )
     events = len(sim.events)
     initial_event_ids = set(sim.events)
     context = player.get(path + "/context", query_string={"run_id": run}).get_json()
@@ -108,6 +129,7 @@ def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path
     }
     handed = player.post(path + "/control", json=request)
     assert handed.status_code == 200, handed.get_json()
+    assert "recap_revision" not in handed.get_json()
     assert player.post(path + "/control", json=request).get_json() == handed.get_json()
     state = handed.get_json()["state"]
     assert state["mode"] == "AUTONOMOUS" and state["epoch"] == 1
@@ -117,15 +139,7 @@ def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path
         player.get(path + "/context", query_string={"run_id": run}).get_json()["evidence_hash"]
         == context["evidence_hash"]
     )
-    body = {
-        "command_type": "tabletop.spatial.move",
-        "world_id": card["world_id"],
-        "branch_id": str(ids["branch_id"]),
-        "run_id": run,
-        "embodied_entity_id": card["entity_id"],
-        "parameters": {"dx": 1, "dy": 0},
-        "idempotency_key": "human-while-away",
-    }
+    assert recap() == {"available": True, "entries": []}
     assert player.post("/api/v2/commands", json=body).status_code == 403
     assert app.extensions["character_runner"].run_once() == 1
     assert app.extensions["character_runner"].run_once() == 0
@@ -133,6 +147,11 @@ def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path
     current = player.get(path + "/control", query_string={"run_id": run}).get_json()["control"]
     assert current["step"] == 1 and current["mode"] == "PAUSED"
     assert current["last_error"] == "step_limit"
+    experience = recap()
+    assert [entry["source_event_id"] for entry in experience["entries"]] == [
+        str(next(reversed(sim.events)))
+    ]
+    assert "recap_revision" not in str(experience)
     taken = player.post(
         path + "/control",
         json={**request, "mode": "HUMAN", "expected_epoch": 1, "idempotency_key": "return"},
@@ -143,6 +162,7 @@ def test_explicit_handoff_runner_budget_and_human_takeover(monkeypatch, tmp_path
     # A delayed legacy request cannot be silently stamped with a fresh epoch.
     assert player.post("/api/v2/commands", json=body).status_code == 403
     assert player.post("/api/v2/commands", json={**body, "control_epoch": 2}).status_code == 200
+    assert recap() == experience
     assert not any(
         "control" in event.event_type or "handoff" in event.event_type
         for event_id, event in sim.events.items()

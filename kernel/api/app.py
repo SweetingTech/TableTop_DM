@@ -2548,7 +2548,8 @@ def create_app(
             scope = ControlScope(
                 world_id=world_id, branch_id=branch_id, entity_id=entity_id, run_id=body.run_id
             )
-            response = jsonify(controllers.handoff(scope, actor_id, body).model_dump(mode="json"))
+            receipt = controllers.handoff(scope, actor_id, body)
+            response = jsonify(receipt.model_dump(mode="json", exclude={"recap_revision"}))
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -2566,6 +2567,66 @@ def create_app(
         )
         state = controllers.presence(scope, current_actor_id(), body.expected_epoch)
         response = jsonify({"state": state.model_dump(mode="json")})
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
+        "/entities/<uuid:entity_id>/control/recap"
+    )
+    def character_recap(world_id: uuid.UUID, branch_id: uuid.UUID, entity_id: uuid.UUID):
+        require_world_access(world_id)
+        actor_id = current_actor_id()
+        scope = ControlScope(
+            world_id=world_id,
+            branch_id=branch_id,
+            entity_id=entity_id,
+            run_id=uuid.UUID(request.args["run_id"]),
+        )
+        window = controllers.recap_window(scope, actor_id)
+        entries: tuple[NarrationEntry, ...] = ()
+        if window is not None:
+            source = controller_snapshot()
+
+            def read() -> tuple[NarrationEntry, ...]:
+                commands = {
+                    (record.proposal.actor_id, record.proposal.idempotency_key)
+                    for record in source.command_history.get(branch_id, ())
+                    if record.proposal.run_id == scope.run_id
+                    and record.committed_revision is not None
+                    and window.after_revision < record.committed_revision <= window.through_revision
+                }
+                event_ids = {
+                    event.event_id
+                    for event in source.events.values()
+                    if (event.world_id, event.branch_id, event.run_id)
+                    == (world_id, branch_id, scope.run_id)
+                    and (event.actor_id, event.idempotency_key) in commands
+                }
+                observed = controller_minds(scope, actor_id).inspect(entity_id, branch_id=branch_id)
+                observations = tuple(
+                    row
+                    for item in observed["observations"]
+                    if (row := Observation.model_validate(item)).source_event_id in event_ids
+                )
+                return build_narration(
+                    source,
+                    world_id=world_id,
+                    branch_id=branch_id,
+                    actor_id=actor_id,
+                    request=NarrationRequest(
+                        run_id=scope.run_id, audience="CHARACTER", observer_entity_id=entity_id
+                    ),
+                    observations=observations,
+                )
+
+            entries = source.read_reference(read)
+        response = jsonify(
+            {
+                "available": window is not None,
+                "entries": [entry.model_dump(mode="json") for entry in entries],
+            }
+        )
         response.headers["Cache-Control"] = "no-store"
         return response
 

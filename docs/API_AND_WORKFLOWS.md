@@ -866,6 +866,12 @@ speech/combat imitation remain planned.
 
 ## Controller handoff and runner
 
+`GET /api/v2/worlds/{world}/branches/{branch}/entities/{body}/control/recap?run_id={run}`
+returns `{available, entries}` for the authorized character. Entries are the latest 12 narrated
+experiences from the last autonomous window. An active window ends at the read's locked boundary.
+A takeover closes the window at its own revision. Historical handoffs without recorded boundaries
+return `available: false`. Entries carry their own frozen observation sources.
+
 For `POST /api/v2/commands`, the server derives the private ledger origin from the authenticated
 input path and registered command. Direct human body actions use `HUMAN_INPUT`. Submitted
 advice uses `POLICY_ADVICE`. Management commands and operator automation use `OPERATOR`.
