@@ -10,7 +10,7 @@ import tempfile
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import psycopg2
@@ -64,6 +64,14 @@ def test_durable_presence_restart_and_competing_timeout_workers(
     integration_stack, monkeypatch, tmp_path
 ):
     app, (_, player, card, _, path, run, _) = setup(integration_stack, monkeypatch, tmp_path)
+
+    class FastAppClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return super().now(tz) + timedelta(minutes=2)
+
+    monkeypatch.setattr("cognition.control.datetime", FastAppClock)
+    monkeypatch.setattr(postgres_control, "datetime", FastAppClock)
     state = enable_disconnect_policy(player, path, run)
     request = {"run_id": run, "expected_epoch": state.epoch}
     response = player.post(path + "/control/presence", json=request)
@@ -97,6 +105,7 @@ def test_durable_presence_restart_and_competing_timeout_workers(
     assert invalid.value.diag.constraint_name == "controller_presence_shape"
     restarted = create_app(artifact_root=tmp_path)
     next_worker = restarted.extensions["controllers"]
+    assert not any(row.scope == state.scope for row in next_worker.due())
     assert next_worker.get(state.scope, state.owner_actor_id) == renewed
     next_worker.expire_disconnected(state.presence_deadline_at)
     assert next_worker.get(state.scope, state.owner_actor_id) == renewed

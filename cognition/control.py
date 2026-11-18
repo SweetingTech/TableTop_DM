@@ -90,6 +90,7 @@ def next_controller(
     previous: ControllerState | None,
     *,
     disconnected: bool = False,
+    presence_now: datetime | None = None,
 ) -> ControllerState:
     epoch = previous.epoch if previous else 0
     if request.expected_epoch != epoch:
@@ -113,7 +114,7 @@ def next_controller(
         else request.interval_ms,
         step=previous.step if request.mode == "PAUSED" and previous else 0,
         disconnect_after_seconds=timeout,
-        presence_deadline_at=datetime.now(UTC) + timedelta(seconds=timeout)
+        presence_deadline_at=(presence_now or datetime.now(UTC)) + timedelta(seconds=timeout)
         if timeout is not None and request.mode == "HUMAN"
         else None,
         handoff_reason="DISCONNECT_TIMEOUT" if disconnected else None,
@@ -133,7 +134,9 @@ class ControllerRepository(Protocol):
     def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None: ...
 
 
-def renew_presence(state: ControllerState | None, expected_epoch: int) -> ControllerState:
+def renew_presence(
+    state: ControllerState | None, expected_epoch: int, *, now: datetime | None = None
+) -> ControllerState:
     if (
         state is None
         or state.epoch != expected_epoch
@@ -141,7 +144,7 @@ def renew_presence(state: ControllerState | None, expected_epoch: int) -> Contro
         or state.disconnect_after_seconds is None
     ):
         raise ControlConflict("controller changed; reload before renewing presence")
-    deadline = datetime.now(UTC) + timedelta(seconds=state.disconnect_after_seconds)
+    deadline = (now or datetime.now(UTC)) + timedelta(seconds=state.disconnect_after_seconds)
     if state.presence_deadline_at is not None and deadline <= state.presence_deadline_at:
         return state
     return state.model_copy(update={"presence_deadline_at": deadline})

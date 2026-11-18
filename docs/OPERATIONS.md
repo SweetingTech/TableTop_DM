@@ -11,6 +11,7 @@ Apply `018_controller_presence.sql` before updating the server and character run
 controller record contains the persisted deadline. The normal runner checks it after restart.
 The same-epoch database write is limited to the current owner's deadline renewal. The handoff
 transaction records a separate private receipt when the runner takes over.
+PostgreSQL time governs durable presence deadlines across API and runner hosts.
 
 Apply `017_speech_cadence_evidence.sql` before upgrading the application and character runner.
 The expanded constraint retains prior evidence variants and protects the optional cadence category.

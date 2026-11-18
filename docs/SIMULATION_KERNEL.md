@@ -15,6 +15,7 @@ Controller presence is operational state. An active human owner may update only 
 deadline at the existing epoch. The normal handoff fence remains responsible for replacing
 authority after timeout. A paused campaign still fences autonomous actions, and a roster seat
 change clears its old presence policy and deadline. Presence and handoff publish no sensory event.
+The durable store reads its deadline clock from PostgreSQL under the existing transaction.
 
 Migration 017 stores a cadence bucket within the current append-only human choice evidence.
 The existing source guard requires accepted manual same-branch speech for the new evidence version.

@@ -14,7 +14,8 @@ from cognition.engine import DecisionAction
 from kernel.state import stable_hash
 from persona.models import CompiledPersona
 
-CHOICE_VERSION = "speech-combat-behavior-1.3.0"
+CHOICE_VERSION = "speech-combat-behavior-1.4.0"
+SUPPORT_EVIDENCE_VERSION = "speech-combat-behavior-1.3.0"
 
 
 class ChoiceOption(BaseModel):
@@ -23,6 +24,10 @@ class ChoiceOption(BaseModel):
     kind: Literal["MOVE", "SPEECH", "ATTACK", "GUARD", "SPELL"]
     style: str
     volume: str = ""
+
+    @property
+    def category(self) -> tuple[str, str, str]:
+        return (self.kind, self.style, self.volume)
 
 
 def option_key(command_type: str, parameters: dict) -> str:
@@ -142,7 +147,7 @@ class HumanChoiceEvidence(BaseModel):
 
     @model_validator(mode="after")
     def selected_option(self) -> HumanChoiceEvidence:
-        if self.version == CHOICE_VERSION:
+        if self.version == SUPPORT_EVIDENCE_VERSION:
             if not self.frame.support_targets or (
                 self.chosen_key.startswith("speech:") != (self.utterance_cadence is not None)
             ):
@@ -187,6 +192,7 @@ class ChoiceProfile(BaseModel):
     evidence_event_ids: tuple[uuid.UUID, ...]
     action_scores: dict[str, float]
     conflicts: tuple[str, ...]
+    action_sample_counts: dict[str, int] = Field(default_factory=dict, exclude_if=lambda v: not v)
     speech_cadence: SpeechCadence | None = Field(default=None, exclude_if=lambda v: v is None)
     cadence_evidence_event_ids: tuple[uuid.UUID, ...] = Field(
         default=(), exclude_if=lambda v: not v
@@ -251,6 +257,10 @@ def choice_profile(
         next(option for option in row.options if option.key == row.chosen_key)
         for _, row in matching
     ]
+    selected_counts = Counter(option.category for option in choices)
+    offered_counts: Counter[tuple[str, str, str]] = Counter()
+    for _, row in matching:
+        offered_counts.update({option.category for option in row.options})
     cadence_samples = [
         (event, row.utterance_cadence)
         for event, row in matching
@@ -286,6 +296,7 @@ def choice_profile(
     avoid = persona.deep_traits.get("conflict_style") == "AVOID"
     battle = bool(frame and frame.threats)
     scores = {}
+    sample_counts = {}
     for option in options:
         if option.kind == "GUARD":
             base = 0.8 + (1 if frame and frame.spatial.injured else 0) + (0.6 if avoid else 0)
@@ -338,12 +349,12 @@ def choice_profile(
             )
             if direct and option.style == "ASSERT":
                 base += 0.5
-        count = sum(
-            (row.kind, row.style, row.volume) == (option.kind, option.style, option.volume)
-            for row in choices
-        )
+        count = offered_counts[option.category]
+        chosen = selected_counts[option.category]
+        passed = count - chosen
+        sample_counts[option.key] = count
         scores[option.key] = round(
-            base * (1 - confidence) + 6 * confidence * count / max(1, len(choices)), 6
+            (3 * base + 6 * chosen + min(0.0, base - 0.25) * passed) / (count + 3), 6
         )
     conflicts: tuple[str, ...] = ()
     if peaceful and sum(row.kind == "ATTACK" for row in choices) >= 3:
@@ -368,6 +379,7 @@ def choice_profile(
         evidence_event_ids=tuple(event for event, _ in matching),
         action_scores=scores,
         conflicts=conflicts,
+        **({"action_sample_counts": sample_counts} if sample_counts else {}),
         **cadence_fields,
     )
     return ChoiceProfile(profile_id=stable_hash(payload), **payload)

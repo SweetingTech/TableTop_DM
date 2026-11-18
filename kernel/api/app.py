@@ -27,7 +27,7 @@ from cognition.character_decisions import (
 from cognition.choice_state import choice_frame, speech_cadence
 from cognition.choice_store import PostgresChoiceEvidence, persist_choice_bundle
 from cognition.choices import (
-    CHOICE_VERSION,
+    SUPPORT_EVIDENCE_VERSION,
     HumanChoiceEvidence,
     choice_profile,
     describe_options,
@@ -877,7 +877,7 @@ def create_app(
                     )
                     choice = HumanChoiceEvidence(
                         version=(
-                            CHOICE_VERSION
+                            SUPPORT_EVIDENCE_VERSION
                             if state.support_targets
                             else "speech-combat-behavior-1.2.0"
                             if cadence is not None
