@@ -243,6 +243,11 @@ after ledger insertion fails. Character/world runners are tested on one branch. 
 journey shows partial waiting work and resumed work on return at desktop/mobile sizes. Browser
 plugin is not available; the repository's regular Playwright/Chromium lane is used.
 
+Scoped narration tests verify the reference and PostgreSQL routes with committed speech and
+movement. The durable lane covers retention across restart, current authorization, composite
+source constraints, append-only grants, and upgrade from migration 014. The wheel gate checks
+that migration 015 ships with the application.
+
 Generated-dialogue tests use a local OpenAI-compatible HTTP fixture, never a real provider/key.
 They exercise the actual API/runner, multiple turns, sanitized subjective input, unknown sources,
 metafiction/extra-field rejection, outage fallback, immutable retries and separate-worker/restart

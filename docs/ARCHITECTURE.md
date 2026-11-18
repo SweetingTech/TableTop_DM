@@ -217,6 +217,11 @@ Scenes expose inspected current activity only. Configuration/ticks/pending work 
 records with no sensory emission. Population lifecycle coupling and a generic leased queue remain
 separate; see [the workflow](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
 
+Scoped narration is a read-side renderer for committed physical events. Operator narration
+uses selected facts from the event ledger. Spectator and character narration use the body's
+masked observation and frozen perception grant. The append-only presentation store retains
+actor, audience, run, and source lineage. Its text never enters replay or character cognition.
+
 Generated dialogue is an optional expression layer after deterministic intent selection. An
 injected provider receives sanitized identity and sourced subjective experience, never simulation
 authority or profile/controller metadata. Its typed text/source response replaces only speech

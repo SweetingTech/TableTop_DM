@@ -444,6 +444,10 @@ Migration `010_tactical_choice_evidence.sql` extends the existing private eviden
 source trigger for guard/fixed spells and the new choice version. It retains old evidence and
 append-only/RLS/privilege rules. Apply it through the owner before upgrading API/runner processes.
 
+Apply migration 015 before enabling the scoped narration routes on a durable stack. Narration
+entries use the existing PostgreSQL runtime role and are append-only. Existing projector lag can
+delay character and spectator lines until their masked observations reach storage.
+
 Generated dialogue is off by default. To activate it, choose the endpoint/model and compatibility
 settings in [.env.example](../.env.example); see [the workflow](API_AND_WORKFLOWS.md#generated-dialogue-and-tactical-choices).
 API and runner must share configuration. The provider key remains server-only; there is no implicit

@@ -38,6 +38,14 @@ from cognition.engine import (
 )
 from cognition.knowledge import KNOWLEDGE_VERSION, search_known_lore
 from cognition.models import Observation, RelationshipVector, RuntimeAssignment, RuntimeKind
+from cognition.narration import (
+    InMemoryNarrations,
+    NarrationEntry,
+    NarrationRepository,
+    NarrationRequest,
+    build_narration,
+    require_narration_access,
+)
 from cognition.openai_compatible import (
     DELIBERATION_PROMPT,
     configured_deliberation,
@@ -48,6 +56,7 @@ from cognition.planning import GoapAction
 from cognition.postgres import PostgresMindRepository
 from cognition.postgres_control import PostgresControllers
 from cognition.postgres_decisions import PostgresCharacterProposals
+from cognition.postgres_narration import PostgresNarrations
 from cognition.projector import WorldEventProjector
 from cognition.reflexes import ReflexRule
 from cognition.relationships import (
@@ -509,6 +518,9 @@ def create_app(
         PostgresCharacterBindings(database_dsn) if database_dsn else InMemoryCharacterBindings()
     )
     app.extensions["character_bindings"] = character_bindings
+    narrations: NarrationRepository = (
+        PostgresNarrations(database_dsn) if database_dsn else InMemoryNarrations()
+    )
     mind_repository = PostgresMindRepository(database_dsn) if database_dsn else None
     if mind_repository is not None:
         for entity in simulation.entities.values():
@@ -2219,6 +2231,83 @@ def create_app(
                 ]
             }
         )
+
+    @app.after_request
+    def private_narration_cache(response):
+        if request.endpoint in {"create_narration", "get_narration"}:
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post("/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>/narration")
+    def create_narration(world_id: uuid.UUID, branch_id: uuid.UUID):
+        source = controller_snapshot()
+        require_world_access(world_id, source)
+        actor_id = current_actor_id()
+        options = NarrationRequest.model_validate(request.get_json())
+
+        def read() -> tuple[NarrationEntry, ...]:
+            observer_id = options.observer_entity_id
+            observations: tuple[Observation, ...] = ()
+            if observer_id is not None:
+                require_narration_access(
+                    source,
+                    world_id=world_id,
+                    branch_id=branch_id,
+                    run_id=options.run_id,
+                    actor_id=actor_id,
+                    audience=options.audience,
+                    observer_entity_id=observer_id,
+                )
+                scope = ControlScope(
+                    world_id=world_id,
+                    branch_id=branch_id,
+                    run_id=options.run_id,
+                    entity_id=observer_id,
+                )
+                observed = controller_minds(scope, actor_id).inspect(
+                    observer_id, branch_id=branch_id
+                )
+                observations = tuple(
+                    Observation.model_validate(row) for row in observed["observations"]
+                )
+            return build_narration(
+                source,
+                world_id=world_id,
+                branch_id=branch_id,
+                actor_id=actor_id,
+                request=options,
+                observations=observations,
+            )
+
+        entries = narrations.retain(source.read_reference(read), actor_id=actor_id)
+        next_event = entries[-1].source_event_id if entries else options.after_event_id
+        return jsonify(
+            {
+                "entries": [entry.model_dump(mode="json") for entry in entries],
+                "next_after_event_id": str(next_event) if next_event else None,
+            }
+        )
+
+    @app.get(
+        "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>/narration/<uuid:narration_id>"
+    )
+    def get_narration(world_id: uuid.UUID, branch_id: uuid.UUID, narration_id: uuid.UUID):
+        source = controller_snapshot()
+        require_world_access(world_id, source)
+        actor_id = current_actor_id()
+        entry = narrations.get(world_id, branch_id, narration_id, actor_id=actor_id)
+        if entry is None:
+            raise KeyError(narration_id)
+        require_narration_access(
+            source,
+            world_id=world_id,
+            branch_id=branch_id,
+            run_id=entry.run_id,
+            actor_id=actor_id,
+            audience=entry.audience,
+            observer_entity_id=entry.observer_entity_id,
+        )
+        return jsonify(entry.model_dump(mode="json"))
 
     def read_scene(
         world_id: uuid.UUID,

@@ -351,8 +351,10 @@ See [subjective NPC goals](API_AND_WORKFLOWS.md#belief-and-persona-driven-npc-go
   `tabletop.dialogue.speak`, with language/volume/perception and normal causal provenance.
   A due character can respond to scoped speech. The receipt records the observation and due time,
   and the committed command retains the source and conversation correlation across restart.
-- [ ] F6 — Add narration derived from committed facts with separate operator, spectator, and character
+- [x] F6 — Add narration derived from committed facts with separate operator, spectator, and character
   scopes. Persist source event references; generated prose must not create uncommitted world facts.
+  The narration API renders selected physical facts and preserves source event and viewpoint
+  observation lineage across restart. Actors can retrieve their own entries with current authority.
 - [ ] F7 — Detect repeated actions, conversation loops, and lack of progress; apply bounded recovery
   policies, preserve motive consistency, and expose failures to the operator.
 - [ ] F8 — Acceptance: small cast pursues goals, converses, responds to interruptions, and reaches a

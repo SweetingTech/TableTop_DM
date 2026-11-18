@@ -1,5 +1,7 @@
 # Changelog
 
+- Add operator, spectator, and character narration from committed events. Migration 015
+  retains each line with its source and enforces actor-scoped access across restart.
 - Rebuild a character's decision after a committed world change invalidates a queued action.
   Fence superseded attempts across workers and restarts, and pause when the retry budget is spent.
 - Carry a critically wounded character's withdrawal and healing plan across worker restart.
