@@ -308,7 +308,8 @@ An offscreen NPC retains its controller budget and current work. The kernel rech
 commit so a prepared detailed action waits if the party leaves first.
 The first independent review passed E2–E6 and reopened E1 for due-time and resource accounting.
 The E1 repair persists those fields, records phases replaced within one clock command in its
-immutable event, and preserves replay of older activity rows. The
+immutable event, and preserves replay of older activity rows. A routine also records the cause
+and time when it suspends work, and the reason for starting the replacement activity. The
 [Orderly task](http://jarvis:8080/b/tabletop-dm-autonomous-campaign/t/6/w/1) shows acceptance.
 Cross-zone routes, additional occupations and unrestricted goal generation are future scope.
 See [life plans](API_AND_WORKFLOWS.md#travel-sleep-and-social-obligations).

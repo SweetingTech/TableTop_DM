@@ -12,6 +12,7 @@ from domains.tabletop.activities import (
     ACTIVITIES,
     WEATHER,
     Activity,
+    ActivityCause,
     ActivityOutputs,
     ActivityRecords,
     eat_meal,
@@ -106,7 +107,13 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
 
 
 def new_phase(
-    state: BranchState, key: str, routine: dict, kind: Literal["WEED", "REST", "EAT"], now: int
+    state: BranchState,
+    key: str,
+    routine: dict,
+    kind: Literal["WEED", "REST", "EAT"],
+    now: int,
+    *,
+    cause: ActivityCause = "ROUTINE",
 ) -> Activity:
     routine["phase_sequence"] += 1
     activity = Activity(
@@ -122,6 +129,7 @@ def new_phase(
         updated_seconds=now,
         origin=position(state, key),
         routine_id=uuid.UUID(routine["routine_id"]),
+        cause=cause,
     )
     state.projections.setdefault(ACTIVITIES, {})[key] = activity.model_dump(mode="json")
     return activity
@@ -174,13 +182,17 @@ def advance_body(
                 activity = new_phase(
                     state, key, routine, "REST" if activity.kind == "WEED" else "WEED", cursor
                 )
-        if activity.kind != "EAT" and hunger >= routine["hunger_limit"]:
+        hungry = activity.kind != "EAT" and hunger >= routine["hunger_limit"]
+        tired = activity.kind == "WEED" and fatigue >= routine["fatigue_limit"]
+        if hungry or tired:
+            cause: ActivityCause = "HUNGER" if hungry else "FATIGUE"
+            interrupted = activity.suspend(cause, cursor)
+            records[interrupted.activity_id] = interrupted
             if activity.kind == "WEED":
-                routine["resume_work"] = activity.model_dump(mode="json")
-            activity = new_phase(state, key, routine, "EAT", cursor)
-        elif activity.kind == "WEED" and fatigue >= routine["fatigue_limit"]:
-            routine["resume_work"] = activity.model_dump(mode="json")
-            activity = new_phase(state, key, routine, "REST", cursor)
+                routine["resume_work"] = interrupted.model_dump(mode="json")
+            activity = new_phase(
+                state, key, routine, "EAT" if hungry else "REST", cursor, cause=cause
+            )
         reason = (
             "MOVED"
             if position(state, key) != activity.origin

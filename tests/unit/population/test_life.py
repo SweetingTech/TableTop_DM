@@ -168,10 +168,14 @@ def test_commute_daily_sleep_and_resumed_work_are_partition_invariant():
     assert results[0] == results[1]
 
 
-@pytest.mark.parametrize("life", [False, True])
-def test_meal_completion_records_actual_input_before_replacing_phase(life):
-    if life:
+@pytest.mark.parametrize("mode", ["simple", "scheduled", "planned"])
+def test_meal_completion_records_actual_input_before_replacing_phase(mode):
+    if mode != "simple":
         app, ids, body = living(sleep_start=1000, hunger_limit=60)
+        if mode == "planned":
+            from tests.unit.population.test_planning import configure_plan
+
+            configure_plan(app, ids, body, hunger_limit=60)
     else:
         app, ids, body, _, _, _ = runtime()
         send(
@@ -183,16 +187,32 @@ def test_meal_completion_records_actual_input_before_replacing_phase(life):
         )
     advance(app, ids, 1)
     work_id = state(app, ids).projections[ACTIVITIES][body]["activity_id"]
-    advance(app, ids, 62)
-    meal = state(app, ids).projections[ACTIVITIES][body]
+    receipt = advance(app, ids, 62)
+    current = state(app, ids)
+    meal = current.projections[ACTIVITIES][body]
     assert meal["kind"] == "EAT" and meal["due_seconds"] == 65
+    assert meal["cause"] == "HUNGER"
     assert meal["progress_seconds"] == 2 and meal["inputs"]["food"] == 0
-    assert state(app, ids).projections["tabletop.entities"][body]["inventory"]["food"] == 3
+    assert current.projections["tabletop.entities"][body]["inventory"]["food"] == 3
+    routine = current.projections[ROUTINES][body]
+    saved = (
+        routine["resume_work"]
+        if mode == "simple"
+        else next(row for row in routine["suspended"].values() if row["activity_id"] == work_id)
+    )
+    assert saved["status"] == "WAITING" and saved["reason"] == "HUNGER"
+    assert saved["due_seconds"] is None
+    assert saved["last_interruption"] == {"cause": "HUNGER", "at_seconds": 60}
+    paused = next(
+        row for row in receipt.event.payload["activity_records"] if row["activity_id"] == work_id
+    )
+    assert paused["last_interruption"] == saved["last_interruption"]
 
     receipt = advance(app, ids, 70)
     records = receipt.event.payload["activity_records"]
     finished = next(row for row in records if row["activity_id"] == meal["activity_id"])
     assert finished["due_seconds"] == 65 and finished["status"] == "COMPLETED"
+    assert finished["cause"] == "HUNGER"
     assert finished["inputs"]["food"] == 1 and finished["outputs"]["meals_eaten"] == 1
     assert finished["outputs"]["hunger_relieved"] == 65
     assert {"details", "origin", "task_key", "routine_id"}.isdisjoint(finished)
@@ -200,6 +220,7 @@ def test_meal_completion_records_actual_input_before_replacing_phase(life):
     assert current.projections["tabletop.entities"][body]["inventory"]["food"] == 2
     work = current.projections[ACTIVITIES][body]
     assert work["activity_id"] == work_id and work["due_seconds"] == 125
+    assert work["reason"] is None and work["last_interruption"] == saved["last_interruption"]
     assert work["outputs"]["weeded_units"] == 65
     assert app.replay(ids["branch_id"]).state_hash == current.state_hash
 

@@ -227,16 +227,38 @@ def test_meal_accounting_survives_restart_rollback_and_replacement(
     api_command(
         admin,
         base,
+        "tabletop.routine.configure",
+        {
+            "entity_id": body,
+            "expected_version": 1,
+            "work_seconds": 600,
+            "hunger_limit": 300,
+            "fatigue_limit": 1000,
+        },
+        "meal-routine",
+    )
+    interrupted = api_command(
+        admin,
+        base,
         "tabletop.clock.advance",
         {"expected_epoch": 1, "expected_seconds": 0, "to_seconds": 302},
         "meal-start",
     )
+    paused = next(
+        row
+        for row in interrupted["event"]["payload"]["activity_records"]
+        if row["entity_id"] == body and row["kind"] == "WEED"
+    )
+    assert paused["status"] == "WAITING" and paused["due_seconds"] is None
+    assert paused["reason"] == "HUNGER"
+    assert paused["last_interruption"] == {"cause": "HUNGER", "at_seconds": 300}
     restarted = create_app(artifact_root=tmp_path)
     restored = restarted.test_client()
     restored.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
     before = restored.get(clock_path(base)).get_json()
     pending = before["activities"][body]
     assert pending["kind"] == "EAT" and pending["due_seconds"] == 305
+    assert pending["cause"] == "HUNGER"
     assert pending["progress_seconds"] == 2 and pending["inputs"]["food"] == 0
 
     command = {
@@ -274,6 +296,7 @@ def test_meal_accounting_survives_restart_rollback_and_replacement(
         if item["activity_id"] == pending["activity_id"]
     )
     assert meal["status"] == "COMPLETED" and meal["due_seconds"] == 305
+    assert meal["cause"] == "HUNGER"
     assert meal["inputs"]["food"] == 1 and meal["outputs"]["meals_eaten"] == 1
     player_after_restart = restarted.test_client()
     session_cookie = player.get_cookie("ttdm_session")
@@ -288,7 +311,9 @@ def test_meal_accounting_survives_restart_rollback_and_replacement(
     assert replay["verified"]
     physical = replay["projections"]["tabletop.entities"][body]
     assert physical["inventory"]["food"] == 0 and physical["meals_eaten"] == 1
-    assert replay["projections"]["tabletop.activities"][body]["activity_id"] != meal["activity_id"]
+    work = replay["projections"]["tabletop.activities"][body]
+    assert work["activity_id"] == paused["activity_id"] and work["due_seconds"] == 605
+    assert work["reason"] is None and work["last_interruption"] == paused["last_interruption"]
 
 
 def test_source_binding_constraints_and_branch_isolation(integration_stack, monkeypatch, tmp_path):

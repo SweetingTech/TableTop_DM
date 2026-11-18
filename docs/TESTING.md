@@ -6,6 +6,10 @@ the same activity record after replacement, and survives a PostgreSQL restart an
 retry. The existing rest and life-plan cases compare physical state across whole and split
 clock advances. A player view must still reveal only the perceived activity summary.
 
+The meal interruption cases exercise simple routines, scheduled life and daily planning.
+They assert a waiting work record with its original ID, the hunger cause and exact simulated
+second, the same cause on the meal, and retained interruption history when work resumes.
+
 World due-work integration cases race two claims, recover an expired lease with a fresh runner,
 deny stale tokens, inject failed event publication, and verify the retry advances the clock
 once and replaces its due row. They also cover pause cancellation, actor scope and retry backoff.

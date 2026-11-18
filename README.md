@@ -172,6 +172,8 @@ detailed character actions while physically relevant. Its background work contin
 encounters, and it keeps the same controller and unfinished tasks when the party returns.
 Activities retain their next completion time while runnable and record actual resources consumed
 or produced. When a clock step replaces an activity, its accounting remains in the clock event.
+When a need or scheduled commitment pauses work, the activity retains why it paused after
+it resumes.
 Optional [daily planning](docs/API_AND_WORKFLOWS.md#daily-goal-planning) lets NPCs choose
 among prioritized work/rest goals with daily limits, seek shelter, recover from displacement or
 injury, and resume unfinished goals. No viewer or additional model provider is required.

@@ -14,6 +14,7 @@ from domains.tabletop.activities import (
     ACTIVITIES,
     WEATHER,
     Activity,
+    ActivityCause,
     ActivityOutputs,
     ActivityRecords,
     eat_meal,
@@ -300,13 +301,19 @@ def switch(
     now: int,
     duration: int,
     details: dict | None = None,
+    *,
+    cause: ActivityCause,
+    records: ActivityRecords,
 ) -> Activity:
     old = Activity.model_validate(state.projections[ACTIVITIES][key])
     if old.task_key == task and old.status != "COMPLETED":
         return old
     cache = row.setdefault("suspended", {})
-    if old.task_key and old.status != "COMPLETED" and old.kind not in {"SLEEP", "SOCIAL"}:
-        cache[old.task_key] = old.model_dump(mode="json")
+    if old.task_key and old.status in {"RUNNING", "WAITING"}:
+        interrupted = old.suspend(cause, now)
+        records[interrupted.activity_id] = interrupted
+        if old.kind not in {"SLEEP", "SOCIAL"}:
+            cache[old.task_key] = interrupted.model_dump(mode="json")
     raw = cache.pop(task, None)
     if (
         raw is not None
@@ -337,13 +344,24 @@ def switch(
                 "updated_seconds": now,
                 "origin": position(state, key),
                 "details": details or {},
+                "cause": cause,
             }
         )
     state.projections[ACTIVITIES][key] = activity.model_dump(mode="json")
     return activity
 
 
-def travel(state: BranchState, key: str, row: dict, task: str, goal: dict, now: int) -> Activity:
+def travel(
+    state: BranchState,
+    key: str,
+    row: dict,
+    task: str,
+    goal: dict,
+    now: int,
+    *,
+    cause: ActivityCause,
+    records: ActivityRecords,
+) -> Activity:
     old = Activity.model_validate(state.projections[ACTIVITIES][key])
     if old.task_key == "travel:" + task and old.status != "COMPLETED":
         return old
@@ -358,6 +376,8 @@ def travel(state: BranchState, key: str, row: dict, task: str, goal: dict, now: 
         now,
         len(path) * row["life"]["step_seconds"],
         {"goal": goal, "path": path, "index": 0, "expected": actual, "step_progress": 0},
+        cause=cause,
+        records=records,
     )
     return activity
 
@@ -408,7 +428,7 @@ def due_obligation(state: BranchState, key: str, now: int) -> tuple[str, dict] |
     )
 
 
-def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
+def prepare(state: BranchState, key: str, row: dict, now: int, records: ActivityRecords) -> None:
     body = state.projections["tabletop.entities"][key]
     old = Activity.model_validate(state.projections[ACTIVITIES][key])
     hp = int(body.get("hp", 0))
@@ -430,7 +450,7 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
     if row["life"].get("planning"):
         from population.planning import prepare_plan
 
-        prepare_plan(state, key, row, now)
+        prepare_plan(state, key, row, now, records)
         return
     reason = (
         "INCAPACITATED"
@@ -457,9 +477,12 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
     plan, actual = row["life"], position(state, key)
     due = due_obligation(state, key, now)
     night = sleeping(plan, now) and not (due and due[1]["wake_for_obligation"])
+    tired = int(body.get("fatigue", 0)) >= row["fatigue_limit"]
     if night:
         if actual != plan["home"]:
-            activity = travel(state, key, row, "home", plan["home"], now)
+            activity = travel(
+                state, key, row, "home", plan["home"], now, cause="SLEEP", records=records
+            )
         else:
             remaining = plan["sleep_seconds"] - (now - plan["sleep_start_seconds"]) % DAY
             activity = switch(
@@ -470,14 +493,35 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
                 "SLEEP",
                 now,
                 remaining,
+                cause="SLEEP",
+                records=records,
             )
     elif int(body.get("hunger", 0)) >= row["hunger_limit"]:
-        activity = switch(state, key, row, "meal", "EAT", now, row["meal_seconds"])
+        activity = switch(
+            state,
+            key,
+            row,
+            "meal",
+            "EAT",
+            now,
+            row["meal_seconds"],
+            cause="HUNGER",
+            records=records,
+        )
     elif due:
         identity, obligation = due
         task = f"social:{identity}:{obligation['occurrence']}"
         if actual != obligation["place"]:
-            activity = travel(state, key, row, task, obligation["place"], now)
+            activity = travel(
+                state,
+                key,
+                row,
+                task,
+                obligation["place"],
+                now,
+                cause="OBLIGATION",
+                records=records,
+            )
         else:
             activity = switch(
                 state,
@@ -488,17 +532,48 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
                 now,
                 obligation["duration_seconds"],
                 {"obligation_id": identity},
+                cause="OBLIGATION",
+                records=records,
             )
     elif actual != plan["workplace"]:
-        activity = travel(state, key, row, "work", plan["workplace"], now)
+        activity = travel(
+            state,
+            key,
+            row,
+            "work",
+            plan["workplace"],
+            now,
+            cause="COMMUTE",
+            records=records,
+        )
     elif (
-        int(body.get("fatigue", 0)) >= row["fatigue_limit"]
+        tired
         or (old.kind == "REST" and old.status != "COMPLETED")
         or (old.kind == "WEED" and old.status == "COMPLETED")
     ):
-        activity = switch(state, key, row, "rest", "REST", now, row["rest_seconds"])
+        activity = switch(
+            state,
+            key,
+            row,
+            "rest",
+            "REST",
+            now,
+            row["rest_seconds"],
+            cause="FATIGUE" if tired else "ROUTINE",
+            records=records,
+        )
     else:
-        activity = switch(state, key, row, "work", "WEED", now, row["work_seconds"])
+        activity = switch(
+            state,
+            key,
+            row,
+            "work",
+            "WEED",
+            now,
+            row["work_seconds"],
+            cause="ROUTINE",
+            records=records,
+        )
     reason = None
     if activity.kind == "TRAVEL":
         details = dict(activity.details)
@@ -721,7 +796,7 @@ def advance_life(
         finish_obligations(state, now)
         for key, row in sorted(routines.items()):
             if row["enabled"] and row.get("life"):
-                prepare(state, key, row, now)
+                prepare(state, key, row, now, records)
         for identity, obligation in sorted(state.projections.get(OBLIGATIONS, {}).items()):
             if obligation["status"] in {"COMPLETED", "MISSED", "CANCELLED"}:
                 continue
