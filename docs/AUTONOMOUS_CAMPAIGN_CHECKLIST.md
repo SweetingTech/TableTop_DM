@@ -414,10 +414,11 @@ rewind remain incomplete; these foundations do not close all F/G acceptance crit
   and durable branch locks serialize handoff with command fencing/commit. Managed requests carry
   the observed epoch; the server never stamps stale requests with new authority. Complete
   timeline/checkpoint integration remains I.
-- [ ] G6 — Add explicit leave/takeover plus presence timeout/reconnect handling. Disconnect policy
+- [x] G6 — Add explicit leave/takeover plus presence timeout/reconnect handling. Disconnect policy
   and campaign pause policy must be visible; identity stays the same while runtime changes.
-  Explicit Let character act / Pause autonomy / Take control and persistent disconnect behavior
-  are implemented. Automatic presence timeout/reconnect policy remains unimplemented.
+  Explicit Let character act / Pause autonomy / Take control retain their prior behavior. An
+  owner can opt into a presence timeout for the same character. The runner uses the normal
+  epoch fence at timeout, and the returning console offers takeover and shows the pause policy.
 - [ ] G7 — Authorize stand-in execution through explicit world/entity grants; do not impersonate a
   browser account or reuse its session. Record both execution authority and behavior-profile attribution.
   Dedicated AGENT execution, scoped grants, CHARACTER_POLICY ledger authorship, and pinned

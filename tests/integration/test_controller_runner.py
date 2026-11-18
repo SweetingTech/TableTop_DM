@@ -10,6 +10,7 @@ import tempfile
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from pathlib import Path
 
 import psycopg2
@@ -20,6 +21,7 @@ from psycopg2.extensions import make_dsn
 from cognition.projector import WorldEventProjector
 from infra.migrate import discover, migrate
 from kernel.api.app import create_app
+from kernel.control import ControllerState
 from kernel.database import transaction
 from kernel.errors import AuthorizationDenied
 from kernel.postgres_repository import PostgresCommandRepository
@@ -27,6 +29,7 @@ from tests.integration.test_clean_boot import _stop_runtime
 from tests.integration.test_speech_combat_behavior import prepare
 from tests.unit.kernel.test_character_binding_api import setup_bound_character
 from tests.unit.kernel.test_controller_handoff import (
+    enable_disconnect_policy,
     heal_from_nearby_body,
     prepare_wounded_body,
     queue_heal,
@@ -52,6 +55,75 @@ def setup(integration_stack, monkeypatch, tmp_path):
     admin.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = token
     scope = admin.post("/api/v2/worlds", json={"name": "Runner " + uuid.uuid4().hex}).get_json()
     return app, setup_bound_character(app, token, scope=scope)
+
+
+def test_durable_presence_restart_and_competing_timeout_workers(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (_, player, card, _, path, run, _) = setup(integration_stack, monkeypatch, tmp_path)
+    state = enable_disconnect_policy(player, path, run)
+    request = {"run_id": run, "expected_epoch": state.epoch}
+    response = player.post(path + "/control/presence", json=request)
+    assert response.status_code == 200, response.get_json()
+    renewed = ControllerState.model_validate(response.get_json()["state"])
+    assert renewed.epoch == state.epoch
+    assert renewed.presence_deadline_at > state.presence_deadline_at
+    for field, value in (
+        ("max_steps", 999),
+        ("presence_deadline_at", (renewed.presence_deadline_at + timedelta(hours=1)).isoformat()),
+    ):
+        with pytest.raises(psycopg2.errors.RaiseException, match="only renew owner presence"):
+            with transaction(
+                actor_id=state.owner_actor_id, dsn=integration_stack.database_url
+            ) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE cognition.controller_assignments "
+                        "SET payload=jsonb_set(payload,%s,%s::jsonb) WHERE entity_id=%s",
+                        ([field], json.dumps(value), card["entity_id"]),
+                    )
+    with pytest.raises(psycopg2.errors.CheckViolation) as invalid:
+        with transaction(actor_id=state.owner_actor_id, dsn=integration_stack.database_url) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE cognition.controller_assignments SET payload = "
+                    'payload || \'{"epoch":2,"disconnect_after_seconds":9999}\'::jsonb '
+                    "WHERE entity_id=%s",
+                    (card["entity_id"],),
+                )
+    assert invalid.value.diag.constraint_name == "controller_presence_shape"
+    restarted = create_app(artifact_root=tmp_path)
+    next_worker = restarted.extensions["controllers"]
+    assert next_worker.get(state.scope, state.owner_actor_id) == renewed
+    next_worker.expire_disconnected(state.presence_deadline_at)
+    assert next_worker.get(state.scope, state.owner_actor_id) == renewed
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        one = pool.submit(next_worker.expire_disconnected, renewed.presence_deadline_at)
+        two = pool.submit(
+            app.extensions["controllers"].expire_disconnected, renewed.presence_deadline_at
+        )
+        one.result(timeout=10)
+        two.result(timeout=10)
+    absent = next_worker.get(state.scope, state.owner_actor_id)
+    assert (absent.mode, absent.epoch, absent.handoff_reason) == (
+        "AUTONOMOUS",
+        2,
+        "DISCONNECT_TIMEOUT",
+    )
+    assert player.post(path + "/control/presence", json=request).status_code == 409
+    assert restarted.extensions["character_runner"].run_once() == 1
+    with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT actor_id FROM cognition.controller_handoffs "
+            "WHERE entity_id=%s AND idempotency_key='presence-timeout:1'",
+            (card["entity_id"],),
+        )
+        assert cursor.fetchall() == [(str(app.extensions["demo_ids"]["actor_id"]),)]
+        cursor.execute(
+            "SELECT actor_id FROM sim.command_log WHERE run_id=%s AND input_origin='STAND_IN'",
+            (run,),
+        )
+        assert cursor.fetchall() == [(str(state.executor_actor_id),)]
 
 
 def test_durable_handoff_unattended_commit_restart_and_takeover(
@@ -299,7 +371,8 @@ def test_private_control_rls_grants_and_handoff_rollback(integration_stack, monk
             )
 
 
-def test_upgrade_from_006_is_idempotent(integration_stack, tmp_path):
+@pytest.mark.parametrize("prior_count", [6, 17])
+def test_controller_upgrade_is_idempotent(integration_stack, tmp_path, prior_count):
     name = "ttdm_control_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
     maintenance = psycopg2.connect(integration_stack.admin_url)
@@ -310,10 +383,10 @@ def test_upgrade_from_006_is_idempotent(integration_stack, tmp_path):
         migrations = Path(__file__).resolve().parents[2] / "infra/sql/migrations"
         prior = tmp_path / "prior"
         prior.mkdir()
-        for path in sorted(migrations.glob("*.sql"))[:6]:
+        for path in sorted(migrations.glob("*.sql"))[:prior_count]:
             shutil.copy2(path, prior / path.name)
-        assert migrate(url, prior) == 6
-        assert migrate(url, migrations) == len(discover(migrations)) - 6
+        assert migrate(url, prior) == prior_count
+        assert migrate(url, migrations) == len(discover(migrations)) - prior_count
         assert migrate(url, migrations) == 0
     finally:
         with maintenance.cursor() as cursor:

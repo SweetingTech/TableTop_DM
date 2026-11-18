@@ -1,5 +1,7 @@
 # Changelog
 
+- Add opt-in disconnect timeout and explicit reconnect takeover in Character control. Migration
+  018 protects the private presence deadline and preserves the existing controller epoch fence.
 - Learn a private speech cadence from comparable committed human replies. Use it with a
   configured dialogue provider and deterministic fallback. Migration 017 preserves older evidence.
 - Record private stand-in, NPC policy, and NPC model decision origins through the existing

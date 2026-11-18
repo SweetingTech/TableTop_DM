@@ -43,6 +43,8 @@ and NPC decisions. Characters still act on their own perception.
 Apply migration 017 to retain how brief or elaborate a player's comparable replies tend to be.
 The stand-in uses that cadence in grounded replies, including when the configured provider is
 unavailable.
+Apply migration 018 to let a player opt into automatic handoff when their console disconnects.
+Choose a timeout in Character control. On return, **Take control** restores manual play.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.
