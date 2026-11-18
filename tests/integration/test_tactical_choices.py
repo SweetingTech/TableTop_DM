@@ -14,9 +14,61 @@ from infra.migrate import discover, migrate
 from kernel.api.app import create_app
 from tests.integration.test_speech_combat_behavior import prepare
 from tests.unit.kernel.test_speech_combat_behavior import provoke, setup_scene
-from tests.unit.kernel.test_tactical_choices import command, resources
+from tests.unit.kernel.test_tactical_choices import (
+    command,
+    establish_helper,
+    record_support_choices,
+    resources,
+)
 
 pytestmark = pytest.mark.integration
+
+
+def test_support_choice_survives_restart_and_executes_through_worker(
+    integration_stack, monkeypatch, tmp_path
+):
+    app, (admin, player, card, path, run, _, base) = prepare(
+        integration_stack, monkeypatch, tmp_path
+    )
+    helper = establish_helper(app, admin, base, card)
+    sources = record_support_choices(app, admin, player, base, card, helper, helper)
+    before = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
+    assert set(before["evidence_event_ids"]) == sources
+    restarted = create_app(artifact_root=tmp_path)
+    restored = restarted.test_client()
+    restored.set_cookie("ttdm_session", player.get_cookie("ttdm_session").value)
+    assert restored.get(path + "/choice-profile", query_string={"run_id": run}).get_json() == before
+    handoff = restored.post(
+        path + "/control",
+        json={
+            "run_id": run,
+            "mode": "AUTONOMOUS",
+            "expected_epoch": 0,
+            "max_steps": 1,
+            "idempotency_key": "return-same-help",
+        },
+    )
+    assert handoff.status_code == 200, handoff.get_json()
+    executor = handoff.get_json()["state"]["executor_actor_id"]
+    assert executor != before["player_actor_id"]
+    worker = create_app(artifact_root=tmp_path)
+    assert worker.extensions["character_runner"].run_once() == 1
+    with psycopg2.connect(integration_stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT command_type, input_origin, parameters->>'target_id', actor_id::text "
+            "FROM sim.command_log WHERE run_id=%s AND input_origin='STAND_IN'",
+            (run,),
+        )
+        assert cursor.fetchall() == [("tabletop.magic.invoke", "STAND_IN", helper, executor)]
+        cursor.execute(
+            "SELECT event_id::text, player_actor_id::text, payload->>'version' "
+            "FROM cognition.human_choice_evidence WHERE run_id=%s",
+            (run,),
+        )
+        assert set(cursor.fetchall()) == {
+            (event_id, before["player_actor_id"], "speech-combat-behavior-1.3.0")
+            for event_id in sources
+        }
 
 
 def test_guard_history_restart_and_real_worker(integration_stack, monkeypatch, tmp_path):
@@ -217,6 +269,58 @@ def test_009_upgrade_and_repeat_with_preserved_old_evidence(
                 ("speech-combat-behavior-1.0.0",),
                 ("speech-combat-behavior-1.1.0",),
             ]
+    finally:
+        with maintenance.cursor() as cursor:
+            cursor.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
+        maintenance.close()
+
+
+def test_020_upgrade_preserves_existing_choice_rows(integration_stack, monkeypatch, tmp_path):
+    name = "ttdm_support_upgrade_" + uuid.uuid4().hex
+    url = make_dsn(integration_stack.admin_url, dbname=name)
+    maintenance = psycopg2.connect(integration_stack.admin_url)
+    maintenance.autocommit = True
+    try:
+        with maintenance.cursor() as cursor:
+            cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        migrations = Path(__file__).resolve().parents[2] / "infra/sql/migrations"
+        prior = tmp_path / "prior_support"
+        prior.mkdir()
+        for path in sorted(migrations.glob("*.sql"))[:19]:
+            shutil.copy2(path, prior / path.name)
+        assert migrate(url, prior) == 19
+        monkeypatch.setenv("DATABASE_URL", url)
+        monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
+        app = create_app(artifact_root=tmp_path)
+        admin, player, card, _, _, target, base = setup_scene(app)
+        provoke(admin, base, target, card, "pre-support-threat")
+        assert (
+            command(player, base, card, "tabletop.combat.guard", {}, "old-guard").status_code == 200
+        )
+        with psycopg2.connect(url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT payload FROM cognition.human_choice_evidence")
+            old = cursor.fetchall()
+        assert len(old) == 1 and old[0][0]["version"] == "speech-combat-behavior-1.1.0"
+
+        assert migrate(url, migrations) == 1
+        assert migrate(url, migrations) == 0
+        helper = establish_helper(app, admin, base, card)
+        assert (
+            command(
+                player,
+                base,
+                card,
+                "tabletop.magic.invoke",
+                {"spell_id": "MEND", "target_id": helper},
+                "new-aid",
+            ).status_code
+            == 200
+        )
+        with psycopg2.connect(url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT payload FROM cognition.human_choice_evidence ORDER BY sequence")
+            rows = cursor.fetchall()
+        assert rows[:1] == old
+        assert len(rows) == 2 and rows[1][0]["version"] == "speech-combat-behavior-1.3.0"
     finally:
         with maintenance.cursor() as cursor:
             cursor.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))

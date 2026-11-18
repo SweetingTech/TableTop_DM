@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from cognition.behavior import MovementFrame, movement_frame
 from cognition.models import Observation
+from domains.tabletop.rules import DEFAULT_SPELLS, SPELLS
 from domains.tabletop.spatial.scene import PerceivedScene
 
 SPEECH = {
@@ -76,6 +77,9 @@ class ChoiceFrame(BaseModel):
     speech_ready: bool
     mana: int = Field(default=0, ge=0)
     guarded: bool = False
+    support_targets: tuple[uuid.UUID, ...] = Field(
+        default=(), max_length=2, exclude_if=lambda targets: not targets
+    )
 
     @property
     def signature(self) -> tuple:
@@ -102,6 +106,7 @@ def choice_frame(
     if spatial is None or body is None or body.position is None:
         return None
     attacks: dict[uuid.UUID, int] = {}
+    helpers: set[uuid.UUID] = set()
     own_speech = -1
     other_speech = own_speech
     # The trusted resolver supplies canonical source-event order, including clock ties.
@@ -110,6 +115,16 @@ def choice_frame(
         attacker_id = payload.get("attacker_id") or (
             payload.get("caster_id") if payload.get("effect") == "DAMAGE" else None
         )
+        if (
+            payload.get("spell_id") == "MEND"
+            and payload.get("effect") == "HEAL"
+            and payload.get("caster_id")
+            and str(payload.get("target_id")) == str(body.entity_id)
+        ):
+            try:
+                helpers.add(uuid.UUID(str(payload["caster_id"])))
+            except ValueError:
+                pass
         if str(payload.get("target_id")) == str(body.entity_id) and attacker_id:
             try:
                 attacker = uuid.UUID(str(attacker_id))
@@ -122,27 +137,46 @@ def choice_frame(
             else:
                 other_speech = index
     threats = []
+    support = []
+    mend = SPELLS["MEND"]
+    known_spells = body.known_spell_ids if body.known_spell_ids is not None else DEFAULT_SPELLS
+    can_mend = (body.mana or 0) >= mend.mana_cost and "MEND" in known_spells
     for row in scene.perceived_entities:
         if (
-            row.entity_id not in attacks
-            or row.entity_id == body.entity_id
+            row.entity_id == body.entity_id
             or row.position is None
+            or row.knowledge_state != "VISIBLE"
             or row.position.zone_id != body.position.zone_id
-            or row.status in {"DEAD", "DEFEATED", "UNCONSCIOUS", "INCAPACITATED"}
-            or (row.health is not None and row.health <= 0)
         ):
             continue
         distance = max(abs(row.position.x - body.position.x), abs(row.position.y - body.position.y))
-        threats.append(
-            KnownThreat(
-                entity_id=row.entity_id,
-                distance=distance,
-                wounded=bool(
-                    row.health is not None and row.max_health and row.health < row.max_health / 2
-                ),
-            )
-        )
+        if row.entity_id in attacks:
+            if row.status not in {"DEAD", "DEFEATED", "UNCONSCIOUS", "INCAPACITATED"} and (
+                row.health is None or row.health > 0
+            ):
+                threats.append(
+                    KnownThreat(
+                        entity_id=row.entity_id,
+                        distance=distance,
+                        wounded=bool(
+                            row.health is not None
+                            and row.max_health
+                            and row.health < row.max_health / 2
+                        ),
+                    )
+                )
+        elif (
+            can_mend
+            and row.entity_id in helpers
+            and distance <= mend.reach
+            and row.status != "DEAD"
+            and row.health is not None
+            and row.max_health is not None
+            and 0 <= row.health < row.max_health
+        ):
+            support.append((distance, row.entity_id))
     threats.sort(key=lambda row: (row.distance, str(row.entity_id)))
+    support.sort()
     latest_attack = max((attacks[row.entity_id] for row in threats), default=own_speech)
     return ChoiceFrame(
         spatial=spatial,
@@ -150,4 +184,5 @@ def choice_frame(
         speech_ready=bool(spatial.company and max(other_speech, latest_attack) > own_speech),
         mana=body.mana or 0,
         guarded=bool(body.guarded),
+        support_targets=tuple(target for _, target in support[:2]),
     )

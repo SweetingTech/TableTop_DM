@@ -1,5 +1,11 @@
 # Simulation-kernel contract
 
+Migration 020 extends the append-only human-choice rows with a bounded support option set derived
+from the body's validated observations and current scene. Source checks still require a matching
+accepted human action in a canonical live run. The normal typed MEND command rechecks control,
+visibility, range, health and mana before applying the result. Exact world, branch, run, player,
+character and body scope determines which samples can train the profile.
+
 Migration 019 stamps the resulting branch projection revision into new commands during their
 existing atomic transaction. Handoff records capture the active revision under the same branch
 fence. Character recap bounds are private. Recap is a perception-scoped read and leaves command,

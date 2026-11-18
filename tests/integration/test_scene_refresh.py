@@ -62,7 +62,7 @@ def test_scene_refresh_reads_external_projector_without_replacing_shared_cache(
     context = client.get(path + "/context")
     assert context.status_code == 200
     assert len(context.get_json()["action_candidates"]) == 4
-    assert context.get_json()["action_catalog_version"] == "tabletop-character-actions-1.4.0"
+    assert context.get_json()["action_catalog_version"] == "tabletop-character-actions-1.5.0"
     assert "external projector delivered" in str(context.get_json()["situation"]["experiences"])
     assert simulation.states.get(UUID(branch_id)).version == cursor["projection_version"]
 

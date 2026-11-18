@@ -26,7 +26,13 @@ from cognition.character_decisions import (
 )
 from cognition.choice_state import choice_frame, speech_cadence
 from cognition.choice_store import PostgresChoiceEvidence, persist_choice_bundle
-from cognition.choices import HumanChoiceEvidence, choice_profile, describe_options, option_key
+from cognition.choices import (
+    CHOICE_VERSION,
+    HumanChoiceEvidence,
+    choice_profile,
+    describe_options,
+    option_key,
+)
 from cognition.context import require_projected_experience
 from cognition.control import ControlConflict, HandoffRequest, InMemoryControllers, PresenceRequest
 from cognition.deliberation import DeliberationProvider
@@ -861,7 +867,7 @@ def create_app(
         else:
             state = choice_frame(scene, resolved.context.observations)
             selected = option_key(proposal.command_type, proposal.parameters)
-            if state and (state.threats or state.speech_ready):
+            if state and (state.threats or state.speech_ready or state.support_targets):
                 options = describe_options(resolved.context, state)
                 if selected in {option.key for option in options}:
                     cadence = (
@@ -871,7 +877,9 @@ def create_app(
                     )
                     choice = HumanChoiceEvidence(
                         version=(
-                            "speech-combat-behavior-1.2.0"
+                            CHOICE_VERSION
+                            if state.support_targets
+                            else "speech-combat-behavior-1.2.0"
                             if cadence is not None
                             else "speech-combat-behavior-1.1.0"
                         ),

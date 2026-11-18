@@ -101,6 +101,95 @@ def leave_and_run(app, player, path, run, key):
     return list(app.extensions["simulation"].events.values())[-1]
 
 
+def establish_helper(app, admin, base, card):
+    response = admin.post(
+        f"/api/v2/worlds/{base['world_id']}/entities",
+        json={
+            "world_id": base["world_id"],
+            "branch_id": base["branch_id"],
+            "name": "Traveling healer",
+            "entity_type": "NPC",
+            "controller_actor_id": str(app.extensions["demo_ids"]["actor_id"]),
+            "public_state": {"x": 0, "y": 1, "hp": 5, "max_hp": 12, "mana": 4},
+        },
+    )
+    assert response.status_code == 201, response.get_json()
+    helper = response.get_json()["entity_id"]
+    resources(app, admin, base, card["entity_id"])
+    response = command(
+        admin,
+        base,
+        {"entity_id": helper},
+        "tabletop.magic.invoke",
+        {"spell_id": "MEND", "target_id": card["entity_id"]},
+        "help-witnessed",
+    )
+    assert response.status_code == 200, response.get_json()
+    resources(app, admin, base, card["entity_id"])
+    return helper
+
+
+def record_support_choices(app, admin, player, base, card, helper, target):
+    sources = set()
+    for index in range(4):
+        response = command(
+            player,
+            base,
+            card,
+            "tabletop.magic.invoke",
+            {"spell_id": "MEND", "target_id": target},
+            f"heal-preference-{index}",
+        )
+        assert response.status_code == 200, response.get_json()
+        sources.add(response.get_json()["event"]["event_id"])
+        resources(app, admin, base, card["entity_id"])
+        if target == helper:
+            resources(app, admin, base, helper)
+    return sources
+
+
+def test_comparable_aid_choices_can_override_injured_self_priority(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, stranger, base = setup_scene(app)
+    helper = establish_helper(app, admin, base, card)
+    resources(app, admin, base, stranger)
+    before = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
+    own_key, help_key = f"spell:MEND:{card['entity_id']}", f"spell:MEND:{helper}"
+    assert before["action_scores"][own_key] > before["action_scores"][help_key]
+    assert f"spell:MEND:{stranger}" not in before["action_scores"]
+
+    sources = record_support_choices(app, admin, player, base, card, helper, helper)
+    resources(app, admin, base, card["entity_id"], hp=12)
+    healthy = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
+    assert healthy["comparable_count"] == 0
+    assert own_key not in healthy["action_scores"]
+    resources(app, admin, base, card["entity_id"])
+    profile = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
+    assert set(profile["evidence_event_ids"]) == sources
+    assert profile["action_scores"][help_key] > profile["action_scores"][own_key]
+    event = leave_and_run(app, player, path, run, "return-the-help")
+    assert event.event_type == "tabletop.magic.invoke" and event.payload["target_id"] == helper
+    assert set(app.extensions["simulation"].human_decision_evidence) == {
+        uuid.UUID(event_id) for event_id in sources
+    }
+
+
+def test_perceived_attacker_is_no_longer_a_support_target(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    admin, player, card, path, run, _, base = setup_scene(app)
+    helper = establish_helper(app, admin, base, card)
+    provoke(admin, base, helper, card, "helper-turns-hostile")
+    context = player.get(path + "/context", query_string={"run_id": run}).get_json()
+    assert any(
+        row["command_type"] == "tabletop.combat.attack" and row["parameters"]["target_id"] == helper
+        for row in context["action_candidates"]
+    )
+    assert not any(
+        row["parameters"].get("spell_id") == "MEND" and row["parameters"]["target_id"] == helper
+        for row in context["action_candidates"]
+    )
+
+
 def test_injured_body_heals_with_fixed_cost_and_power_through_runner(monkeypatch, tmp_path):
     app = _app(monkeypatch, tmp_path)
     admin, player, card, path, run, target, base = setup_scene(app)

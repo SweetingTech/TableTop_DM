@@ -1,5 +1,7 @@
 # Changelog
 
+- Learn whether the player favors self-healing or helping a character who previously mended
+  them. Migration 020 preserves earlier choice evidence and records comparable alternatives.
 - Show a private recap of the character's witnessed experience between handoff and takeover.
   Migration 019 records exact committed revision bounds for new handoffs.
 - Add opt-in disconnect timeout and explicit reconnect takeover in Character control. Migration

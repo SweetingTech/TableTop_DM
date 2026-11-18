@@ -14,7 +14,7 @@ from domains.tabletop.spatial import MoveRequest, command_definition
 from domains.tabletop.spatial.scene import PerceivedScene
 from kernel.contracts import Actor, BranchKind
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.4.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.5.0"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
 
 
@@ -104,19 +104,30 @@ def character_action_candidates(
                 for index, threat in enumerate(frame.threats)
                 if threat.distance <= 6 and "ARCANE_BOLT" in spells
             )
-            if (
-                "MEND" in spells
-                and body.health is not None
-                and body.max_health
-                and body.health < body.max_health
-            ):
-                actions += (
-                    DecisionAction(
-                        action="Try to mend my wounds",
-                        command_type="tabletop.magic.invoke",
-                        parameters=InvokeRequest(
-                            spell_id="MEND", target_id=body.entity_id
-                        ).model_dump(mode="json"),
+    if frame is not None and (frame.threats or frame.support_targets):
+        spells = body.known_spell_ids if body.known_spell_ids is not None else DEFAULT_SPELLS
+        if (
+            frame.mana >= 2
+            and "MEND" in spells
+            and body.health is not None
+            and body.max_health
+            and body.health < body.max_health
+        ):
+            actions += (
+                DecisionAction(
+                    action="Try to mend my wounds",
+                    command_type="tabletop.magic.invoke",
+                    parameters=InvokeRequest(spell_id="MEND", target_id=body.entity_id).model_dump(
+                        mode="json"
                     ),
-                )
+                ),
+            )
+        actions += tuple(
+            DecisionAction(
+                action=f"Try to mend the wounds of past helper {index + 1}",
+                command_type="tabletop.magic.invoke",
+                parameters=InvokeRequest(spell_id="MEND", target_id=target).model_dump(mode="json"),
+            )
+            for index, target in enumerate(frame.support_targets)
+        )
     return actions

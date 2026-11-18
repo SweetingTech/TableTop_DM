@@ -55,6 +55,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
             ("017_speech_cadence_evidence.sql",),
             ("018_controller_presence.sql",),
             ("019_character_recap_boundaries.sql",),
+            ("020_contextual_support_evidence.sql",),
         ]
         cursor.execute(
             """

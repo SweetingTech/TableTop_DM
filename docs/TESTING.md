@@ -313,6 +313,10 @@ rollback, idempotency, source guards, forced RLS, append-only privilege/trigger 
 surviving application recreation. `test_player_behavior_isolated.py` demonstrates five human moves
 through the built console, then a matching autonomous move without training on that move.
 
+The tactical choice lanes verify human self-heal versus assistance priority, exclusion of
+strangers and former helpers who attack, comparable opportunities, restart stability, and
+distinct human preference versus machine execution attribution for the resulting MEND.
+
 Controller/runner coverage includes explicit leave/pause/takeover, missing/stale human epochs,
 captured old agent authority, two-worker idempotency, atomic canonical action and step budget,
 paused-run and invalid-action handling, private RLS/grant revocation, handoff rollback, migration

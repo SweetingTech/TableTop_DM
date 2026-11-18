@@ -2,6 +2,11 @@
 
 ## System shape
 
+The character action catalog offers MEND for a currently visible, wounded body in reach that the
+character observed healing them. A witnessed attack against the character removes that target
+from the support choices. The private choice profile compares human actions with comparable
+healing options and retains the source event IDs and confidence.
+
 Character recap uses private branch revision boundaries captured under the normal handoff lock.
 New command ledger rows carry the exact committed revision. A recap matches same-run commands
 within the most recent autonomous interval and renders only their validated frozen observations.
