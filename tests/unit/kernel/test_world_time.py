@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
+from domains.tabletop.activities import ACTIVITIES
 from domains.tabletop.world_time import read_clock
 from kernel.application import SimulationApplication
 from kernel.contracts import ActorKind, CommandProposal
@@ -155,6 +156,32 @@ def test_trial_clock_is_independent_and_not_automatically_driven():
     assert read_clock(app.states.get(ids["branch_id"])).seconds == 0
     assert read_clock(app.states.get(trial.branch_id)).seconds == 5
     assert WorldRunner(lambda: app).run_once(NOW + timedelta(days=1)) == 0
+
+
+def test_legacy_activity_resumes_and_records_only_new_work():
+    app, ids = reference()
+    configure(app, ids)
+    branch = app.states.get(ids["branch_id"])
+    body = next(iter(branch.projections["tabletop.entities"]))
+    send(
+        app,
+        ids,
+        "tabletop.activity.start",
+        {"entity_id": body, "kind": "WEED", "duration_seconds": 10},
+        "legacy-weed",
+    )
+    advance(app, ids, 4)
+    legacy = app.states.get(ids["branch_id"]).projections[ACTIVITIES][body]
+    assert legacy["due_seconds"] == 10 and legacy["outputs"]["weeded_units"] == 4
+    for field in ("due_seconds", "inputs", "outputs"):
+        legacy.pop(field)
+
+    advance(app, ids, 15)
+    branch = app.states.get(ids["branch_id"])
+    finished = branch.projections[ACTIVITIES][body]
+    assert finished["status"] == "COMPLETED" and finished["due_seconds"] == 10
+    assert finished["progress_seconds"] == 10 and finished["outputs"]["weeded_units"] == 6
+    assert branch.projections["tabletop.entities"][body]["weeded_units"] == 10
 
 
 def api_command(admin, base, command, parameters, key):

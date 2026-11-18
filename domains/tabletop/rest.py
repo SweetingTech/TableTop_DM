@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from domains.tabletop.action_time import UNTIMED_COMMANDS, wait_seconds
-from domains.tabletop.activities import ACTIVITIES, Activity, position, seconds
+from domains.tabletop.activities import ACTIVITIES, Activity, ActivityOutputs, position, seconds
 from domains.tabletop.rules import incapacitated
 from kernel.command_bus import CommandDefinition, CommandHandler
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
@@ -140,6 +140,7 @@ def recover(activity: Activity, body: dict, start: int, until: int, *, allowed: 
         return activity.model_copy(update={"details": details})
     if row.updated_seconds != start:
         row = RestProgress(updated_seconds=start)
+    previous_hp, previous_mana = int(body["hp"]), int(body.get("mana", 0))
     elapsed = row.elapsed_seconds + until - start
     updates = {"elapsed_seconds": elapsed, "updated_seconds": until}
     maximum = max(0, int(body.get("max_hp", 0)))
@@ -160,7 +161,12 @@ def recover(activity: Activity, body: dict, start: int, until: int, *, allowed: 
             body["last_long_rest_seconds"] = completed
         updates["long_awarded"] = True
     details["recovery"] = row.model_copy(update=updates).model_dump(mode="json")
-    return activity.model_copy(update={"details": details})
+    return activity.model_copy(update={"details": details}).account(
+        ActivityOutputs(
+            hp_restored=int(body["hp"]) - previous_hp,
+            mana_restored=int(body.get("mana", 0)) - previous_mana,
+        )
+    )
 
 
 def boundaries(state: BranchState, start: int, until: int) -> tuple[int, ...]:
@@ -174,8 +180,8 @@ def boundaries(state: BranchState, start: int, until: int) -> tuple[int, ...]:
         for threshold in (SHORT_SECONDS, LONG_SECONDS):
             if elapsed < threshold:
                 points.add(start + threshold - elapsed)
-        if activity.routine_id is None:
-            points.add(start + activity.duration_seconds - activity.progress_seconds)
+        if activity.routine_id is None and activity.due_seconds is not None:
+            points.add(activity.due_seconds)
     return tuple(sorted(point for point in points if start < point <= until))
 
 
@@ -205,10 +211,12 @@ def with_rest_interruptions(handler: CommandHandler) -> CommandHandler:
             activity = Activity.model_validate(raw)
             details = dict(activity.details)
             details.pop("recovery", None)
-            changes: dict = {"details": details}
+            activity = activity.model_copy(update={"details": details})
             if activity.details.get("rest_kind") and activity.status in {"RUNNING", "WAITING"}:
-                changes.update(status="CANCELLED", reason="DANGER")
-            updated = activity.model_copy(update=changes).model_dump(mode="json")
+                activity = activity.evolve(
+                    status="CANCELLED", reason="DANGER", updated_seconds=seconds(after)
+                )
+            updated = activity.model_dump(mode="json")
             if updated != raw:
                 deltas.append(
                     StateDelta(

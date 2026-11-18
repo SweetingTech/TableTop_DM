@@ -502,6 +502,13 @@ does not apply migrations to a running user database or deploy/restart the live 
 
 ## Local NPC life plans
 
+Activity due times and resource accounting use the existing clock projection and command ledger.
+Keep the application and world runner on the same build when upgrading. Migration 014 remains
+the current storage baseline. Existing activity rows gain timing and accounting as they advance.
+Use the branch clock endpoint for current progress and the restricted clock event for a phase
+that was replaced within one step. Health checks validate service readiness, while a real clock
+advance verifies activity behavior.
+
 Optional [daily planning](API_AND_WORKFLOWS.md#daily-goal-planning) shares schema 011 and the same
 world-runner. Inspect the private routine's `planner.reason`, `spent`, `day` and `blocked` metadata
 when a person changes goals. Needs, rain, injury, exhausted daily quotas and blocked routes can

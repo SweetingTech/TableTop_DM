@@ -10,7 +10,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.tabletop.action_time import wait_seconds
-from domains.tabletop.activities import ACTIVITIES, WEATHER, Activity, position, seconds
+from domains.tabletop.activities import (
+    ACTIVITIES,
+    WEATHER,
+    Activity,
+    ActivityOutputs,
+    ActivityRecords,
+    eat_meal,
+    position,
+    seconds,
+)
 from domains.tabletop.rules import incapacitated
 from domains.tabletop.spatial import MoveRequest, move_entity
 from kernel.command_bus import CommandDefinition, CommandHandler
@@ -306,13 +315,11 @@ def switch(
     ):
         raw = None
     if raw is not None:
-        activity = Activity.model_validate(raw).model_copy(
-            update={
-                "updated_seconds": now,
-                "origin": position(state, key) if kind == "EAT" else raw["origin"],
-                "status": "RUNNING",
-                "reason": None,
-            }
+        activity = Activity.model_validate(raw).evolve(
+            updated_seconds=now,
+            origin=position(state, key) if kind == "EAT" else raw["origin"],
+            status="RUNNING",
+            reason=None,
         )
     else:
         row["phase_sequence"] += 1
@@ -442,9 +449,10 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
         if reason in {"DANGER", "MOVED"} or hp <= 0:
             body["asleep"] = False
             row["was_asleep"] = False
-        state.projections[ACTIVITIES][key] = old.model_copy(
-            update={"updated_seconds": now, "status": "WAITING", "reason": reason}
-        ).model_dump(mode="json")
+        if old.status != "COMPLETED":
+            state.projections[ACTIVITIES][key] = old.evolve(
+                updated_seconds=now, status="WAITING", reason=reason
+            ).model_dump(mode="json")
         return
     plan, actual = row["life"], position(state, key)
     due = due_obligation(state, key, now)
@@ -520,12 +528,10 @@ def prepare(state: BranchState, key: str, row: dict, now: int) -> None:
         reason = "NO_FOOD"
     body["asleep"] = activity.kind == "SLEEP"
     row["was_asleep"] = body["asleep"]
-    state.projections[ACTIVITIES][key] = activity.model_copy(
-        update={
-            "updated_seconds": now,
-            "status": "WAITING" if reason else "RUNNING",
-            "reason": reason,
-        }
+    state.projections[ACTIVITIES][key] = activity.evolve(
+        updated_seconds=now,
+        status="WAITING" if reason else "RUNNING",
+        reason=reason,
     ).model_dump(mode="json")
 
 
@@ -612,12 +618,12 @@ def next_boundary(state: BranchState, now: int, until: int) -> int:
         activity = Activity.model_validate(state.projections[ACTIVITIES][key])
         if activity.kind != "SLEEP" and int(body.get("hunger", 0)) < row["hunger_limit"]:
             candidates.append(now + row["hunger_limit"] - int(body.get("hunger", 0)))
-        if activity.status == "WAITING":
+        if activity.status != "RUNNING":
             continue
         if activity.kind == "TRAVEL":
             candidates.append(now + plan["step_seconds"] - activity.details["step_progress"])
-        elif activity.kind in {"WEED", "REST", "EAT", "SLEEP"}:
-            candidates.append(now + activity.duration_seconds - activity.progress_seconds)
+        if activity.due_seconds is not None:
+            candidates.append(activity.due_seconds)
         if (
             activity.kind == "WEED" or (plan.get("planning") and activity.kind == "TRAVEL")
         ) and int(body.get("fatigue", 0)) < row["fatigue_limit"]:
@@ -625,32 +631,37 @@ def next_boundary(state: BranchState, now: int, until: int) -> int:
     return min(value for value in candidates if value > now)
 
 
-def progress_body(state: BranchState, key: str, row: dict, until: int) -> None:
+def progress_body(
+    state: BranchState, key: str, row: dict, until: int, records: ActivityRecords
+) -> None:
     from domains.tabletop.rest import recover
 
     body = state.projections["tabletop.entities"][key]
     activity = Activity.model_validate(state.projections[ACTIVITIES][key])
     elapsed = until - row["updated_seconds"]
     activity = recover(
-        activity, body, row["updated_seconds"], until, allowed=activity.status != "WAITING"
+        activity, body, row["updated_seconds"], until, allowed=activity.status == "RUNNING"
     )
     if int(body.get("hp", 0)) > 0:
         body["hunger"] = int(body.get("hunger", 0)) + elapsed
-    if activity.status != "WAITING" and int(body.get("hp", 0)) > 0:
+    if activity.status == "RUNNING" and int(body.get("hp", 0)) > 0:
         progress = activity.progress_seconds + elapsed
         if activity.kind in {"WEED", "TRAVEL"}:
             body["fatigue"] = int(body.get("fatigue", 0)) + elapsed
         elif activity.kind in {"REST", "SLEEP"}:
-            body["fatigue"] = max(
-                0, int(body.get("fatigue", 0)) - elapsed * (2 if activity.kind == "SLEEP" else 1)
-            )
+            fatigue = int(body.get("fatigue", 0))
+            body["fatigue"] = max(0, fatigue - elapsed * (2 if activity.kind == "SLEEP" else 1))
+            activity = activity.account(ActivityOutputs(fatigue_relieved=fatigue - body["fatigue"]))
         if activity.kind == "WEED":
             body["weeded_units"] = int(body.get("weeded_units", 0)) + elapsed
+            activity = activity.account(ActivityOutputs(weeded_units=elapsed))
         elif activity.kind == "SLEEP":
             body["sleep_seconds"] = int(body.get("sleep_seconds", 0)) + elapsed
+            activity = activity.account(ActivityOutputs(sleep_seconds=elapsed))
         elif activity.kind == "SOCIAL":
             obligation = state.projections[OBLIGATIONS][activity.details["obligation_id"]]
             progress = obligation["progress_seconds"]
+            activity = activity.account(ActivityOutputs(social_seconds=elapsed))
         elif activity.kind == "TRAVEL":
             details = dict(activity.details)
             details["step_progress"] += elapsed
@@ -667,6 +678,7 @@ def progress_body(state: BranchState, key: str, row: dict, until: int) -> None:
                     index=details["index"] + 1, expected=position(state, key), step_progress=0
                 )
                 body["travel_steps"] = int(body.get("travel_steps", 0)) + 1
+                activity = activity.account(ActivityOutputs(travel_steps=1))
             activity = activity.model_copy(update={"details": details})
         complete = progress >= activity.duration_seconds
         if activity.details.get("planning_goal") and activity.kind in {"WEED", "REST"}:
@@ -674,21 +686,24 @@ def progress_body(state: BranchState, key: str, row: dict, until: int) -> None:
             planner = row["planner"]
             planner["spent"][goal] = planner["spent"].get(goal, 0) + elapsed
         if complete and activity.kind == "EAT":
-            inventory = dict(body.get("inventory", {}))
-            inventory["food"] = int(inventory["food"]) - 1
-            body["inventory"] = inventory
-            body["hunger"] = max(0, int(body["hunger"]) - 14400)
-            body["meals_eaten"] = int(body.get("meals_eaten", 0)) + 1
-        activity = activity.model_copy(
-            update={"progress_seconds": progress, "status": "COMPLETED" if complete else "RUNNING"}
+            activity = eat_meal(activity, body)
+        activity = activity.evolve(
+            updated_seconds=until,
+            progress_seconds=progress,
+            status="COMPLETED" if complete else "RUNNING",
         )
-    state.projections[ACTIVITIES][key] = activity.model_copy(
-        update={"updated_seconds": until}
-    ).model_dump(mode="json")
+        records[activity.activity_id] = activity
+    elif activity.status == "WAITING":
+        activity = activity.evolve(updated_seconds=until)
+        if activity.activity_id in records:
+            records[activity.activity_id] = activity
+    state.projections[ACTIVITIES][key] = activity.model_dump(mode="json")
     row["updated_seconds"] = until
 
 
-def advance_life(state: BranchState, until: int, start: int | None = None) -> None:
+def advance_life(
+    state: BranchState, until: int, records: ActivityRecords, start: int | None = None
+) -> None:
     from population.routines import advance_body, reconcile_relevance
 
     routines = state.projections.get("tabletop.routines", {})
@@ -721,13 +736,17 @@ def advance_life(state: BranchState, until: int, start: int | None = None) -> No
                     and activity["kind"] == "SOCIAL"
                     and activity["details"]["obligation_id"] == identity
                 ):
-                    activity.update(
-                        status="RUNNING" if present else "WAITING",
-                        reason=None
-                        if present
-                        else "NOT_STARTED"
-                        if now < obligation["starts_seconds"]
-                        else "PARTNER_UNAVAILABLE",
+                    state.projections[ACTIVITIES][key] = (
+                        Activity.model_validate(activity)
+                        .evolve(
+                            status="RUNNING" if present else "WAITING",
+                            reason=None
+                            if present
+                            else "NOT_STARTED"
+                            if now < obligation["starts_seconds"]
+                            else "PARTNER_UNAVAILABLE",
+                        )
+                        .model_dump(mode="json")
                     )
         reconcile_relevance(state, now)
         if now == until:
@@ -742,7 +761,7 @@ def advance_life(state: BranchState, until: int, start: int | None = None) -> No
         for key, row in sorted(routines.items()):
             if row["enabled"]:
                 if row.get("life"):
-                    progress_body(state, key, row, stop)
+                    progress_body(state, key, row, stop, records)
                 else:
-                    advance_body(state, key, row, stop)
+                    advance_body(state, key, row, stop, records)
         now = stop

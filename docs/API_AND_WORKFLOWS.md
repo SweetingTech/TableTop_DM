@@ -1075,6 +1075,19 @@ the accepted utterance for replay. Spontaneous conversations and narrative/world
 
 ## World time and offscreen activities
 
+World managers can inspect typed activity rows in the branch clock response. Each row includes
+`started_seconds`, `due_seconds`, `updated_seconds`, `progress_seconds`, `entity_id`, `status`,
+`reason`, `inputs`, and `outputs`. The clock stores an expected completion second for runnable
+work, a null due time during an interruption or cancellation, and the actual finish second
+after completion. Inputs and outputs are cumulative for that activity ID. Food is recorded
+only when a meal completes. Rest records actual recoveries within the body's limits.
+
+When one advance replaces a phase, the clock command result and its restricted event include
+that phase's last record in `activity_records`. Earlier records for the same ID describe earlier
+cumulative totals. Player scenes still carry the perceived activity summary. Older stored
+rows acquire timing and accounting fields as the kernel next updates them. The kernel does not
+estimate historical resource transfers.
+
 The durable world runner supplies a lease token to `tabletop.clock.tick`. The assigned executor
 can submit a due tick without a token while no worker holds an active lease. A previous token
 cannot authorize new work after reassignment, expiry or completion. A committed idempotency key

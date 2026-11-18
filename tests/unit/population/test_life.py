@@ -168,6 +168,42 @@ def test_commute_daily_sleep_and_resumed_work_are_partition_invariant():
     assert results[0] == results[1]
 
 
+@pytest.mark.parametrize("life", [False, True])
+def test_meal_completion_records_actual_input_before_replacing_phase(life):
+    if life:
+        app, ids, body = living(sleep_start=1000, hunger_limit=60)
+    else:
+        app, ids, body, _, _, _ = runtime()
+        send(
+            app,
+            ids,
+            "tabletop.routine.configure",
+            {"entity_id": body, "expected_version": 1, "work_seconds": 120, "hunger_limit": 60},
+            "meal-routine",
+        )
+    advance(app, ids, 1)
+    work_id = state(app, ids).projections[ACTIVITIES][body]["activity_id"]
+    advance(app, ids, 62)
+    meal = state(app, ids).projections[ACTIVITIES][body]
+    assert meal["kind"] == "EAT" and meal["due_seconds"] == 65
+    assert meal["progress_seconds"] == 2 and meal["inputs"]["food"] == 0
+    assert state(app, ids).projections["tabletop.entities"][body]["inventory"]["food"] == 3
+
+    receipt = advance(app, ids, 70)
+    records = receipt.event.payload["activity_records"]
+    finished = next(row for row in records if row["activity_id"] == meal["activity_id"])
+    assert finished["due_seconds"] == 65 and finished["status"] == "COMPLETED"
+    assert finished["inputs"]["food"] == 1 and finished["outputs"]["meals_eaten"] == 1
+    assert finished["outputs"]["hunger_relieved"] == 65
+    assert {"details", "origin", "task_key", "routine_id"}.isdisjoint(finished)
+    current = state(app, ids)
+    assert current.projections["tabletop.entities"][body]["inventory"]["food"] == 2
+    work = current.projections[ACTIVITIES][body]
+    assert work["activity_id"] == work_id and work["due_seconds"] == 125
+    assert work["outputs"]["weeded_units"] == 65
+    assert app.replay(ids["branch_id"]).state_hash == current.state_hash
+
+
 def test_route_uses_manual_step_collisions_and_reroutes_without_teleporting():
     app, ids, body = living()
     current = state(app, ids)

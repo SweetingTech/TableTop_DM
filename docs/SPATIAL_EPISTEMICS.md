@@ -32,6 +32,10 @@ Physical witnesses are never added to `visible_to` merely because they heard or 
 They receive an observation derived from a frozen `PerceptionGrant`; this prevents a partial
 witness from downloading unmasked canonical payload.
 
+An inspected activity can show its visible progress and physical result in a player scene.
+Scheduled completion, per-activity resource accounts, and archived phase records stay outside
+the perceived scene. Clock events use the restricted operator audience.
+
 `observed_by` remains a compatibility summary of unique controller actors. Cognition does not use
 it as its gate because one actor may control several bodies in different locations.
 

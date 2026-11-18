@@ -52,13 +52,12 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
     if unavailable or busy:
         if int(body.get("hp", 0)) <= 0:
             body["asleep"] = row["was_asleep"] = False
-        state.projections[ACTIVITIES][key] = old.model_copy(
-            update={
-                "updated_seconds": now,
-                "status": "WAITING",
-                "reason": "INCAPACITATED" if unavailable else "ACTION_BUSY",
-            }
-        ).model_dump(mode="json")
+        if old.status != "COMPLETED":
+            state.projections[ACTIVITIES][key] = old.evolve(
+                updated_seconds=now,
+                status="WAITING",
+                reason="INCAPACITATED" if unavailable else "ACTION_BUSY",
+            ).model_dump(mode="json")
         return
 
     due = due_obligation(state, key, now)
@@ -228,6 +227,6 @@ def prepare_plan(state: BranchState, key: str, row: dict, now: int) -> None:
     row["suspended"] = {
         task: raw for task, raw in row["suspended"].items() if task in allowed_cache
     }
-    state.projections[ACTIVITIES][key] = activity.model_copy(
-        update={"updated_seconds": now}
-    ).model_dump(mode="json")
+    state.projections[ACTIVITIES][key] = activity.evolve(updated_seconds=now).model_dump(
+        mode="json"
+    )

@@ -191,9 +191,10 @@ Use the game-level controls to:
 - **Pause** — pause the hosted game status;
 - **Complete** — mark the hosted game complete.
 
-These game/session status controls are different from simulation time controls. A visual or
-tactical camera does not freeze the world; use an explicit hard-pause mechanism when one is
-available for the active game mode.
+Game and session status controls manage the hosted session. An enabled world clock uses its
+own pause and resume controls. Use those controls when offscreen work and the rest of the
+simulation need to stop. Camera changes leave the world clock running.
+See [world time and offscreen activities](API_AND_WORKFLOWS.md#world-time-and-offscreen-activities).
 
 ### 5. Use DM visibility responsibly
 
@@ -201,6 +202,9 @@ DM tools can inspect canonical state and hidden information that players cannot 
 views remain perception scoped: a player's map and observation feed reveal only what their selected
 character could perceive. When validating split-party play, use a player's embodied viewpoint
 rather than assuming the canonical DM view matches the player's knowledge.
+
+The branch clock inspection route shows an activity's due time, interruptions, and resource
+accounting. The player's scene shows the physical activity their character can inspect.
 
 ## Part 3: Set up and operate as a Player
 
@@ -259,8 +263,9 @@ Under **Saved characters**, select a character to inspect:
 - Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma;
 - current status such as `ALIVE`, `DEAD`, `MISSING`, or `RETIRED`.
 
-Use **Save status** after changing the editable status or hit-point fields. Deleting a character is
-permanent and requires browser confirmation.
+Use **Save status** for editable status or hit points on an unbound card. Once the card has a body,
+the live sheet follows the body's canonical values and refreshes while open. Use authorized
+game actions for live changes. Deleting a character requires browser confirmation.
 
 ### 4. Join and play a hosted game
 
@@ -270,9 +275,14 @@ permanent and requires browser confirmation.
 4. Select the authorized character viewpoint.
 5. Use normal prose for in-world speech and slash commands for typed actions such as movement.
 
-The player cannot select or act through another player's character or a DM-controlled NPC. The map
-and event feed are also knowledge scoped: entering a room later does not reveal conversations that
-happened before the character arrived.
+Use **Let character act** to give an eligible character to the configured runner, **Pause autonomy**
+to suspend it, and **Take control** to resume playing that character. The runner uses the card,
+the character's own experience, and comparable recorded choices. The character continues to
+perceive the world from its own body through the handoff.
+
+The console enforces the player's authorized characters. The map and event feed follow that
+character's perception, including when the character first entered a room.
+See [controller handoff and runner](API_AND_WORKFLOWS.md#controller-handoff-and-runner).
 
 ## Settings available to every account
 
