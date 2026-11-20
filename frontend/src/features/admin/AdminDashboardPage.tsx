@@ -10,7 +10,7 @@ const emptyProfile = {
   display_name: "",
   legal_name: "",
   email: "",
-  date_of_birth: "",
+  date_of_birth: null,
   pronouns: "",
   timezone: "UTC",
   locale: "en-US",

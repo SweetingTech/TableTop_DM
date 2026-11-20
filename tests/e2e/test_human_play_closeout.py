@@ -132,6 +132,21 @@ def test_two_cookie_clients_invite_act_resynchronize_switch_and_survive_restart(
 
     try:
         _, dm = page_for(admin)
+        dm.goto(base + "/v2/admin", wait_until="networkidle")
+        dm.get_by_role("button", name="Add account", exact=True).click()
+        creation = dm.locator("form.management-form")
+        creation.get_by_label("Display name", exact=True).fill("New player from the browser")
+        creation.get_by_label("Username", exact=True).fill("new-player-" + uuid.uuid4().hex[:8])
+        creation.get_by_label("Temporary password", exact=True).fill(secrets.token_urlsafe(24))
+        with dm.expect_response(
+            lambda response: (
+                response.url.endswith("/api/v2/admin/users") and response.request.method == "POST"
+            )
+        ) as new_player:
+            dm.get_by_role("button", name="Create account", exact=True).click()
+        assert new_player.value.status == 201
+        assert new_player.value.json()["user"]["profile"]["date_of_birth"] is None
+
         dm.goto(base + "/v2/dm", wait_until="networkidle")
         dm.locator("label.context-control").filter(has_text="Active world").locator(
             "select"
