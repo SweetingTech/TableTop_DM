@@ -54,6 +54,12 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         expect(page).to_have_title("TableTop Simulation Kernel")
         expect(page.get_by_role("heading", name="Game Console", exact=True)).to_be_visible()
         expect(page.get_by_text("You are playing", exact=True)).to_be_visible()
+        pause_policy = page.get_by_text(
+            "Your character draws on your play history and its persona. "
+            "A paused world stops autonomous actions.",
+            exact=True,
+        )
+        expect(pause_policy).to_be_visible()
         page.get_by_label("Autonomous action limit", exact=True).fill("2")
         with page.expect_response(
             lambda response: (
@@ -91,6 +97,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
             close_navigation.first.click()
         page.evaluate("window.scrollTo(0,0)")
         expect(page.get_by_role("button", name="Let character act", exact=True)).to_be_visible()
+        expect(pause_policy).to_be_visible()
         page.get_by_label("Autonomous action limit", exact=True).fill("1")
         page.get_by_role("button", name="Let character act", exact=True).click()
         expect(page.get_by_text("Autonomy paused", exact=True)).to_be_visible(timeout=12000)
@@ -120,6 +127,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
             pytest.fail("the disconnected character did not take its bounded turn")
         page.goto(f"http://127.0.0.1:{server.server_port}/v2/game", wait_until="networkidle")
         expect(page.get_by_text("Connection timed out. Take control when ready.")).to_be_visible()
+        expect(pause_policy).to_be_visible()
         expect(page.locator(".event-row")).to_have_count(5)
         assert "timeout" not in page.locator(".event-feed").inner_text().lower()
         with page.expect_response(
