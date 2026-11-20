@@ -314,6 +314,13 @@ The manager creates a private `.env` with random database, Redis, and automation
 the application; applies every migration; and waits for PostgreSQL, Redis, Qdrant, the API, and
 worker. Open [http://127.0.0.1:8000/v2](http://127.0.0.1:8000/v2) and sign in.
 
+To play your first session, create a world in **Control Plane**. In **Admin Dashboard**, create
+each player's account and grant **Player** in that world. Each player signs in, changes their
+temporary password, and creates a character in **Player Dashboard**. In **Dungeon Master**,
+host a game, select each account and its **Playable character**, and start the game. The players
+can then open **Game Console** to speak, move, and hand off their character. The
+[role setup guide](docs/ROLE_SETUP_GUIDE.md) walks through these screens.
+
 Stop without deleting data:
 
 ```powershell
