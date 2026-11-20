@@ -9,6 +9,10 @@ The [Section G supplemental checks](verification/section-g/four-criteria.md) ver
 versions and rebuilds, concurrent takeover, recap authorization, and the actual console requests
 for handoff and return.
 
+The [Section G completion evidence](verification/section-g/completion-proof.md) includes the
+persisted player-choice record after a masked attack and the campaign pause policy as seen by
+a player before handoff and after reconnect.
+
 Controller presence cases exercise default manual control, owner opt-in and renewal, stale epochs,
 competing PostgreSQL timeout workers and same-epoch write restrictions. The browser journey leaves
 the actual console for the configured deadline, returns after one autonomous action, and takes

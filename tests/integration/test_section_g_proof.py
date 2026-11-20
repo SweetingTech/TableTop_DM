@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
@@ -16,7 +17,7 @@ from kernel.control import ControllerState
 from kernel.errors import AuthorizationDenied
 from kernel.state import stable_hash
 from tests.integration.test_section_g_campaign import handoff
-from tests.integration.test_speech_combat_behavior import prepare
+from tests.integration.test_speech_combat_behavior import prepare, provoke
 from tests.unit.kernel.test_character_binding_api import setup_bound_character
 from tests.unit.kernel.test_tactical_choices import (
     establish_helper,
@@ -25,6 +26,86 @@ from tests.unit.kernel.test_tactical_choices import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+def test_durable_human_choice_records_only_the_characters_known_threats(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    stack = isolated_integration_stack
+    app, (admin, player, card, _, run, visible, base) = prepare(stack, monkeypatch, tmp_path)
+    hidden_name = "Invisible assailant"
+    secret = "Synthetic private ambush motive"
+    spawned = admin.post(
+        f"/api/v2/worlds/{base['world_id']}/entities",
+        json={
+            "world_id": base["world_id"],
+            "branch_id": base["branch_id"],
+            "name": hidden_name,
+            "entity_type": "NPC",
+            "controller_actor_id": str(app.extensions["demo_ids"]["actor_id"]),
+            "public_state": {
+                "x": 0,
+                "y": 1,
+                "hp": 100,
+                "max_hp": 100,
+                "reach": 1,
+                "invisible": True,
+                "damage_bonus": -10,
+            },
+            "secret_state": {"motive": secret},
+        },
+    )
+    assert spawned.status_code == 201, spawned.get_json()
+    hidden = spawned.get_json()["entity_id"]
+    provoke(admin, base, hidden, card, "hidden-attack")
+    provoke(admin, base, visible, card, "visible-attack")
+    WorldEventProjector(stack.database_url).run_once(limit=100)
+
+    response = player.post(
+        "/api/v2/commands",
+        json={
+            **base,
+            "embodied_entity_id": card["entity_id"],
+            "command_type": "tabletop.combat.attack",
+            "parameters": {"target_id": visible},
+            "seed": 2,
+            "idempotency_key": "human-choice",
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    outcome = response.get_json()["event"]
+
+    with psycopg2.connect(stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT e.payload->>'attacker_id', o.perceived_payload "
+            "FROM cognition.observations o JOIN sim.events e ON e.event_id=o.source_event_id "
+            "WHERE e.run_id=%s AND e.idempotency_key='hidden-attack' AND o.observer_entity_id=%s",
+            (run, card["entity_id"]),
+        )
+        assert cursor.fetchall() == [(hidden, {"summary": "Sounds of nearby fighting."})]
+        cursor.execute(
+            "SELECT h.payload,c.input_origin,c.decision_authorship,c.committed_revision, "
+            "c.actor_id::text,b.binding_id::text,e.payload->>'target_id' "
+            "FROM cognition.human_choice_evidence h "
+            "JOIN sim.events e USING(world_id,branch_id,run_id,event_id) "
+            "JOIN sim.command_log c USING(world_id,branch_id,run_id,actor_id,idempotency_key) "
+            "JOIN tabletop.character_bindings b "
+            "USING(world_id,branch_id,run_id,entity_id,character_id,binding_id) "
+            "WHERE h.run_id=%s AND h.event_id=%s AND h.entity_id=%s AND h.character_id=%s",
+            (run, outcome["event_id"], card["entity_id"], card["character_id"]),
+        )
+        [(evidence, origin, author, revision, actor, binding, target)] = cursor.fetchall()
+
+    assert (origin, author, target) == ("HUMAN_INPUT", "HUMAN", visible)
+    assert evidence["player_actor_id"] == actor == outcome["actor_id"]
+    assert evidence["binding_id"] == binding
+    assert evidence["projection_version"] == revision - 1
+    chosen = f"attack:{visible}"
+    assert evidence["chosen_key"] == chosen
+    assert chosen in {option["key"] for option in evidence["options"]}
+    assert [threat["entity_id"] for threat in evidence["frame"]["threats"]] == [visible]
+    serialized = json.dumps(evidence)
+    assert all(value not in serialized for value in (hidden, hidden_name, secret))
 
 
 def test_versioned_profiles_rebuild_without_learning_stand_in_actions(
