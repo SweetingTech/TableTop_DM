@@ -56,6 +56,7 @@ def test_speech_history_clock_ties_restart_and_unattended_reply(
         )
 
     monkeypatch.setattr(EventFactory, "materialize", tied)
+    utterances = set()
     for index in range(4):
         prompt(admin, base, target, f"prompt-{index}")
         body = {
@@ -67,12 +68,15 @@ def test_speech_history_clock_ties_restart_and_unattended_reply(
         }
         first = player.post("/api/v2/commands", json=body)
         assert first.status_code == 200, first.get_json()
+        utterances.add(first.get_json()["event"]["event_id"])
         assert player.post("/api/v2/commands", json=body).get_json() == first.get_json()
     prompt(admin, base, target, "new-prompt")
     before = player.get(path + "/choice-profile", query_string={"run_id": run}).get_json()
     assert before["comparable_count"] == 4
     assert before["speech_cadence"] == "BRIEF"
-    assert len(before["cadence_evidence_event_ids"]) == 4
+    assert set(before["cadence_evidence_event_ids"]) == utterances
+    assert set(before["evidence_event_ids"]) == utterances
+    assert before["confidence"] == pytest.approx(4 / 7)
     advice = player.post(
         path + "/character-proposals", json={"run_id": run, "idempotency_key": "speech"}
     )
@@ -116,6 +120,29 @@ def test_speech_history_clock_ties_restart_and_unattended_reply(
             (run,),
         )
         assert cursor.fetchall() == [("speech-combat-behavior-1.2.0", "BRIEF")] * 4
+        cursor.execute(
+            "SELECT e.event_id::text, c.input_origin, c.decision_authorship, "
+            "e.payload->>'text', h.payload FROM sim.command_log c JOIN sim.events e "
+            "USING(world_id,branch_id,run_id,actor_id,idempotency_key) "
+            "LEFT JOIN cognition.human_choice_evidence h ON h.event_id=e.event_id "
+            "WHERE c.run_id=%s AND c.command_type='tabletop.dialogue.speak' "
+            "AND c.input_origin IN ('HUMAN_INPUT','OPERATOR')",
+            (run,),
+        )
+        rows = cursor.fetchall()
+    assert {event for event, origin, _, _, _ in rows if origin == "HUMAN_INPUT"} == utterances
+    assert sum(origin == "OPERATOR" for _, origin, _, _, _ in rows) == 5
+    for event, origin, author, line, evidence in rows:
+        if origin == "OPERATOR":
+            assert event not in utterances and evidence is None
+            continue
+        assert (author, line) == ("HUMAN", "Hello friend.")
+        assert evidence["player_actor_id"] == before["player_actor_id"]
+        assert evidence["character_id"] == card["character_id"]
+        assert evidence["entity_id"] == card["entity_id"]
+        assert evidence["frame"]["speech_ready"] is True
+        assert evidence["chosen_key"] == "speech:GREET:WHISPER"
+        assert evidence["chosen_key"] in {option["key"] for option in evidence["options"]}
 
 
 def test_combat_history_executes_and_stale_takeover_cannot_commit(
