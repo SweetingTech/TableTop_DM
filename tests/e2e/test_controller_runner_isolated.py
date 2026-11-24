@@ -22,7 +22,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
     token = secrets.token_urlsafe(32)
     monkeypatch.setenv("TTDM_OPERATOR_TOKEN", token)
     app = create_app(artifact_root=tmp_path / "app")
-    _, player, _, _, control_path, run_id, _ = setup_bound_character(app, token)
+    _, player, card, _, control_path, run_id, _ = setup_bound_character(app, token)
     server = make_server("127.0.0.1", 0, app, request_handler=_QuietRequests)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     stop = threading.Event()
@@ -46,6 +46,13 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
             }
         ]
     )
+    binding_url = f"http://127.0.0.1:{server.server_port}{control_path}/character-binding"
+
+    def read_binding():
+        response = context.request.get(binding_url, params={"run_id": run_id})
+        assert response.ok
+        return response.json()["binding"]
+
     try:
         page = context.new_page()
         errors = []
@@ -54,6 +61,11 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         expect(page).to_have_title("TableTop Simulation Kernel")
         expect(page.get_by_role("heading", name="Game Console", exact=True)).to_be_visible()
         expect(page.get_by_text("You are playing", exact=True)).to_be_visible()
+        binding = read_binding()
+        assert (binding["character_id"], binding["entity_id"]) == (
+            card["character_id"],
+            card["entity_id"],
+        )
         pause_policy = page.get_by_text(
             "Your character draws on your play history and its persona. "
             "A paused world stops autonomous actions.",
@@ -83,6 +95,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         assert leaving.value.json()["state"]["epoch"] == 1
         expect(page.get_by_text("Autonomy paused", exact=True)).to_be_visible(timeout=12000)
         expect(page.get_by_text("2 / 2 autonomous actions", exact=False)).to_be_visible()
+        assert read_binding() == binding
         expect(page.locator(".event-row")).to_have_count(2)
         assert "handoff" not in page.locator(".event-feed").inner_text().lower()
         page.screenshot(path=str(tmp_path / "controller-desktop.png"), full_page=True)
@@ -127,6 +140,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
             pytest.fail("the disconnected character did not take its bounded turn")
         page.goto(f"http://127.0.0.1:{server.server_port}/v2/game", wait_until="networkidle")
         expect(page.get_by_text("Connection timed out. Take control when ready.")).to_be_visible()
+        assert read_binding() == binding
         expect(pause_policy).to_be_visible()
         expect(page.locator(".event-row")).to_have_count(5)
         assert "timeout" not in page.locator(".event-feed").inner_text().lower()
@@ -160,6 +174,7 @@ def test_player_leaves_autonomy_acts_and_player_returns(browser, monkeypatch, tm
         assert return_request["idempotency_key"] != leave_request["idempotency_key"]
         confirmed = returning.value.json()["state"]
         assert (confirmed["mode"], confirmed["epoch"]) == ("HUMAN", state["epoch"] + 1)
+        assert read_binding() == binding
         expect(page.get_by_text("You are playing", exact=True)).to_be_visible()
         expect(setting).to_have_value("15")
         assert not errors

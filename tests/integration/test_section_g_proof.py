@@ -11,9 +11,11 @@ from pydantic import ValidationError
 
 from cognition.behavior import BehaviorProfile
 from cognition.choices import ChoiceProfile
+from cognition.control import EXECUTOR_CAPABILITIES
 from cognition.projector import WorldEventProjector
 from kernel.api.app import create_app
 from kernel.control import ControllerState
+from kernel.database import transaction
 from kernel.errors import AuthorizationDenied
 from kernel.state import stable_hash
 from tests.integration.test_section_g_campaign import handoff
@@ -122,8 +124,37 @@ def test_versioned_profiles_rebuild_without_learning_stand_in_actions(
     }
     initial_choice = player.get(path + "/choice-profile", query_string=query).get_json()
     leave = handoff(player, path, run, 0, "AUTONOMOUS", "proof-history-leave")
-    assert app.extensions["character_runner"].run_once() == 1
+    executor = uuid.UUID(leave["executor_actor_id"])
+    with psycopg2.connect(stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT actor_kind, EXISTS (SELECT 1 FROM identity.users u WHERE u.actor_id=a.id) "
+            "FROM sim.actors a WHERE a.id=%s",
+            (str(executor),),
+        )
+        assert cursor.fetchone() == ("AGENT", False)
+        cursor.execute(
+            "SELECT world_id::text, capability FROM sim.actor_capabilities WHERE actor_id=%s",
+            (str(executor),),
+        )
+        assert set(cursor.fetchall()) == {
+            (base["world_id"], capability) for capability in EXECUTOR_CAPABILITIES
+        }
+    scope = (base["world_id"], base["branch_id"], card["entity_id"])
+    with transaction(actor_id=executor, dsn=stack.database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT sim.runtime_controls_entity(%s,%s,%s), "
+                "sim.runtime_controls_entity(%s,%s,%s)",
+                (*scope, *scope[:2], helper),
+            )
+            assert cursor.fetchone() == (True, False)
+    worker = create_app(artifact_root=tmp_path / "proof-worker")
+    assert worker.extensions["character_runner"].run_once() == 1
     handoff(player, path, run, leave["epoch"], "HUMAN", "proof-history-return")
+    with transaction(actor_id=executor, dsn=stack.database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT sim.runtime_controls_entity(%s,%s,%s)", scope)
+            assert cursor.fetchone() == (False,)
     resources(app, admin, base, helper)
     WorldEventProjector(stack.database_url).run_once(limit=100)
     rebuilt = {}
@@ -152,6 +183,11 @@ def test_versioned_profiles_rebuild_without_learning_stand_in_actions(
     assert after["profile_id"] != initial_choice["profile_id"]
     assert set(after["evidence_event_ids"]) == examples
     assert after["comparable_count"] == after["action_sample_counts"][f"spell:MEND:{helper}"] == 4
+    assert after["action_sample_counts"][f"spell:MEND:{card['entity_id']}"] == 4
+    assert (
+        after["action_scores"][f"spell:MEND:{helper}"]
+        > after["action_scores"][f"spell:MEND:{card['entity_id']}"]
+    )
     assert after["confidence"] == pytest.approx(4 / 7)
 
     with psycopg2.connect(stack.admin_url) as connection, connection.cursor() as cursor:
@@ -173,6 +209,65 @@ def test_versioned_profiles_rebuild_without_learning_stand_in_actions(
     ]
     assert (origin, executor, evidence_version) == ("STAND_IN", leave["executor_actor_id"], None)
     assert stand_in_event not in after["evidence_event_ids"]
+
+
+def test_repeated_risk_choice_surfaces_pinned_backstory_conflict(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    stack = isolated_integration_stack
+    app, (admin, _, _, _, run, threat, base) = prepare(stack, monkeypatch, tmp_path)
+    _, player, card, _, route, _, _ = setup_bound_character(
+        app,
+        scope={
+            "world_id": base["world_id"],
+            "canonical_branch_id": base["branch_id"],
+            "current_run_id": run,
+        },
+        authored_identity={"backstory": "A peaceful pacifist who avoids violence."},
+    )
+    provoke(admin, base, threat, card, "conflict-threat")
+    WorldEventProjector(stack.database_url).run_once(limit=100)
+    path = route + "/choice-profile"
+    query = {"run_id": run}
+    before = player.get(path, query_string=query)
+    assert before.status_code == 200, before.get_json()
+    before = before.get_json()
+    attack = f"attack:{threat}"
+    assert before["conflicts"] == [] and before["comparable_count"] == 0
+    assert before["action_scores"][attack] < before["action_scores"]["guard"]
+    decisions = set()
+    for index in range(4):
+        response = player.post(
+            "/api/v2/commands",
+            json={
+                **base,
+                "embodied_entity_id": card["entity_id"],
+                "command_type": "tabletop.combat.attack",
+                "parameters": {"target_id": threat},
+                "seed": 2,
+                "idempotency_key": f"conflict-attack-{index}",
+            },
+        )
+        assert response.status_code == 200, response.get_json()
+        decisions.add(response.get_json()["event"]["event_id"])
+    WorldEventProjector(stack.database_url).run_once(limit=100)
+    learned = player.get(path, query_string=query)
+    assert learned.status_code == 200, learned.get_json()
+    after = learned.get_json()
+    assert after["player_actor_id"] == before["player_actor_id"]
+    assert after["character_id"] == card["character_id"]
+    assert after["binding_id"] == before["binding_id"]
+    assert set(after["evidence_event_ids"]) == decisions
+    assert after["confidence"] == pytest.approx(4 / 7)
+    assert after["action_sample_counts"][attack] == after["action_sample_counts"]["guard"] == 4
+    assert after["action_scores"][attack] > after["action_scores"]["guard"]
+    assert after["conflicts"] == [
+        "Repeated human attacks conflict with the pinned peaceful tendency; "
+        "review the card or history."
+    ]
+    operator_view = admin.get(path, query_string=query)
+    assert operator_view.status_code == 200, operator_view.get_json()
+    assert operator_view.get_json()["conflicts"] == after["conflicts"]
 
 
 def test_atomic_takeover_allows_one_epoch_and_only_its_new_controller(
