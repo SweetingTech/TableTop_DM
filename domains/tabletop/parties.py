@@ -46,9 +46,26 @@ class LeaveParty(PartyReference):
     hostile: bool = Field(default=False, strict=True)
 
 
+class PartyWaypoint(PartyModel):
+    x: int = Field(ge=-100000, le=100000)
+    y: int = Field(ge=-100000, le=100000)
+    z: int = Field(default=0, ge=-1000, le=1000)
+    zone_id: str = Field(default="world", min_length=1, max_length=120)
+
+
+class PartySupplyCache(PartyModel):
+    position: PartyWaypoint
+    gold: int = Field(default=0, ge=0)
+    inventory: dict[str, int] = Field(default_factory=dict)
+
+
 class PartyView(CreateParty, PartyReference):
     leader_id: uuid.UUID | None
     member_ids: tuple[uuid.UUID, ...]
+    waypoint: PartyWaypoint | None = None
+    plan_event_id: uuid.UUID | None = None
+    following_member_ids: tuple[uuid.UUID, ...] = ()
+    supplies: PartySupplyCache | None = None
 
 
 class Party(PartyView):
@@ -66,7 +83,20 @@ class Invitation(InvitationView):
 
 class PartyEvent(PartyReference):
     actor_entity_id: uuid.UUID
-    kind: Literal["CREATED", "INVITED", "JOINED", "DECLINED", "LEFT", "HOSTILE_EXIT", "REUNITED"]
+    kind: Literal[
+        "CREATED",
+        "INVITED",
+        "JOINED",
+        "DECLINED",
+        "LEFT",
+        "HOSTILE_EXIT",
+        "REUNITED",
+        "PLAN_UPDATED",
+        "FOLLOWING",
+        "STOPPED_FOLLOWING",
+        "LEADER_CHANGED",
+        "SUPPLIES_MOVED",
+    ]
     invitation_id: uuid.UUID | None = None
     invitee_id: uuid.UUID | None = None
     prior_departure_event_id: uuid.UUID | None = None
@@ -92,7 +122,7 @@ def member_and_invitations(
     return parties, invites
 
 
-def _read_party(state: BranchState, identity: uuid.UUID) -> Party:
+def read_party(state: BranchState, identity: uuid.UUID) -> Party:
     raw = state.projections.get(PARTIES, {}).get(str(identity))
     if raw is None:
         raise ValueError("party is unavailable")
@@ -105,8 +135,8 @@ def _body(proposal: CommandProposal) -> uuid.UUID:
     return proposal.embodied_entity_id
 
 
-def _contact(state: BranchState, source: uuid.UUID, target: uuid.UUID) -> None:
-    unavailable = "party invitation requires nearby participants who can see each other"
+def party_contact(state: BranchState, source: uuid.UUID, target: uuid.UUID) -> None:
+    unavailable = "party interaction requires nearby participants who can see each other"
     bodies = state.projections.get("tabletop.entities", {})
     positions = state.projections.get("tabletop.spatial.positions", {})
     first, second = bodies.get(str(source), {}), bodies.get(str(target), {})
@@ -127,7 +157,7 @@ def _contact(state: BranchState, source: uuid.UUID, target: uuid.UUID) -> None:
         raise ValueError(unavailable)
 
 
-def _set_party(party: Party) -> StateDelta:
+def set_party(party: Party) -> StateDelta:
     return StateDelta(
         projection=PARTIES,
         operation="SET",
@@ -145,7 +175,7 @@ def _set_invitation(invitation: Invitation) -> StateDelta:
     )
 
 
-def _result(event: PartyEvent, *deltas: StateDelta) -> CommandResult:
+def party_result(event: PartyEvent, *deltas: StateDelta) -> CommandResult:
     return CommandResult(
         result=event.model_dump(mode="json"),
         deltas=deltas,
@@ -164,24 +194,24 @@ def create_party(proposal: CommandProposal, state: BranchState) -> CommandResult
         leader_id=founder,
         member_ids=(founder,),
     )
-    return _result(
+    return party_result(
         PartyEvent(
             party_id=party.party_id,
             actor_entity_id=founder,
             kind="CREATED",
             summary="Formed a party around a shared goal.",
         ),
-        _set_party(party),
+        set_party(party),
     )
 
 
 def invite_member(proposal: CommandProposal, state: BranchState) -> CommandResult:
     request = InviteMember.model_validate(proposal.parameters)
     inviter = _body(proposal)
-    party = _read_party(state, request.party_id)
+    party = read_party(state, request.party_id)
     if inviter not in party.member_ids or request.invitee_id in party.member_ids:
         raise ValueError("party invitation is unavailable")
-    _contact(state, inviter, request.invitee_id)
+    party_contact(state, inviter, request.invitee_id)
     pending = [
         row
         for row in state.projections.get(INVITATIONS, {}).values()
@@ -200,7 +230,7 @@ def invite_member(proposal: CommandProposal, state: BranchState) -> CommandResul
         goal=party.goal,
         motive=party.motive,
     )
-    return _result(
+    return party_result(
         PartyEvent(
             party_id=party.party_id,
             actor_entity_id=inviter,
@@ -220,7 +250,7 @@ def respond_to_invitation(proposal: CommandProposal, state: BranchState) -> Comm
     if raw is None or raw["invitee_id"] != str(invitee) or raw["status"] != "PENDING":
         raise ValueError("party invitation is unavailable")
     invitation = Invitation.model_validate(raw)
-    party = _read_party(state, invitation.party_id)
+    party = read_party(state, invitation.party_id)
     updated = invitation.model_copy(update={"status": "ACCEPTED" if request.accept else "DECLINED"})
     event_fields = {
         "party_id": party.party_id,
@@ -228,7 +258,7 @@ def respond_to_invitation(proposal: CommandProposal, state: BranchState) -> Comm
         "invitation_id": invitation.invitation_id,
     }
     if not request.accept:
-        return _result(
+        return party_result(
             PartyEvent(
                 **event_fields,
                 kind="DECLINED",
@@ -238,10 +268,10 @@ def respond_to_invitation(proposal: CommandProposal, state: BranchState) -> Comm
         )
     if invitation.inviter_id not in party.member_ids or invitee in party.member_ids:
         raise ValueError("party invitation is unavailable")
-    _contact(state, invitee, invitation.inviter_id)
+    party_contact(state, invitee, invitation.inviter_id)
     updated_party = party.model_copy(update={"member_ids": (*party.member_ids, invitee)})
     prior_departure = party.departure_events.get(invitee)
-    return _result(
+    return party_result(
         PartyEvent(
             **event_fields,
             kind="REUNITED" if prior_departure else "JOINED",
@@ -249,20 +279,23 @@ def respond_to_invitation(proposal: CommandProposal, state: BranchState) -> Comm
             summary="Rejoined the party." if prior_departure else "Accepted and joined the party.",
         ),
         _set_invitation(updated),
-        _set_party(updated_party),
+        set_party(updated_party),
     )
 
 
 def leave_party(proposal: CommandProposal, state: BranchState) -> CommandResult:
     request = LeaveParty.model_validate(proposal.parameters)
     member = _body(proposal)
-    party = _read_party(state, request.party_id)
+    party = read_party(state, request.party_id)
     if member not in party.member_ids:
         raise ValueError("party is unavailable")
     remaining = tuple(identity for identity in party.member_ids if identity != member)
     updated = party.model_copy(
         update={
             "member_ids": remaining,
+            "following_member_ids": tuple(
+                identity for identity in party.following_member_ids if identity != member
+            ),
             "leader_id": party.leader_id
             if party.leader_id != member
             else next(iter(remaining), None),
@@ -276,7 +309,7 @@ def leave_party(proposal: CommandProposal, state: BranchState) -> CommandResult:
         and row["status"] == "PENDING"
         and row["inviter_id"] == str(member)
     )
-    return _result(
+    return party_result(
         PartyEvent(
             party_id=party.party_id,
             actor_entity_id=member,
@@ -284,7 +317,7 @@ def leave_party(proposal: CommandProposal, state: BranchState) -> CommandResult:
             reason=request.reason,
             summary="Broke with the party in hostility." if request.hostile else "Left the party.",
         ),
-        _set_party(updated),
+        set_party(updated),
         *withdrawals,
     )
 

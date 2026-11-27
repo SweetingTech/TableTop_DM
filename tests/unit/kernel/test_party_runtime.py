@@ -12,7 +12,7 @@ from tests.unit.kernel.test_world_time import NOW, api_command
 pytestmark = pytest.mark.unit
 
 
-def prepare_invited_resident(app, game=None, *, curious=False):
+def prepare_invited_resident(app, game=None, *, curious=False, max_steps=1):
     game, _, resident_path, _, _ = configure_subjective(app, game, curious=curious)
     admin, player, player_card, player_path, run, resident, base = game
     party_id, invite_id = create_and_invite(game)
@@ -24,14 +24,25 @@ def prepare_invited_resident(app, game=None, *, curious=False):
     assert "PRIVATE_NPC_VOW" not in str(party_scene(player, player_path))
 
     clock = admin.get(clock_path(base)).get_json()["clock"]
+    executor = admin.post(
+        "/api/v2/actors",
+        json={
+            "world_id": base["world_id"],
+            "display_name": "Resident routine clock",
+            "kind": "AGENT",
+            "capabilities": ["world.read", "action.propose", "action.commit", "mind.read.all"],
+        },
+    )
+    assert executor.status_code == 201, executor.get_json()
     api_command(
         admin,
         base,
         "tabletop.clock.configure",
         {
             "expected_epoch": clock["epoch"],
-            "executor_actor_id": clock["executor_actor_id"],
+            "executor_actor_id": executor.get_json()["actor_id"],
             "paused": False,
+            "seconds_per_tick": 6,
             "wall_time": NOW.isoformat(),
         },
         "resume-for-party-response",
@@ -42,7 +53,8 @@ def prepare_invited_resident(app, game=None, *, curious=False):
             "run_id": run,
             "mode": "AUTONOMOUS",
             "expected_epoch": 0,
-            "max_steps": 1,
+            "max_steps": max_steps,
+            "interval_ms": 100,
             "idempotency_key": "resident-controller",
         },
     )

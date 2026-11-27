@@ -1,5 +1,7 @@
 # Changelog
 
+- Add party plans, consensual waypoint travel, leadership changes, and a physically located cache
+  funded by members' own supplies.
 - Let autonomous residents answer party invitations from the proposed motive and their own
   experiences. Restore pinned character traits for live decisions after a PostgreSQL restart.
 - Record in-world party invites, consent, departures, hostile exits, and reunions through the

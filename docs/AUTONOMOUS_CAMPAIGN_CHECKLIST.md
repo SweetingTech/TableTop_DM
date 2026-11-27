@@ -449,8 +449,9 @@ implementation and verification.
   The character runner responds to a nearby invitation using the offered motive, its pinned
   persona, and experienced hostility. A joining resident gains only the party's shared charter.
   Private knowledge and controller access retain their existing authorization rules.
-- [ ] H3 — Define group movement, shared plans, leadership decisions, resources, and distributed knowledge.
-  Group membership alone must not share every member's beliefs/secrets.
+- [x] H3 — Define group movement, shared plans, leadership decisions, resources, and distributed knowledge.
+  Leaders record goals and waypoints, each member consents and moves independently, and voluntary
+  deposits fund a local cache. Testimony uses ordinary hearing and retains each member's perspective.
 - [ ] H4 — Make quests/opportunities transferable where the fiction allows. Replace arbitrary
   protagonist/class gates with actual prerequisites; support alternate informants and approaches.
 - [ ] H5 — Acceptance: an ordinary resident joins, contributes, can become human-controlled when

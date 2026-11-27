@@ -8,6 +8,9 @@ The scene presents the charter and membership to members and presents pending in
 to their intended recipient. Roster and controller access still require explicit authorization.
 The character runner and offscreen planner share the pinned character profile reader. It obtains
 character-purpose traits from the immutable blueprint, preserving motive choices after restart.
+The party leader records the shared waypoint. Each member chooses whether to follow it and moves
+through the existing controlled-body rules. Shared cache contents come from explicit deposits at
+the cache site. Character knowledge still comes from each body's frozen observations.
 
 The character action catalog offers MEND for a currently visible, wounded body in reach that the
 character observed healing them. A witnessed attack against the character removes that target

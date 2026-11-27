@@ -140,7 +140,7 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.7.0"
+    context_version: str = "character-context-1.8.0"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
@@ -268,6 +268,25 @@ class CharacterContext(BaseModel):
                     ]
                 }
                 if self.scene.party_invitations
+                else {}
+            ),
+            **(
+                {
+                    "party_plans": [
+                        {
+                            "reference": f"party plan {index}",
+                            "name": party.name,
+                            "goal": party.goal,
+                            "motive": party.motive,
+                            "waypoint": party.waypoint.model_dump(exclude={"zone_id"})
+                            if party.waypoint
+                            else None,
+                            "following": observer in party.following_member_ids,
+                        }
+                        for index, party in enumerate(self.scene.parties, 1)
+                    ]
+                }
+                if self.scene.parties
                 else {}
             ),
             "experiences": [experience_summary(item) for item in self.observations],

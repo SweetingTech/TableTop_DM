@@ -30,11 +30,23 @@ and the usual run, branch, and idempotency fields.
 - `tabletop.party.leave` takes `{party_id, reason, hostile?}`. The member leaves voluntarily and
   their outstanding invitations are withdrawn. If a leader leaves, the earliest remaining member
   takes the lead. A hostile exit records the character's stated break in the event history.
+- `tabletop.party.plan` takes `{party_id, goal, waypoint?}` from the current leader. A waypoint
+  has `x`, `y`, optional `z`, and optional `zone_id`. Its event ID identifies the plan.
+- `tabletop.party.follow` takes `{party_id, plan_event_id, follow}`. Each member makes its own
+  choice for that exact plan. A new plan requires fresh agreement. An interested autonomous
+  follower can favor ordinary steps toward a waypoint on the same floor and in the same zone.
+- `tabletop.party.transfer_leadership` takes `{party_id, successor_id}` from the current leader.
+  A capable nearby member can take responsibility for the charter. Body control is unchanged.
+- `tabletop.party.supplies` takes `{party_id, direction, amount, item?}`. `DEPOSIT` and `WITHDRAW`
+  move owned goods or gold between the acting body and a shared cache at its first deposit site.
+  Members must stand at the cache to use it. Omit `item` to move gold.
 
 The body-scoped `/scene` response includes `parties` for that body's memberships and
-`party_invitations` for its pending invitations. The party view contains the shared goal,
-leader and member IDs. Position, inventory, and controller access follow their existing
-authorization rules. The departure reason is private. These actions currently use the typed API.
+`party_invitations` for its pending invitations. The party view contains the charter, leader,
+member IDs, agreed travel plan and contributed supplies. A member can share what they know
+through ordinary speech. Only recipients who hear the statement receive its testimony under the
+normal perception rules. Private departure reasons remain scoped to their source. Party actions
+currently use the typed API.
 
 An active autonomous character with a pinned character persona can respond to a nearby inviter.
 The runner considers the offered motive, the invited character's traits, and hostility that
@@ -1126,9 +1138,9 @@ replies and a strict majority can establish brief, balanced, or elaborate cadenc
 choice profile retains the supporting event IDs. A provider receives the cadence category with the
 selected intent and volume. Replies outside that cadence use the corresponding local line.
 
-Context `character-context-1.7.0` includes the body's own mana/reach/learned spell IDs and inspected
+Context `character-context-1.8.0` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
-`tabletop-character-actions-1.6.0` supports party responses alongside the existing action choices.
+`tabletop-character-actions-1.7.0` supports party responses and consensual waypoint travel.
 The combat actions include:
 
 - `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next

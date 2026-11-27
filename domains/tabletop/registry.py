@@ -20,6 +20,7 @@ from domains.tabletop.magic import command_definition as magic
 from domains.tabletop.magic.tactical import command_definition as invoke
 from domains.tabletop.onboarding import command_definition as onboarding
 from domains.tabletop.parties import command_definitions as parties
+from domains.tabletop.party_coordination import command_definitions as party_coordination
 from domains.tabletop.quests import command_definitions as quests
 from domains.tabletop.quests.evidence import EVIDENCE_COMMANDS, with_quest_evidence
 from domains.tabletop.recovery import command_definition as stabilize
@@ -67,6 +68,7 @@ def command_definitions(
         divine(),
         *quests(),
         *parties(),
+        *party_coordination(),
     )
     wrapped = tuple(
         replace(definition, version=f"{definition.version}+presentation.1")

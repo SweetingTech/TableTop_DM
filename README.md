@@ -29,6 +29,8 @@ on their card, backstory, and observed play history.
 - The [party API](docs/API_AND_WORKFLOWS.md#in-world-parties) lets a controlled character form a
   party, invite a nearby resident, and accept, decline, leave, or rejoin through that body.
   A resident with an active runner can answer based on the offered goal and their own persona.
+  Members can agree on a waypoint, transfer leadership, contribute supplies, and share testimony
+  within hearing distance.
 - The [unattended cast test](docs/verification/section-f/acceptance.md) verifies character recovery,
   conversation, weather interruptions, and a finite stopping condition with the production workers.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
