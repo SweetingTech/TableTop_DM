@@ -6,7 +6,14 @@ from typing import Any
 
 from kernel.contracts import CommandResult
 
-PRIVATE_PROJECTIONS = frozenset({"tabletop.quest_contracts", "tabletop.trade_offers"})
+PRIVATE_PROJECTIONS = frozenset(
+    {
+        "tabletop.quest_contracts",
+        "tabletop.trade_offers",
+        "tabletop.parties",
+        "tabletop.party_invitations",
+    }
+)
 
 
 def present_command_result(result: CommandResult, *, include_private: bool) -> dict[str, Any]:

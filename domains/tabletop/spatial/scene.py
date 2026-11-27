@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from domains.tabletop.parties import InvitationView, PartyView
 from domains.tabletop.quests.contracts import QuestView
 
 
@@ -83,4 +84,6 @@ class PerceivedScene(BaseModel):
     perceived_entities: tuple[PerceivedEntity, ...]
     recent_observations: tuple[ObservationPresentation, ...]
     available_viewpoints: tuple[uuid.UUID, ...]
+    parties: tuple[PartyView, ...] = ()
+    party_invitations: tuple[InvitationView, ...] = ()
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

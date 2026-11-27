@@ -1,5 +1,7 @@
 # Changelog
 
+- Record in-world party invites, consent, departures, hostile exits, and reunions through the
+  controlled body. Residents can join a party without a player account.
 - Score human preferences using choices the player actually had. Options never offered keep the
   character's fallback. Verify solo, mixed, and all-autonomous control in one durable campaign.
 - Use PostgreSQL time for durable presence deadlines so clock skew does not reject renewals or

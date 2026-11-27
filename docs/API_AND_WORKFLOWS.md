@@ -6,12 +6,34 @@ in-process DM grant cannot survive another API process's revocation. New respons
 retries are both redacted after revocation; privileged inspection remains available when the
 current exact-world grant allows it. Reference mode uses its existing world-scoped authority.
 
-`POST /api/v2/commands` presents quest/offer results without private projection deltas unless
+`POST /api/v2/commands` redacts private quest, offer, and party projection deltas unless
 the submitting actor has `world.read.all` in the command's exact world. Quest source commands,
 unperceived target IDs and offer provenance cannot leak through accept/trade/reward receipts or
 cached retries. The committed receipt, event, hash and replay records are unchanged internally;
 ordinary public results and scene synchronization still describe the action. Client parameters
 cannot request privileged presentation or grant capabilities.
+
+## In-world parties
+
+Submit party actions through `POST /api/v2/commands` with the acting `embodied_entity_id`
+and the usual run, branch, and idempotency fields.
+
+- `tabletop.party.create` takes `{name, goal}`. The founding body becomes the first member
+  and leader. The `party_id` is returned in the result.
+- `tabletop.party.invite` takes `{party_id, invitee_id}`. A member can invite a capable body
+  within one grid step when both can see each other. The invitation carries the offered goal.
+- `tabletop.party.respond` takes `{invitation_id, accept}` from the invited body's controller.
+  Accepting requires a still-present, perceivable inviter who remains a member. Declining
+  consumes the invitation without adding the body. A fresh accepted invitation after a
+  departure produces a reunion event with the prior departure event ID.
+- `tabletop.party.leave` takes `{party_id, reason, hostile?}`. The member leaves voluntarily and
+  their outstanding invitations are withdrawn. If a leader leaves, the earliest remaining member
+  takes the lead. A hostile exit records the character's stated break in the event history.
+
+The body-scoped `/scene` response includes `parties` for that body's memberships and
+`party_invitations` for its pending invitations. The party view contains the shared goal,
+leader and member IDs. Position, inventory, and controller access follow their existing
+authorization rules. The departure reason is private. These actions currently use the typed API.
 
 Quest contract `tabletop-quests-2.0.0` uses `POST /api/v2/commands`:
 

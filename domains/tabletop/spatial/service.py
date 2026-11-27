@@ -8,6 +8,7 @@ from cognition.models import Observation
 from cognition.store import MindStore
 from domains.tabletop.action_time import wait_seconds
 from domains.tabletop.economy import visible_offers
+from domains.tabletop.parties import member_and_invitations
 from domains.tabletop.quests import personal_quests, visible_quests
 from domains.tabletop.rules import available_melee_reach, dead, incapacitated, known_spells
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
@@ -217,6 +218,7 @@ def build_perceived_scene(
     visible_zones = tuple(
         sorted({str(item.position.zone_id) for item in entities if item.position is not None})
     )
+    parties, invitations = member_and_invitations(state, observer_entity_id)
     scene = PerceivedScene(
         observer_entity_id=observer_entity_id,
         world_id=world_id,
@@ -226,5 +228,7 @@ def build_perceived_scene(
         perceived_entities=tuple(entities),
         recent_observations=tuple(observation_presentations),
         available_viewpoints=viewpoints,
+        parties=parties,
+        party_invitations=invitations,
     )
     return scene

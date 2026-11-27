@@ -442,8 +442,9 @@ implementation and verification.
 
 ## H. In-world parties and transferable opportunities
 
-- [ ] H1 — Add party membership independent of human account/game rosters and ownership.
-  Model invitations, willingness, shared goals, departure, reunion, and hostility with causal events.
+- [x] H1 — Add party membership independent of human account/game rosters and ownership.
+  Controlled bodies form parties around shared goals and can invite, accept, decline, leave,
+  break in hostility, and rejoin through [typed party actions](API_AND_WORKFLOWS.md#in-world-parties).
 - [ ] H2 — Allow any eligible in-world entity to join based on circumstances and motives; support NPC
   companions without manufacturing a human account for each. Joining does not grant private knowledge or human body control.
 - [ ] H3 — Define group movement, shared plans, leadership decisions, resources, and distributed knowledge.

@@ -1,5 +1,9 @@
 # Testing
 
+Party API tests cover redacted receipts, intended-recipient and body authority, decline, voluntary
+membership, ordinary and hostile exits, and causal reunion. The PostgreSQL test restarts the API
+around consent, verifies an exact retry, and rebuilds the recorded outcome through replay.
+
 Recap cases compare pre-handoff, in-window, and post-takeover actions. The PostgreSQL case
 checks the returning owner's access to a machine-recorded timeout handoff across restart and
 matches the narrated source to the committed revision. The built console shows the recap after

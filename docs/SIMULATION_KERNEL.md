@@ -1,5 +1,11 @@
 # Simulation-kernel contract
 
+Party creation and membership changes are typed controlled-body actions. Invitations freeze
+the stated goal at issue and use the issue event ID as their identity. Accept, decline, and
+reunion events retain their invitation ID, and reunion links to the previous departure.
+Party projections commit atomically with the same event and receipt. The departure event
+retains the personal reason for replay and inspection under the existing world authority.
+
 Migration 020 extends the append-only human-choice rows with a bounded support option set derived
 from the body's validated observations and current scene. Source checks still require a matching
 accepted human action in a canonical live run. The normal typed MEND command rechecks control,

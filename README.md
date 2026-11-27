@@ -26,6 +26,8 @@ on their card, backstory, and observed play history.
   character's own experience. Each line links to the committed event it describes.
 - The world clock advances work, meals, rest, commutes, and appointments while the party is
   elsewhere. Changes in weather, danger, or bodily needs can interrupt and resume that activity.
+- The [party API](docs/API_AND_WORKFLOWS.md#in-world-parties) lets a controlled character form a
+  party, invite a nearby resident, and accept, decline, leave, or rejoin through that body.
 - The [unattended cast test](docs/verification/section-f/acceptance.md) verifies character recovery,
   conversation, weather interruptions, and a finite stopping condition with the production workers.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
@@ -54,8 +56,8 @@ people within visible spell reach.
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.
 
-Ordinary command receipts omit internal quest/offer projection deltas. The canonical receipt
-and replay evidence remain complete; inspecting them requires read-all authority in that world.
+Ordinary command receipts omit internal quest, offer, and party projection deltas.
+Read-all authority in that world allows inspection of the complete receipt and replay evidence.
 
 Quests use manager-authored movement, defeat, trade or weeding objectives and rewards reserved
 from the giver's actual goods/gold. Inspect a nearby giver, accept an offer, then complete its

@@ -212,6 +212,10 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.quest.accept",
         "tabletop.quest.claim",
         "tabletop.quest.cancel",
+        "tabletop.party.create",
+        "tabletop.party.invite",
+        "tabletop.party.respond",
+        "tabletop.party.leave",
     }
     assert all(contract["request_schema"]["type"] == "object" for contract in contracts)
     assert all(contract["result_schema"]["type"] == "object" for contract in contracts)
