@@ -40,6 +40,9 @@ on their card, backstory, and observed play history.
 - World managers can [capture a named campaign checkpoint](docs/API_AND_WORKFLOWS.md#campaign-checkpoint-capture)
   from a ready hold in PostgreSQL. The private archive includes the bodies and subjective state
   at that boundary and validates its dependencies before publishing a receipt.
+- A world manager can [schedule checkpoints](docs/API_AND_WORKFLOWS.md#automatic-checkpoints)
+  on the simulated clock or by event type. The existing world runner finishes the archive
+  when the projector has caught up and resumes the branch.
 
 ## Implementation details
 
@@ -62,6 +65,7 @@ they help someone who previously helped them. It considers help the character pe
 people within visible spell reach.
 Apply migration 021 for durable checkpoint holds. Existing campaigns start without a hold.
 Apply migration 022 for durable campaign checkpoint archives and receipts.
+Apply migration 023 for scheduled campaign checkpoints.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

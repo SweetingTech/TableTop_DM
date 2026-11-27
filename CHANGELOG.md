@@ -1,5 +1,7 @@
 # Changelog
 
+- Schedule campaign checkpoints on the simulated clock or at matching committed events. The
+  world runner finishes the held archive and resumes the branch after projection completes.
 - Capture a private, integrity-checked campaign archive from a ready checkpoint hold. Migration 022
   binds the named receipt to its exact world, branch, request, projection and projected prefix.
 - Hold a canonical branch at a fixed checkpoint boundary while its existing perceptions finish

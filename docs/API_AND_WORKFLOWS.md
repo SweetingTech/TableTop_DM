@@ -682,6 +682,21 @@ the server's artifact store. A repeat capture of the same request and label retu
 receipt, including after release. A different label for that request returns 409. Release the hold
 when play or simulation should resume.
 
+### Automatic checkpoints
+
+In PostgreSQL, a world manager can `PUT /api/v2/worlds/{world_id}/branches/{branch_id}/checkpoint-schedule`
+with a new `rule_id`, a `label`, and either `interval_seconds`, `event_types`, or both. The interval
+uses simulated time measured from the rule's creation. `event_types` matches committed event
+types such as `tabletop.dialogue.speak`. A clock advance that crosses multiple intervals creates
+one checkpoint at the committed cut. When an API writes several commands atomically, the archive
+uses the final cut and records the particular event that triggered it.
+
+`GET` returns the active rule or `{"rule": null}`. Supply its ID as `expected_rule_id` when replacing
+it. `POST /{rule_id}/retire` retires the matching rule and retains its history. Automatic capture
+uses the same hold and private archive routes for inspection. The world runner captures and
+releases the hold after the projector drains the prefix. The archived boundary records both the
+originating event and the rule ID.
+
 ### World-scoped reads
 
 Every world-scoped route requires `ADMIN`, or a `DM` or `PLAYER` grant **for that world**. Roles

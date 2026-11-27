@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from kernel.checkpoint_holds import CheckpointHoldConflict, CheckpointHolds, CheckpointHoldStatus
+from kernel.checkpoint_schedules import CheckpointRuleRequest, PostgresCheckpointSchedules
 from kernel.errors import BranchCheckpointHeld
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
 
@@ -97,3 +98,35 @@ def register_checkpoint_capture(
         response = jsonify(receipt.model_dump(mode="json"))
         response.headers["Cache-Control"] = "no-store"
         return response
+
+
+def register_checkpoint_schedules(
+    app: Flask,
+    schedules: PostgresCheckpointSchedules,
+    current_actor: Callable[[], uuid.UUID],
+    require_world_access: Callable[[uuid.UUID], None],
+) -> None:
+    root = "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>/checkpoint-schedule"
+
+    @app.get(root)
+    def read_checkpoint_schedule(world_id: uuid.UUID, branch_id: uuid.UUID):
+        require_world_access(world_id)
+        rule = schedules.read(world_id, branch_id, current_actor())
+        response = jsonify(rule.model_dump(mode="json") if rule else {"rule": None})
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.put(root)
+    def put_checkpoint_schedule(world_id: uuid.UUID, branch_id: uuid.UUID):
+        require_world_access(world_id)
+        body = CheckpointRuleRequest.model_validate(request.get_json(silent=True) or {})
+        rule = schedules.configure(world_id, branch_id, current_actor(), body)
+        response = jsonify(rule.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post(root + "/<uuid:rule_id>/retire")
+    def retire_checkpoint_schedule(world_id: uuid.UUID, branch_id: uuid.UUID, rule_id: uuid.UUID):
+        require_world_access(world_id)
+        schedules.retire(world_id, branch_id, rule_id, current_actor())
+        return "", 204
