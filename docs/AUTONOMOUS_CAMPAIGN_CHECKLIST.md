@@ -452,10 +452,12 @@ implementation and verification.
 - [x] H3 — Define group movement, shared plans, leadership decisions, resources, and distributed knowledge.
   Leaders record goals and waypoints, each member consents and moves independently, and voluntary
   deposits fund a local cache. Testimony uses ordinary hearing and retains each member's perspective.
-- [ ] H4 — Make quests/opportunities transferable where the fiction allows. Replace arbitrary
-  protagonist/class gates with actual prerequisites; support alternate informants and approaches.
-- [ ] H5 — Acceptance: an ordinary resident joins, contributes, can become human-controlled when
-  authorized, leaves for a personal reason, and can carry an opportunity after another quest giver dies.
+- [x] H4 — Make quests and opportunities transferable where the fiction allows. Funded quests use
+  actual item prerequisites, authorized alternate contacts, and alternative approaches. Transfer
+  requires the current holder's offer and the named recipient's acceptance.
+- [x] H5 — An ordinary resident joins, contributes, becomes human-controlled after explicit
+  authorization, leaves for a personal reason, and carries the opportunity after the original giver
+  dies. The [durable journey](verification/section-h/acceptance.md) verifies restart and replay.
 
 ## I. Complete checkpoints, timeline revision, and correction
 

@@ -211,6 +211,7 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.quest.configure",
         "tabletop.quest.accept",
         "tabletop.quest.claim",
+        "tabletop.quest.offer_transfer",
         "tabletop.quest.cancel",
         "tabletop.party.create",
         "tabletop.party.invite",

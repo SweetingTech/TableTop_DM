@@ -65,9 +65,10 @@ Read-all authority in that world allows inspection of the complete receipt and r
 Quests use manager-authored movement, defeat, trade or weeding objectives and rewards reserved
 from the giver's actual goods/gold. Inspect a nearby giver, accept an offer, then complete its
 objectives through ordinary actions. The personal journal follows committed outcomes, including
-offscreen work. Return to a capable nearby giver to claim the promised reward once. Console
-commands are `/quest accept|status|claim <quest id>`. Requests cannot supply progress or reward
-amounts. The autonomous planner's pursuit of these opportunities remains a later checklist item.
+offscreen work. A quest can designate alternate contacts, item prerequisites, and multiple ways
+to finish. Return to a capable nearby contact to claim the funded reward once. For a transferable
+quest, its current holder can offer responsibility and the recipient can accept it. Console
+commands are `/quest accept|status|claim <quest id>`. Offering a transfer uses the typed API.
 
 Trade uses standing offers backed by the maker's carried goods or gold. In the console, inspect
 an adjacent merchant and choose an offer to prepare a command, then send it. `/offer buy|sell

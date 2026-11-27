@@ -54,24 +54,33 @@ character witnessed. A resident can accept or decline through its existing auton
 The model sees the offered goal and a local invitation reference. The server owns the invitation
 ID, command parameters, and authorization.
 
-Quest contract `tabletop-quests-2.0.0` uses `POST /api/v2/commands`:
+Quest contract `tabletop-quests-2.1.0` uses `POST /api/v2/commands`.
 
 - Manager `tabletop.quest.configure`: `{giver_id, title, description, objectives, reward_gold?,
-  reward_items?}`. One to eight immutable objectives combine with AND. Rewards reserve available
-  giver gold and inventory at creation; titles/descriptions are explicitly public in-world text.
+  reward_items?, alternate_giver_ids?, alternate_approaches?, required_items?, transferable?}`.
+  Completing all objectives of any one approach satisfies the task. Each alternate approach
+  has a `title` and `objectives`. `required_items` checks carried inventory when a body accepts.
+  Rewards reserve the original giver's available gold and inventory at creation. Titles and
+  descriptions are public in-world text.
 - Objectives each have `description` plus one discriminated definition: `kind: "MOVE"` with
   `x,y,zone_id?,z?`; `kind: "DEFEAT"` with distinct `target_ids` (all must be defeated once);
   `kind: "TRADE"` with `side: "BUY"|"SELL",counterparty_id,item,quantity`; or `kind: "WEED"`
   with `units`. Targets/counterparties must exist in the same branch. DEFEAT means a genuine
   positive-to-zero HP outcome caused by the owner's attack/spell, not necessarily permanent death.
 - Controlled `tabletop.quest.accept`, `tabletop.quest.advance` and `tabletop.quest.claim` accept
-  only `{quest_id}`. Accept fixes the body owner; advance only reviews recorded status. New
-  requests cannot supply `amount`, `target`, source evidence, ownership or reward overrides.
+  only `{quest_id}`. Accept records the body responsible for the task. Advance only reviews
+  recorded status. Objective progress and reward amounts come from the registered quest rules.
+- Controlled `tabletop.quest.offer_transfer` takes `{quest_id, recipient_id}` from the current
+  holder of a transferable active or ready quest. The named recipient can inspect the nearby
+  holder and use the ordinary `accept` command. The existing progress travels with the quest,
+  and the transfer consumes the offer. The recipient must meet its item prerequisites.
 - Manager `tabletop.quest.cancel` accepts `{quest_id}` and returns any unsettled funded reward once.
 
-Accept and claim require a capable, visible, adjacent giver and reserve both participants for six
-seconds with encounter/readiness checks. Claim requires every objective satisfied; the body must
-return to the giver and cannot claim twice. Cancellation/claim retain terminal audit state.
+Initial acceptance and claim require a capable, visible, adjacent contact. The command checks the
+original giver first, followed by the declared alternates. An authorized alternate can present or
+settle the quest after the original giver dies, using the existing escrow. Transfer interactions
+require contact between the current holder and recipient. These exchanges reserve both bodies for
+six seconds and enforce encounter/readiness checks. Claim and cancellation retain terminal state.
 Offscreen WEED progress counts only newly committed work after acceptance, excluding action-busy,
 blocked or pre-acceptance work. The ordinary command receipt remains the retry authority.
 Scenes expose nearby `quest_offers` as public descriptions/rewards; only the observing body's

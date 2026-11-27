@@ -1,5 +1,7 @@
 # Changelog
 
+- Let funded quests designate alternate contacts and approaches, require specific items, and
+  transfer responsibility with consent while preserving progress and single-payout escrow.
 - Add party plans, consensual waypoint travel, leadership changes, and a physically located cache
   funded by members' own supplies.
 - Let autonomous residents answer party invitations from the proposed motive and their own

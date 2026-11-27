@@ -8,6 +8,9 @@ The durable case restarts the worker after handoff and checks the committed `NPC
 Party coordination tests exercise separately authorized leadership, plan changes, travel agreement,
 normal movement, cache deposits and local withdrawals, and the effect of distance on testimony.
 PostgreSQL cases rebuild the party after cache use and autonomous travel.
+The [Section H acceptance journey](verification/section-h/acceptance.md) covers the resident's
+autonomous party role, an explicit human takeover, voluntary departure, and a funded opportunity
+that survives the original giver's death.
 
 Recap cases compare pre-handoff, in-window, and post-takeover actions. The PostgreSQL case
 checks the returning owner's access to a machine-recorded timeout handoff across restart and

@@ -11,6 +11,9 @@ character-purpose traits from the immutable blueprint, preserving motive choices
 The party leader records the shared waypoint. Each member chooses whether to follow it and moves
 through the existing controlled-body rules. Shared cache contents come from explicit deposits at
 the cache site. Character knowledge still comes from each body's frozen observations.
+Quests store their authored contacts, complete approaches, and funded reward in the branch projection.
+Responsibility can pass between consenting bodies. The new holder inherits verified progress and
+the same escrow from the original giver.
 
 The character action catalog offers MEND for a currently visible, wounded body in reach that the
 character observed healing them. A witnessed attack against the character removes that target

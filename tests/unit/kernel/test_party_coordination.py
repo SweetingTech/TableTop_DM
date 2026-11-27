@@ -181,8 +181,10 @@ def test_hearing_does_not_follow_party_membership(monkeypatch, tmp_path):
     assert "The ferryman knows a secret." not in str(scene["recent_observations"])
 
 
-def autonomous_waypoint(app, game=None):
-    game, resident_path, party_id, invite_id = prepare_invited_resident(app, game, max_steps=3)
+def autonomous_waypoint(app, game=None, *, human_owner=False):
+    game, resident_path, party_id, invite_id = prepare_invited_resident(
+        app, game, max_steps=3, human_owner=human_owner
+    )
     admin, player, card, player_path, _, resident, base = game
     assert_resident_response(app, base, resident, invite_id, accept=True)
     clock = app.extensions["world_runner"]

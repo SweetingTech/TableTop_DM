@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 QUESTS = "tabletop.quest_contracts"
-QUEST_VERSION = "tabletop-quests-2.0.0"
+QUEST_VERSION = "tabletop-quests-2.1.0"
 
 
 class StrictModel(BaseModel):
@@ -59,11 +59,20 @@ Item = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9]
 Count = Annotated[int, Field(ge=1, le=100000)]
 
 
+class QuestApproach(StrictModel):
+    title: str = Field(min_length=1, max_length=160)
+    objectives: tuple[Objective, ...] = Field(min_length=1, max_length=8)
+
+
 class ConfigureQuest(StrictModel):
     giver_id: uuid.UUID
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(min_length=1, max_length=1000)
     objectives: tuple[Objective, ...] = Field(min_length=1, max_length=8)
+    alternate_approaches: tuple[QuestApproach, ...] = Field(default=(), max_length=4)
+    alternate_giver_ids: tuple[uuid.UUID, ...] = Field(default=(), max_length=8)
+    required_items: dict[Item, Count] = Field(default_factory=dict, max_length=16)
+    transferable: bool = Field(default=False, strict=True)
     reward_gold: int = Field(default=0, ge=0, le=1000000)
     reward_items: dict[Item, Count] = Field(default_factory=dict, max_length=16)
 
@@ -83,10 +92,17 @@ class Quest(ConfigureQuest):
     owner_id: uuid.UUID | None = None
     status: Literal["OFFERED", "ACTIVE", "READY", "CLAIMED", "CANCELLED"] = "OFFERED"
     evidence: tuple[Evidence, ...]
+    alternate_evidence: tuple[tuple[Evidence, ...], ...] = ()
+    transfer_recipient_id: uuid.UUID | None = None
+    transfer_event_id: uuid.UUID | None = None
 
 
 class QuestReference(StrictModel):
     quest_id: uuid.UUID
+
+
+class TransferQuest(QuestReference):
+    recipient_id: uuid.UUID
 
 
 class ObjectiveView(StrictModel):
@@ -95,18 +111,30 @@ class ObjectiveView(StrictModel):
     target: int
 
 
+class ApproachView(StrictModel):
+    title: str
+    objectives: tuple[ObjectiveView, ...]
+
+
 class QuestView(StrictModel):
     quest_id: uuid.UUID
     title: str
     description: str
     status: str
     objectives: tuple[ObjectiveView, ...]
+    alternate_approaches: tuple[ApproachView, ...] = Field(
+        default=(), exclude_if=lambda rows: not rows
+    )
+    required_items: dict[str, int] = Field(default_factory=dict, exclude_if=lambda items: not items)
     reward_gold: int
     reward_items: dict[str, int]
 
 
 class QuestResult(QuestView):
     summary: str
+    transfer_event_id: uuid.UUID | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 def target(objective: Objective) -> int:
@@ -119,20 +147,37 @@ def target(objective: Objective) -> int:
     return 1
 
 
-def view(quest: Quest) -> QuestView:
+def objective_views(
+    objectives: tuple[Objective, ...], evidence: tuple[Evidence, ...]
+) -> tuple[ObjectiveView, ...]:
+    return tuple(
+        ObjectiveView(description=o.description, progress=e.progress, target=target(o))
+        for o, e in zip(objectives, evidence, strict=True)
+    )
+
+
+def view(quest: Quest, *, transfer_offer: bool = False) -> QuestView:
     return QuestView(
         quest_id=quest.quest_id,
         title=quest.title,
         description=quest.description,
-        status=quest.status,
+        status="OFFERED" if transfer_offer else quest.status,
         reward_gold=quest.reward_gold,
         reward_items=quest.reward_items,
-        objectives=tuple(
-            ObjectiveView(description=o.description, progress=e.progress, target=target(o))
-            for o, e in zip(quest.objectives, quest.evidence, strict=True)
+        objectives=objective_views(quest.objectives, quest.evidence),
+        alternate_approaches=tuple(
+            ApproachView(
+                title=approach.title, objectives=objective_views(approach.objectives, proof)
+            )
+            for approach, proof in zip(
+                quest.alternate_approaches, quest.alternate_evidence, strict=True
+            )
         ),
+        required_items=quest.required_items,
     )
 
 
-def result(quest: Quest, summary: str) -> dict:
-    return QuestResult(**view(quest).model_dump(), summary=summary).model_dump(mode="json")
+def result(quest: Quest, summary: str, *, transfer_event_id: uuid.UUID | None = None) -> dict:
+    return QuestResult(
+        **view(quest).model_dump(), summary=summary, transfer_event_id=transfer_event_id
+    ).model_dump(mode="json")

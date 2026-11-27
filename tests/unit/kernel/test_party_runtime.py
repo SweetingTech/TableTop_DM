@@ -12,7 +12,7 @@ from tests.unit.kernel.test_world_time import NOW, api_command
 pytestmark = pytest.mark.unit
 
 
-def prepare_invited_resident(app, game=None, *, curious=False, max_steps=1):
+def prepare_invited_resident(app, game=None, *, curious=False, max_steps=1, human_owner=False):
     game, _, resident_path, _, _ = configure_subjective(app, game, curious=curious)
     admin, player, player_card, player_path, run, resident, base = game
     party_id, invite_id = create_and_invite(game)
@@ -22,6 +22,16 @@ def prepare_invited_resident(app, game=None, *, curious=False, max_steps=1):
     assert situation["party_invitations"][0]["motive"] == "CARE"
     assert invite_id not in str(situation)
     assert "PRIVATE_NPC_VOW" not in str(party_scene(player, player_path))
+    if human_owner:
+        assert player.get(resident_path + "/scene").status_code == 403
+        owner = player.get("/api/v2/auth/session").get_json()["user"]["actor_id"]
+        api_command(
+            admin,
+            base,
+            "tabletop.entity.set_controllers",
+            {"changes": [{"entity_id": resident, "controller_actor_id": owner}]},
+            "authorize-resident-player",
+        )
 
     clock = admin.get(clock_path(base)).get_json()["clock"]
     executor = admin.post(
