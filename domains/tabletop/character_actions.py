@@ -14,11 +14,15 @@ from domains.tabletop.parties import RespondToInvitation
 from domains.tabletop.party_coordination import FollowPlan
 from domains.tabletop.rules import DEFAULT_SPELLS
 from domains.tabletop.spatial import MoveRequest, command_definition
-from domains.tabletop.spatial.scene import PerceivedScene, SceneCoordinate
+from domains.tabletop.spatial.scene import (
+    PerceivedScene,
+    SceneCoordinate,
+    actionable_party_invitations,
+)
 from kernel.contracts import Actor, BranchKind
 from persona.models import CompiledPersona
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.7.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.7.1"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
 
 
@@ -31,24 +35,11 @@ def _motive_weight(persona: CompiledPersona, motive: str) -> float:
 
 
 def _invitation_actions(
-    scene: PerceivedScene, origin: SceneCoordinate, persona: CompiledPersona, frame: ChoiceFrame
+    scene: PerceivedScene, persona: CompiledPersona, frame: ChoiceFrame
 ) -> tuple[DecisionAction, ...]:
-    visible = {
-        entity.entity_id: entity
-        for entity in scene.perceived_entities
-        if entity.knowledge_state == "VISIBLE"
-    }
     threats = {threat.entity_id for threat in frame.threats}
     actions: list[DecisionAction] = []
-    for index, invitation in enumerate(scene.party_invitations[:8], 1):
-        inviter = visible.get(invitation.inviter_id)
-        location = inviter.position if inviter and inviter.status in {None, "ACTIVE"} else None
-        if (
-            location is None
-            or (location.zone_id, location.z) != (origin.zone_id, origin.z)
-            or max(abs(location.x - origin.x), abs(location.y - origin.y)) > 1
-        ):
-            continue
+    for index, invitation in enumerate(actionable_party_invitations(scene), 1):
         temperament = _motive_weight(persona, invitation.motive)
         hostilities = -1.5 if invitation.inviter_id in threats else 0.0
         for accept, response, direction in ((True, "Accept", 1), (False, "Decline", -1)):
@@ -165,7 +156,7 @@ def character_action_candidates(
         + party_choices
     )
     if frame is not None and persona is not None:
-        actions += _invitation_actions(scene, body.position, persona, frame)
+        actions += _invitation_actions(scene, persona, frame)
     if frame is not None and frame.speech_ready:
         actions += tuple(
             DecisionAction(

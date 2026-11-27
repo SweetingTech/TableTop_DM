@@ -13,7 +13,7 @@ from cognition.knowledge import KnownLore, knowledge_from_validated, search_know
 from cognition.models import Belief, Memory, MindState, Observation
 from cognition.perception import PerceptionEngine, PerceptionProfile
 from domains.tabletop.character_history import CharacterCardContent
-from domains.tabletop.spatial.scene import PerceivedScene
+from domains.tabletop.spatial.scene import PerceivedScene, actionable_party_invitations
 from kernel.contracts import EventEnvelopeV2
 from kernel.perception_contracts import NON_SENSORY_TAGS, PerceptionGrant
 from kernel.state import stable_hash
@@ -140,7 +140,7 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.8.0"
+    context_version: str = "character-context-1.8.1"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
@@ -185,6 +185,7 @@ class CharacterContext(BaseModel):
             target = perceived_references.get(str(action.parameters.get("target_id")))
             if target is not None:
                 action_targets[action.action] = target
+        invitations = actionable_party_invitations(self.scene)
         return {
             "identity": {
                 "name": self.identity.name,
@@ -264,10 +265,10 @@ class CharacterContext(BaseModel):
                             "motive": invitation.motive,
                             "inviter": references.get(invitation.inviter_id),
                         }
-                        for index, invitation in enumerate(self.scene.party_invitations[:8], 1)
+                        for index, invitation in enumerate(invitations, 1)
                     ]
                 }
-                if self.scene.party_invitations
+                if invitations
                 else {}
             ),
             **(

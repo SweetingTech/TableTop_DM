@@ -51,8 +51,9 @@ currently use the typed API.
 An active autonomous character with a pinned character persona can respond to a nearby inviter.
 The runner considers the offered motive, the invited character's traits, and hostility that
 character witnessed. A resident can accept or decline through its existing autonomous controller.
-The model sees the offered goal and a local invitation reference. The server owns the invitation
-ID, command parameters, and authorization.
+The model sees up to eight nearby invitations with their offered goals and local references.
+Absent or distant inviters leave room for nearby choices. The server owns the invitation ID,
+command parameters, and authorization.
 
 Quest contract `tabletop-quests-2.1.0` uses `POST /api/v2/commands`.
 
@@ -1149,9 +1150,9 @@ replies and a strict majority can establish brief, balanced, or elaborate cadenc
 choice profile retains the supporting event IDs. A provider receives the cadence category with the
 selected intent and volume. Replies outside that cadence use the corresponding local line.
 
-Context `character-context-1.8.0` includes the body's own mana/reach/learned spell IDs and inspected
+Context `character-context-1.8.1` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
-`tabletop-character-actions-1.7.0` supports party responses and consensual waypoint travel.
+`tabletop-character-actions-1.7.1` supports party responses and consensual waypoint travel.
 The combat actions include:
 
 - `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next
