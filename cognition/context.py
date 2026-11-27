@@ -140,7 +140,7 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.6.0"
+    context_version: str = "character-context-1.7.0"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
@@ -254,6 +254,22 @@ class CharacterContext(BaseModel):
                 for entity in self.scene.perceived_entities
             ],
             "action_targets": action_targets,
+            **(
+                {
+                    "party_invitations": [
+                        {
+                            "reference": f"party invitation {index}",
+                            "name": invitation.name,
+                            "goal": invitation.goal,
+                            "motive": invitation.motive,
+                            "inviter": references.get(invitation.inviter_id),
+                        }
+                        for index, invitation in enumerate(self.scene.party_invitations[:8], 1)
+                    ]
+                }
+                if self.scene.party_invitations
+                else {}
+            ),
             "experiences": [experience_summary(item) for item in self.observations],
             "beliefs": [
                 {

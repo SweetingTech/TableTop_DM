@@ -18,8 +18,9 @@ cannot request privileged presentation or grant capabilities.
 Submit party actions through `POST /api/v2/commands` with the acting `embodied_entity_id`
 and the usual run, branch, and idempotency fields.
 
-- `tabletop.party.create` takes `{name, goal}`. The founding body becomes the first member
-  and leader. The `party_id` is returned in the result.
+- `tabletop.party.create` takes `{name, goal, motive?}`. The founding body becomes the first
+  member and leader. The motive is `DUTY`, `CURIOSITY`, `CARE` (the default), or `RECOVERY`.
+  The `party_id` is returned in the result.
 - `tabletop.party.invite` takes `{party_id, invitee_id}`. A member can invite a capable body
   within one grid step when both can see each other. The invitation carries the offered goal.
 - `tabletop.party.respond` takes `{invitation_id, accept}` from the invited body's controller.
@@ -34,6 +35,12 @@ The body-scoped `/scene` response includes `parties` for that body's memberships
 `party_invitations` for its pending invitations. The party view contains the shared goal,
 leader and member IDs. Position, inventory, and controller access follow their existing
 authorization rules. The departure reason is private. These actions currently use the typed API.
+
+An active autonomous character with a pinned character persona can respond to a nearby inviter.
+The runner considers the offered motive, the invited character's traits, and hostility that
+character witnessed. A resident can accept or decline through its existing autonomous controller.
+The model sees the offered goal and a local invitation reference. The server owns the invitation
+ID, command parameters, and authorization.
 
 Quest contract `tabletop-quests-2.0.0` uses `POST /api/v2/commands`:
 
@@ -1119,9 +1126,10 @@ replies and a strict majority can establish brief, balanced, or elaborate cadenc
 choice profile retains the supporting event IDs. A provider receives the cadence category with the
 selected intent and volume. Replies outside that cadence use the corresponding local line.
 
-Context `character-context-1.6.0` includes the body's own mana/reach/learned spell IDs and inspected
+Context `character-context-1.7.0` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
-`tabletop-character-actions-1.4.0` and proposal policy `character-proposal-policy-1.7.0` offer:
+`tabletop-character-actions-1.6.0` supports party responses alongside the existing action choices.
+The combat actions include:
 
 - `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next
   physical attack; that attempt consumes the guard, including a miss. Guards do not stack.

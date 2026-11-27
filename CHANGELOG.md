@@ -1,5 +1,7 @@
 # Changelog
 
+- Let autonomous residents answer party invitations from the proposed motive and their own
+  experiences. Restore pinned character traits for live decisions after a PostgreSQL restart.
 - Record in-world party invites, consent, departures, hostile exits, and reunions through the
   controlled body. Residents can join a party without a player account.
 - Score human preferences using choices the player actually had. Options never offered keep the

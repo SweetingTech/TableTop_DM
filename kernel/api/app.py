@@ -618,6 +618,42 @@ def create_app(
             persona_versions[stored_version.version_id] = stored_version
             personas[stored_version.blueprint.persona_id] = stored_version.blueprint
 
+    def pinned_character_profile(
+        persona: uuid.UUID, version: uuid.UUID, compiler_version: str
+    ) -> CompiledPersona | None:
+        from persona.compilation.compiler import character_trait_names
+
+        profile = (
+            persona_repository.get_compiled(persona, version, compiler_version)
+            if persona_repository
+            else bound_profiles.get((persona, version, compiler_version))
+        )
+        record = persona_versions.get(version)
+        if record is None and profile is not None and persona_repository:
+            record = next(
+                (row for row in persona_repository.list_versions() if row.version_id == version),
+                None,
+            )
+            if record is not None:
+                persona_versions[version] = record
+        if (
+            profile is None
+            or record is None
+            or record.blueprint.persona_id != persona
+            or record.blueprint.purpose is not PersonaPurpose.CHARACTER
+        ):
+            return None
+        allowed = character_trait_names()
+        return profile.model_copy(
+            update={
+                "deep_traits": {
+                    name: value
+                    for name, value in record.blueprint.dimensions.items()
+                    if name in allowed
+                }
+            }
+        )
+
     def controller_snapshot() -> SimulationApplication:
         if durable_control is None:
             return simulation
@@ -854,11 +890,7 @@ def create_app(
                 run_id=proposal.run_id,
                 bindings=character_bindings,
                 cards=portal.repository,
-                profile_reader=lambda persona, version, compiler: (
-                    persona_repository.get_compiled(persona, version, compiler)
-                    if persona_repository
-                    else bound_profiles.get((persona, version, compiler))
-                ),
+                profile_reader=pinned_character_profile,
             )
         except CharacterContextPending:
             # Movement uses the locked physical scene. Contextual training needs
@@ -927,11 +959,7 @@ def create_app(
         read_minds=controller_minds,
         bindings=character_bindings,
         cards=portal.repository,
-        profiles=lambda persona, version, compiler: (
-            persona_repository.get_compiled(persona, version, compiler)
-            if persona_repository
-            else bound_profiles.get((persona, version, compiler))
-        ),
+        profiles=pinned_character_profile,
         proposals=character_proposals,
         reference=simulation if database_dsn is None else None,
         behavior_reader=read_behavior,
@@ -2431,11 +2459,7 @@ def create_app(
             run_id=run_id,
             bindings=character_bindings,
             cards=portal.repository,
-            profile_reader=lambda persona, version, compiler: (
-                persona_repository.get_compiled(persona, version, compiler)
-                if persona_repository
-                else bound_profiles.get((persona, version, compiler))
-            ),
+            profile_reader=pinned_character_profile,
         )
 
     @app.post(
@@ -4221,43 +4245,11 @@ def create_app(
     from kernel.due_work import PostgresDueWork
     from kernel.world_runner import WorldRunner
 
-    def goal_profile(persona, version, compiler_version):
-        from persona.compilation.compiler import character_trait_names
-
-        profile = (
-            persona_repository.get_compiled(persona, version, compiler_version)
-            if persona_repository
-            else bound_profiles.get((persona, version, compiler_version))
-        )
-        record = persona_versions.get(version)
-        if record is None and persona_repository:
-            record = next(
-                (row for row in persona_repository.list_versions() if row.version_id == version),
-                None,
-            )
-        if (
-            profile is None
-            or record is None
-            or record.blueprint.persona_id != persona
-            or record.blueprint.purpose is not PersonaPurpose.CHARACTER
-        ):
-            return None
-        allowed = character_trait_names()
-        return profile.model_copy(
-            update={
-                "deep_traits": {
-                    name: value
-                    for name, value in record.blueprint.dimensions.items()
-                    if name in allowed
-                }
-            }
-        )
-
     simulation.goal_input_reader = make_goal_reader(
         controller_snapshot,
         controller_minds,
         character_bindings,
-        goal_profile,
+        pinned_character_profile,
     )
     app.extensions["world_runner"] = WorldRunner(
         controller_snapshot, PostgresDueWork(database_dsn) if database_dsn else None

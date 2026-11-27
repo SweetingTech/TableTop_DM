@@ -445,8 +445,10 @@ implementation and verification.
 - [x] H1 — Add party membership independent of human account/game rosters and ownership.
   Controlled bodies form parties around shared goals and can invite, accept, decline, leave,
   break in hostility, and rejoin through [typed party actions](API_AND_WORKFLOWS.md#in-world-parties).
-- [ ] H2 — Allow any eligible in-world entity to join based on circumstances and motives; support NPC
-  companions without manufacturing a human account for each. Joining does not grant private knowledge or human body control.
+- [x] H2 — Allow any eligible in-world entity to join based on circumstances and motives.
+  The character runner responds to a nearby invitation using the offered motive, its pinned
+  persona, and experienced hostility. A joining resident gains only the party's shared charter.
+  Private knowledge and controller access retain their existing authorization rules.
 - [ ] H3 — Define group movement, shared plans, leadership decisions, resources, and distributed knowledge.
   Group membership alone must not share every member's beliefs/secrets.
 - [ ] H4 — Make quests/opportunities transferable where the fiction allows. Replace arbitrary

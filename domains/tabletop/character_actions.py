@@ -2,20 +2,67 @@
 
 from __future__ import annotations
 
-from cognition.choice_state import SPEECH, VOLUMES, choice_frame
+from cognition.choice_state import SPEECH, VOLUMES, ChoiceFrame, choice_frame
 from cognition.engine import DecisionAction
+from cognition.goal_motivation import LEVEL, MOTIVE_TRAITS
 from cognition.models import Observation
 from domains.tabletop.combat import AttackRequest
 from domains.tabletop.combat import command_definition as attack_definition
 from domains.tabletop.dialogue import SpeechRequest
 from domains.tabletop.magic.tactical import InvokeRequest
+from domains.tabletop.parties import RespondToInvitation
 from domains.tabletop.rules import DEFAULT_SPELLS
 from domains.tabletop.spatial import MoveRequest, command_definition
-from domains.tabletop.spatial.scene import PerceivedScene
+from domains.tabletop.spatial.scene import PerceivedScene, SceneCoordinate
 from kernel.contracts import Actor, BranchKind
+from persona.models import CompiledPersona
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.5.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.6.0"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
+
+
+def _invitation_actions(
+    scene: PerceivedScene, origin: SceneCoordinate, persona: CompiledPersona, frame: ChoiceFrame
+) -> tuple[DecisionAction, ...]:
+    visible = {
+        entity.entity_id: entity
+        for entity in scene.perceived_entities
+        if entity.knowledge_state == "VISIBLE"
+    }
+    threats = {threat.entity_id for threat in frame.threats}
+    actions: list[DecisionAction] = []
+    for index, invitation in enumerate(scene.party_invitations[:8], 1):
+        inviter = visible.get(invitation.inviter_id)
+        location = inviter.position if inviter and inviter.status in {None, "ACTIVE"} else None
+        if (
+            location is None
+            or (location.zone_id, location.z) != (origin.zone_id, origin.z)
+            or max(abs(location.x - origin.x), abs(location.y - origin.y)) > 1
+        ):
+            continue
+        temperament = (
+            sum(
+                LEVEL.get(str(persona.deep_traits.get(trait)), 0)
+                for trait in MOTIVE_TRAITS[invitation.motive]
+            )
+            / 32
+        )
+        hostilities = -1.5 if invitation.inviter_id in threats else 0.0
+        for accept, response, direction in ((True, "Accept", 1), (False, "Decline", -1)):
+            actions.append(
+                DecisionAction(
+                    action=f"{response} party invitation {index}",
+                    command_type="tabletop.party.respond",
+                    parameters=RespondToInvitation(
+                        invitation_id=invitation.invitation_id, accept=accept
+                    ).model_dump(mode="json"),
+                    utility_factors={
+                        "offered_motive": direction * temperament,
+                        "witnessed_hostility": direction * hostilities,
+                    },
+                )
+            )
+    return tuple(actions)
 
 
 def character_action_candidates(
@@ -24,6 +71,7 @@ def character_action_candidates(
     actor: Actor,
     branch_kind: BranchKind,
     observations: tuple[Observation, ...] = (),
+    persona: CompiledPersona | None = None,
 ) -> tuple[DecisionAction, ...]:
     """Caller supplies world-scoped authority, after authorizing this exact scene.
 
@@ -62,6 +110,8 @@ def character_action_candidates(
         for name, dx, dy in _DIRECTIONS
     )
     frame = choice_frame(scene, observations)
+    if frame is not None and persona is not None:
+        actions += _invitation_actions(scene, body.position, persona, frame)
     if frame is not None and frame.speech_ready:
         actions += tuple(
             DecisionAction(

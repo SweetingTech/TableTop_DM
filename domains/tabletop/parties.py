@@ -25,6 +25,7 @@ class PartyModel(BaseModel):
 class CreateParty(PartyModel):
     name: str = Field(min_length=1, max_length=100)
     goal: str = Field(min_length=1, max_length=400)
+    motive: Literal["DUTY", "CURIOSITY", "CARE", "RECOVERY"] = "CARE"
 
 
 class PartyReference(PartyModel):
@@ -77,12 +78,14 @@ def member_and_invitations(
     state: BranchState, observer: uuid.UUID
 ) -> tuple[tuple[PartyView, ...], tuple[InvitationView, ...]]:
     parties = tuple(
-        PartyView.model_validate({key: raw[key] for key in PartyView.model_fields})
+        PartyView.model_validate({key: raw[key] for key in PartyView.model_fields if key in raw})
         for _, raw in sorted(state.projections.get(PARTIES, {}).items())
         if str(observer) in raw["member_ids"]
     )
     invites = tuple(
-        InvitationView.model_validate({key: raw[key] for key in InvitationView.model_fields})
+        InvitationView.model_validate(
+            {key: raw[key] for key in InvitationView.model_fields if key in raw}
+        )
         for _, raw in sorted(state.projections.get(INVITATIONS, {}).items())
         if raw["status"] == "PENDING" and raw["invitee_id"] == str(observer)
     )
@@ -195,6 +198,7 @@ def invite_member(proposal: CommandProposal, state: BranchState) -> CommandResul
         invitee_id=request.invitee_id,
         name=party.name,
         goal=party.goal,
+        motive=party.motive,
     )
     return _result(
         PartyEvent(
@@ -295,6 +299,7 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
     return tuple(
         CommandDefinition(
             command_type=f"tabletop.party.{name}",
+            version="1.1.0",
             required_capabilities=frozenset({"action.propose", "entity.act"}),
             allowed_branch_kinds=frozenset({BranchKind.CANONICAL, BranchKind.TRIAL}),
             handler=handler,

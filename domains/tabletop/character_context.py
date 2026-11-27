@@ -127,6 +127,7 @@ def resolve_character_context(
                 actor=authority,
                 branch_kind=simulation.states.get(branch).kind,
                 observations=context.observations,
+                persona=profile,
             )
         }
     )

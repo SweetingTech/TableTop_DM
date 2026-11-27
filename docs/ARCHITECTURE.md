@@ -6,6 +6,8 @@ Party membership belongs to embodied entities. The party, invitations, and linke
 events are branch projections. Each member consents through the existing body authority.
 The scene presents the charter and membership to members and presents pending invitations
 to their intended recipient. Roster and controller access still require explicit authorization.
+The character runner and offscreen planner share the pinned character profile reader. It obtains
+character-purpose traits from the immutable blueprint, preserving motive choices after restart.
 
 The character action catalog offers MEND for a currently visible, wounded body in reach that the
 character observed healing them. A witnessed attack against the character removes that target
