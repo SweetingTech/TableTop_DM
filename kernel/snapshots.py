@@ -26,6 +26,23 @@ def artifact_path(uri: str) -> Path:
     return path
 
 
+def publish_immutable_artifact(destination: Path, content: bytes) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=destination.parent, suffix=".tmp", delete=False) as output:
+        temporary = Path(output.name)
+        output.write(content)
+    try:
+        try:
+            os.link(temporary, destination)
+        except FileExistsError:
+            if destination.read_bytes() != content:
+                raise ValueError(
+                    "immutable snapshot artifact differs from frozen content"
+                ) from None
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 class SnapshotEntity(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -109,22 +126,7 @@ class SnapshotStore:
         compressed = gzip.compress(body, mtime=0)
         artifact_hash = hashlib.sha256(compressed).hexdigest()
         destination = self.root / str(world_id) / f"{snapshot_id}.json.gz"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            dir=destination.parent, suffix=".tmp", delete=False
-        ) as output:
-            temporary = Path(output.name)
-            output.write(compressed)
-        try:
-            try:
-                os.link(temporary, destination)
-            except FileExistsError:
-                if destination.read_bytes() != compressed:
-                    raise ValueError(
-                        "immutable snapshot artifact differs from frozen content"
-                    ) from None
-        finally:
-            temporary.unlink(missing_ok=True)
+        publish_immutable_artifact(destination, compressed)
         return SnapshotManifest(
             snapshot_id=snapshot_id,
             world_id=world_id,

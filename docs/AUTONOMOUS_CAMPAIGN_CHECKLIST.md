@@ -461,6 +461,9 @@ implementation and verification.
 
 ## I. Complete checkpoints, timeline revision, and correction
 
+The [campaign checkpoint contract](CAMPAIGN_CHECKPOINTS.md) specifies the complete manifest,
+the causal capture boundary, and the active continuation and restore rules.
+
 - [ ] I1 — Specify a consistent checkpoint manifest spanning canonical projection and entity metadata,
   secrets, minds/evidence/memories/relationships, population, control assignments, activities, clock,
   RNG allocation, story state, tasks, narrative/retrieval indexes, and relevant versioned artifacts.
