@@ -89,6 +89,8 @@ history remains canonical. Source commands, raw target/counterparty IDs and owne
 excluded from these views. Fiction context version `character-context-1.6.0` replaces quest IDs
 with local task references. The console prepares `/quest accept|status|claim <quest id>` intents
 from the offer or personal journal; choosing a button focuses the draft and sending commits.
+Both views list required items and all visible approaches. The personal journal shows each
+objective's recorded progress, including the alternate approach that made a quest ready.
 This wires enforcement and observed opportunities; autonomous goal selection remains checklist F.
 
 Trade contract `tabletop-trade-2.0.0` uses these typed commands through `POST /api/v2/commands`:

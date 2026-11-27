@@ -3,7 +3,7 @@ import { Crosshair, Map, MessageSquare, RefreshCw, Send, Swords } from "lucide-r
 import { useAppContext } from "../../app/AppContext";
 import { DefinitionList, PageHeader, Panel, Status } from "../../components/ui/Primitives";
 import { EmptyState, ErrorState, LoadingState, SourceNotice } from "../../components/ui/States";
-import type { EntitySummary } from "../../core/api/types";
+import type { EntitySummary, QuestSummary } from "../../core/api/types";
 import { proposeCommand, type CommandAcknowledgement, type ControlMode } from "./api";
 import ControlPanel from "./ControlPanel";
 import { entityMapPosition, mapLayout } from "./mapPosition";
@@ -21,6 +21,29 @@ function WorldConsole({ activeWorldId }: { activeWorldId: string }) {
   function choose(entityId: string) { setSelectedEntityId(entityId); setSelectionEpoch(value => value + 1); }
   return <SceneConsole key={`${selectedEntityId}:${selectionEpoch}`} activeWorldId={activeWorldId}
     selectedEntityId={selectedEntityId} onViewpointChange={choose} />;
+}
+
+function QuestObjectives({ quest, showProgress }: { quest: QuestSummary; showProgress: boolean }) {
+  const alternatives = quest.alternate_approaches ?? [];
+  const approaches = [{ title: "Main approach", objectives: quest.objectives }, ...alternatives];
+  const requirements = Object.entries(quest.required_items ?? {});
+
+  return <>
+    {requirements.length ? <>
+      <p>Required items to accept</p>
+      <ul aria-label="Required items">{requirements.map(([item, count]) =>
+        <li key={item}>{count} {item}</li>,
+      )}</ul>
+    </> : null}
+    {alternatives.length ? <p>Complete one approach.</p> : null}
+    {approaches.map((approach, index) => <div key={`${approach.title}:${index}`}>
+      {alternatives.length ? <h5>{approach.title}</h5> : null}
+      <ul aria-label={`${approach.title} objectives`}>{approach.objectives.map((objective, objectiveIndex) =>
+        <li key={objectiveIndex}>{objective.description} · {showProgress || objective.progress
+          ? `${objective.progress} / ${objective.target}` : `${objective.target} needed`}</li>,
+      )}</ul>
+    </div>)}
+  </>;
 }
 
 function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
@@ -146,7 +169,7 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
             <h3>Offered quests</h3>
             {selected.quest_offers.map((quest) => <article key={quest.quest_id}>
               <h4>{quest.title}</h4><p>{quest.description}</p>
-              <ul>{quest.objectives.map((objective, index) => <li key={index}>{objective.description} · {objective.target} needed</li>)}</ul>
+              <QuestObjectives quest={quest} showProgress={false} />
               <p>Reward: {quest.reward_gold} gold{Object.entries(quest.reward_items).map(([item, count]) => ` · ${count} ${item}`).join("")}</p>
               <button type="button" className="button secondary" disabled={!canAct || sending} onClick={() => {
                 setCommand(`/quest accept ${quest.quest_id}`); commandInput.current?.focus();
@@ -157,7 +180,7 @@ function SceneConsole({ activeWorldId, selectedEntityId, onViewpointChange }: {
             <h3>Your quests</h3>
             {personalQuests.map((quest) => <article key={quest.quest_id}>
               <h4>{quest.title}</h4><p>{({ ACTIVE: "In progress", READY: "Ready for reward", CLAIMED: "Reward received", CANCELLED: "Withdrawn", OFFERED: "Offered" })[quest.status]}</p>
-              <ul>{quest.objectives.map((objective, index) => <li key={index}>{objective.description} · {objective.progress} / {objective.target}</li>)}</ul>
+              <QuestObjectives quest={quest} showProgress />
               {quest.status === "READY" ? <button type="button" className="button secondary" disabled={!canAct || sending} onClick={() => {
                 setCommand(`/quest claim ${quest.quest_id}`); commandInput.current?.focus();
               }}>Claim reward for {quest.title}</button> : null}

@@ -11,6 +11,9 @@ PostgreSQL cases rebuild the party after cache use and autonomous travel.
 The [Section H acceptance journey](verification/section-h/acceptance.md) covers the resident's
 autonomous party role, an explicit human takeover, voluntary departure, and a funded opportunity
 that survives the original giver's death.
+The Chromium quest journey checks the original route and an alternate route. It verifies item
+prerequisites in both console views, progress for the completed route, and the mobile reward flow.
+The GitHub PostgreSQL integration job allows 70 minutes for the full suite and dependency cleanup.
 
 Recap cases compare pre-handoff, in-window, and post-takeover actions. The PostgreSQL case
 checks the returning owner's access to a machine-recorded timeout handoff across restart and

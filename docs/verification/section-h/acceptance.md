@@ -20,3 +20,7 @@ uv run pytest tests/integration/test_party.py tests/integration/test_party_runti
 The fixtures use the standard command bus, identity endpoints, clocks, runtime, PostgreSQL
 storage, and replay. The fixture provisions equipment through a test-only typed setup command.
 Actual body actions supply objective evidence.
+
+The [Chromium journey](../../../tests/e2e/test_quest_evidence_isolated.py) exercises the same
+quest contract in the play console. It verifies the requirements before acceptance, the alternate
+route's progress beside the unfinished main route, and the reward flow at a mobile viewport.
