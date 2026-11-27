@@ -33,10 +33,13 @@ export type ActorSummary = {
 };
 
 export type TradeOffer = { offer_id: string; side: "SELL" | "BUY"; item: string; quantity: number; unit_price: number };
+export type QuestObjective = { description: string; progress: number; target: number };
 export type QuestSummary = {
   quest_id: string; title: string; description: string;
   status: "OFFERED" | "ACTIVE" | "READY" | "CLAIMED" | "CANCELLED";
-  objectives: Array<{ description: string; progress: number; target: number }>;
+  objectives: QuestObjective[];
+  alternate_approaches?: Array<{ title: string; objectives: QuestObjective[] }>;
+  required_items?: Record<string, number>;
   reward_gold: number; reward_items: Record<string, number>;
 };
 

@@ -17,7 +17,7 @@ from domains.tabletop.quests.contracts import (
     target,
 )
 from kernel.command_bus import CommandHandler
-from kernel.contracts import CommandProposal, CommandResult
+from kernel.contracts import CommandProposal, CommandResult, StateDelta
 from kernel.state import BranchState
 
 EVIDENCE_COMMANDS = frozenset(
@@ -132,24 +132,40 @@ def with_quest_evidence(handler: CommandHandler) -> CommandHandler:
         after = state.working_copy()
         for delta in result.deltas:
             after.apply(delta)
-        deltas = []
+        deltas: list[StateDelta] = []
         for _, raw in sorted(state.projections.get(QUESTS, {}).items()):
             quest = Quest.model_validate(raw)
             if quest.status != "ACTIVE" or quest.owner_id is None:
                 continue
-            evidence = tuple(
-                progress(o, e, quest.owner_id, proposal, state, after, result)
-                for o, e in zip(quest.objectives, quest.evidence, strict=True)
+            objectives = (
+                quest.objectives,
+                *(approach.objectives for approach in quest.alternate_approaches),
             )
-            if evidence == quest.evidence:
+            previous = (quest.evidence, *quest.alternate_evidence)
+            proofs = tuple(
+                tuple(
+                    progress(objective, stored, quest.owner_id, proposal, state, after, result)
+                    for objective, stored in zip(group, snapshots, strict=True)
+                )
+                for group, snapshots in zip(objectives, previous, strict=True)
+            )
+            if proofs == previous:
                 continue
-            ready = all(
-                e.progress >= target(o) for o, e in zip(quest.objectives, evidence, strict=True)
+            ready = any(
+                all(
+                    evidence.progress >= target(objective)
+                    for objective, evidence in zip(group, snapshots, strict=True)
+                )
+                for group, snapshots in zip(objectives, proofs, strict=True)
             )
             deltas.append(
                 set_quest(
                     quest.model_copy(
-                        update={"evidence": evidence, "status": "READY" if ready else "ACTIVE"}
+                        update={
+                            "evidence": proofs[0],
+                            "alternate_evidence": proofs[1:],
+                            "status": "READY" if ready else "ACTIVE",
+                        }
                     )
                 )
             )

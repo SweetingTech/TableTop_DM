@@ -2,20 +2,101 @@
 
 from __future__ import annotations
 
-from cognition.choice_state import SPEECH, VOLUMES, choice_frame
+from cognition.choice_state import SPEECH, VOLUMES, ChoiceFrame, choice_frame
 from cognition.engine import DecisionAction
+from cognition.goal_motivation import LEVEL, MOTIVE_TRAITS
 from cognition.models import Observation
 from domains.tabletop.combat import AttackRequest
 from domains.tabletop.combat import command_definition as attack_definition
 from domains.tabletop.dialogue import SpeechRequest
 from domains.tabletop.magic.tactical import InvokeRequest
+from domains.tabletop.parties import RespondToInvitation
+from domains.tabletop.party_coordination import FollowPlan
 from domains.tabletop.rules import DEFAULT_SPELLS
 from domains.tabletop.spatial import MoveRequest, command_definition
-from domains.tabletop.spatial.scene import PerceivedScene
+from domains.tabletop.spatial.scene import (
+    PerceivedScene,
+    SceneCoordinate,
+    actionable_party_invitations,
+)
 from kernel.contracts import Actor, BranchKind
+from persona.models import CompiledPersona
 
-ACTION_CATALOG_VERSION = "tabletop-character-actions-1.5.0"
+ACTION_CATALOG_VERSION = "tabletop-character-actions-1.7.1"
 _DIRECTIONS = (("north", 0, -1), ("east", 1, 0), ("south", 0, 1), ("west", -1, 0))
+
+
+def _motive_weight(persona: CompiledPersona, motive: str) -> float:
+    # A strong motive can compete with an established movement preference.
+    return (
+        sum(LEVEL.get(str(persona.deep_traits.get(trait)), 0) for trait in MOTIVE_TRAITS[motive])
+        / 32
+    )
+
+
+def _invitation_actions(
+    scene: PerceivedScene, persona: CompiledPersona, frame: ChoiceFrame
+) -> tuple[DecisionAction, ...]:
+    threats = {threat.entity_id for threat in frame.threats}
+    actions: list[DecisionAction] = []
+    for index, invitation in enumerate(actionable_party_invitations(scene), 1):
+        temperament = _motive_weight(persona, invitation.motive)
+        hostilities = -1.5 if invitation.inviter_id in threats else 0.0
+        for accept, response, direction in ((True, "Accept", 1), (False, "Decline", -1)):
+            actions.append(
+                DecisionAction(
+                    action=f"{response} party invitation {index}",
+                    command_type="tabletop.party.respond",
+                    parameters=RespondToInvitation(
+                        invitation_id=invitation.invitation_id, accept=accept
+                    ).model_dump(mode="json"),
+                    utility_factors={
+                        "offered_motive": direction * temperament,
+                        "witnessed_hostility": direction * hostilities,
+                    },
+                )
+            )
+    return tuple(actions)
+
+
+def _party_travel_options(
+    scene: PerceivedScene, origin: SceneCoordinate, persona: CompiledPersona
+) -> tuple[dict[str, float], tuple[DecisionAction, ...]]:
+    move_weights: dict[str, float] = {}
+    choices: list[DecisionAction] = []
+    for index, party in enumerate(scene.parties, 1):
+        waypoint = party.waypoint
+        if (
+            waypoint is None
+            or party.plan_event_id is None
+            or (waypoint.zone_id, waypoint.z) != (str(origin.zone_id), origin.z)
+            or (waypoint.x, waypoint.y) == (origin.x, origin.y)
+        ):
+            continue
+        if scene.observer_entity_id not in party.following_member_ids:
+            choices.append(
+                DecisionAction(
+                    action=f"Agree to follow party plan {index}",
+                    command_type="tabletop.party.follow",
+                    parameters=FollowPlan(
+                        party_id=party.party_id,
+                        plan_event_id=party.plan_event_id,
+                        follow=True,
+                    ).model_dump(mode="json"),
+                    utility_factors={"agreed_goal": _motive_weight(persona, party.motive)},
+                )
+            )
+            continue
+        distance = abs(waypoint.x - origin.x) + abs(waypoint.y - origin.y)
+        move_weights.update(
+            {
+                name: 1.5
+                for name, dx, dy in _DIRECTIONS
+                if abs(waypoint.x - origin.x - dx) + abs(waypoint.y - origin.y - dy) < distance
+            }
+        )
+        break
+    return move_weights, tuple(choices)
 
 
 def character_action_candidates(
@@ -24,6 +105,7 @@ def character_action_candidates(
     actor: Actor,
     branch_kind: BranchKind,
     observations: tuple[Observation, ...] = (),
+    persona: CompiledPersona | None = None,
 ) -> tuple[DecisionAction, ...]:
     """Caller supplies world-scoped authority, after authorizing this exact scene.
 
@@ -53,15 +135,28 @@ def character_action_candidates(
         or bool(body.action_wait_seconds)
     ):
         return ()
-    actions = tuple(
-        DecisionAction(
-            action=f"Try to take one step {name}",
-            command_type=definition.command_type,
-            parameters=MoveRequest(dx=dx, dy=dy).model_dump(mode="json"),
-        )
-        for name, dx, dy in _DIRECTIONS
-    )
     frame = choice_frame(scene, observations)
+    move_weights, party_choices = (
+        _party_travel_options(scene, body.position, persona)
+        if frame is not None and not frame.threats and persona is not None
+        else ({}, ())
+    )
+    actions = (
+        tuple(
+            DecisionAction(
+                action=f"Try to take one step {name}",
+                command_type=definition.command_type,
+                parameters=MoveRequest(dx=dx, dy=dy).model_dump(mode="json"),
+                utility_factors={"party_waypoint": move_weights[name]}
+                if name in move_weights
+                else {},
+            )
+            for name, dx, dy in _DIRECTIONS
+        )
+        + party_choices
+    )
+    if frame is not None and persona is not None:
+        actions += _invitation_actions(scene, persona, frame)
     if frame is not None and frame.speech_ready:
         actions += tuple(
             DecisionAction(

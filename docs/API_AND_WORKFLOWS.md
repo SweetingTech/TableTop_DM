@@ -6,31 +6,82 @@ in-process DM grant cannot survive another API process's revocation. New respons
 retries are both redacted after revocation; privileged inspection remains available when the
 current exact-world grant allows it. Reference mode uses its existing world-scoped authority.
 
-`POST /api/v2/commands` presents quest/offer results without private projection deltas unless
+`POST /api/v2/commands` redacts private quest, offer, and party projection deltas unless
 the submitting actor has `world.read.all` in the command's exact world. Quest source commands,
 unperceived target IDs and offer provenance cannot leak through accept/trade/reward receipts or
 cached retries. The committed receipt, event, hash and replay records are unchanged internally;
 ordinary public results and scene synchronization still describe the action. Client parameters
 cannot request privileged presentation or grant capabilities.
 
-Quest contract `tabletop-quests-2.0.0` uses `POST /api/v2/commands`:
+## In-world parties
+
+Submit party actions through `POST /api/v2/commands` with the acting `embodied_entity_id`
+and the usual run, branch, and idempotency fields.
+
+- `tabletop.party.create` takes `{name, goal, motive?}`. The founding body becomes the first
+  member and leader. The motive is `DUTY`, `CURIOSITY`, `CARE` (the default), or `RECOVERY`.
+  The `party_id` is returned in the result.
+- `tabletop.party.invite` takes `{party_id, invitee_id}`. A member can invite a capable body
+  within one grid step when both can see each other. The invitation carries the offered goal.
+- `tabletop.party.respond` takes `{invitation_id, accept}` from the invited body's controller.
+  Accepting requires a still-present, perceivable inviter who remains a member. Declining
+  consumes the invitation without adding the body. A fresh accepted invitation after a
+  departure produces a reunion event with the prior departure event ID.
+- `tabletop.party.leave` takes `{party_id, reason, hostile?}`. The member leaves voluntarily and
+  their outstanding invitations are withdrawn. If a leader leaves, the earliest remaining member
+  takes the lead. A hostile exit records the character's stated break in the event history.
+- `tabletop.party.plan` takes `{party_id, goal, waypoint?}` from the current leader. A waypoint
+  has `x`, `y`, optional `z`, and optional `zone_id`. Its event ID identifies the plan.
+- `tabletop.party.follow` takes `{party_id, plan_event_id, follow}`. Each member makes its own
+  choice for that exact plan. A new plan requires fresh agreement. An interested autonomous
+  follower can favor ordinary steps toward a waypoint on the same floor and in the same zone.
+- `tabletop.party.transfer_leadership` takes `{party_id, successor_id}` from the current leader.
+  A capable nearby member can take responsibility for the charter. Body control is unchanged.
+- `tabletop.party.supplies` takes `{party_id, direction, amount, item?}`. `DEPOSIT` and `WITHDRAW`
+  move owned goods or gold between the acting body and a shared cache at its first deposit site.
+  Members must stand at the cache to use it. Omit `item` to move gold.
+
+The body-scoped `/scene` response includes `parties` for that body's memberships and
+`party_invitations` for its pending invitations. The party view contains the charter, leader,
+member IDs, agreed travel plan and contributed supplies. A member can share what they know
+through ordinary speech. Only recipients who hear the statement receive its testimony under the
+normal perception rules. Private departure reasons remain scoped to their source. Party actions
+currently use the typed API.
+
+An active autonomous character with a pinned character persona can respond to a nearby inviter.
+The runner considers the offered motive, the invited character's traits, and hostility that
+character witnessed. A resident can accept or decline through its existing autonomous controller.
+The model sees up to eight nearby invitations with their offered goals and local references.
+Absent or distant inviters leave room for nearby choices. The server owns the invitation ID,
+command parameters, and authorization.
+
+Quest contract `tabletop-quests-2.1.0` uses `POST /api/v2/commands`.
 
 - Manager `tabletop.quest.configure`: `{giver_id, title, description, objectives, reward_gold?,
-  reward_items?}`. One to eight immutable objectives combine with AND. Rewards reserve available
-  giver gold and inventory at creation; titles/descriptions are explicitly public in-world text.
+  reward_items?, alternate_giver_ids?, alternate_approaches?, required_items?, transferable?}`.
+  Completing all objectives of any one approach satisfies the task. Each alternate approach
+  has a `title` and `objectives`. `required_items` checks carried inventory when a body accepts.
+  Rewards reserve the original giver's available gold and inventory at creation. Titles and
+  descriptions are public in-world text.
 - Objectives each have `description` plus one discriminated definition: `kind: "MOVE"` with
   `x,y,zone_id?,z?`; `kind: "DEFEAT"` with distinct `target_ids` (all must be defeated once);
   `kind: "TRADE"` with `side: "BUY"|"SELL",counterparty_id,item,quantity`; or `kind: "WEED"`
   with `units`. Targets/counterparties must exist in the same branch. DEFEAT means a genuine
   positive-to-zero HP outcome caused by the owner's attack/spell, not necessarily permanent death.
 - Controlled `tabletop.quest.accept`, `tabletop.quest.advance` and `tabletop.quest.claim` accept
-  only `{quest_id}`. Accept fixes the body owner; advance only reviews recorded status. New
-  requests cannot supply `amount`, `target`, source evidence, ownership or reward overrides.
+  only `{quest_id}`. Accept records the body responsible for the task. Advance only reviews
+  recorded status. Objective progress and reward amounts come from the registered quest rules.
+- Controlled `tabletop.quest.offer_transfer` takes `{quest_id, recipient_id}` from the current
+  holder of a transferable active or ready quest. The named recipient can inspect the nearby
+  holder and use the ordinary `accept` command. The existing progress travels with the quest,
+  and the transfer consumes the offer. The recipient must meet its item prerequisites.
 - Manager `tabletop.quest.cancel` accepts `{quest_id}` and returns any unsettled funded reward once.
 
-Accept and claim require a capable, visible, adjacent giver and reserve both participants for six
-seconds with encounter/readiness checks. Claim requires every objective satisfied; the body must
-return to the giver and cannot claim twice. Cancellation/claim retain terminal audit state.
+Initial acceptance and claim require a capable, visible, adjacent contact. The command checks the
+original giver first, followed by the declared alternates. An authorized alternate can present or
+settle the quest after the original giver dies, using the existing escrow. Transfer interactions
+require contact between the current holder and recipient. These exchanges reserve both bodies for
+six seconds and enforce encounter/readiness checks. Claim and cancellation retain terminal state.
 Offscreen WEED progress counts only newly committed work after acceptance, excluding action-busy,
 blocked or pre-acceptance work. The ordinary command receipt remains the retry authority.
 Scenes expose nearby `quest_offers` as public descriptions/rewards; only the observing body's
@@ -39,6 +90,8 @@ history remains canonical. Source commands, raw target/counterparty IDs and owne
 excluded from these views. Fiction context version `character-context-1.6.0` replaces quest IDs
 with local task references. The console prepares `/quest accept|status|claim <quest id>` intents
 from the offer or personal journal; choosing a button focuses the draft and sending commits.
+Both views list required items and all visible approaches. The personal journal shows each
+objective's recorded progress, including the alternate approach that made a quest ready.
 This wires enforcement and observed opportunities; autonomous goal selection remains checklist F.
 
 Trade contract `tabletop-trade-2.0.0` uses these typed commands through `POST /api/v2/commands`:
@@ -1097,9 +1150,10 @@ replies and a strict majority can establish brief, balanced, or elaborate cadenc
 choice profile retains the supporting event IDs. A provider receives the cadence category with the
 selected intent and volume. Replies outside that cadence use the corresponding local line.
 
-Context `character-context-1.6.0` includes the body's own mana/reach/learned spell IDs and inspected
+Context `character-context-1.8.1` includes the body's own mana/reach/learned spell IDs and inspected
 guard stance. Other bodies' mana/reach/spell knowledge stay hidden. Catalog
-`tabletop-character-actions-1.4.0` and proposal policy `character-proposal-policy-1.7.0` offer:
+`tabletop-character-actions-1.7.1` supports party responses and consensual waypoint travel.
+The combat actions include:
 
 - `tabletop.combat.guard` takes `{}`. A capable unguarded body gains two armor against the next
   physical attack; that attempt consumes the guard, including a miss. Guards do not stack.

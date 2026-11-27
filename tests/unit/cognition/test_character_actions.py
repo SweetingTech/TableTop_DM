@@ -5,10 +5,13 @@ import uuid
 
 import pytest
 
+from cognition.context import CharacterContext
 from domains.tabletop.character_actions import character_action_candidates
+from domains.tabletop.parties import InvitationView
 from domains.tabletop.spatial import MoveRequest
 from domains.tabletop.spatial.scene import PerceivedEntity, PerceivedScene, SceneCoordinate
 from kernel.contracts import Actor, ActorKind, BranchKind
+from persona.models import CompiledPersona, PersonaPurpose
 
 pytestmark = pytest.mark.unit
 
@@ -131,3 +134,62 @@ def test_other_entities_do_not_change_or_add_targets_to_basic_movement_choices()
         character_action_candidates(expanded, actor=actor, branch_kind=BranchKind.CANONICAL)
         == expected
     )
+
+
+def test_unreachable_invites_do_not_displace_the_nearby_party_offer():
+    scene, actor = _fixture()
+    self_view = scene.perceived_entities[0]
+    absent = self_view.model_copy(update={"entity_id": uuid.uuid4()})
+    distant = self_view.model_copy(
+        update={"entity_id": uuid.uuid4(), "position": SceneCoordinate(x=10, y=3)}
+    )
+    nearby = self_view.model_copy(
+        update={"entity_id": uuid.uuid4(), "position": SceneCoordinate(x=3, y=3)}
+    )
+
+    def invite(inviter, name):
+        return InvitationView(
+            party_id=uuid.uuid4(),
+            invitation_id=uuid.uuid4(),
+            inviter_id=inviter.entity_id,
+            invitee_id=self_view.entity_id,
+            name=name,
+            goal="Carry water to the garden.",
+        )
+
+    live = invite(nearby, "Neighbors at the gate")
+    scene = scene.model_copy(
+        update={
+            "perceived_entities": (self_view, distant, nearby),
+            "party_invitations": (
+                *tuple(invite(absent, "Absent") for _ in range(4)),
+                *tuple(invite(distant, "Distant") for _ in range(4)),
+                live,
+            ),
+        }
+    )
+    persona = CompiledPersona(
+        persona_id=uuid.uuid4(),
+        purpose=PersonaPurpose.CHARACTER,
+        persona_version="fixed",
+        compiler_version="fixed",
+        identity_summary="A gardener",
+        policy_weights={},
+        starting_goals=(),
+        retrieval_filters=(),
+    )
+    candidates = character_action_candidates(
+        scene, actor=actor, branch_kind=BranchKind.CANONICAL, persona=persona
+    )
+    responses = [row for row in candidates if row.command_type == "tabletop.party.respond"]
+    assert {row.action for row in responses} == {
+        "Accept party invitation 1",
+        "Decline party invitation 1",
+    }
+    assert {row.parameters["invitation_id"] for row in responses} == {str(live.invitation_id)}
+    situation = CharacterContext(
+        scene=scene, observations=(), beliefs=(), memories=(), actions=candidates
+    ).situation()
+    assert [(row["reference"], row["name"]) for row in situation["party_invitations"]] == [
+        ("party invitation 1", live.name),
+    ]

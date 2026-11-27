@@ -2,6 +2,19 @@
 
 ## System shape
 
+Party membership belongs to embodied entities. The party, invitations, and linked departure
+events are branch projections. Each member consents through the existing body authority.
+The scene presents the charter and membership to members and presents pending invitations
+to their intended recipient. Roster and controller access still require explicit authorization.
+The character runner and offscreen planner share the pinned character profile reader. It obtains
+character-purpose traits from the immutable blueprint, preserving motive choices after restart.
+The party leader records the shared waypoint. Each member chooses whether to follow it and moves
+through the existing controlled-body rules. Shared cache contents come from explicit deposits at
+the cache site. Character knowledge still comes from each body's frozen observations.
+Quests store their authored contacts, complete approaches, and funded reward in the branch projection.
+Responsibility can pass between consenting bodies. The new holder inherits verified progress and
+the same escrow from the original giver.
+
 The character action catalog offers MEND for a currently visible, wounded body in reach that the
 character observed healing them. A witnessed attack against the character removes that target
 from the support choices. The private choice profile compares human actions with comparable

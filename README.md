@@ -26,6 +26,11 @@ on their card, backstory, and observed play history.
   character's own experience. Each line links to the committed event it describes.
 - The world clock advances work, meals, rest, commutes, and appointments while the party is
   elsewhere. Changes in weather, danger, or bodily needs can interrupt and resume that activity.
+- The [party API](docs/API_AND_WORKFLOWS.md#in-world-parties) lets a controlled character form a
+  party, invite a nearby resident, and accept, decline, leave, or rejoin through that body.
+  A resident with an active runner can answer based on the offered goal and their own persona.
+  Members can agree on a waypoint, transfer leadership, contribute supplies, and share testimony
+  within hearing distance.
 - The [unattended cast test](docs/verification/section-f/acceptance.md) verifies character recovery,
   conversation, weather interruptions, and a finite stopping condition with the production workers.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
@@ -54,15 +59,17 @@ people within visible spell reach.
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.
 
-Ordinary command receipts omit internal quest/offer projection deltas. The canonical receipt
-and replay evidence remain complete; inspecting them requires read-all authority in that world.
+Ordinary command receipts omit internal quest, offer, and party projection deltas.
+Read-all authority in that world allows inspection of the complete receipt and replay evidence.
 
 Quests use manager-authored movement, defeat, trade or weeding objectives and rewards reserved
 from the giver's actual goods/gold. Inspect a nearby giver, accept an offer, then complete its
 objectives through ordinary actions. The personal journal follows committed outcomes, including
-offscreen work. Return to a capable nearby giver to claim the promised reward once. Console
-commands are `/quest accept|status|claim <quest id>`. Requests cannot supply progress or reward
-amounts. The autonomous planner's pursuit of these opportunities remains a later checklist item.
+offscreen work. A quest can designate alternate contacts, item prerequisites, and multiple ways
+to finish. Return to a capable nearby contact to claim the funded reward once. For a transferable
+quest, its current holder can offer responsibility and the recipient can accept it. The console
+shows prerequisites and each approach in the quest offer and journal. Console commands are
+`/quest accept|status|claim <quest id>`. Offering a transfer uses the typed API.
 
 Trade uses standing offers backed by the maker's carried goods or gold. In the console, inspect
 an adjacent merchant and choose an offer to prepare a command, then send it. `/offer buy|sell

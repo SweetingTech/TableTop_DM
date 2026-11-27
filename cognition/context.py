@@ -13,7 +13,7 @@ from cognition.knowledge import KnownLore, knowledge_from_validated, search_know
 from cognition.models import Belief, Memory, MindState, Observation
 from cognition.perception import PerceptionEngine, PerceptionProfile
 from domains.tabletop.character_history import CharacterCardContent
-from domains.tabletop.spatial.scene import PerceivedScene
+from domains.tabletop.spatial.scene import PerceivedScene, actionable_party_invitations
 from kernel.contracts import EventEnvelopeV2
 from kernel.perception_contracts import NON_SENSORY_TAGS, PerceptionGrant
 from kernel.state import stable_hash
@@ -140,7 +140,7 @@ def experience_summary(observation: Observation) -> str:
 class CharacterContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    context_version: str = "character-context-1.6.0"
+    context_version: str = "character-context-1.8.1"
     scene: PerceivedScene
     observations: tuple[Observation, ...]
     beliefs: tuple[Belief, ...]
@@ -185,6 +185,7 @@ class CharacterContext(BaseModel):
             target = perceived_references.get(str(action.parameters.get("target_id")))
             if target is not None:
                 action_targets[action.action] = target
+        invitations = actionable_party_invitations(self.scene)
         return {
             "identity": {
                 "name": self.identity.name,
@@ -254,6 +255,41 @@ class CharacterContext(BaseModel):
                 for entity in self.scene.perceived_entities
             ],
             "action_targets": action_targets,
+            **(
+                {
+                    "party_invitations": [
+                        {
+                            "reference": f"party invitation {index}",
+                            "name": invitation.name,
+                            "goal": invitation.goal,
+                            "motive": invitation.motive,
+                            "inviter": references.get(invitation.inviter_id),
+                        }
+                        for index, invitation in enumerate(invitations, 1)
+                    ]
+                }
+                if invitations
+                else {}
+            ),
+            **(
+                {
+                    "party_plans": [
+                        {
+                            "reference": f"party plan {index}",
+                            "name": party.name,
+                            "goal": party.goal,
+                            "motive": party.motive,
+                            "waypoint": party.waypoint.model_dump(exclude={"zone_id"})
+                            if party.waypoint
+                            else None,
+                            "following": observer in party.following_member_ids,
+                        }
+                        for index, party in enumerate(self.scene.parties, 1)
+                    ]
+                }
+                if self.scene.parties
+                else {}
+            ),
             "experiences": [experience_summary(item) for item in self.observations],
             "beliefs": [
                 {

@@ -442,16 +442,22 @@ implementation and verification.
 
 ## H. In-world parties and transferable opportunities
 
-- [ ] H1 — Add party membership independent of human account/game rosters and ownership.
-  Model invitations, willingness, shared goals, departure, reunion, and hostility with causal events.
-- [ ] H2 — Allow any eligible in-world entity to join based on circumstances and motives; support NPC
-  companions without manufacturing a human account for each. Joining does not grant private knowledge or human body control.
-- [ ] H3 — Define group movement, shared plans, leadership decisions, resources, and distributed knowledge.
-  Group membership alone must not share every member's beliefs/secrets.
-- [ ] H4 — Make quests/opportunities transferable where the fiction allows. Replace arbitrary
-  protagonist/class gates with actual prerequisites; support alternate informants and approaches.
-- [ ] H5 — Acceptance: an ordinary resident joins, contributes, can become human-controlled when
-  authorized, leaves for a personal reason, and can carry an opportunity after another quest giver dies.
+- [x] H1 — Add party membership independent of human account/game rosters and ownership.
+  Controlled bodies form parties around shared goals and can invite, accept, decline, leave,
+  break in hostility, and rejoin through [typed party actions](API_AND_WORKFLOWS.md#in-world-parties).
+- [x] H2 — Allow any eligible in-world entity to join based on circumstances and motives.
+  The character runner responds to a nearby invitation using the offered motive, its pinned
+  persona, and experienced hostility. A joining resident gains only the party's shared charter.
+  Private knowledge and controller access retain their existing authorization rules.
+- [x] H3 — Define group movement, shared plans, leadership decisions, resources, and distributed knowledge.
+  Leaders record goals and waypoints, each member consents and moves independently, and voluntary
+  deposits fund a local cache. Testimony uses ordinary hearing and retains each member's perspective.
+- [x] H4 — Make quests and opportunities transferable where the fiction allows. Funded quests use
+  actual item prerequisites, authorized alternate contacts, and alternative approaches. Transfer
+  requires the current holder's offer and the named recipient's acceptance.
+- [x] H5 — An ordinary resident joins, contributes, becomes human-controlled after explicit
+  authorization, leaves for a personal reason, and carries the opportunity after the original giver
+  dies. The [durable journey](verification/section-h/acceptance.md) verifies restart and replay.
 
 ## I. Complete checkpoints, timeline revision, and correction
 

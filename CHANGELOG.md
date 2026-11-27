@@ -1,5 +1,13 @@
 # Changelog
 
+- Let funded quests designate alternate contacts and approaches, require specific items, and
+  transfer responsibility with consent while preserving progress and single-payout escrow.
+- Add party plans, consensual waypoint travel, leadership changes, and a physically located cache
+  funded by members' own supplies.
+- Let autonomous residents answer party invitations from the proposed motive and their own
+  experiences. Restore pinned character traits for live decisions after a PostgreSQL restart.
+- Record in-world party invites, consent, departures, hostile exits, and reunions through the
+  controlled body. Residents can join a party without a player account.
 - Score human preferences using choices the player actually had. Options never offered keep the
   character's fallback. Verify solo, mixed, and all-autonomous control in one durable campaign.
 - Use PostgreSQL time for durable presence deadlines so clock skew does not reject renewals or

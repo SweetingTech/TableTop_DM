@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from domains.tabletop.parties import InvitationView, PartyView
 from domains.tabletop.quests.contracts import QuestView
 
 
@@ -83,4 +84,32 @@ class PerceivedScene(BaseModel):
     perceived_entities: tuple[PerceivedEntity, ...]
     recent_observations: tuple[ObservationPresentation, ...]
     available_viewpoints: tuple[uuid.UUID, ...]
+    parties: tuple[PartyView, ...] = ()
+    party_invitations: tuple[InvitationView, ...] = ()
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+def actionable_party_invitations(scene: PerceivedScene) -> tuple[InvitationView, ...]:
+    visible = {
+        entity.entity_id: entity
+        for entity in scene.perceived_entities
+        if entity.knowledge_state == "VISIBLE"
+    }
+    body = visible.get(scene.observer_entity_id)
+    origin = body.position if body else None
+    if origin is None:
+        return ()
+    choices: list[InvitationView] = []
+    for invitation in scene.party_invitations:
+        inviter = visible.get(invitation.inviter_id)
+        location = inviter.position if inviter and inviter.status in {None, "ACTIVE"} else None
+        if (
+            location is None
+            or (str(location.zone_id), location.z) != (str(origin.zone_id), origin.z)
+            or max(abs(location.x - origin.x), abs(location.y - origin.y)) > 1
+        ):
+            continue
+        choices.append(invitation)
+        if len(choices) == 8:
+            break
+    return tuple(choices)

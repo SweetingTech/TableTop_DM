@@ -1,5 +1,14 @@
 # Simulation-kernel contract
 
+Party creation and membership changes are typed controlled-body actions. Invitations freeze
+the stated goal at issue and use the issue event ID as their identity. Accept, decline, and
+reunion events retain their invitation ID, and reunion links to the previous departure.
+Party projections commit atomically with the same event and receipt. The departure event
+retains the personal reason for replay and inspection under the existing world authority.
+Travel agreement is scoped to the exact plan event. Coordination commands change the charter and
+the cache. Individual steps use ordinary movement, and cache exchanges commit the body inventory
+or gold together with the party delta under one idempotency key.
+
 Migration 020 extends the append-only human-choice rows with a bounded support option set derived
 from the body's validated observations and current scene. Source checks still require a matching
 accepted human action in a canonical live run. The normal typed MEND command rechecks control,
@@ -83,20 +92,23 @@ receive no private quest/offer delta records. Public result models already exclu
 metadata. Presentation filtering is pure and applies equally to original and cached receipts;
 it cannot alter committed state, evidence, resource costs or replay hashes.
 
-`tabletop-quests-2.0.0` replaces self-reported counters. Manager-only `quest.configure` validates
+`tabletop-quests-2.1.0` derives quest progress from committed outcomes. Manager-only `quest.configure` validates
 same-branch giver/target references and reserves defined gold/items from the giver. Controlled
 `quest.accept` pins the owner; MOVE, unique-target DEFEAT, exact-counterparty/item TRADE and
 new clock-owned WEED outcomes update evidence only through the authorized handler wrapper.
-Objectives combine with AND. Historical work, raw client claims, unrelated bodies, failed actions
+All objectives of at least one authored approach must be satisfied. Historical work, raw client claims, unrelated bodies, failed actions
 and retries cannot increment progress. Source command IDs stay private, while recorded physical
 and quest deltas replay together. No later narration or current perception reinterprets evidence.
-`quest.claim` requires READY status and current physical giver contact/encounter/readiness;
-both participants reserve six seconds and receive normal rest interruption. The reward transfers
+`quest.claim` requires READY status and a capable authorized contact, using current encounter and
+readiness. Both participants reserve six seconds and receive normal rest interruption. The reward transfers
 only once from reserved funds/items, without minting. Manager `quest.cancel` returns the reserve
 once, even after partial work. `quest.advance` now accepts only a quest reference and acknowledges
 recorded progress without changing it. Legacy self-reported `tabletop.quests` rows are not evidence
 for the new contracts; old committed receipt keys remain readable. Active limits are 256 per
 branch, 16 per giver and 16 accepted per body, without a lifetime completion quota.
+Quest transfer uses an owner-issued offer and the named recipient's acceptance. The event retains
+the offer ID. The accepted transfer changes the body responsible for the quest while preserving
+the evidence rows and the original reward reserve.
 
 `tabletop-trade-2.0.0` replaces caller-authored exchange terms with maker-authorized escrowed
 offers. Controlled `tabletop.economy.offer` and manager-only `configure_offer` reserve available

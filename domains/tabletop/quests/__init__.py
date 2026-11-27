@@ -17,12 +17,14 @@ from domains.tabletop.quests.contracts import (
     QuestResult,
     QuestView,
     TradeObjective,
+    TransferQuest,
     result,
     view,
 )
 from domains.tabletop.rules import capable
 from kernel.command_bus import CommandDefinition
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
+from kernel.event_factory import stable_event_id
 from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
 from kernel.state import BranchState
 
@@ -59,6 +61,33 @@ def interaction(
     return (timing,) if timing is not None else ()
 
 
+def quest_contact(
+    proposal: CommandProposal, state: BranchState, quest: Quest
+) -> tuple[StateDelta, ...]:
+    if not quest.alternate_giver_ids:
+        return interaction(proposal, state, quest.giver_id)
+    for giver in (quest.giver_id, *quest.alternate_giver_ids):
+        try:
+            return interaction(proposal, state, giver)
+        except ValueError:
+            continue
+    raise ValueError("no authorized quest contact is available nearby")
+
+
+def check_assignment(state: BranchState, quest: Quest, owner: uuid.UUID) -> None:
+    inventory = body(state, owner).get("inventory", {})
+    if any(
+        int(inventory.get(item, 0)) < quantity for item, quantity in quest.required_items.items()
+    ):
+        raise ValueError("this body lacks the required items for the task")
+    assigned = sum(
+        raw.get("owner_id") == str(owner) and raw["status"] in {"ACTIVE", "READY"}
+        for raw in state.projections.get(QUESTS, {}).values()
+    )
+    if assigned >= 16:
+        raise ValueError("active personal quest limit reached")
+
+
 def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
     request = ConfigureQuest.model_validate(proposal.parameters)
     giver = body(state, request.giver_id)
@@ -71,7 +100,16 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
     ]
     if len(active) >= 256 or sum(row["giver_id"] == str(request.giver_id) for row in active) >= 16:
         raise ValueError("active quest limit reached")
-    for objective in request.objectives:
+    contacts = (request.giver_id, *request.alternate_giver_ids)
+    if len(set(contacts)) != len(contacts):
+        raise ValueError("quest contacts must be distinct bodies")
+    for giver_id in request.alternate_giver_ids:
+        body(state, giver_id)
+    objectives = (
+        *request.objectives,
+        *(item for approach in request.alternate_approaches for item in approach.objectives),
+    )
+    for objective in objectives:
         if isinstance(objective, DefeatObjective):
             for identity in objective.target_ids:
                 body(state, identity)
@@ -95,6 +133,10 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
         source_command_id=proposal.command_id,
         created_sequence=state.version + 1,
         evidence=tuple(Evidence() for _ in request.objectives),
+        alternate_evidence=tuple(
+            tuple(Evidence() for _ in approach.objectives)
+            for approach in request.alternate_approaches
+        ),
     )
     return CommandResult(
         result=result(quest, "A task and its reward were offered."),
@@ -111,6 +153,45 @@ def configure(proposal: CommandProposal, state: BranchState) -> CommandResult:
     )
 
 
+def accept_quest(
+    proposal: CommandProposal, state: BranchState, quest: Quest, owner: uuid.UUID
+) -> CommandResult:
+    previous_owner = (
+        quest.owner_id
+        if quest.status in {"ACTIVE", "READY"} and quest.transfer_recipient_id == owner
+        else None
+    )
+    if previous_owner is None and quest.status != "OFFERED":
+        raise ValueError("quest is no longer offered")
+    timing = (
+        interaction(proposal, state, previous_owner)
+        if previous_owner is not None
+        else quest_contact(proposal, state, quest)
+    )
+    check_assignment(state, quest, owner)
+    updated = quest.model_copy(
+        update={
+            "owner_id": owner,
+            "status": quest.status if previous_owner else "ACTIVE",
+            "transfer_recipient_id": None,
+            "transfer_event_id": None,
+        }
+    )
+    return CommandResult(
+        result=result(
+            updated,
+            "Accepted responsibility for the task."
+            if previous_owner
+            else "An offered task was accepted.",
+            transfer_event_id=quest.transfer_event_id if previous_owner else None,
+        ),
+        deltas=(set_quest(updated), *timing),
+        domain_tags=("tabletop", "quest", "transferred")
+        if previous_owner
+        else ("tabletop", "quest"),
+    )
+
+
 def reference(proposal: CommandProposal, state: BranchState) -> CommandResult:
     request = QuestReference.model_validate(proposal.parameters)
     quest = read(state, request.quest_id)
@@ -119,21 +200,7 @@ def reference(proposal: CommandProposal, state: BranchState) -> CommandResult:
         raise ValueError("quest interaction requires a body")
     command = proposal.command_type
     if command == "tabletop.quest.accept":
-        if quest.status != "OFFERED":
-            raise ValueError("quest is no longer offered")
-        timing = interaction(proposal, state, quest.giver_id)
-        assigned = sum(
-            raw.get("owner_id") == str(owner) and raw["status"] in {"ACTIVE", "READY"}
-            for raw in state.projections.get(QUESTS, {}).values()
-        )
-        if assigned >= 16:
-            raise ValueError("active personal quest limit reached")
-        quest = quest.model_copy(update={"owner_id": owner, "status": "ACTIVE"})
-        return CommandResult(
-            result=result(quest, "An offered task was accepted."),
-            deltas=(set_quest(quest), *timing),
-            domain_tags=("tabletop", "quest"),
-        )
+        return accept_quest(proposal, state, quest, owner)
     if quest.owner_id != owner:
         raise ValueError("quest is not assigned to this body")
     if command == "tabletop.quest.advance":
@@ -143,14 +210,20 @@ def reference(proposal: CommandProposal, state: BranchState) -> CommandResult:
         )
     if quest.status != "READY":
         raise ValueError("quest objectives are not ready for reward")
-    timing = interaction(proposal, state, quest.giver_id)
+    timing = quest_contact(proposal, state, quest)
     recipient = dict(body(state, owner))
     for item, quantity in sorted(quest.reward_items.items()):
         recipient.update(usable_inventory(recipient, item, quantity))
     updates = {"gold": int(recipient.get("gold", 0)) + quest.reward_gold}
     if quest.reward_items:
         updates["inventory"] = recipient["inventory"]
-    quest = quest.model_copy(update={"status": "CLAIMED"})
+    quest = quest.model_copy(
+        update={
+            "status": "CLAIMED",
+            "transfer_recipient_id": None,
+            "transfer_event_id": None,
+        }
+    )
     return CommandResult(
         result=result(quest, "A completed task's promised reward was received."),
         deltas=(
@@ -164,6 +237,34 @@ def reference(proposal: CommandProposal, state: BranchState) -> CommandResult:
     )
 
 
+def offer_transfer(proposal: CommandProposal, state: BranchState) -> CommandResult:
+    request = TransferQuest.model_validate(proposal.parameters)
+    quest = read(state, request.quest_id)
+    owner = proposal.embodied_entity_id
+    if (
+        owner is None
+        or quest.owner_id != owner
+        or not quest.transferable
+        or quest.status not in {"ACTIVE", "READY"}
+    ):
+        raise ValueError("quest transfer is unavailable")
+    timing = interaction(proposal, state, request.recipient_id)
+    source = stable_event_id(proposal)
+    updated = quest.model_copy(
+        update={
+            "transfer_recipient_id": request.recipient_id,
+            "transfer_event_id": source,
+        }
+    )
+    return CommandResult(
+        result=result(
+            updated, "Offered to pass on responsibility for the task.", transfer_event_id=source
+        ),
+        deltas=(set_quest(updated), *timing),
+        domain_tags=("tabletop", "quest", "transfer_offer"),
+    )
+
+
 def cancel(proposal: CommandProposal, state: BranchState) -> CommandResult:
     quest = read(state, QuestReference.model_validate(proposal.parameters).quest_id)
     if quest.status in {"CLAIMED", "CANCELLED"}:
@@ -174,7 +275,13 @@ def cancel(proposal: CommandProposal, state: BranchState) -> CommandResult:
     updates = {"gold": int(giver.get("gold", 0)) + quest.reward_gold}
     if quest.reward_items:
         updates["inventory"] = giver["inventory"]
-    quest = quest.model_copy(update={"status": "CANCELLED"})
+    quest = quest.model_copy(
+        update={
+            "status": "CANCELLED",
+            "transfer_recipient_id": None,
+            "transfer_event_id": None,
+        }
+    )
     return CommandResult(
         result=result(quest, "An offered task was withdrawn."),
         deltas=(
@@ -197,11 +304,20 @@ def visible_quests(
         contact(state, observer, giver)
     except ValueError:
         return ()
-    return tuple(
-        view(quest)
-        for _, raw in sorted(state.projections.get(QUESTS, {}).items())
-        if (quest := Quest.model_validate(raw)).giver_id == giver and quest.status == "OFFERED"
-    )
+    available: list[QuestView] = []
+    for _, raw in sorted(state.projections.get(QUESTS, {}).items()):
+        if raw["status"] == "OFFERED" and str(giver) in (
+            raw["giver_id"],
+            *raw.get("alternate_giver_ids", ()),
+        ):
+            available.append(view(Quest.model_validate(raw)))
+        elif (
+            raw["status"] in {"ACTIVE", "READY"}
+            and raw.get("owner_id") == str(giver)
+            and raw.get("transfer_recipient_id") == str(observer)
+        ):
+            available.append(view(Quest.model_validate(raw), transfer_offer=True))
+    return tuple(available)
 
 
 def personal_quests(state: BranchState, observer: uuid.UUID) -> tuple[QuestView, ...]:
@@ -248,6 +364,7 @@ def command_definitions() -> tuple[CommandDefinition, ...]:
             ("tabletop.quest.accept", reference, QuestReference, False),
             ("tabletop.quest.advance", reference, QuestReference, False),
             ("tabletop.quest.claim", reference, QuestReference, False),
+            ("tabletop.quest.offer_transfer", offer_transfer, TransferQuest, False),
             ("tabletop.quest.cancel", cancel, QuestReference, True),
         )
     )
