@@ -152,6 +152,7 @@ class PersonaGenerator:
             separators=(",", ":"),
             default=str,
         )
+        generation_key = f"{generation_key}:{uuid.uuid4()}"
         persona_id = uuid.uuid5(
             uuid.NAMESPACE_URL,
             f"tabletop-dm:persona:{self.registry.VERSION}:{seed}:{generation_key}",
