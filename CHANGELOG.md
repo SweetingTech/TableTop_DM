@@ -1,5 +1,7 @@
 # Changelog
 
+- Capture a private, integrity-checked campaign archive from a ready checkpoint hold. Migration 022
+  binds the named receipt to its exact world, branch, request, projection and projected prefix.
 - Hold a canonical branch at a fixed checkpoint boundary while its existing perceptions finish
   projecting. Migration 021 preserves the hold across API and worker restarts.
 - Let funded quests designate alternate contacts and approaches, require specific items, and

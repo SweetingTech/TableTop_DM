@@ -38,6 +38,18 @@ def _optional_uuid(value: object | None) -> uuid.UUID | None:
     return None if value is None else _uuid(value)
 
 
+def read_snapshot_entities(
+    cursor: psycopg2.extras.RealDictCursor, world_id: uuid.UUID, branch_id: uuid.UUID
+) -> dict[str, SnapshotEntity]:
+    cursor.execute(
+        "SELECT id AS entity_id,world_id,branch_id,entity_type,name,"
+        "controller_actor_id,secret_state "
+        "FROM sim.entities WHERE world_id=%s AND branch_id=%s ORDER BY id",
+        (str(world_id), str(branch_id)),
+    )
+    return {str(row["entity_id"]): SnapshotEntity.model_validate(row) for row in cursor}
+
+
 class PostgresControlPlane:
     """Durable metadata/projection adapter for the local application service."""
 
@@ -281,18 +293,7 @@ class PostgresControlPlane:
                 projected = cursor.fetchone()
                 if projected is None:
                     raise ValueError("snapshot projection is unavailable")
-                cursor.execute(
-                    "SELECT id,world_id,branch_id,entity_type,name,"
-                    "controller_actor_id,secret_state "
-                    "FROM sim.entities WHERE world_id=%s AND branch_id=%s ORDER BY id",
-                    (str(world_id), str(branch_id)),
-                )
-                entities = {}
-                for row in cursor.fetchall():
-                    raw = dict(row)
-                    raw["entity_id"] = raw.pop("id")
-                    record = SnapshotEntity.model_validate(raw)
-                    entities[str(record.entity_id)] = record.model_dump(mode="json")
+                entities = read_snapshot_entities(cursor, world_id, branch_id)
                 cursor.execute(
                     "SELECT count(*) AS n FROM sim.command_log WHERE world_id=%s AND branch_id=%s",
                     (str(world_id), str(branch_id)),

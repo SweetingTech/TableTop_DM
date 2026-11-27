@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import psycopg2
 import psycopg2.extras
@@ -73,13 +73,18 @@ def database_url() -> str:
 
 @contextmanager
 def transaction(
-    *, actor_id: uuid.UUID | None = None, dsn: str | None = None
+    *,
+    actor_id: uuid.UUID | None = None,
+    dsn: str | None = None,
+    isolation: Literal["REPEATABLE READ"] | None = None,
 ) -> Iterator[PgConnection]:
     active = _unit.get()
     if active is not None:
         try:
             if (dsn or database_url()) != active.dsn or actor_id not in {None, active.actor_id}:
                 raise RuntimeError("database unit cannot switch actor or database")
+            if isolation is not None:
+                raise RuntimeError("database unit isolation must be selected before opening it")
             yield active.connection
         except BaseException:
             active.failed = True
@@ -88,6 +93,8 @@ def transaction(
     connection = psycopg2.connect(dsn or database_url(), application_name="tabletop-dm-kernel")
     connection.autocommit = False
     try:
+        if isolation is not None:
+            connection.set_session(isolation_level=isolation)
         if actor_id is not None:
             with connection.cursor() as cursor:
                 cursor.execute(

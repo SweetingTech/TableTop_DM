@@ -37,6 +37,9 @@ on their card, backstory, and observed play history.
   campaign roadmap tracks complete rewind, authored story direction, and an executable AI DM.
 - World managers can [hold a branch at its committed boundary](docs/API_AND_WORKFLOWS.md#checkpoint-holds).
   The hold survives a restart and reports when the projector has finished the outstanding events.
+- World managers can [capture a named campaign checkpoint](docs/API_AND_WORKFLOWS.md#campaign-checkpoint-capture)
+  from a ready hold in PostgreSQL. The private archive includes the bodies and subjective state
+  at that boundary and validates its dependencies before publishing a receipt.
 
 ## Implementation details
 
@@ -58,6 +61,7 @@ Apply migration 020 so a stand-in can learn when the player mends their own woun
 they help someone who previously helped them. It considers help the character perceived and
 people within visible spell reach.
 Apply migration 021 for durable checkpoint holds. Existing campaigns start without a hold.
+Apply migration 022 for durable campaign checkpoint archives and receipts.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

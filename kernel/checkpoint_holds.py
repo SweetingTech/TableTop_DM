@@ -91,15 +91,20 @@ class PostgresCheckpointHolds:
         self.dsn = dsn
 
     @staticmethod
-    def _authorize(cursor: RealDictCursor, world: uuid.UUID, actor: uuid.UUID) -> None:
+    def authorize(
+        cursor: RealDictCursor, world: uuid.UUID, actor: uuid.UUID, *, private: bool = False
+    ) -> None:
+        required = CHECKPOINT_AUTHORITY
+        if private:
+            required = required | {"world.read", "entity.read.secret"}
         cursor.execute(
             "SELECT c.capability FROM sim.actor_capabilities c "
             "JOIN sim.actors a ON a.id=c.actor_id "
             "WHERE c.world_id=%s AND c.actor_id=%s AND a.is_active "
             "AND c.capability=ANY(%s::text[]) FOR SHARE OF c,a",
-            (str(world), str(actor), sorted(CHECKPOINT_AUTHORITY)),
+            (str(world), str(actor), sorted(required)),
         )
-        if {row["capability"] for row in cursor} != CHECKPOINT_AUTHORITY:
+        if {row["capability"] for row in cursor} != required:
             raise PermissionError("checkpoint requires current world manager authority")
 
     @staticmethod
@@ -145,7 +150,7 @@ class PostgresCheckpointHolds:
         scope = (str(world), str(branch), str(request))
         with transaction(actor_id=actor, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                self._authorize(cursor, world, actor)
+                self.authorize(cursor, world, actor)
                 self._require_branch(cursor, world, branch, lock=True)
                 prior = self._read_hold(cursor, scope)
                 if prior is not None:
@@ -184,7 +189,7 @@ class PostgresCheckpointHolds:
     ) -> CheckpointHoldStatus:
         with transaction(actor_id=actor, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                self._authorize(cursor, world, actor)
+                self.authorize(cursor, world, actor)
                 self._require_branch(cursor, world, branch)
                 hold = self._read_hold(cursor, (str(world), str(branch), str(request)))
                 if hold is None:
@@ -196,7 +201,7 @@ class PostgresCheckpointHolds:
     ) -> CheckpointHoldStatus | None:
         with transaction(actor_id=actor, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                self._authorize(cursor, world, actor)
+                self.authorize(cursor, world, actor)
                 self._require_branch(cursor, world, branch)
                 cursor.execute(
                     "SELECT * FROM sim.campaign_checkpoint_holds "
@@ -212,7 +217,7 @@ class PostgresCheckpointHolds:
         scope = (str(world), str(branch), str(request))
         with transaction(actor_id=actor, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                self._authorize(cursor, world, actor)
+                self.authorize(cursor, world, actor)
                 self._require_branch(cursor, world, branch, lock=True)
                 hold = self._read_hold(cursor, scope)
                 if hold is None:
@@ -228,6 +233,15 @@ class PostgresCheckpointHolds:
                 if released is None:
                     raise PermissionError("checkpoint release requires current authority")
                 return CheckpointHoldStatus.read(CheckpointHold.model_validate(released))
+
+    def lock_for_capture(
+        self, cursor: RealDictCursor, world: uuid.UUID, branch: uuid.UUID, request: uuid.UUID
+    ) -> CheckpointHoldStatus:
+        self._require_branch(cursor, world, branch, lock=True)
+        hold = self._read_hold(cursor, (str(world), str(branch), str(request)))
+        if hold is None:
+            raise KeyError(request)
+        return self._status(cursor, hold)
 
 
 class ReferenceCheckpointHolds:

@@ -340,6 +340,12 @@ row in the held branch's prefix, including work leased by another projector. The
 operational control and stays outside story events and character observations. A matching release
 resumes the normal command and scheduling paths.
 
+Private campaign capture reads that ready boundary in a repeatable-read transaction with the
+branch locked. It gathers canonical projections and entity metadata, branch-local minds and
+population sources, runtime assignments, logical schedules, and pinned versioned dependencies.
+The archive names reconstruction inputs for derived narration and knowledge. Its database receipt
+binds the same hold and digest. The metadata route verifies the archive bytes on read.
+
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
 projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
 entity's identity, controller and secret metadata at that boundary. Public body resources remain

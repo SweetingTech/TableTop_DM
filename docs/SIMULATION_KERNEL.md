@@ -326,6 +326,11 @@ records an exact projection and event boundary under the branch fence. A held br
 an authorized committed receipt. New canonical actions, control transitions and worker action
 dispatch wait for release, while already committed perception work can finish projecting.
 
+The durable capture path checks the held projection hash and ordered ledger prefix together with
+the full subject and runtime inventory under one database snapshot. Publication records a private
+append-only manifest for the chosen boundary. The manifest's component digests and source pins
+validate the exact archive across retry and restart.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception
