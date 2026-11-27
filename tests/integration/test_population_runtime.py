@@ -578,7 +578,7 @@ def test_two_actual_world_workers_and_restart_do_not_reset_or_double_award_routi
 
 
 def test_010_upgrade_preserves_materialized_source_and_can_bind_afterwards(
-    integration_stack, monkeypatch, tmp_path
+    integration_stack, monkeypatch, tmp_path, pre_checkpoint_commands
 ):
     name = "ttdm_population_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
@@ -599,8 +599,9 @@ def test_010_upgrade_preserves_materialized_source_and_can_bind_afterwards(
         client = app.test_client()
         client.environ_base["HTTP_X_TTDM_OPERATOR_TOKEN"] = os.environ["TTDM_OPERATOR_TOKEN"]
         scope = client.post("/api/v2/worlds", json={"name": "Population upgrade"}).get_json()
-        admin, _, _, _, _, target, base = setup_scene(app, scope=scope)
-        _, member_path, body = seed_routine(app, admin, base, target, bind=False)
+        with pre_checkpoint_commands(url):
+            admin, _, _, _, _, target, base = setup_scene(app, scope=scope)
+            _, member_path, body = seed_routine(app, admin, base, target, bind=False)
         before = admin.get(member_path).get_json()
         assert migrate(url, migrations) == len(discover(migrations)) - 10
         assert migrate(url, migrations) == 0

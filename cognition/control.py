@@ -18,6 +18,7 @@ from kernel.control import (
     ControlMode,
     ControlScope,
 )
+from kernel.errors import BranchCheckpointHeld
 
 EXECUTOR_CAPABILITIES = frozenset({"world.read", "action.propose", "action.commit", "entity.act"})
 REPLAN_LIMIT = 3
@@ -265,6 +266,8 @@ class InMemoryControllers:
                 key = (*scope.key, actor_id, request.idempotency_key)
                 if key in self.receipts:
                     return self.receipts[key]
+                if self.simulation.checkpoint_holds.held(scope.world_id, scope.branch_id):
+                    raise BranchCheckpointHeld("branch is paused for a checkpoint")
                 previous = self.rows.get(scope.key)
                 if "disconnect_after_seconds" in request.model_fields_set:
                     self._check_player(scope, actor_id)
@@ -335,6 +338,8 @@ class InMemoryControllers:
         def transition():
             self._owner(scope, actor_id)
             self._check_player(scope, actor_id)
+            if self.simulation.checkpoint_holds.held(scope.world_id, scope.branch_id):
+                raise BranchCheckpointHeld("branch is paused for a checkpoint")
             state = renew_presence(self.rows.get(scope.key), expected_epoch)
             self.rows[scope.key] = state
             return state
@@ -351,7 +356,7 @@ class InMemoryControllers:
                         disconnect_handoff(state),
                         timeout_at=now,
                     )
-                except (ControlConflict, PermissionError, ValueError):
+                except (BranchCheckpointHeld, ControlConflict, PermissionError, ValueError):
                     continue
 
     def due(self) -> tuple[ControllerState, ...]:
@@ -360,6 +365,7 @@ class InMemoryControllers:
             row
             for _, row in sorted(self.rows.items(), key=lambda pair: str(pair[0]))
             if row.mode == "AUTONOMOUS"
+            and not self.simulation.checkpoint_holds.held(row.world_id, row.branch_id)
             and row.next_due <= datetime.now(UTC)
             and self.simulation.runs[row.run_id].status in {"ACTIVE", "RUNNING"}
         )
@@ -367,7 +373,11 @@ class InMemoryControllers:
     def defer(self, state: ControllerState, code: str | None, *, retry_limit: int = 0) -> None:
         def update():
             current = self.rows.get(state.key)
-            if current != state or state.mode != "AUTONOMOUS":
+            if (
+                current != state
+                or state.mode != "AUTONOMOUS"
+                or self.simulation.checkpoint_holds.held(state.world_id, state.branch_id)
+            ):
                 return
             changed = deferred_controller(state, code, retry_limit=retry_limit)
             self.rows[state.key] = changed

@@ -321,6 +321,11 @@ the server-owned movement catalog before deciding.
 
 ## Constitutional order
 
+Checkpoint holds are private world-operator control over a single canonical branch. The hold
+records an exact projection and event boundary under the branch fence. A held branch can replay
+an authorized committed receipt. New canonical actions, control transitions and worker action
+dispatch wait for release, while already committed perception work can finish projecting.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

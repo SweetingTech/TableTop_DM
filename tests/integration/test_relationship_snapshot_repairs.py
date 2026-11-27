@@ -243,7 +243,7 @@ def test_failed_trial_insert_is_atomic_and_retry_is_stable(
 
 
 def test_011_upgrade_preserves_legacy_snapshot_and_allows_metadata_identity(
-    integration_stack, monkeypatch, tmp_path
+    integration_stack, monkeypatch, tmp_path, pre_checkpoint_commands
 ):
     name = "ttdm_snapshot_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
@@ -262,7 +262,8 @@ def test_011_upgrade_preserves_legacy_snapshot_and_allows_metadata_identity(
         monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
         app, client = fresh_client(tmp_path)
         world = client.post("/api/v2/worlds", json={"name": "Snapshot upgrade"}).get_json()
-        game = setup_scene(app, scope=world)
+        with pre_checkpoint_commands(url):
+            game = setup_scene(app, scope=world)
         admin, base, sim = game[0], game[-1], app.extensions["simulation"]
         state = sim.states.get(uuid.UUID(base["branch_id"]))
         legacy = sim.snapshot_store.create(

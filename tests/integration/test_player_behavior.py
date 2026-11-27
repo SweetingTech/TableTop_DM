@@ -286,7 +286,9 @@ def test_evidence_option_constraints_and_composite_binding(
     WorldEventProjector(integration_stack.database_url).run_once(limit=1000)
 
 
-def test_origin_upgrades_preserve_legacy_classification(integration_stack, monkeypatch, tmp_path):
+def test_origin_upgrades_preserve_legacy_classification(
+    integration_stack, monkeypatch, tmp_path, pre_checkpoint_commands
+):
     name = "ttdm_behavior_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
     maintenance = psycopg2.connect(integration_stack.admin_url)
@@ -307,17 +309,18 @@ def test_origin_upgrades_preserve_legacy_classification(integration_stack, monke
         monkeypatch.setenv("DATABASE_URL", url)
         monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
         app = create_app(artifact_root=tmp_path / "legacy")
-        admin, player, card, _, path, run, _ = setup_bound_character(app)
-        card["branch_id"] = path.split("/")[6]
-        manual = movement(card, run, key="legacy-manual")
-        assert player.post("/api/v2/commands", json=manual).status_code == 200
-        body_key = (uuid.UUID(card["branch_id"]), uuid.UUID(card["entity_id"]))
-        owner = app.extensions["simulation"].entities[body_key].controller_actor_id
-        operator = admin.post(
-            "/api/v2/commands",
-            json={**manual, "actor_id": str(owner), "idempotency_key": "legacy-operator"},
-        )
-        assert operator.status_code == 200, operator.get_json()
+        with pre_checkpoint_commands(url):
+            admin, player, card, _, path, run, _ = setup_bound_character(app)
+            card["branch_id"] = path.split("/")[6]
+            manual = movement(card, run, key="legacy-manual")
+            assert player.post("/api/v2/commands", json=manual).status_code == 200
+            body_key = (uuid.UUID(card["branch_id"]), uuid.UUID(card["entity_id"]))
+            owner = app.extensions["simulation"].entities[body_key].controller_actor_id
+            operator = admin.post(
+                "/api/v2/commands",
+                json={**manual, "actor_id": str(owner), "idempotency_key": "legacy-operator"},
+            )
+            assert operator.status_code == 200, operator.get_json()
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT command_id,input_origin FROM sim.command_log ORDER BY seq_id")
             original = cursor.fetchall()

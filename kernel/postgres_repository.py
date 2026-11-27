@@ -8,6 +8,7 @@ from typing import Any
 import psycopg2.errors
 import psycopg2.extras
 
+from kernel.checkpoint_holds import require_checkpoint_open
 from kernel.command_bus import (
     CommandDefinition,
     CommandReceipt,
@@ -125,6 +126,7 @@ class PostgresCommandRepository:
                 if existing is not None:
                     return existing
 
+                require_checkpoint_open(cursor, proposal.world_id, proposal.branch_id)
                 proposal = normalized_proposal(proposal, definition)
                 controller = load_controller(cursor, proposal)
                 if controller is None:
