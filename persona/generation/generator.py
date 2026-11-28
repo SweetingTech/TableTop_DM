@@ -47,6 +47,11 @@ class PersonaGenerator:
             raise InfeasibleStratumError(
                 f"Dimensions cannot be both fixed and distributed: {sorted(overlap)}"
             )
+        for name in distributions:
+            if self.registry.dimensions[name].kind not in ("boolean", "enum"):
+                raise InfeasibleStratumError(
+                    f"Distribution {name} is unsupported: numeric distributions are not supported"
+                )
         self._validate_fixed_assignments(fixed)
 
         rng = random.Random(seed)
@@ -93,11 +98,13 @@ class PersonaGenerator:
                     distributions,
                 )
             elif spec.kind == "integer":
-                value = rng.randint(int(spec.minimum or 0), int(spec.maximum or 100))
+                minimum = int(spec.minimum if spec.minimum is not None else 0)
+                maximum = int(spec.maximum if spec.maximum is not None else 100)
+                value = rng.randint(minimum, maximum)
                 source = "seeded_generator"
             else:
-                minimum = float(spec.minimum or 0)
-                maximum = float(spec.maximum or 1)
+                minimum = float(spec.minimum if spec.minimum is not None else 0)
+                maximum = float(spec.maximum if spec.maximum is not None else 1)
                 value = round(rng.uniform(minimum, maximum), 4)
                 source = "seeded_generator"
 
