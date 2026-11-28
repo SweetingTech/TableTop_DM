@@ -73,6 +73,10 @@ Migration 026 enables [revision preparation](API_AND_WORKFLOWS.md#prepare-a-time
 Planning preserves the live world and protects the selected file until the plan is disposed of.
 Cancel an unused plan to let the configured retention policy consider its checkpoint again.
 
+Migration 027 enables activation. Keep the projector running until a revision hold drains.
+Repeat the activation request after an interruption. It will reuse the hold or return the
+committed receipt. A pending plan can be cancelled to release the live branch.
+
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
 on the read transaction. Deploy the matching API/control-plane code. Role changes from a second

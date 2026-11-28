@@ -22,6 +22,7 @@ from kernel.checkpoint_retention import (
 from kernel.checkpoint_schedules import CheckpointRuleRequest, PostgresCheckpointSchedules
 from kernel.errors import BranchCheckpointHeld
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
+from kernel.revision_activation import PostgresRevisionActivation
 
 
 class CheckpointHoldRequest(BaseModel):
@@ -88,6 +89,8 @@ def register_checkpoint_capture(
     archives: PostgresCampaignCheckpoints,
     current_actor: Callable[[], uuid.UUID],
     require_world_access: Callable[[uuid.UUID], None],
+    activation: PostgresRevisionActivation,
+    refresh_simulation: Callable[[], None],
 ) -> None:
     scope = "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
     retention = PostgresCheckpointRetention(archives)
@@ -113,6 +116,18 @@ def register_checkpoint_capture(
     def cancel_timeline_revision(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):
         require_world_access(world_id)
         return plan_response(revisions.cancel(world_id, branch_id, current_actor(), request_id))
+
+    @app.post(scope + "/timeline-revision-plans/<uuid:request_id>/activate")
+    def activate_timeline_revision(
+        world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID
+    ):
+        require_world_access(world_id)
+        status = activation.activate(world_id, branch_id, current_actor(), request_id)
+        if status.phase == "COMMITTED":
+            refresh_simulation()
+        response = jsonify(status.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response, 202 if status.phase == "DRAINING" else 200
 
     @app.post(scope + "/checkpoint-holds/<uuid:request_id>/capture")
     def capture_checkpoint(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):

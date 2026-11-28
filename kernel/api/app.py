@@ -130,6 +130,7 @@ from kernel.api.campaign_checkpoints import (
 from kernel.api.roster import finalize_member
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
+from kernel.campaign_activation import ACTIVATE_CAMPAIGN_REVISION
 from kernel.checkpoint_holds import PostgresCheckpointHolds
 from kernel.checkpoint_schedules import PostgresCheckpointSchedules
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
@@ -139,6 +140,7 @@ from kernel.errors import BranchIsolationError, KernelError
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
 from kernel.postgres_control_plane import PostgresControlPlane
 from kernel.postgres_repository import PostgresCommandRepository
+from kernel.revision_activation import PostgresRevisionActivation
 from kernel.state import InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
 from persona.compilation import PersonaCompiler
@@ -1170,11 +1172,30 @@ def create_app(
         persona_versions[version.version_id] = version
         return version
 
-    def canonical_entity(entity_id: uuid.UUID):
-        for (branch_id, identity), entity in simulation.entities.items():
-            if identity == entity_id and simulation.states.get(branch_id).kind.value == "CANONICAL":
+    def canonical_entity(entity_id: uuid.UUID, source: SimulationApplication | None = None):
+        source = source or simulation
+        for (branch_id, identity), entity in source.entities.items():
+            world = source.worlds.get(entity.world_id)
+            if (
+                identity == entity_id
+                and world is not None
+                and branch_id == world.canonical_branch_id
+            ):
                 return entity
         raise KeyError(entity_id)
+
+    def timeline_visible(
+        source: SimulationApplication,
+        world_id: uuid.UUID,
+        branch_id: uuid.UUID,
+        actor_id: uuid.UUID,
+    ) -> bool:
+        world = source.worlds[world_id]
+        return (
+            branch_id == world.canonical_branch_id
+            or source.states.get(branch_id).kind is BranchKind.TRIAL
+            or "world.read.all" in source.authority(world_id, actor_id).capabilities
+        )
 
     def job_payload(job: Any) -> dict[str, Any]:
         payload = job.model_dump(mode="json")
@@ -2308,6 +2329,8 @@ def create_app(
         source = controller_snapshot()
         require_world_access(world_id, source)
         actor_id = current_actor_id()
+        if not timeline_visible(source, world_id, branch_id, actor_id):
+            raise PermissionError("this continuation is archived")
         options = NarrationRequest.model_validate(request.get_json())
 
         def read() -> tuple[NarrationEntry, ...]:
@@ -2360,6 +2383,8 @@ def create_app(
         source = controller_snapshot()
         require_world_access(world_id, source)
         actor_id = current_actor_id()
+        if not timeline_visible(source, world_id, branch_id, actor_id):
+            raise PermissionError("this continuation is archived")
         entry = narrations.get(world_id, branch_id, narration_id, actor_id=actor_id)
         if entry is None:
             raise KeyError(narration_id)
@@ -2383,6 +2408,10 @@ def create_app(
         source = source or simulation
         require_world_access(world_id, source)
         actor_id = current_actor_id()
+        if source.states.get(branch_id).world_id == world_id and not timeline_visible(
+            source, world_id, branch_id, actor_id
+        ):
+            raise PermissionError("this continuation is archived")
         require_scene_access(
             source,
             world_id=world_id,
@@ -2855,13 +2884,15 @@ def create_app(
         actor_id = requested_actor_id(uuid.UUID(requested) if requested else None)
         world_id = request.args.get("world_id")
         branch_id = request.args.get("branch_id")
+        source = controller_snapshot()
         return jsonify(
             [
                 event.model_dump(mode="json")
-                for event in simulation.visible_events(actor_id)
+                for event in source.visible_events(actor_id)
                 if (world_id is None or str(event.world_id) == world_id)
                 and (branch_id is None or str(event.branch_id) == branch_id)
                 and world_readable(event.world_id)
+                and timeline_visible(source, event.world_id, event.branch_id, actor_id)
             ]
         )
 
@@ -3316,11 +3347,12 @@ def create_app(
 
     @app.get("/api/v2/entities/<uuid:entity_id>/mind")
     def cognition_inspect(entity_id: uuid.UUID):
-        entity = canonical_entity(entity_id)
-        require_world_access(entity.world_id)
+        source = controller_snapshot()
+        entity = canonical_entity(entity_id, source)
+        require_world_access(entity.world_id, source)
         requested = request.args.get("actor_id")
         actor_id = requested_actor_id(uuid.UUID(requested) if requested else None)
-        authority = simulation.authority(entity.world_id, actor_id)
+        authority = source.authority(entity.world_id, actor_id)
         if entity.controller_actor_id != actor_id and not {
             "mind.read.all",
             "mind.write.all",
@@ -4277,12 +4309,33 @@ def create_app(
         require_world_access,
     )
     checkpoint_schedules = None
-    if database_dsn and durable_checkpoint_holds is not None:
+    if (
+        database_dsn
+        and durable_checkpoint_holds is not None
+        and durable_control is not None
+        and simulation.durable_repository is not None
+    ):
         checkpoint_archives = PostgresCampaignCheckpoints(
             database_dsn, root / "campaign-checkpoints", durable_checkpoint_holds
         )
+        revision_activation = PostgresRevisionActivation(
+            checkpoint_archives,
+            durable_control,
+            simulation.snapshot_store,
+            simulation.durable_repository,
+            simulation.bus.definition(ACTIVATE_CAMPAIGN_REVISION),
+        )
+
+        def refresh_revision_state() -> None:
+            simulation.read_reference(lambda: durable_control.hydrate(simulation))
+
         register_checkpoint_capture(
-            app, checkpoint_archives, current_actor_id, require_world_access
+            app,
+            checkpoint_archives,
+            current_actor_id,
+            require_world_access,
+            revision_activation,
+            refresh_revision_state,
         )
         checkpoint_schedules = PostgresCheckpointSchedules(
             database_dsn, checkpoint_archives, demo["actor_id"]
