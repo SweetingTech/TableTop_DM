@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -76,6 +77,85 @@ def frozen_tables(
 
 def sorted_references(references: list[CheckpointReference]) -> tuple[CheckpointReference, ...]:
     return tuple(sorted(references, key=lambda item: (item.kind, item.identity, item.version)))
+
+
+@dataclass(frozen=True)
+class CheckpointEvidence:
+    events: list[dict[str, Any]]
+    commands: list[dict[str, Any]]
+    perceptions: list[dict[str, Any]]
+
+    def reference(self, boundary: CheckpointBoundary) -> tuple[CheckpointReference, ...]:
+        last_event = (
+            (self.events[-1]["seq_id"], self.events[-1]["event_id"])
+            if self.events
+            else (
+                0,
+                None,
+            )
+        )
+        expected = (
+            boundary.through_event_seq,
+            str(boundary.through_event_id) if boundary.through_event_id else None,
+        )
+        if last_event != expected or len(self.commands) != boundary.command_ordinal:
+            raise CheckpointHoldConflict("checkpoint evidence does not match its causal boundary")
+        if not self.events:
+            return ()
+        return (
+            CheckpointReference(
+                kind="physical-evidence-prefix",
+                identity=f"{boundary.branch_id}:{boundary.through_event_seq}",
+                version="v1",
+                digest=stable_hash(
+                    {
+                        "events": self.events,
+                        "commands": self.commands,
+                        "perceptions": self.perceptions,
+                    }
+                ),
+            ),
+        )
+
+
+def read_checkpoint_evidence(
+    cursor: RealDictCursor, boundary: CheckpointBoundary
+) -> CheckpointEvidence:
+    scope = (str(boundary.world_id), str(boundary.branch_id))
+    cursor.execute(
+        "SELECT to_jsonb(e) AS payload FROM sim.events e "
+        "WHERE (e.world_id,e.branch_id)=(%s,%s) AND e.seq_id<=%s ORDER BY e.seq_id",
+        (*scope, boundary.through_event_seq),
+    )
+    events = [row["payload"] for row in cursor]
+    cursor.execute(
+        "SELECT to_jsonb(c) AS payload FROM sim.command_log c "
+        "WHERE (c.world_id,c.branch_id)=(%s,%s) ORDER BY c.seq_id LIMIT %s",
+        (*scope, boundary.command_ordinal),
+    )
+    commands = [row["payload"] for row in cursor]
+    cursor.execute(
+        """SELECT to_jsonb(p) AS payload
+           FROM sim.event_perceptions p JOIN sim.events e
+             ON (e.world_id,e.branch_id,e.event_id)=(p.world_id,p.branch_id,p.event_id)
+           WHERE (p.world_id,p.branch_id)=(%s,%s) AND e.seq_id<=%s
+           ORDER BY p.event_id,p.observer_entity_id""",
+        (*scope, boundary.through_event_seq),
+    )
+    return CheckpointEvidence(events, commands, [row["payload"] for row in cursor])
+
+
+def verify_artifact_file(uri: str, artifacts_root: Path, expected: str) -> None:
+    try:
+        path = artifact_path(uri).resolve(strict=True)
+        if not path.is_relative_to(artifacts_root):
+            raise ValueError("source is outside the archive root")
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if digest != expected:
+            raise ValueError("source digest differs")
+    except (OSError, ValueError):
+        raise CheckpointHoldConflict("a checkpoint source artifact is unavailable") from None
 
 
 def pin_artifacts(
@@ -179,22 +259,13 @@ def pin_artifacts(
         scope * 3,
     )
     for row in cursor:
-        try:
-            path = artifact_path(row["uri"]).resolve(strict=True)
-            if not path.is_relative_to(artifacts_root):
-                raise ValueError("source is outside the archive root")
-            with path.open("rb") as stream:
-                digest = hashlib.file_digest(stream, "sha256").hexdigest()
-            if digest != row["content_hash"]:
-                raise ValueError("source digest differs")
-        except (OSError, ValueError):
-            raise CheckpointHoldConflict("a checkpoint source artifact is unavailable") from None
+        verify_artifact_file(row["uri"], artifacts_root, row["content_hash"])
         references.append(
             CheckpointReference(
                 kind="artifact",
                 identity=str(row["id"]),
                 version=row["artifact_kind"],
-                digest=digest,
+                digest=row["content_hash"],
             )
         )
     return PinnedComponent(
@@ -297,28 +368,14 @@ def collect_checkpoint(
     )
     events = read_scoped_rows(cursor, scope, "sim.events", order=("seq_id",))
     commands = read_scoped_rows(cursor, scope, "sim.command_log", order=("seq_id",))
-    last_event = (events[-1]["seq_id"], events[-1]["event_id"]) if events else (0, None)
-    expected_event = (
-        hold.through_event_seq,
-        str(hold.through_event_id) if hold.through_event_id else None,
-    )
-    if last_event != expected_event or len(commands) != hold.command_ordinal:
-        raise CheckpointHoldConflict("ledger changed after the checkpoint hold")
-    event_refs: tuple[CheckpointReference, ...] = ()
-    if events:
-        perceptions = read_scoped_rows(
+    perceptions = (
+        read_scoped_rows(
             cursor, scope, "sim.event_perceptions", order=("event_id", "observer_entity_id")
         )
-        event_refs = (
-            CheckpointReference(
-                kind="physical-evidence-prefix",
-                identity=f"{hold.branch_id}:{hold.through_event_seq}",
-                version="v1",
-                digest=stable_hash(
-                    {"events": events, "commands": commands, "perceptions": perceptions}
-                ),
-            ),
-        )
+        if events
+        else []
+    )
+    event_refs = CheckpointEvidence(events, commands, perceptions).reference(boundary)
 
     minds = frozen_tables(
         cursor,
@@ -455,6 +512,34 @@ class PostgresCampaignCheckpoints:
         except (OSError, ValueError, EOFError):
             raise CheckpointHoldConflict("checkpoint archive could not be verified") from None
 
+    def load_verified_at_cut(
+        self, cursor: RealDictCursor, manifest: CampaignCheckpointManifest
+    ) -> tuple[CampaignCheckpoint, CheckpointEvidence]:
+        checkpoint = self._load_verified(manifest)
+        cursor.execute("SET LOCAL TIME ZONE 'UTC'")
+        evidence = read_checkpoint_evidence(cursor, checkpoint.boundary)
+        physical = cast(PinnedComponent, checkpoint.sections[CheckpointSection.PHYSICAL_EVIDENCE])
+        if physical.references != evidence.reference(checkpoint.boundary):
+            raise CheckpointHoldConflict("checkpoint evidence does not match its archived digest")
+        pinned = cast(PinnedComponent, checkpoint.sections[CheckpointSection.VERSIONED_ARTIFACTS])
+        file_refs = [ref for ref in pinned.references if ref.kind == "artifact"]
+        if file_refs:
+            cursor.execute(
+                "SELECT id,uri,artifact_kind,content_hash FROM artifacts.objects "
+                "WHERE id=ANY(%s::uuid[]) AND (world_id IS NULL OR world_id=%s)",
+                ([ref.identity for ref in file_refs], str(checkpoint.boundary.world_id)),
+            )
+            files = {str(row["id"]): row for row in cursor}
+            for ref in file_refs:
+                row = files.get(ref.identity)
+                if row is None or (row["artifact_kind"], row["content_hash"]) != (
+                    ref.version,
+                    ref.digest,
+                ):
+                    raise CheckpointHoldConflict("a checkpoint source artifact is unavailable")
+                verify_artifact_file(row["uri"], self.store.root.parent, ref.digest)
+        return checkpoint, evidence
+
     def capture(
         self,
         world: uuid.UUID,
@@ -544,4 +629,5 @@ class PostgresCampaignCheckpoints:
                 if row is None:
                     raise KeyError(checkpoint_id)
                 receipt = CheckpointReceipt.model_validate(row)
-                return receipt, self._load_verified(receipt.manifest)
+                checkpoint, _ = self.load_verified_at_cut(cursor, receipt.manifest)
+                return receipt, checkpoint

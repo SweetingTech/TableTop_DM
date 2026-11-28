@@ -195,7 +195,8 @@ class PostgresCheckpointRetention:
         if not candidates:
             return ()
         for row in rows[: policy.keep_automatic]:
-            self.archives._load_verified(CampaignCheckpointManifest.model_validate(row["manifest"]))
+            manifest = CampaignCheckpointManifest.model_validate(row["manifest"])
+            self.archives.load_verified_at_cut(cursor, manifest)
         for manifest in candidates:
             cursor.execute(
                 "INSERT INTO sim.campaign_checkpoint_retention_state "
