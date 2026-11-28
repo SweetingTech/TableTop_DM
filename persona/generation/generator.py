@@ -209,6 +209,31 @@ class PersonaGenerator:
             )
         return StratumFeasibility(feasible=True, fixed=fixed)
 
+    @staticmethod
+    def _validate_distribution(
+        name: str,
+        candidates: tuple[Any, ...],
+        weights: dict[Any, float],
+    ) -> None:
+        unknown = set(weights) - set(candidates)
+        if unknown:
+            raise InfeasibleStratumError(
+                f"Distribution {name} has unknown values: {sorted(unknown, key=str)}"
+            )
+        try:
+            invalid_weights = any(
+                not isinstance(weight, (int, float))
+                or weight < 0
+                or not math.isfinite(float(weight))
+                for weight in weights.values()
+            )
+        except OverflowError:
+            invalid_weights = True
+        if invalid_weights:
+            raise InfeasibleStratumError(
+                f"Distribution {name} weights must be finite non-negative numbers"
+            )
+
     def _choose(
         self,
         rng: random.Random,
@@ -220,24 +245,7 @@ class PersonaGenerator:
     ) -> tuple[Any, ProvenanceSource]:
         weights = distributions.get(name)
         if weights is not None:
-            unknown = set(weights) - set(candidates)
-            if unknown:
-                raise InfeasibleStratumError(
-                    f"Distribution {name} has unknown values: {sorted(unknown, key=str)}"
-                )
-            try:
-                invalid_weights = any(
-                    not isinstance(weight, (int, float))
-                    or weight < 0
-                    or not math.isfinite(float(weight))
-                    for weight in weights.values()
-                )
-            except OverflowError:
-                invalid_weights = True
-            if invalid_weights:
-                raise InfeasibleStratumError(
-                    f"Distribution {name} weights must be finite non-negative numbers"
-                )
+            self._validate_distribution(name, candidates, weights)
 
         feasible: list[Any] = []
         feasible_weights: list[float] = []
@@ -310,18 +318,26 @@ class PersonaGenerator:
                 if target in fixed and fixed[target] not in allowed:
                     return False
                 weights = distributions.get(target)
-                if weights is not None and not any(
-                    value in allowed and weight > 0 for value, weight in weights.items()
-                ):
-                    return False
+                if weights is not None:
+                    spec = self.registry.dimensions[target]
+                    candidates = (False, True) if spec.kind == "boolean" else spec.values
+                    self._validate_distribution(target, candidates, weights)
+                    if not any(
+                        value in allowed and weight > 0 for value, weight in weights.items()
+                    ):
+                        return False
             for target, forbidden in rule.forbid.items():
                 if target in fixed and fixed[target] in forbidden:
                     return False
                 weights = distributions.get(target)
-                if weights is not None and not any(
-                    value not in forbidden and weight > 0 for value, weight in weights.items()
-                ):
-                    return False
+                if weights is not None:
+                    spec = self.registry.dimensions[target]
+                    candidates = (False, True) if spec.kind == "boolean" else spec.values
+                    self._validate_distribution(target, candidates, weights)
+                    if not any(
+                        value not in forbidden and weight > 0 for value, weight in weights.items()
+                    ):
+                        return False
         return True
 
     @staticmethod
