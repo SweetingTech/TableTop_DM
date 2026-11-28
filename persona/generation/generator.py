@@ -309,35 +309,42 @@ class PersonaGenerator:
         distributions: dict[str, dict[Any, float]],
     ) -> bool:
         context = {**proposed, **fixed}
+        active_rules = []
         for rule in self.registry.constraints:
             if any(name not in context for name in rule.when):
                 continue
             if not all(context[name] in allowed for name, allowed in rule.when.items()):
                 continue
+            active_rules.append(rule)
             for target, allowed in rule.require.items():
                 if target in fixed and fixed[target] not in allowed:
                     return False
-                weights = distributions.get(target)
-                if weights is not None:
-                    spec = self.registry.dimensions[target]
-                    candidates = (False, True) if spec.kind == "boolean" else spec.values
-                    self._validate_distribution(target, candidates, weights)
-                    if not any(
-                        value in allowed and weight > 0 for value, weight in weights.items()
-                    ):
-                        return False
             for target, forbidden in rule.forbid.items():
                 if target in fixed and fixed[target] in forbidden:
                     return False
-                weights = distributions.get(target)
-                if weights is not None:
-                    spec = self.registry.dimensions[target]
-                    candidates = (False, True) if spec.kind == "boolean" else spec.values
-                    self._validate_distribution(target, candidates, weights)
-                    if not any(
-                        value not in forbidden and weight > 0 for value, weight in weights.items()
-                    ):
-                        return False
+
+        for target, weights in distributions.items():
+            target_rules = [
+                rule
+                for rule in active_rules
+                if target in rule.require or target in rule.forbid
+            ]
+            if not target_rules:
+                continue
+            spec = self.registry.dimensions[target]
+            candidates = (False, True) if spec.kind == "boolean" else spec.values
+            self._validate_distribution(target, candidates, weights)
+            # One positive-weight value must satisfy every active rule for this target.
+            if not any(
+                weight > 0
+                and all(
+                    (target not in rule.require or value in rule.require[target])
+                    and (target not in rule.forbid or value not in rule.forbid[target])
+                    for rule in target_rules
+                )
+                for value, weight in weights.items()
+            ):
+                return False
         return True
 
     @staticmethod
