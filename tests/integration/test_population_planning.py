@@ -189,9 +189,9 @@ def test_planning_quota_and_shelter_rollback_retry_restart_and_privacy(
 
 
 def test_two_world_workers_and_restart_finish_daily_choices_once(
-    integration_stack, monkeypatch, tmp_path
+    isolated_integration_stack, monkeypatch, tmp_path
 ):
-    app, game = prepare(integration_stack, monkeypatch, tmp_path)
+    app, game = prepare(isolated_integration_stack, monkeypatch, tmp_path)
     admin, player, card, path, run, target, base = game
     configure_game_plan(app, game)
     for due, raining in ((40, True), (100, False)):
