@@ -78,6 +78,13 @@ class CheckpointHolds(Protocol):
 def require_checkpoint_open(cursor: PgCursor, world: uuid.UUID, branch: uuid.UUID) -> None:
     """Call under the same branch lock that serializes new action commits."""
     cursor.execute(
+        "SELECT 1 FROM sim.branches WHERE (world_id,id)=(%s,%s) "
+        "AND branch_kind='CANONICAL' AND status<>'ACTIVE'",
+        (str(world), str(branch)),
+    )
+    if cursor.fetchone() is not None:
+        raise BranchCheckpointHeld("canonical continuation was superseded")
+    cursor.execute(
         "SELECT 1 FROM sim.campaign_checkpoint_holds WHERE (world_id,branch_id)=(%s,%s) "
         "AND released_at IS NULL",
         (str(world), str(branch)),

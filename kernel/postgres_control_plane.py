@@ -411,16 +411,29 @@ class PostgresControlPlane:
         snapshot_projection_versions: dict[uuid.UUID, int] = {}
         with transaction(actor_id=self.actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
-                    """
-                    SELECT world.*, canonical.id AS canonical_branch_id
-                    FROM sim.worlds world
-                    JOIN sim.branches canonical
-                      ON canonical.world_id = world.id
-                     AND canonical.branch_kind = 'CANONICAL'
-                    ORDER BY world.created_at, world.id
-                    """
-                )
+                cursor.execute("SELECT to_regclass('sim.campaign_continuations') AS continuations")
+                schema = cursor.fetchone()
+                if schema is not None and schema["continuations"] is not None:
+                    cursor.execute(
+                        """
+                        SELECT world.*, head.branch_id AS canonical_branch_id, head.epoch
+                        FROM sim.worlds world
+                        JOIN sim.campaign_continuations head ON head.world_id = world.id
+                        ORDER BY world.created_at, world.id
+                        """
+                    )
+                else:
+                    # Prior-schema upgrade fixtures still use the original canonical branch.
+                    cursor.execute(
+                        """
+                        SELECT world.*, canonical.id AS canonical_branch_id, 0 AS epoch
+                        FROM sim.worlds world
+                        JOIN sim.branches canonical
+                          ON canonical.world_id = world.id
+                         AND canonical.branch_kind = 'CANONICAL'
+                        ORDER BY world.created_at, world.id
+                        """
+                    )
                 for row in cursor.fetchall():
                     world_id = _uuid(row["id"])
                     simulation.worlds[world_id] = WorldRecord(
@@ -430,6 +443,7 @@ class PostgresControlPlane:
                         status=row["status"],
                         domain_packs=tuple(row["domain_packs"]),
                         canonical_branch_id=_uuid(row["canonical_branch_id"]),
+                        continuation_epoch=row["epoch"],
                         created_at=row["created_at"],
                     )
 

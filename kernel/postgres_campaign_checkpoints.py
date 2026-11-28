@@ -262,6 +262,16 @@ def collect_checkpoint(
     schema = cursor.fetchone()
     if schema is None or schema["v"] is None:
         raise ValueError("checkpoint schema version is unavailable")
+    epoch = 0
+    if schema["v"] >= 25:
+        cursor.execute(
+            "SELECT epoch FROM sim.campaign_continuations WHERE (world_id,branch_id)=(%s,%s)",
+            scope,
+        )
+        continuation = cursor.fetchone()
+        if continuation is None:
+            raise CheckpointHoldConflict("checkpoint must use the active campaign continuation")
+        epoch = int(continuation["epoch"])
     origin = None
     if schema["v"] >= 23:
         cursor.execute(
@@ -273,7 +283,7 @@ def collect_checkpoint(
     boundary = CheckpointBoundary(
         world_id=hold.world_id,
         branch_id=hold.branch_id,
-        continuation_epoch=0,
+        continuation_epoch=epoch,
         capture_request_id=hold.request_id,
         trigger_event_id=origin["source_event_id"] if origin else None,
         trigger_schedule_id=origin["rule_id"] if origin else None,

@@ -66,6 +66,9 @@ Keep the private artifact volume available and writable when applying it. Repeat
 request if cleanup remains pending after an interruption. The audited manifest remains in
 PostgreSQL after the file is removed.
 
+Migration 025 initializes the continuation pointer for each existing canonical branch at epoch
+zero. Apply it before starting the new API or world runner. Evaluation trials stay separate.
+
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
 on the read transaction. Deploy the matching API/control-plane code. Role changes from a second

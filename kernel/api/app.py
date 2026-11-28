@@ -1070,7 +1070,13 @@ def create_app(
 
     def world_payload(world: Any) -> dict[str, Any]:
         live_run = next(
-            (item for item in simulation.runs.values() if item.world_id == world.world_id),
+            (
+                item
+                for item in simulation.runs.values()
+                if item.world_id == world.world_id
+                and item.branch_id == world.canonical_branch_id
+                and item.kind is RunKind.LIVE
+            ),
             None,
         )
         return {
