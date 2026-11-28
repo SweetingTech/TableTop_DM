@@ -82,6 +82,10 @@ command, its private event and outbox row commit with the pointer switch. A mate
 failure rolls back all staged rows. The current hold can be retried after restart or released by
 cancelling the plan.
 
+Paused restored controllers each receive the successor run's execution actor and its standard
+world-scoped grants. The original execution actor and archived decisions remain in the old
+timeline's ledger.
+
 Resume checks the active epoch again and establishes new controller epochs and clock work
 under current grants. A controller that cannot regain its archived mode stays paused.
 The clock resumes from the checkpoint's simulated time and starts its next timeout from

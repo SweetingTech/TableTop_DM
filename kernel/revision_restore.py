@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
+from cognition.control import execution_actor
+from cognition.postgres_control import ensure_execution_actor
 from kernel.campaign_checkpoints import CampaignCheckpoint, CheckpointSection
 from kernel.campaign_revisions import (
     CampaignRevisionPlan,
@@ -26,7 +28,7 @@ from kernel.checkpoint_knowledge import (
     restored_identity,
     scoped_copy,
 )
-from kernel.control import ControllerState
+from kernel.control import ControllerState, ControlScope
 from kernel.postgres_campaign_checkpoints import CheckpointEvidence
 from kernel.postgres_control_plane import PostgresControlPlane
 from kernel.snapshots import SnapshotEntity, SnapshotStore
@@ -228,10 +230,20 @@ def restore_runtime(cursor: RealDictCursor, campaign: RestoredCampaign) -> None:
             required=frozenset({"run_id"}),
         )
         archived = ControllerState.model_validate(row["payload"])
+        scope = ControlScope(
+            world_id=plan.world_id,
+            branch_id=target,
+            run_id=uuid.UUID(copy["run_id"]),
+            entity_id=archived.entity_id,
+        )
+        executor = execution_actor(scope)
+        ensure_execution_actor(cursor, scope.world_id, executor)
+        copy["executor_actor_id"] = str(executor)
         copy["payload"] = archived.model_copy(
             update={
-                "branch_id": target,
-                "run_id": uuid.UUID(copy["run_id"]),
+                "branch_id": scope.branch_id,
+                "run_id": scope.run_id,
+                "executor_actor_id": executor,
                 "epoch": 1,
                 "mode": "PAUSED",
                 "failures": 0,

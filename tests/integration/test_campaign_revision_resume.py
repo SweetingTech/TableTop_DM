@@ -99,7 +99,8 @@ def test_resume_is_atomic_and_restarts_world_clock_and_controller(
     assert restored["epoch"] == 2
     assert restored["mode"] == "AUTONOMOUS"
     assert restored["owner_actor_id"] == original["owner_actor_id"]
-    assert restored["executor_actor_id"] == original["executor_actor_id"]
+    assert restored["executor_actor_id"] == controller["executor_actor_id"]
+    assert restored["executor_actor_id"] != original["executor_actor_id"]
     due = datetime.fromisoformat(clock["next_due"])
     assert restarted_app.extensions["world_runner"].run_once(due) == 1
     assert restarted.get(clock_url).get_json()["clock"]["seconds"] > initial["seconds"]
@@ -203,8 +204,12 @@ def test_028_upgrade_can_resume_a_preexisting_paused_revision(
             _, (admin, player, _card, path, run, _witness, base) = prepare(
                 old, monkeypatch, tmp_path
             )
-            assignment = handoff(player, path, run, 0, "AUTONOMOUS", "archive-old-executor")
+            handoff(player, path, run, 0, "AUTONOMOUS", "archive-old-executor")
             resume, new = activate_from(admin, base, manual_capture(admin, base))
+            control_path = path.replace(base["branch_id"], new["branch_id"]) + "/control"
+            control = player.get(control_path, query_string={"run_id": new["run_id"]})
+            assert control.status_code == 200, control.get_json()
+            executor = control.get_json()["control"]["executor_actor_id"]
             latest = migrations / "028_campaign_revision_resume.sql"
             with closing(psycopg2.connect(owner)) as connection, connection.cursor() as cursor:
                 cursor.execute(latest.read_text(encoding="utf-8"))
@@ -219,7 +224,7 @@ def test_028_upgrade_can_resume_a_preexisting_paused_revision(
                 cursor.execute(
                     "DELETE FROM sim.actor_capabilities "
                     "WHERE (world_id,actor_id,capability)=(%s,%s,'entity.act')",
-                    (new["world_id"], assignment["executor_actor_id"]),
+                    (new["world_id"], executor),
                 )
                 assert cursor.rowcount == 1
             result = restarted.post(

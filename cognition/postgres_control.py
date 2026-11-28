@@ -27,6 +27,26 @@ from kernel.errors import BranchCheckpointHeld
 PRESENCE_BATCH_LIMIT = 32
 
 
+def ensure_execution_actor(
+    cursor: psycopg2.extras.RealDictCursor, world_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    cursor.execute(
+        "INSERT INTO sim.actors(id,actor_kind,display_name) "
+        "VALUES (%s,'AGENT','Character policy executor') ON CONFLICT (id) DO NOTHING",
+        (str(actor_id),),
+    )
+    cursor.execute("SELECT actor_kind FROM sim.actors WHERE id=%s", (str(actor_id),))
+    executor = cursor.fetchone()
+    if executor is None or executor["actor_kind"] != "AGENT":
+        raise ValueError("execution principal is unavailable")
+    for capability in sorted(EXECUTOR_CAPABILITIES):
+        cursor.execute(
+            "INSERT INTO sim.actor_capabilities(world_id,actor_id,capability) "
+            "VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
+            (str(world_id), str(actor_id), capability),
+        )
+
+
 class PostgresControllers:
     def __init__(self, dsn: str, machine_actor_id: uuid.UUID) -> None:
         self.dsn, self.machine_actor_id = dsn, machine_actor_id
@@ -202,23 +222,7 @@ class PostgresControllers:
                     disconnected=timeout_at is not None,
                     presence_now=self._database_clock(cursor) if request.mode == "HUMAN" else None,
                 )
-                cursor.execute(
-                    "INSERT INTO sim.actors(id,actor_kind,display_name) "
-                    "VALUES (%s,'AGENT','Character policy executor') ON CONFLICT (id) DO NOTHING",
-                    (str(state.executor_actor_id),),
-                )
-                cursor.execute(
-                    "SELECT actor_kind FROM sim.actors WHERE id=%s", (str(state.executor_actor_id),)
-                )
-                executor = cursor.fetchone()
-                if executor is None or executor["actor_kind"] != "AGENT":
-                    raise ValueError("execution principal is unavailable")
-                for capability in sorted(EXECUTOR_CAPABILITIES):
-                    cursor.execute(
-                        "INSERT INTO sim.actor_capabilities(world_id,actor_id,capability) "
-                        "VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
-                        (str(scope.world_id), str(state.executor_actor_id), capability),
-                    )
+                ensure_execution_actor(cursor, scope.world_id, state.executor_actor_id)
                 cursor.execute(
                     """INSERT INTO cognition.runtime_assignments
                     (world_id,branch_id,run_id,entity_id,runtime_kind,runtime_config,assigned_at)
