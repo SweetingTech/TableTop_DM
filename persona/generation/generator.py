@@ -47,6 +47,11 @@ class PersonaGenerator:
             raise InfeasibleStratumError(
                 f"Dimensions cannot be both fixed and distributed: {sorted(overlap)}"
             )
+        for name in distributions:
+            if self.registry.dimensions[name].kind not in ("boolean", "enum"):
+                raise InfeasibleStratumError(
+                    f"Distribution {name} is unsupported: numeric distributions are not supported"
+                )
         self._validate_fixed_assignments(fixed)
 
         rng = random.Random(seed)
@@ -93,12 +98,14 @@ class PersonaGenerator:
                     distributions,
                 )
             elif spec.kind == "integer":
-                value = rng.randint(int(spec.minimum or 0), int(spec.maximum or 100))
+                minimum = int(spec.minimum if spec.minimum is not None else 0)
+                maximum = int(spec.maximum if spec.maximum is not None else 100)
+                value = rng.randint(minimum, maximum)
                 source = "seeded_generator"
             else:
-                minimum = float(spec.minimum or 0)
-                maximum = float(spec.maximum or 1)
-                value = round(rng.uniform(minimum, maximum), 4)
+                float_minimum = float(spec.minimum if spec.minimum is not None else 0)
+                float_maximum = float(spec.maximum if spec.maximum is not None else 1)
+                value = round(rng.uniform(float_minimum, float_maximum), 4)
                 source = "seeded_generator"
 
             error = self.registry.validate_value(spec, value)
@@ -202,6 +209,31 @@ class PersonaGenerator:
             )
         return StratumFeasibility(feasible=True, fixed=fixed)
 
+    @staticmethod
+    def _validate_distribution(
+        name: str,
+        candidates: tuple[Any, ...],
+        weights: dict[Any, float],
+    ) -> None:
+        unknown = set(weights) - set(candidates)
+        if unknown:
+            raise InfeasibleStratumError(
+                f"Distribution {name} has unknown values: {sorted(unknown, key=str)}"
+            )
+        try:
+            invalid_weights = any(
+                not isinstance(weight, (int, float))
+                or weight < 0
+                or not math.isfinite(float(weight))
+                for weight in weights.values()
+            )
+        except OverflowError:
+            invalid_weights = True
+        if invalid_weights:
+            raise InfeasibleStratumError(
+                f"Distribution {name} weights must be finite non-negative numbers"
+            )
+
     def _choose(
         self,
         rng: random.Random,
@@ -213,24 +245,7 @@ class PersonaGenerator:
     ) -> tuple[Any, ProvenanceSource]:
         weights = distributions.get(name)
         if weights is not None:
-            unknown = set(weights) - set(candidates)
-            if unknown:
-                raise InfeasibleStratumError(
-                    f"Distribution {name} has unknown values: {sorted(unknown, key=str)}"
-                )
-            try:
-                invalid_weights = any(
-                    not isinstance(weight, (int, float))
-                    or weight < 0
-                    or not math.isfinite(float(weight))
-                    for weight in weights.values()
-                )
-            except OverflowError:
-                invalid_weights = True
-            if invalid_weights:
-                raise InfeasibleStratumError(
-                    f"Distribution {name} weights must be finite non-negative numbers"
-                )
+            self._validate_distribution(name, candidates, weights)
 
         feasible: list[Any] = []
         feasible_weights: list[float] = []
@@ -243,14 +258,18 @@ class PersonaGenerator:
             if not self._allows_future_constraints(proposed, fixed, distributions):
                 continue
             feasible.append(candidate)
-            feasible_weights.append(float(weights.get(candidate, 0)) if weights else 1.0)
+            feasible_weights.append(
+                float(weights.get(candidate, 0)) if weights is not None else 1.0
+            )
         total_weight = sum(feasible_weights)
         if not math.isfinite(total_weight):
             raise InfeasibleStratumError(f"Distribution {name} total weight must be finite")
         if not feasible or total_weight <= 0:
             raise InfeasibleStratumError(f"No feasible weighted value for {name}")
         selected = rng.choices(feasible, weights=feasible_weights, k=1)[0]
-        source: ProvenanceSource = "weighted_distribution" if weights else "seeded_generator"
+        source: ProvenanceSource = (
+            "weighted_distribution" if weights is not None else "seeded_generator"
+        )
         return selected, source
 
     def _validate_fixed_assignments(self, fixed: dict[str, Any]) -> None:
@@ -290,27 +309,40 @@ class PersonaGenerator:
         distributions: dict[str, dict[Any, float]],
     ) -> bool:
         context = {**proposed, **fixed}
+        active_rules = []
         for rule in self.registry.constraints:
             if any(name not in context for name in rule.when):
                 continue
             if not all(context[name] in allowed for name, allowed in rule.when.items()):
                 continue
+            active_rules.append(rule)
             for target, allowed in rule.require.items():
                 if target in fixed and fixed[target] not in allowed:
-                    return False
-                weights = distributions.get(target)
-                if weights is not None and not any(
-                    value in allowed and weight > 0 for value, weight in weights.items()
-                ):
                     return False
             for target, forbidden in rule.forbid.items():
                 if target in fixed and fixed[target] in forbidden:
                     return False
-                weights = distributions.get(target)
-                if weights is not None and not any(
-                    value not in forbidden and weight > 0 for value, weight in weights.items()
-                ):
-                    return False
+
+        for target, weights in distributions.items():
+            target_rules = [
+                rule for rule in active_rules if target in rule.require or target in rule.forbid
+            ]
+            if not target_rules:
+                continue
+            spec = self.registry.dimensions[target]
+            candidates = (False, True) if spec.kind == "boolean" else spec.values
+            self._validate_distribution(target, candidates, weights)
+            # One positive-weight value must satisfy every active rule for this target.
+            if not any(
+                weight > 0
+                and all(
+                    (target not in rule.require or value in rule.require[target])
+                    and (target not in rule.forbid or value not in rule.forbid[target])
+                    for rule in target_rules
+                )
+                for value, weight in weights.items()
+            ):
+                return False
         return True
 
     @staticmethod
