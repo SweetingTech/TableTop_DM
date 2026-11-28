@@ -335,6 +335,10 @@ An automatic checkpoint uses a preconfigured world-operator rule and a committed
 same transaction records the rule, source event and held cut. The runner's retry reuses the held
 request and its archive receipt, then releases the branch only after verified publication.
 
+Retention can retire older released scheduled archives under the active operator policy.
+The newest verified copies, manual captures, and pinned archives remain available.
+Retirement commits before any file cleanup and preserves the original manifest and ledger.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

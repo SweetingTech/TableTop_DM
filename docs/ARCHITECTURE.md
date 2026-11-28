@@ -351,6 +351,11 @@ records the originating event and acquires a hold at the command transaction's f
 another command can commit. The existing world runner reads ready dispatches, checks the stored
 operator's current authority, publishes the named archive, and releases that exact hold.
 
+Checkpoint retention applies a versioned branch policy to released scheduled archives.
+The repository serializes pin changes, retirement, and archive reads. It verifies the
+files that satisfy the keep count before the database commits retirement. File cleanup
+starts after that commit and can be retried from the persisted retirement records.
+
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
 projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
 entity's identity, controller and secret metadata at that boundary. Public body resources remain

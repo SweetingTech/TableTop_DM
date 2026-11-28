@@ -40,7 +40,15 @@ Hash canonical serialization in stable key and primary-key order. Bind each comp
 
 The reference adapter applies the same causal checks under its synchronized state boundary. For PostgreSQL, a database-consistent snapshot alone cannot prove that a committed event reached every witness if the projector still owns an unpublished row. Capture success requires the drain check as well as the consistent read.
 
-Retain checkpoints with live timeline, schedule, restore or operator holds. Retire unreferenced checkpoint artifacts under a configured retention policy only after verifying no retained manifest needs their bytes. Keep capture and correction audit records. Trial snapshot and ledger retention are independent of this policy.
+By default every archive is retained. An operator may set a branch policy and explicitly
+apply it to completed automatic checkpoints. The repository retains manual captures, pins
+and active holds. It verifies the newest completed archives before retiring any older one.
+An immutable retirement marker records the applied policy before file cleanup. The manifest
+and capture receipt stay available for audit. Trial snapshots and ledgers use their own
+retention rules.
+
+Revision and restore must also retain their source checkpoint until the timeline and
+all associated recovery work release it.
 
 ## Restore and revision
 

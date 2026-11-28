@@ -1,5 +1,8 @@
 # Changelog
 
+- Add opt-in retention for scheduled campaign checkpoints. Preserve manual and pinned archives,
+  verify the newest retained copies, and record retirement before cleaning up archive files.
+
 - Schedule campaign checkpoints on the simulated clock or at matching committed events. The
   world runner finishes the held archive and resumes the branch after projection completes.
 - Capture a private, integrity-checked campaign archive from a ready checkpoint hold. Migration 022

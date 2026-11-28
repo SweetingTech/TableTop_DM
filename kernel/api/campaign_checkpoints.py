@@ -8,6 +8,12 @@ from flask import Flask, jsonify, request
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from kernel.checkpoint_holds import CheckpointHoldConflict, CheckpointHolds, CheckpointHoldStatus
+from kernel.checkpoint_retention import (
+    ApplyRetentionRequest,
+    CheckpointPinRequest,
+    PostgresCheckpointRetention,
+    RetentionRequest,
+)
 from kernel.checkpoint_schedules import CheckpointRuleRequest, PostgresCheckpointSchedules
 from kernel.errors import BranchCheckpointHeld
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
@@ -79,6 +85,7 @@ def register_checkpoint_capture(
     require_world_access: Callable[[uuid.UUID], None],
 ) -> None:
     scope = "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
+    retention = PostgresCheckpointRetention(archives)
 
     @app.post(scope + "/checkpoint-holds/<uuid:request_id>/capture")
     def capture_checkpoint(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):
@@ -96,6 +103,43 @@ def register_checkpoint_capture(
         require_world_access(world_id)
         receipt, _ = archives.load(world_id, branch_id, checkpoint_id, current_actor())
         response = jsonify(receipt.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get(scope + "/checkpoint-retention")
+    def read_checkpoint_retention(world_id: uuid.UUID, branch_id: uuid.UUID):
+        require_world_access(world_id)
+        policy = retention.read(world_id, branch_id, current_actor())
+        response = jsonify(policy.model_dump(mode="json") if policy else {"policy": None})
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.put(scope + "/checkpoint-retention")
+    def configure_checkpoint_retention(world_id: uuid.UUID, branch_id: uuid.UUID):
+        require_world_access(world_id)
+        body = RetentionRequest.model_validate(request.get_json(silent=True) or {})
+        policy = retention.configure(world_id, branch_id, current_actor(), body)
+        response = jsonify(policy.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post(scope + "/checkpoint-retention/apply")
+    def apply_checkpoint_retention(world_id: uuid.UUID, branch_id: uuid.UUID):
+        require_world_access(world_id)
+        body = ApplyRetentionRequest.model_validate(request.get_json(silent=True) or {})
+        result = retention.apply(world_id, branch_id, current_actor(), body)
+        response = jsonify(result.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.put(scope + "/campaign-checkpoints/<uuid:checkpoint_id>/pin")
+    def pin_campaign_checkpoint(
+        world_id: uuid.UUID, branch_id: uuid.UUID, checkpoint_id: uuid.UUID
+    ):
+        require_world_access(world_id)
+        body = CheckpointPinRequest.model_validate(request.get_json(silent=True) or {})
+        pin = retention.pin(world_id, branch_id, checkpoint_id, current_actor(), body)
+        response = jsonify(pin.model_dump(mode="json"))
         response.headers["Cache-Control"] = "no-store"
         return response
 

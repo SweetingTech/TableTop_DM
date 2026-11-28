@@ -210,6 +210,9 @@ stores private archive bytes alongside the source files required for verificatio
 Migration 023 uses the existing PostgreSQL, projector and world-runner services for automatic
 checkpoints. Schedule configuration uses the same world-manager API authority as manual capture.
 
+Migration 024 adds checkpoint retention using the same PostgreSQL and private artifact store.
+The API process needs write access to that store to clean up explicitly retired files.
+
 ### Scenario job
 
 ```mermaid
