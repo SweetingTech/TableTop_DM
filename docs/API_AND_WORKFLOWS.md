@@ -668,6 +668,20 @@ returns its existing receipt if submitted again. PostgreSQL keeps the hold and p
 API and worker restarts. See the [campaign checkpoint contract](CAMPAIGN_CHECKPOINTS.md) for
 capture, retention and revision requirements.
 
+### Campaign checkpoint capture
+
+In the PostgreSQL runtime, `POST /{request_id}/capture` under the branch's checkpoint-hold
+collection accepts `{"label": "Before the ferry raid"}`. The caller also needs current
+`entity.read.secret` authority in that world. Capture requires a `READY` hold and a matching
+projection and ledger boundary. It verifies pinned local population and decision artifacts before
+publishing the archive and returns its checkpoint ID, label, boundary and integrity digests.
+
+`GET /api/v2/worlds/{world_id}/branches/{branch_id}/campaign-checkpoints/{checkpoint_id}`
+verifies the stored bytes and returns the private receipt metadata. The archive contents stay in
+the server's artifact store. A repeat capture of the same request and label returns the original
+receipt, including after release. A different label for that request returns 409. Release the hold
+when play or simulation should resume.
+
 ### World-scoped reads
 
 Every world-scoped route requires `ADMIN`, or a `DM` or `PLAYER` grant **for that world**. Roles

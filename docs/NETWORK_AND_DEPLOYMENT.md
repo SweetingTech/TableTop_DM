@@ -204,6 +204,9 @@ World operators use the existing API connection to request or release a branch c
 Apply migration 021 before starting the updated API and workers. Checkpoint status requires
 current manager capabilities for that world.
 
+Apply migration 022 before using the campaign checkpoint capture API. The existing artifact volume
+stores private archive bytes alongside the source files required for verification.
+
 ### Scenario job
 
 ```mermaid

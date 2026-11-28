@@ -6,6 +6,9 @@ The [campaign checklist](AUTONOMOUS_CAMPAIGN_CHECKLIST.md#i-complete-checkpoints
 
 A complete checkpoint binds one world and canonical timeline branch to a source continuation epoch. Its manifest identifies the capture request, format and schema versions, triggering command or schedule when present, canonical projection version and SHA-256, branch-local committed command ordinal, last included `sim.events.seq_id` and event ID, and world clock position. The command ordinal and the event sequence are distinct. The event sequence is global across the database and can have gaps. All event and outbox lookups use the selected world and branch.
 
+The [durable capture API](API_AND_WORKFLOWS.md#campaign-checkpoint-capture) publishes this archive
+from a ready hold. Table and artifact reads share one PostgreSQL transaction snapshot.
+
 The manifest lists every component below. Each entry has a schema identifier, immutable content hash, and one of these dispositions:
 
 - **Frozen** includes the canonical serialized state at the cut. The reader checks its hash and exact lineage before using it.
@@ -25,7 +28,7 @@ Hash canonical serialization in stable key and primary-key order. Bind each comp
 | Activities and game time | Activity, routine, needs, status, quest and party projections, world clock, `sim.schedules` and logical `sim.world_due_work` | Preserve simulated time, remaining work, due intent, and all branch-local resources. Recreate fresh physical work leases after handoff. Wall-clock expiry and work-claim owners are transient. |
 | Randomness | Run seeds, branch-local allocation ordinal, RNG contract version, committed decisions and results | Preserve existing outcomes on replay. Record the seed policy and independent new lineage for fresh execution after a correction. |
 | Campaign story and pending tasks | Branch-owned quests, chosen approaches, rewards and escrow, authored story and agenda progress when installed, pending branch/run schedules | Bind the story plan version and freeze progression, references and logical pending work. Record explicit absence of an uninstalled story subsystem. Experiment jobs, account administration, and unrelated campaigns are outside the cut. |
-| Narration and retrieval | `cognition.narration_entries`, source events and observations, source-scoped knowledge inputs and index version | Keep authorized narration tied to the same cut. Rebuild derived search from the retained facts and observations. Redis and Qdrant are rebuildable infrastructure. Never import their shared cache or index into an earlier timeline. |
+| Narration and retrieval | Scoped narration and knowledge builder versions, source events and frozen observations | Rebuild authorized narration and search from the pinned facts and observations. Recreate any needed Redis and Qdrant indexes for the restored scope. |
 | Artifact provenance | Exact manifests for published domain, rules, assets, population, persona and model/prompt inputs used by the retained state | Verify immutable IDs, versions and digests. Reject a missing or damaged dependency. Operator labels and retention metadata do not replace content identity. |
 
 ## Quiescence and capture

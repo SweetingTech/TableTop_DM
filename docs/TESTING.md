@@ -93,6 +93,10 @@ Checkpoint hold tests exercise the canonical action and controller fence, retain
 full completion of the pinned outbox prefix, and active hold recovery after PostgreSQL restart.
 The migration checks also verify actor-scoped hold access and the release-only update grant.
 
+The complete capture test combines a frozen body secret, a materialized population member and
+an outbox-delayed observation in one PostgreSQL archive. It checks the scoped receipt, source
+artifact integrity, repeat capture, and reconstruction of private records after restarting the API.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

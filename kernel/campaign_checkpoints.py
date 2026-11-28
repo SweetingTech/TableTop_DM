@@ -71,7 +71,7 @@ SECTION_MODES = {
     CheckpointSection.RANDOMNESS: {"FROZEN"},
     CheckpointSection.PENDING_WORK: {"FROZEN"},
     CheckpointSection.STORY: {"FROZEN", "ABSENT"},
-    CheckpointSection.NARRATION: {"FROZEN"},
+    CheckpointSection.NARRATION: {"FROZEN", "REBUILD"},
     CheckpointSection.RETRIEVAL: {"REBUILD"},
     CheckpointSection.VERSIONED_ARTIFACTS: {"PINNED"},
 }

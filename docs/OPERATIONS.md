@@ -49,6 +49,12 @@ the pinned prefix and pending projection count, then let the projector finish th
 the matching request to resume commits and clock and character work. The runtime role can update
 only the release timestamp, and world-scoped row security protects the hold.
 
+Migration 022 adds append-only campaign checkpoint receipts and capture scoped to the exact hold.
+Back up `campaign-checkpoints` below the configured artifact root together with PostgreSQL and
+the referenced source artifacts. Keep a matching database and artifact backup so a restored
+receipt still resolves to its verified content. A capture failure leaves the hold available for
+inspection and retry.
+
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
 on the read transaction. Deploy the matching API/control-plane code. Role changes from a second
