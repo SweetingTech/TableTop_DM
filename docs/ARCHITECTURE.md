@@ -333,6 +333,13 @@ physical witness membership. See [Spatial epistemics](SPATIAL_EPISTEMICS.md).
 
 ## Canonical state, snapshots, trials, and replay
 
+An operator checkpoint hold serializes with the normal canonical branch commit lock. It pins the
+projection hash, command ordinal and event prefix, then prevents new actions and controller
+transitions. The projector can drain existing outbox work. Readiness requires no unpublished
+row in the held branch's prefix, including work leased by another projector. The hold is durable
+operational control and stays outside story events and character observations. A matching release
+resumes the normal command and scheduling paths.
+
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
 projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
 entity's identity, controller and secret metadata at that boundary. Public body resources remain

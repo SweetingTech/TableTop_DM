@@ -12,11 +12,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domains.tabletop import register_tabletop
 from kernel.branching import BranchManager, promotion_definition
+from kernel.checkpoint_holds import ReferenceCheckpointHolds
 from kernel.command_bus import CommandBus, CommandReceipt
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, CommandResult, RunKind
 from kernel.control import ControllerState, advanced, reassigned, validate_controller
 from kernel.database import after_commit
-from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
+from kernel.errors import (
+    AuthorizationDenied,
+    BranchCheckpointHeld,
+    BranchIsolationError,
+    WorldClockPaused,
+)
 from kernel.perception_contracts import PerceptionGrant
 from kernel.replay import ReplayEngine, ReplayRecord
 from kernel.snapshots import SnapshotEntity, SnapshotManifest, SnapshotStore
@@ -79,6 +85,7 @@ class SimulationApplication:
 
     def __init__(self, artifact_root: Path | None = None) -> None:
         self._reference_command_lock = threading.RLock()
+        self.checkpoint_holds = ReferenceCheckpointHolds(self)
         self.controller_states: dict[tuple, ControllerState] = {}
         self.human_decision_evidence: dict[uuid.UUID, dict] = {}
         self.states = InMemoryStateStore()
@@ -399,6 +406,8 @@ class SimulationApplication:
                 raise ValueError("population source changed before binding")
 
     def validate_control(self, proposal: CommandProposal) -> None:
+        if self.checkpoint_holds.held(proposal.world_id, proposal.branch_id):
+            raise BranchCheckpointHeld("branch is paused for a checkpoint")
         if proposal.decision_authorship == "CHARACTER_POLICY":
             clock = (
                 self.states.get(proposal.branch_id)

@@ -206,7 +206,7 @@ def test_spell_evidence_failure_rolls_back_resources_then_retry_once(
 
 
 def test_009_upgrade_and_repeat_with_preserved_old_evidence(
-    integration_stack, monkeypatch, tmp_path
+    integration_stack, monkeypatch, tmp_path, pre_checkpoint_commands
 ):
     name = "ttdm_tactics_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
@@ -224,8 +224,9 @@ def test_009_upgrade_and_repeat_with_preserved_old_evidence(
         monkeypatch.setenv("DATABASE_URL", url)
         monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
         app = create_app(artifact_root=tmp_path / "legacy")
-        admin, player, card, path, run, target, base = setup_scene(app)
-        provoke(admin, base, target, card, "legacy-threat")
+        with pre_checkpoint_commands(url):
+            admin, player, card, path, run, target, base = setup_scene(app)
+            provoke(admin, base, target, card, "legacy-threat")
         repository = app.extensions["simulation"].durable_repository
         original = repository.evidence_builder
 
@@ -242,9 +243,10 @@ def test_009_upgrade_and_repeat_with_preserved_old_evidence(
 
         repository.evidence_builder = legacy
         try:
-            response = command(
-                player, base, card, "tabletop.spatial.move", {"dx": -1, "dy": 0}, "legacy-move"
-            )
+            with pre_checkpoint_commands(url):
+                response = command(
+                    player, base, card, "tabletop.spatial.move", {"dx": -1, "dy": 0}, "legacy-move"
+                )
             assert response.status_code == 200, response.get_json()
         finally:
             repository.evidence_builder = original
@@ -275,7 +277,9 @@ def test_009_upgrade_and_repeat_with_preserved_old_evidence(
         maintenance.close()
 
 
-def test_020_upgrade_preserves_existing_choice_rows(integration_stack, monkeypatch, tmp_path):
+def test_020_upgrade_preserves_existing_choice_rows(
+    integration_stack, monkeypatch, tmp_path, pre_checkpoint_commands
+):
     name = "ttdm_support_upgrade_" + uuid.uuid4().hex
     url = make_dsn(integration_stack.admin_url, dbname=name)
     maintenance = psycopg2.connect(integration_stack.admin_url)
@@ -292,17 +296,19 @@ def test_020_upgrade_preserves_existing_choice_rows(integration_stack, monkeypat
         monkeypatch.setenv("DATABASE_URL", url)
         monkeypatch.setenv("TTDM_OPERATOR_TOKEN", secrets.token_urlsafe(32))
         app = create_app(artifact_root=tmp_path)
-        admin, player, card, _, _, target, base = setup_scene(app)
-        provoke(admin, base, target, card, "pre-support-threat")
-        assert (
-            command(player, base, card, "tabletop.combat.guard", {}, "old-guard").status_code == 200
-        )
+        with pre_checkpoint_commands(url):
+            admin, player, card, _, _, target, base = setup_scene(app)
+            provoke(admin, base, target, card, "pre-support-threat")
+            assert (
+                command(player, base, card, "tabletop.combat.guard", {}, "old-guard").status_code
+                == 200
+            )
         with psycopg2.connect(url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT payload FROM cognition.human_choice_evidence")
             old = cursor.fetchall()
         assert len(old) == 1 and old[0][0]["version"] == "speech-combat-behavior-1.1.0"
 
-        assert migrate(url, migrations) == 1
+        assert migrate(url, migrations) == len(discover(migrations)) - 19
         assert migrate(url, migrations) == 0
         helper = establish_helper(app, admin, base, card)
         assert (

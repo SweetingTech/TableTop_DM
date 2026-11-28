@@ -648,6 +648,26 @@ Legacy 2.0 snapshots remain readable for replay. Creating a new trial from one r
 metadata cannot be reconstructed safely. Existing persisted trials remain available. These are
 projection/entity snapshots; full campaign checkpoint and timeline revision remain unfinished.
 
+### Checkpoint holds
+
+Use `/api/v2/worlds/{world_id}/branches/{branch_id}/checkpoint-holds` to hold a canonical
+branch before checkpoint capture. `POST` with `{"request_id": "<uuid>"}` pins the current
+projection version, hash, command ordinal, event sequence and simulated time. The same ID
+replays the existing hold. A different request while a hold is active returns
+`checkpoint_hold_conflict` (409). The route requires current `run.branch`, `world.read.all`
+and `mind.read.all` authority in the requested world.
+
+`GET` on the collection returns the active hold, or `{"hold": null}`. `GET /{request_id}`
+returns a specific hold. While `DRAINING`, `pending_events` counts unpublished outbox rows
+from the pinned branch prefix. `READY` means that prefix has finished projecting. New actions
+and controller transitions return `branch_checkpoint_held` (409) while either state is active.
+Authorized old command and handoff receipts can still be retried.
+
+`POST /{request_id}/release` resumes the branch. Release is idempotent, and a released request
+returns its existing receipt if submitted again. PostgreSQL keeps the hold and prefix across
+API and worker restarts. See the [campaign checkpoint contract](CAMPAIGN_CHECKPOINTS.md) for
+capture, retention and revision requirements.
+
 ### World-scoped reads
 
 Every world-scoped route requires `ADMIN`, or a `DM` or `PLAYER` grant **for that world**. Roles

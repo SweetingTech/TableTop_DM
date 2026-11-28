@@ -200,6 +200,10 @@ sequenceDiagram
 
 No model or client receives a direct database mutation path.
 
+World operators use the existing API connection to request or release a branch checkpoint hold.
+Apply migration 021 before starting the updated API and workers. Checkpoint status requires
+current manager capabilities for that world.
+
 ### Scenario job
 
 ```mermaid

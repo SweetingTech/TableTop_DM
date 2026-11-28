@@ -1,5 +1,7 @@
 # Changelog
 
+- Hold a canonical branch at a fixed checkpoint boundary while its existing perceptions finish
+  projecting. Migration 021 preserves the hold across API and worker restarts.
 - Let funded quests designate alternate contacts and approaches, require specific items, and
   transfer responsibility with consent while preserving progress and single-payout escrow.
 - Add party plans, consensual waypoint travel, leadership changes, and a physically located cache

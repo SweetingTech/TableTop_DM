@@ -43,6 +43,12 @@ row when later observations are waiting. Its retry timestamp and stable error cl
 pending event while other branches can continue. Restarting the projector recovers expired
 claims and reuses any observations already written for the event.
 
+Migration 021 adds persistent branch checkpoint holds. Restarting API or worker services keeps
+an active hold. Use the [checkpoint hold API](API_AND_WORKFLOWS.md#checkpoint-holds) to inspect
+the pinned prefix and pending projection count, then let the projector finish that work. Release
+the matching request to resume commits and clock and character work. The runtime role can update
+only the release timestamp, and world-scoped row security protects the hold.
+
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
 on the read transaction. Deploy the matching API/control-plane code. Role changes from a second

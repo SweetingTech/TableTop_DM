@@ -35,6 +35,8 @@ on their card, backstory, and observed play history.
   conversation, weather interruptions, and a finite stopping condition with the production workers.
 - Commands, snapshots, replay, and isolated trials retain a history the DM can inspect. The
   campaign roadmap tracks complete rewind, authored story direction, and an executable AI DM.
+- World managers can [hold a branch at its committed boundary](docs/API_AND_WORKFLOWS.md#checkpoint-holds).
+  The hold survives a restart and reports when the projector has finished the outstanding events.
 
 ## Implementation details
 
@@ -55,6 +57,7 @@ during the last recorded handoff.
 Apply migration 020 so a stand-in can learn when the player mends their own wounds and when
 they help someone who previously helped them. It considers help the character perceived and
 people within visible spell reach.
+Apply migration 021 for durable checkpoint holds. Existing campaigns start without a hold.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

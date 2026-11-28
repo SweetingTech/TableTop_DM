@@ -122,9 +122,11 @@ from identity.repository import (
 )
 from identity.service import AuthenticationError, IdentityService
 from infra.migrate import DEFAULT_MIGRATIONS_DIR, discover
+from kernel.api.campaign_checkpoints import register_checkpoint_holds
 from kernel.api.roster import finalize_member
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
+from kernel.checkpoint_holds import PostgresCheckpointHolds
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
 from kernel.control import ControllerState, ControlScope
 from kernel.database import execute_one
@@ -4258,6 +4260,12 @@ def create_app(
         app, controller_snapshot, current_user, current_actor_id, require_world_access, portal
     )
     register_world_time(app, controller_snapshot, current_actor_id, require_world_access)
+    register_checkpoint_holds(
+        app,
+        PostgresCheckpointHolds(database_dsn) if database_dsn else simulation.checkpoint_holds,
+        current_actor_id,
+        require_world_access,
+    )
     from kernel.api.population_runtime import PopulationRuntime, register_population_runtime
 
     def read_population_source(population_id: uuid.UUID, persona_id: uuid.UUID):

@@ -35,6 +35,12 @@ class PostgresDueWork:
                       (%s,%s,%s,%s,%s,%s)
                     AND available_at <= %s
                     AND (lease_until IS NULL OR lease_until <= clock_timestamp())
+                    AND NOT EXISTS (
+                      SELECT 1 FROM sim.campaign_checkpoint_holds h
+                      WHERE (h.world_id,h.branch_id)=
+                        (world_due_work.world_id,world_due_work.branch_id)
+                        AND h.released_at IS NULL
+                    )
                     RETURNING lease_token
                     """,
                     (

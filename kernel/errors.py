@@ -10,6 +10,10 @@ class WorldClockPaused(AuthorizationDenied):
     """Expected suspension; runners must preserve the character controller's budget."""
 
 
+class BranchCheckpointHeld(WorldClockPaused):
+    """The branch is paused at an operator checkpoint boundary."""
+
+
 class BodySleeping(AuthorizationDenied):
     """Expected bodily suspension; autonomous actions wait without spending a control step."""
 

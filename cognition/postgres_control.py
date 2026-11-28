@@ -19,8 +19,10 @@ from cognition.control import (
     recap_bounds,
     renew_presence,
 )
+from kernel.checkpoint_holds import require_checkpoint_open
 from kernel.control import ControllerState, ControlScope, persist_controller
 from kernel.database import transaction
+from kernel.errors import BranchCheckpointHeld
 
 PRESENCE_BATCH_LIMIT = 32
 
@@ -168,6 +170,7 @@ class PostgresControllers:
                 prior = cursor.fetchone()
                 if prior:
                     return HandoffReceipt.model_validate(prior["payload"])
+                require_checkpoint_open(cursor, scope.world_id, scope.branch_id)
                 previous = self._read(cursor, scope)
                 if "disconnect_after_seconds" in request.model_fields_set:
                     self._check_player(cursor, scope, actor_id)
@@ -295,6 +298,7 @@ class PostgresControllers:
                 self._owner(cursor, scope, actor_id)
                 self._lock_branch(cursor, scope)
                 self._check_player(cursor, scope, actor_id)
+                require_checkpoint_open(cursor, scope.world_id, scope.branch_id)
                 previous = self._read(cursor, scope)
                 state = renew_presence(previous, expected_epoch, now=self._database_clock(cursor))
                 if state != previous:
@@ -314,6 +318,9 @@ class PostgresControllers:
                     WHERE c.payload->>'mode'='HUMAN'
                       AND (c.payload->>'presence_deadline_at')::timestamptz<=%s
                       AND r.status IN ('ACTIVE','RUNNING')
+                      AND NOT EXISTS (SELECT 1 FROM sim.campaign_checkpoint_holds h
+                        WHERE (h.world_id,h.branch_id)=(c.world_id,c.branch_id)
+                          AND h.released_at IS NULL)
                     ORDER BY (
                       ((c.payload->>'presence_deadline_at')::timestamptz,
                        c.world_id,c.branch_id,c.run_id,c.entity_id)
@@ -339,7 +346,13 @@ class PostgresControllers:
                 self._handoff(
                     state.scope, self.machine_actor_id, disconnect_handoff(state), timeout_at=now
                 )
-            except (ControlConflict, PermissionError, ValueError, psycopg2.Error):
+            except (
+                BranchCheckpointHeld,
+                ControlConflict,
+                PermissionError,
+                ValueError,
+                psycopg2.Error,
+            ):
                 continue
 
     def due(self) -> tuple[ControllerState, ...]:
@@ -351,6 +364,9 @@ class PostgresControllers:
                     WHERE c.payload->>'mode'='AUTONOMOUS'
                       AND (c.payload->>'next_due')::timestamptz<=now()
                       AND r.status IN ('RUNNING','ACTIVE')
+                      AND NOT EXISTS (SELECT 1 FROM sim.campaign_checkpoint_holds h
+                        WHERE (h.world_id,h.branch_id)=(c.world_id,c.branch_id)
+                          AND h.released_at IS NULL)
                     ORDER BY (c.payload->>'next_due')::timestamptz,
                              c.world_id,c.branch_id,c.run_id,c.entity_id LIMIT 32""")
                 return tuple(
@@ -361,6 +377,10 @@ class PostgresControllers:
         with transaction(actor_id=state.executor_actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 self._lock_branch(cursor, state.scope)
+                try:
+                    require_checkpoint_open(cursor, state.world_id, state.branch_id)
+                except BranchCheckpointHeld:
+                    return
                 current = self._read(cursor, state.scope)
                 if current != state or state.mode != "AUTONOMOUS":
                     return

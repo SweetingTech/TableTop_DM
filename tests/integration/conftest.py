@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -116,3 +117,19 @@ def integration_stack() -> Iterator[IntegrationStack]:
 def isolated_integration_stack() -> Iterator[IntegrationStack]:
     """Give database-wide worker processes only the worlds created by their test."""
     yield from _integration_stack()
+
+
+@pytest.fixture
+def pre_checkpoint_commands(monkeypatch):
+    """Emulate the command path used by the old deployment to seed upgrade fixtures."""
+
+    @contextmanager
+    def older_runtime(dsn: str) -> Iterator[None]:
+        with closing(psycopg2.connect(dsn)) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT to_regclass('sim.campaign_checkpoint_holds')")
+            assert cursor.fetchone() == (None,)
+        with monkeypatch.context() as patch:
+            patch.setattr("kernel.postgres_repository.require_checkpoint_open", lambda *_: None)
+            yield
+
+    return older_runtime
