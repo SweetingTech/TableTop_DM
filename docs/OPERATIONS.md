@@ -80,6 +80,8 @@ committed receipt. A pending plan can be cancelled to release the live branch.
 Migration 028 enables resume. Use the revision's reported epoch and keep the worker
 services running. A controller whose owner or executor lost a required grant stays paused.
 The receipt reports controller counts, and the operator can adjust control separately.
+Migration 029 enables remapping pending mechanics during rewind. If activation asks for a
+new plan, cancel the earlier plan and reprepare from its retained checkpoint.
 
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally

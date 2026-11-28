@@ -126,6 +126,8 @@ Resume tests interrupt the operation after clock configuration and verify rollba
 clock and controller changes. They retry after restart, run real world and character workers
 on the successor, and verify scope, the prior receipt, and upgrade from a paused 027 revision.
 An ordinary player without a controller assignment also waits for the resume boundary.
+`tests/integration/test_campaign_restore_mechanics.py` covers 028-to-029 upgrade and
+rollback, rejection of a mismatched restore hash, and play inside a restored encounter.
 
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then

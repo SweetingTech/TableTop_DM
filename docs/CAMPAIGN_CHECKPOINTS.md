@@ -79,6 +79,9 @@ paused clock, archived physical and subjective state, current authorized body co
 retained human evidence, population sources, and a replay baseline. A materialization
 failure rolls back the pointer change and all staged rows. The current hold can be retried
 after restart or released by cancelling the plan.
+The successor also restores initiative rolls, open offers, death-save progress, action
+reservations, and current timed conditions. These entries keep their simulated deadlines
+and original source command IDs and use the corresponding restored run IDs.
 
 Resume checks the active epoch again and establishes new controller epochs and clock work
 under current grants. A controller that cannot regain its archived mode stays paused.

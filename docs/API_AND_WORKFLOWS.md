@@ -733,8 +733,11 @@ Use `POST /{request_id}/activate` under the same path to start the rewind. A 202
 response means the current branch is held while its outstanding perception work drains.
 Repeat the request to finish activation. A successful response identifies the successor
 branch, run and epoch. The new branch starts paused and holds the restored state.
+An older prepared plan that cannot restore its pending tabletop mechanics returns 409.
+Cancel that plan and prepare a fresh revision from the same checkpoint.
 The request returns the same receipt after a restart or a dropped response.
 Cancelling a pending plan releases its hold. Operators can audit the archived branch.
+Once resumed, ordinary commands can target the restored run through any API process.
 
 Use `POST /{request_id}/resume` on the completed revision plan with a fresh resume
 `request_id` and the restored `expected_epoch`. The default resumes the archived

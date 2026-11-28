@@ -2852,21 +2852,28 @@ def create_app(
         )
         proposal = CommandProposal.model_validate(payload)
         require_world_access(proposal.world_id)
+        # Another API process may have just activated a continuation with a new run.
+        # Resolve that scope from durable storage without replacing the shared cache.
+        source = (
+            controller_snapshot()
+            if durable_control is not None and proposal.run_id not in simulation.runs
+            else simulation
+        )
         if (
             proposal.input_origin == "HUMAN_INPUT"
-            and not simulation.bus.definition(proposal.command_type).requires_controlled_entity
+            and not source.bus.definition(proposal.command_type).requires_controlled_entity
         ):
             proposal = proposal.model_copy(update={"input_origin": "OPERATOR"})
-        receipt = simulation.submit(proposal)
+        receipt = source.submit(proposal)
         include_private = (
             durable_control.has_world_capability(
                 proposal.world_id, proposal.actor_id, "world.read.all"
             )
             if durable_control is not None
             else "world.read.all"
-            in simulation.authority(proposal.world_id, proposal.actor_id).capabilities
+            in source.authority(proposal.world_id, proposal.actor_id).capabilities
         )
-        cursor = command_scene_cursor(receipt, simulation.states.get(proposal.branch_id).version)
+        cursor = command_scene_cursor(receipt, source.states.get(proposal.branch_id).version)
         return jsonify(
             {
                 "result": present_command_result(receipt.result, include_private=include_private),

@@ -353,6 +353,8 @@ and the perceived content intact and assigns no fresh request keys to the retain
 The authoritative revision transaction fences the prior continuation and writes the paused
 successor, replay baseline and receipt together. Transaction-scoped restore authority allows
 only that operation to retain historical authorship. It ends before new actions can commit.
+The versioned restore hash covers run references in initiative, trade, recovery, action
+timing and timed conditions. Committed history keeps the source identifiers and randomness.
 
 The resume transaction advances controller epochs, rearms due work through a typed clock
 command, and commits the live run status with its retry receipt. A write to an archived

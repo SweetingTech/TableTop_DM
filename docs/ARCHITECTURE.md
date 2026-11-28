@@ -374,6 +374,10 @@ Activation holds the current branch and waits for its outbox. A single transacti
 builds the successor from the verified archive, initializes its replay baseline, and
 switches the canonical pointer. A deferred check rejects an incomplete transaction.
 Private event lineage links retained records to the previously experienced events.
+Encounters, offers, recovery, action reservations, and timed conditions rebind to the
+restored run identities. The restore contract version commits their result to the plan hash.
+Command submission resolves a newly restored run from durable storage when the receiving
+API process has an older in-memory view.
 
 Resume is a separate typed transaction. It rechecks the active epoch, reauthorizes the
 archived controller modes, and configures the restored clock through the normal command

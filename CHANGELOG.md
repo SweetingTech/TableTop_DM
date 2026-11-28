@@ -1,5 +1,8 @@
 # Changelog
 
+- Restore active encounters, offers, death saves, action reservations and timed conditions
+  on the successor run. Preserve their original rolls, sources, and simulated deadlines.
+
 - Resume an activated timeline with a durable retry receipt. Reauthorize the archived
   controllers, restart the world clock on the new branch, and fence stale writes.
 
