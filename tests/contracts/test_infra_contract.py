@@ -51,6 +51,7 @@ def test_clean_break_has_one_numbered_baseline() -> None:
         "026_campaign_revision_plans.sql",
         "027_campaign_revision_activation.sql",
         "028_campaign_revision_resume.sql",
+        "029_campaign_restore_mechanics.sql",
     ]
     assert not (ROOT / "infra" / "sql" / "init").exists()
     assert not (ROOT / "infra" / "sql" / "seed").exists()

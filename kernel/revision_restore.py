@@ -12,6 +12,7 @@ from cognition.control import execution_actor
 from cognition.postgres_control import ensure_execution_actor
 from kernel.campaign_checkpoints import CampaignCheckpoint, CheckpointSection
 from kernel.campaign_revisions import (
+    RESTORE_VERSION,
     CampaignRevisionPlan,
     archived_runs,
     build_paused_projection,
@@ -59,11 +60,10 @@ class RestoredCampaign:
         if run_ids[str(plan.source_live_run_id)] != str(plan.successor_run_id):
             raise CheckpointHoldConflict("the planned successor run is inconsistent")
         projection = build_paused_projection(checkpoint, plan.successor_branch_id, runs)
+        version = plan.provenance.restore_version
         planned_projection = (
-            build_paused_projection(
-                checkpoint, plan.successor_branch_id, runs, remap_population=False
-            )
-            if plan.provenance.restore_version == "campaign-restore-1.0.0"
+            build_paused_projection(checkpoint, plan.successor_branch_id, runs, version=version)
+            if version != RESTORE_VERSION
             else projection
         )
         knowledge = restore_knowledge(checkpoint, evidence, plan.successor_branch_id, run_ids)
@@ -72,6 +72,10 @@ class RestoredCampaign:
             and knowledge.digest != plan.provenance.retained_knowledge_hash
         ):
             raise CheckpointHoldConflict("the archived state differs from the prepared revision")
+        if version == "campaign-restore-1.1.0" and planned_projection != projection:
+            raise CheckpointHoldConflict(
+                "prepare a new revision to restore these campaign mechanics"
+            )
         return cls(checkpoint, plan, projection, run_ids, knowledge)
 
     def source(

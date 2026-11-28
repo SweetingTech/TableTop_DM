@@ -224,6 +224,8 @@ writes an immutable replay baseline to the snapshot volume before it commits the
 
 Migration 028 uses the existing API, world-runner and character-runner services. After
 resume commits, those workers discover due work on the restored timeline.
+Migration 029 adds a database check for the versioned restore hash. Run it with the
+corresponding API build before preparing or activating rewinds that restore pending mechanics.
 
 ### Scenario job
 

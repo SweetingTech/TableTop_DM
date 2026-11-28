@@ -86,6 +86,10 @@ Paused restored controllers each receive the successor run's execution actor and
 world-scoped grants. The original execution actor and archived decisions remain in the old
 timeline's ledger.
 
+The successor also restores initiative rolls, open offers, death-save progress, action
+reservations, and current timed conditions. These entries keep their simulated deadlines
+and original source command IDs and use the corresponding restored run IDs.
+
 Resume checks the active epoch again and establishes new controller epochs and clock work
 under current grants. A controller that cannot regain its archived mode stays paused.
 The clock resumes from the checkpoint's simulated time and starts its next timeout from

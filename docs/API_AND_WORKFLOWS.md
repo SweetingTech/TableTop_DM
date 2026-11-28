@@ -736,7 +736,10 @@ branch, run and epoch. The new branch starts paused and holds the restored state
 Activation commits an operator-only `kernel.campaign.activate_revision` event in the same
 transaction as the new continuation. Use the revision endpoint to invoke this command. The
 request returns the same receipt after a restart or a dropped response.
+An older prepared plan that cannot restore its pending tabletop mechanics returns 409.
+Cancel that plan and prepare a fresh revision from the same checkpoint.
 Cancelling a pending plan releases its hold. Operators can audit the archived branch.
+Once resumed, ordinary commands can target the restored run through any API process.
 
 Use `POST /{request_id}/resume` on the completed revision plan with a fresh resume
 `request_id` and the restored `expected_epoch`. The default resumes the archived

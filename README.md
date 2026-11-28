@@ -73,6 +73,8 @@ Apply migration 025 for the active canonical continuation and its timeline linea
 Apply migration 026 for durable campaign revision plans.
 Apply migration 027 to activate a prepared revision on a paused successor timeline.
 Apply migration 028 to resume play and world time on the restored timeline.
+Apply migration 029 so rewinds can resume encounters, offers, death saves, action timing
+and timed conditions from the archived moment.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

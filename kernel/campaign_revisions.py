@@ -9,8 +9,11 @@ from typing import Annotated, Literal
 from psycopg2.extras import RealDictCursor
 from pydantic import AwareDatetime, Field, JsonValue, StringConstraints
 
+from domains.tabletop.action_time import ACTION_TIME
+from domains.tabletop.economy import OFFERS
 from domains.tabletop.initiative import ENCOUNTERS
 from domains.tabletop.quests.contracts import QUESTS, Quest
+from domains.tabletop.recovery import VITALS
 from domains.tabletop.world_time import CLOCK, Clock
 from kernel.campaign_checkpoints import (
     CampaignCheckpoint,
@@ -39,6 +42,10 @@ from kernel.state import stable_hash
 from population.runtime import MEMBERS
 
 SeedPolicy = Literal["REUSE_CHECKPOINT_SEED", "FRESH_SEED"]
+RestoreVersion = Literal[
+    "campaign-restore-1.0.0", "campaign-restore-1.1.0", "campaign-restore-1.2.0"
+]
+RESTORE_VERSION: RestoreVersion = "campaign-restore-1.2.0"
 RevisionReason = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
 ]
@@ -54,9 +61,7 @@ class PrepareCampaignRevision(CheckpointModel):
 
 
 class RevisionProvenance(CheckpointModel):
-    restore_version: Literal["campaign-restore-1.0.0", "campaign-restore-1.1.0"] = (
-        "campaign-restore-1.1.0"
-    )
+    restore_version: RestoreVersion = RESTORE_VERSION
     source_state_hash: Digest
     source_command_ordinal: int
     source_event_seq: int
@@ -130,7 +135,7 @@ def build_paused_projection(
     successor_branch: uuid.UUID,
     runs: dict[uuid.UUID, ArchivedRun],
     *,
-    remap_population: bool = True,
+    version: RestoreVersion = RESTORE_VERSION,
 ) -> dict[str, dict[str, JsonValue]]:
     """Preserve the archived facts and remap the named run references."""
     result = deepcopy(checkpoint.projections)
@@ -158,7 +163,7 @@ def build_paused_projection(
         ).model_dump(mode="json")
     run_ids = {str(source): str(restored_run_id(successor_branch, source)) for source in runs}
     remap_run_references(result.get(ENCOUNTERS, {}), run_ids)
-    if remap_population and result.get(MEMBERS):
+    if version != "campaign-restore-1.0.0" and result.get(MEMBERS):
         ids = identifier_map(
             successor_branch,
             "population",
@@ -172,6 +177,15 @@ def build_paused_projection(
             if not isinstance(source, str) or source not in ids:
                 raise CheckpointHoldConflict("checkpoint population source is missing")
             result[MEMBERS][identity] = {**raw, "population_id": ids[source]}
+    if version == "campaign-restore-1.2.0":
+        for projection in (OFFERS, VITALS, ACTION_TIME):
+            remap_run_references(result.get(projection, {}), run_ids)
+        for body in result.get("tabletop.entities", {}).values():
+            if isinstance(body, dict) and "timed_conditions" in body:
+                conditions = body["timed_conditions"]
+                if not isinstance(conditions, dict):
+                    raise CheckpointHoldConflict("checkpoint has invalid timed conditions")
+                remap_run_references(conditions, run_ids)
     return result
 
 
