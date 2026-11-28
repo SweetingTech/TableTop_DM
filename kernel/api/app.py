@@ -122,11 +122,16 @@ from identity.repository import (
 )
 from identity.service import AuthenticationError, IdentityService
 from infra.migrate import DEFAULT_MIGRATIONS_DIR, discover
-from kernel.api.campaign_checkpoints import register_checkpoint_capture, register_checkpoint_holds
+from kernel.api.campaign_checkpoints import (
+    register_checkpoint_capture,
+    register_checkpoint_holds,
+    register_checkpoint_schedules,
+)
 from kernel.api.roster import finalize_member
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
 from kernel.checkpoint_holds import PostgresCheckpointHolds
+from kernel.checkpoint_schedules import PostgresCheckpointSchedules
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
 from kernel.control import ControllerState, ControlScope
 from kernel.database import execute_one
@@ -4254,9 +4259,6 @@ def create_app(
         character_bindings,
         pinned_character_profile,
     )
-    app.extensions["world_runner"] = WorldRunner(
-        controller_snapshot, PostgresDueWork(database_dsn) if database_dsn else None
-    )
     register_npc_card_binding(
         app, controller_snapshot, current_user, current_actor_id, require_world_access, portal
     )
@@ -4268,6 +4270,7 @@ def create_app(
         current_actor_id,
         require_world_access,
     )
+    checkpoint_schedules = None
     if database_dsn and durable_checkpoint_holds is not None:
         checkpoint_archives = PostgresCampaignCheckpoints(
             database_dsn, root / "campaign-checkpoints", durable_checkpoint_holds
@@ -4275,6 +4278,17 @@ def create_app(
         register_checkpoint_capture(
             app, checkpoint_archives, current_actor_id, require_world_access
         )
+        checkpoint_schedules = PostgresCheckpointSchedules(
+            database_dsn, checkpoint_archives, demo["actor_id"]
+        )
+        register_checkpoint_schedules(
+            app, checkpoint_schedules, current_actor_id, require_world_access
+        )
+    app.extensions["world_runner"] = WorldRunner(
+        controller_snapshot,
+        PostgresDueWork(database_dsn) if database_dsn else None,
+        finish_checkpoints=checkpoint_schedules.run_ready if checkpoint_schedules else None,
+    )
     from kernel.api.population_runtime import PopulationRuntime, register_population_runtime
 
     def read_population_source(population_id: uuid.UUID, persona_id: uuid.UUID):

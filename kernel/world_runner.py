@@ -15,15 +15,22 @@ from kernel.errors import KernelError
 
 class WorldRunner:
     def __init__(
-        self, snapshot: Callable[[], SimulationApplication], queue: PostgresDueWork | None = None
+        self,
+        snapshot: Callable[[], SimulationApplication],
+        queue: PostgresDueWork | None = None,
+        *,
+        finish_checkpoints: Callable[[], int] | None = None,
     ) -> None:
         self.snapshot = snapshot
         self.queue = queue
+        self.finish_checkpoints = finish_checkpoints
 
     def run_once(self, now: datetime | None = None) -> int:
         boundary = now or datetime.now(UTC)
         if boundary.tzinfo is None:
             raise ValueError("world runner requires timezone-aware operational time")
+        if self.finish_checkpoints is not None:
+            self.finish_checkpoints()
         source = self.snapshot()
         submitted = 0
         due = [

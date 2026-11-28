@@ -55,6 +55,11 @@ the referenced source artifacts. Keep a matching database and artifact backup so
 receipt still resolves to its verified content. A capture failure leaves the hold available for
 inspection and retry.
 
+Migration 023 adds automatic checkpoint rules and append-only trigger records. Keep the projector
+and world runner running for automatic capture. Until projection and archive checks pass, an
+automatic hold is visible through the same operator hold endpoint. A world manager can release
+that request to resume play or retire its rule after release.
+
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
 on the read transaction. Deploy the matching API/control-plane code. Role changes from a second

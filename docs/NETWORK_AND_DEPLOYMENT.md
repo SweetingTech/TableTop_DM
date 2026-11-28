@@ -207,6 +207,9 @@ current manager capabilities for that world.
 Apply migration 022 before using the campaign checkpoint capture API. The existing artifact volume
 stores private archive bytes alongside the source files required for verification.
 
+Migration 023 uses the existing PostgreSQL, projector and world-runner services for automatic
+checkpoints. Schedule configuration uses the same world-manager API authority as manual capture.
+
 ### Scenario job
 
 ```mermaid

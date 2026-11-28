@@ -331,6 +331,10 @@ the full subject and runtime inventory under one database snapshot. Publication 
 append-only manifest for the chosen boundary. The manifest's component digests and source pins
 validate the exact archive across retry and restart.
 
+An automatic checkpoint uses a preconfigured world-operator rule and a committed event. The
+same transaction records the rule, source event and held cut. The runner's retry reuses the held
+request and its archive receipt, then releases the branch only after verified publication.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

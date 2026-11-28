@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psycopg2.errors
 from psycopg2 import sql
@@ -262,11 +262,21 @@ def collect_checkpoint(
     schema = cursor.fetchone()
     if schema is None or schema["v"] is None:
         raise ValueError("checkpoint schema version is unavailable")
+    origin = None
+    if schema["v"] >= 23:
+        cursor.execute(
+            "SELECT rule_id,source_event_id FROM sim.campaign_checkpoint_dispatches "
+            "WHERE (world_id,branch_id,request_id)=(%s,%s,%s)",
+            (*scope, str(hold.request_id)),
+        )
+        origin = cursor.fetchone()
     boundary = CheckpointBoundary(
         world_id=hold.world_id,
         branch_id=hold.branch_id,
         continuation_epoch=0,
         capture_request_id=hold.request_id,
+        trigger_event_id=origin["source_event_id"] if origin else None,
+        trigger_schedule_id=origin["rule_id"] if origin else None,
         schema_version=schema["v"],
         projection_version=hold.projection_version,
         state_hash=hold.state_hash,
@@ -320,15 +330,19 @@ def collect_checkpoint(
             digest=stable_hash(minds.data),
         ),
     )
+    pending_work = {
+        "sim.schedules": read_scoped_rows(cursor, scope, "sim.schedules"),
+        "sim.world_due_work": read_scoped_rows(
+            cursor, scope, "sim.world_due_work", omit=("lease_token", "lease_until", "attempts")
+        ),
+        "sim.interactions": read_scoped_rows(cursor, scope, "sim.interactions"),
+    }
+    if schema["v"] >= 23:
+        pending_work["sim.campaign_checkpoint_rules"] = read_scoped_rows(
+            cursor, scope, "sim.campaign_checkpoint_rules"
+        )
     work = FrozenComponent(
-        schema_id="pending-work/v1",
-        data={
-            "sim.schedules": read_scoped_rows(cursor, scope, "sim.schedules"),
-            "sim.world_due_work": read_scoped_rows(
-                cursor, scope, "sim.world_due_work", omit=("lease_token", "lease_until", "attempts")
-            ),
-            "sim.interactions": read_scoped_rows(cursor, scope, "sim.interactions"),
-        },
+        schema_id="pending-work/v1", data=cast(dict[str, JsonValue], pending_work)
     )
     time: dict[str, JsonValue] = {"seconds": hold.simulated_seconds}
     for key in ("tabletop.clock", "tabletop.activities", "tabletop.routines"):

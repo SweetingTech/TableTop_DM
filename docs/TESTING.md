@@ -97,6 +97,10 @@ The complete capture test combines a frozen body secret, a materialized populati
 an outbox-delayed observation in one PostgreSQL archive. It checks the scoped receipt, source
 artifact integrity, repeat capture, and reconstruction of private records after restarting the API.
 
+The automatic checkpoint tests capture the exact event cut and then restart the app while its
+outbox row is leased. They verify archive publication and automatic release after projection.
+The simulated-time test checks that crossing multiple intervals publishes one committed cut.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest
