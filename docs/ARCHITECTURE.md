@@ -366,6 +366,10 @@ plan. The plan records an idempotent identity, provenance, and a digest of the p
 candidate derived from the archived projection. Prepared plans protect source archives
 from retention using the same branch fence as file cleanup.
 
+The rewind input builder rekeys historical events, their frozen perception grants, and
+the archived observations, beliefs, memories, and relationships for the successor branch.
+It preserves body identity and witness-specific payloads and binds the result to the plan.
+
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
 projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
 entity's identity, controller and secret metadata at that boundary. Public body resources remain

@@ -114,6 +114,10 @@ Revision preparation tests cover epoch and role checks, an exact candidate based
 earlier cut, durable retry and cancellation, and retention protection for the planned source.
 They verify the 025-to-026 migration, rollback, and cleanup after cancellation.
 
+The knowledge reconstruction case restores earlier testimony for its witness, compares the
+retained grant, and checks every mapped reference used by its memory. Later funeral dialogue
+stays outside the candidate, and an out-of-cut memory source fails validation.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

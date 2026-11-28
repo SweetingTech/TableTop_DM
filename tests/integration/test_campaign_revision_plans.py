@@ -12,11 +12,16 @@ import psycopg2.errors
 import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
+from psycopg2.extras import RealDictCursor
 
+from cognition.relationships import RelationshipChangeRecord
 from domains.tabletop.initiative import ENCOUNTERS
 from domains.tabletop.world_time import CLOCK
 from infra.migrate import discover, migrate
-from kernel.checkpoint_holds import PostgresCheckpointHolds
+from kernel.campaign_checkpoints import CheckpointSection, FrozenComponent
+from kernel.campaign_revisions import archived_runs, restored_run_id
+from kernel.checkpoint_holds import CheckpointHoldConflict, PostgresCheckpointHolds
+from kernel.checkpoint_knowledge import restore_knowledge
 from kernel.database import transaction
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
 from kernel.state import stable_hash
@@ -30,6 +35,7 @@ from tests.integration.test_world_time import prepare
 from tests.unit.kernel.test_action_time_api import advance_clock
 from tests.unit.kernel.test_campaign_checkpoint_holds import player_speech
 from tests.unit.kernel.test_initiative_api import start_encounter
+from tests.unit.kernel.test_tactical_choices import command
 
 pytestmark = pytest.mark.integration
 
@@ -167,6 +173,102 @@ def test_revision_plan_holds_source_until_cancelled(
         "cleanup_pending": 0,
     }
     assert admin.post(path, json=request_for(oldest)).status_code == 409
+
+
+def test_rewind_compiles_witnessed_knowledge_without_later_memories(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    stack = isolated_integration_stack
+    app, (admin, player, card, _path, _run, witness, base) = prepare(stack, monkeypatch, tmp_path)
+    before = player_speech(player, base, card, "before-the-recorded-cut")
+    assert before.status_code == 200, before.get_json()
+    earlier = before.get_json()["event"]["event_id"]
+    reaction = admin.post(
+        f"/api/v2/entities/{witness}/relationships",
+        json={
+            "target_entity_id": card["entity_id"],
+            "source_event_id": earlier,
+            "event_type": "kept_promise",
+        },
+    )
+    assert reaction.status_code == 201, reaction.get_json()
+    checkpoint_id = manual_capture(admin, base)
+    later_text = "The captain's funeral took place at dawn."
+    after = command(
+        player,
+        base,
+        card,
+        "tabletop.dialogue.speak",
+        {"text": later_text},
+        "after-the-recorded-cut",
+    )
+    assert after.status_code == 200, after.get_json()
+    later = after.get_json()["event"]["event_id"]
+    response = admin.post(revision_path(base), json=request_for(checkpoint_id))
+    assert response.status_code == 200, response.get_json()
+    plan = response.get_json()
+    branch = uuid.UUID(plan["successor_branch_id"])
+    archives = PostgresCampaignCheckpoints(
+        stack.database_url,
+        tmp_path / "campaign-checkpoints",
+        PostgresCheckpointHolds(stack.database_url),
+    )
+    actor = app.extensions["demo_ids"]["actor_id"]
+    receipt, _ = archives.load(
+        uuid.UUID(base["world_id"]), uuid.UUID(base["branch_id"]), uuid.UUID(checkpoint_id), actor
+    )
+    with transaction(actor_id=actor, dsn=stack.database_url) as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            archived, evidence = archives.load_verified_at_cut(cursor, receipt.manifest)
+    runs = {str(run): str(restored_run_id(branch, run)) for run in archived_runs(archived)}
+    restored = restore_knowledge(archived, evidence, branch, runs)
+    assert restored.digest == plan["provenance"]["retained_knowledge_hash"]
+    assert restored == restore_knowledge(archived, evidence, branch, runs)
+    assert later not in restored.event_origins
+    restored_id = restored.event_origins[earlier]
+    assert restored_id != earlier
+    (change,) = restored.subjective["cognition.relationship_changes"]
+    assert change["id"] == str(
+        RelationshipChangeRecord.identity(
+            world_id=uuid.UUID(base["world_id"]),
+            branch_id=branch,
+            source_entity_id=uuid.UUID(witness),
+            target_entity_id=uuid.UUID(card["entity_id"]),
+            source_event_id=uuid.UUID(restored_id),
+        )
+    )
+    assert change["source_event_id"] == restored_id
+    source_grant = next(
+        row
+        for row in evidence.perceptions
+        if row["event_id"] == earlier and row["observer_entity_id"] == witness
+    )
+    restored_grant = next(
+        row
+        for row in restored.perceptions
+        if row["event_id"] == restored_id and row["observer_entity_id"] == witness
+    )
+    assert restored_grant == {**source_grant, "event_id": restored_id, "branch_id": str(branch)}
+    observation = next(
+        row
+        for row in restored.subjective["cognition.observations"]
+        if row["source_event_id"] == restored_id and row["observer_entity_id"] == witness
+    )
+    assert observation["perceived_payload"]["text"] == "The ferry is ready."
+    memory = next(
+        row
+        for row in restored.subjective["cognition.memories"]
+        if row["source_event_id"] == restored_id and row["entity_id"] == witness
+    )
+    assert memory["source_observation_id"] == observation["id"]
+    assert later_text not in str(restored.subjective)
+
+    outside_cut = archived.model_copy(deep=True)
+    minds = outside_cut.sections[CheckpointSection.MINDS]
+    assert isinstance(minds, FrozenComponent)
+    minds.data["cognition.observations"][0]["source_event_id"] = later
+    with pytest.raises(CheckpointHoldConflict, match="outside the retained cut"):
+        restore_knowledge(outside_cut, evidence, branch, runs)
 
 
 def test_026_upgrade_preserves_existing_checkpoint_and_rolls_back_ddl(

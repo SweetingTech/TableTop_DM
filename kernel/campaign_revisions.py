@@ -21,6 +21,7 @@ from kernel.campaign_checkpoints import (
     FrozenComponent,
 )
 from kernel.checkpoint_holds import CheckpointHoldConflict
+from kernel.checkpoint_knowledge import restore_knowledge, restored_identity
 from kernel.contracts import RunKind
 from kernel.database import transaction
 from kernel.postgres_campaign_checkpoints import (
@@ -51,6 +52,7 @@ class RevisionProvenance(CheckpointModel):
     source_state_hash: Digest
     source_command_ordinal: int
     source_event_seq: int
+    retained_knowledge_hash: Digest | None = None
     command_versions: tuple[str, ...]
     model_versions: tuple[str, ...]
     persona_versions: tuple[str, ...]
@@ -108,7 +110,7 @@ def archived_runs(checkpoint: CampaignCheckpoint) -> dict[uuid.UUID, ArchivedRun
 
 
 def restored_run_id(successor_branch: uuid.UUID, source_run: uuid.UUID) -> uuid.UUID:
-    return uuid.uuid5(successor_branch, f"run:{source_run}")
+    return uuid.UUID(restored_identity(successor_branch, "run", source_run))
 
 
 def build_paused_projection(
@@ -177,7 +179,7 @@ def archived_live_run(
 
 
 def revision_provenance(
-    checkpoint: CampaignCheckpoint, evidence: CheckpointEvidence
+    checkpoint: CampaignCheckpoint, evidence: CheckpointEvidence, knowledge_hash: str
 ) -> RevisionProvenance:
     def values(field: str) -> tuple[str, ...]:
         return tuple(sorted({str(row[field]) for row in evidence.events if row.get(field)}))
@@ -186,6 +188,7 @@ def revision_provenance(
         source_state_hash=checkpoint.boundary.state_hash,
         source_command_ordinal=checkpoint.boundary.command_ordinal,
         source_event_seq=checkpoint.boundary.through_event_seq,
+        retained_knowledge_hash=knowledge_hash,
         command_versions=tuple(
             sorted({f"{row['command_type']}@{row['command_version']}" for row in evidence.commands})
         ),
@@ -280,6 +283,12 @@ class PostgresCampaignRevisions:
             live = archived_live_run(checkpoint, runs, body.source_live_run_id)
             successor = uuid.uuid5(branch, f"campaign-continuation:{body.request_id}")
             projection = build_paused_projection(checkpoint, successor, runs)
+            restored = restore_knowledge(
+                checkpoint,
+                evidence,
+                successor,
+                {str(source): str(restored_run_id(successor, source)) for source in runs},
+            )
             seed = (
                 (live.seed or 0)
                 if body.seed_policy == "REUSE_CHECKPOINT_SEED"
@@ -308,7 +317,7 @@ class PostgresCampaignRevisions:
                     str(successor),
                     str(restored_run_id(successor, live.id)),
                     stable_hash(projection),
-                    revision_provenance(checkpoint, evidence).model_dump_json(),
+                    revision_provenance(checkpoint, evidence, restored.digest).model_dump_json(),
                 ),
             )
             return CampaignRevisionPlan.model_validate(cursor.fetchone())
