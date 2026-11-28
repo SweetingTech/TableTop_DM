@@ -152,7 +152,6 @@ class PersonaGenerator:
             separators=(",", ":"),
             default=str,
         )
-        generation_key = f"{generation_key}:{uuid.uuid4()}"
         persona_id = uuid.uuid5(
             uuid.NAMESPACE_URL,
             f"tabletop-dm:persona:{self.registry.VERSION}:{seed}:{generation_key}",
@@ -244,14 +243,14 @@ class PersonaGenerator:
             if not self._allows_future_constraints(proposed, fixed, distributions):
                 continue
             feasible.append(candidate)
-            feasible_weights.append(float(weights.get(candidate, 0)) if weights else 1.0)
+            feasible_weights.append(float(weights.get(candidate, 0)) if weights is not None else 1.0)
         total_weight = sum(feasible_weights)
         if not math.isfinite(total_weight):
             raise InfeasibleStratumError(f"Distribution {name} total weight must be finite")
         if not feasible or total_weight <= 0:
             raise InfeasibleStratumError(f"No feasible weighted value for {name}")
         selected = rng.choices(feasible, weights=feasible_weights, k=1)[0]
-        source: ProvenanceSource = "weighted_distribution" if weights else "seeded_generator"
+        source: ProvenanceSource = "weighted_distribution" if weights is not None else "seeded_generator"
         return selected, source
 
     def _validate_fixed_assignments(self, fixed: dict[str, Any]) -> None:
