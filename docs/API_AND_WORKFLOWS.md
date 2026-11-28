@@ -729,6 +729,13 @@ The operator can read the receipt with `GET /{request_id}` or cancel their plan 
 `POST /{request_id}/cancel` under the same path. The request ID is idempotent. A
 prepared plan protects the checkpoint while it is available for revision.
 
+Use `POST /{request_id}/activate` under the same path to start the rewind. A 202
+response means the current branch is held while its outstanding perception work drains.
+Repeat the request to finish activation. A successful response identifies the successor
+branch, run and epoch. The new branch starts paused and holds the restored state.
+The request returns the same receipt after a restart or a dropped response.
+Cancelling a pending plan releases its hold. Operators can audit the archived branch.
+
 ### World-scoped reads
 
 World records report `canonical_branch_id` and `continuation_epoch`. The current live run

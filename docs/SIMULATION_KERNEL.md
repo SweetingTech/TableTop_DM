@@ -350,6 +350,10 @@ Preparation also verifies that subjective references belong to the retained caus
 It rekeys the historical witnesses and mind rows together. It leaves the archived mask
 and the perceived content intact and assigns no fresh request keys to the retained events.
 
+The authoritative revision transaction fences the prior continuation and writes the paused
+successor, replay baseline and receipt together. Transaction-scoped restore authority allows
+only that operation to retain historical authorship. It ends before new actions can commit.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

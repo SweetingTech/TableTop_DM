@@ -118,6 +118,10 @@ The knowledge reconstruction case restores earlier testimony for its witness, co
 retained grant, and checks every mapped reference used by its memory. Later funeral dialogue
 stays outside the candidate, and an out-of-cut memory source fails validation.
 
+Activation cases interrupt the transaction after writing the restored state, restart, and
+retry the same request. They verify the single active pointer, old receipt retry, the
+retained witnesses and human choices, offscreen population, and replay after restart.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

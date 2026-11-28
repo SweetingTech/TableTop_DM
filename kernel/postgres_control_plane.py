@@ -519,7 +519,15 @@ class PostgresControlPlane:
                         secret_state=dict(row["secret_state"]),
                     )
                     simulation.entities[(entity.branch_id, entity.entity_id)] = entity
-                    if entity.controller_actor_id is not None:
+                    world = simulation.worlds.get(entity.world_id)
+                    if (
+                        entity.controller_actor_id is not None
+                        and world is not None
+                        and (
+                            entity.branch_id == world.canonical_branch_id
+                            or simulation.states.get(entity.branch_id).kind is BranchKind.TRIAL
+                        )
+                    ):
                         controlled.setdefault(
                             (entity.world_id, entity.controller_actor_id), set()
                         ).add(entity.entity_id)

@@ -219,6 +219,9 @@ hydrate the same pointer using their existing database connection.
 Migration 026 uses those same PostgreSQL and artifact connections to validate and store
 rewind plans. Preparation requires access to the private checkpoint files and source artifacts.
 
+Migration 027 uses the existing projector and snapshot volume during activation. The API
+writes an immutable replay baseline to the snapshot volume before it commits the switch.
+
 ### Scenario job
 
 ```mermaid

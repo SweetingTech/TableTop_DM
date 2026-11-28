@@ -74,6 +74,12 @@ prefix. Event, observation, belief, evidence and memory identities are stable wi
 successor branch. A reference outside the cut fails validation. Witness grants and perceived
 content stay unchanged. Earlier event receipts remain on their original timeline.
 
+Activation verifies the plan again while holding the source branch. It persists the
+paused clock, archived physical and subjective state, current authorized body control,
+retained human evidence, population sources, and a replay baseline. A materialization
+failure rolls back the pointer change and all staged rows. The current hold can be retried
+after restart or released by cancelling the plan.
+
 Prepare and validate the new projection, entity identities, retained source lineage and subjective visibility before switching the active pointer. Restore branch-scoped identities using a consistent mapping for all dependent rows. Record origin references to the historical input while presenting only the restored observations to characters. Rebuild narration and retrieval from the retained prefix. Never borrow current memories or queue entries from the abandoned suffix.
 
 The pointer switch, typed correction receipt, and initial scheduling state must commit together. A failed or interrupted revision leaves the previous timeline active. Resuming the same operation is idempotent. Workers and controllers holding an old branch, continuation epoch, control epoch or run cannot publish new outputs after the switch. New work starts only when the selected timeline and its restored data are ready. A restored checkpoint can stay paused without creating another active history.

@@ -1,5 +1,8 @@
 # Changelog
 
+- Activate a prepared rewind in one database transaction. Restore the paused branch
+  and its retained witnesses, choices and population, then switch the active pointer.
+
 - Prepare branch-local copies of retained physical grants and subjective state.
   Rewind plans bind that reconstruction before activation.
 

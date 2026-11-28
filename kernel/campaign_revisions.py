@@ -20,7 +20,12 @@ from kernel.campaign_checkpoints import (
     FrozenComponent,
 )
 from kernel.checkpoint_holds import CheckpointHoldConflict
-from kernel.checkpoint_knowledge import restore_knowledge, restored_identity
+from kernel.checkpoint_knowledge import (
+    archived_rows,
+    identifier_map,
+    restore_knowledge,
+    restored_identity,
+)
 from kernel.contracts import RunKind
 from kernel.database import transaction
 from kernel.postgres_campaign_checkpoints import (
@@ -30,6 +35,7 @@ from kernel.postgres_campaign_checkpoints import (
     lock_checkpoint_archives,
 )
 from kernel.state import stable_hash
+from population.runtime import MEMBERS
 
 SeedPolicy = Literal["REUSE_CHECKPOINT_SEED", "FRESH_SEED"]
 RevisionReason = Annotated[
@@ -47,7 +53,9 @@ class PrepareCampaignRevision(CheckpointModel):
 
 
 class RevisionProvenance(CheckpointModel):
-    restore_version: Literal["campaign-restore-1.0.0"] = "campaign-restore-1.0.0"
+    restore_version: Literal["campaign-restore-1.0.0", "campaign-restore-1.1.0"] = (
+        "campaign-restore-1.1.0"
+    )
     source_state_hash: Digest
     source_command_ordinal: int
     source_event_seq: int
@@ -112,10 +120,16 @@ def restored_run_id(successor_branch: uuid.UUID, source_run: uuid.UUID) -> uuid.
     return uuid.UUID(restored_identity(successor_branch, "run", source_run))
 
 
+def revision_hold_id(request: uuid.UUID) -> uuid.UUID:
+    return uuid.uuid5(request, "campaign-revision-live-boundary")
+
+
 def build_paused_projection(
     checkpoint: CampaignCheckpoint,
     successor_branch: uuid.UUID,
     runs: dict[uuid.UUID, ArchivedRun],
+    *,
+    remap_population: bool = True,
 ) -> dict[str, dict[str, JsonValue]]:
     """Preserve the archived facts and remap the named run references."""
     result = deepcopy(checkpoint.projections)
@@ -141,6 +155,20 @@ def build_paused_projection(
         result[QUESTS][identity] = quest.model_copy(
             update={"run_id": restored_run_id(successor_branch, quest.run_id)}
         ).model_dump(mode="json")
+    if remap_population and result.get(MEMBERS):
+        ids = identifier_map(
+            successor_branch,
+            "population",
+            archived_rows(checkpoint, CheckpointSection.POPULATION, "population.definitions"),
+            "id",
+        )
+        for identity, raw in result[MEMBERS].items():
+            if not isinstance(raw, dict):
+                raise CheckpointHoldConflict("checkpoint population entry is invalid")
+            source = raw.get("population_id")
+            if not isinstance(source, str) or source not in ids:
+                raise CheckpointHoldConflict("checkpoint population source is missing")
+            result[MEMBERS][identity] = {**raw, "population_id": ids[source]}
     return result
 
 
@@ -323,9 +351,26 @@ class PostgresCampaignRevisions:
                 raise PermissionError("only the plan operator can cancel the campaign revision")
             if prior.cancelled_at is not None:
                 return prior
+            cursor.execute("SELECT to_regclass('sim.campaign_revision_commits') AS commits")
+            version = cursor.fetchone()
+            if version is not None and version["commits"] is not None:
+                cursor.execute(
+                    "SELECT 1 FROM sim.campaign_revision_commits "
+                    "WHERE (world_id,source_branch_id,request_id)=(%s,%s,%s)",
+                    scope,
+                )
+                if cursor.fetchone() is not None:
+                    raise CheckpointHoldConflict("campaign revision is already committed")
             cursor.execute(
                 "UPDATE sim.campaign_revision_plans SET cancelled_at=clock_timestamp() "
                 "WHERE (world_id,branch_id,request_id)=(%s,%s,%s) RETURNING *",
                 scope,
             )
-            return CampaignRevisionPlan.model_validate(cursor.fetchone())
+            cancelled = CampaignRevisionPlan.model_validate(cursor.fetchone())
+            cursor.execute(
+                "UPDATE sim.campaign_checkpoint_holds SET released_at=clock_timestamp() "
+                "WHERE (world_id,branch_id,request_id)=(%s,%s,%s) AND released_at IS NULL "
+                "AND actor_id=%s",
+                (str(world), str(branch), str(revision_hold_id(request_id)), str(actor)),
+            )
+            return cancelled
