@@ -70,6 +70,7 @@ Apply migration 022 for durable campaign checkpoint archives and receipts.
 Apply migration 023 for scheduled campaign checkpoints.
 Apply migration 024 for checkpoint retention policies and pins.
 Apply migration 025 for the active canonical continuation and its timeline lineage.
+Apply migration 026 for durable campaign revision plans.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

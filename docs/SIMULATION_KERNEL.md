@@ -343,6 +343,9 @@ The durable canonical write policy requires the branch selected by the world's c
 pointer. Clock work also selects that branch. Authorized retries may read the existing
 receipt from an archived branch. Trial commands retain their proposal-only scope.
 
+Preparing a revision verifies the source and hashes a paused candidate. The prepared
+request remains private and leaves canonical state, worker leases, and the current epoch intact.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

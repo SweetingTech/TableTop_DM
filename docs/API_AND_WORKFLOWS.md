@@ -714,6 +714,21 @@ files still pending cleanup. Repeat the apply request after a cleanup failure. R
 retired archive returns 409. The original capture receipt remains available on a same-label
 retry of the capture request.
 
+### Prepare a timeline revision
+
+An operator with private checkpoint access and canonical commit authority can send
+`POST /api/v2/worlds/{world_id}/branches/{branch_id}/timeline-revision-plans`
+with `request_id`, `source_checkpoint_id`, `expected_epoch`, and a private `reason`.
+Select `FRESH_SEED` to derive a distinct reproducible run seed, or set
+`seed_policy: REUSE_CHECKPOINT_SEED` to reuse the archived run seed. Include
+`source_live_run_id` to disambiguate a checkpoint with several live runs and no clock.
+
+The receipt identifies the checkpoint, the prospective branch and run, seed policy,
+candidate state hash and archived versions. Preparing leaves the current timeline moving.
+The operator can read the receipt with `GET /{request_id}` or cancel their plan with
+`POST /{request_id}/cancel` under the same path. The request ID is idempotent. A
+prepared plan protects the checkpoint while it is available for revision.
+
 ### World-scoped reads
 
 World records report `canonical_branch_id` and `continuation_epoch`. The current live run

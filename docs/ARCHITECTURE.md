@@ -361,6 +361,11 @@ Every durable world has an explicit canonical continuation pointer. Its epoch id
 an immutable lineage entry. World hydration and automatic clock work use that pointer,
 and a separate trial continues to use its own snapshot and proposal authority.
 
+Revision preparation verifies the checkpoint against that pointer and writes a private
+plan. The plan records an idempotent identity, provenance, and a digest of the paused
+candidate derived from the archived projection. Prepared plans protect source archives
+from retention using the same branch fence as file cleanup.
+
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
 projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
 entity's identity, controller and secret metadata at that boundary. Public body resources remain
