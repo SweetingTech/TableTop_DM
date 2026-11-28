@@ -130,6 +130,7 @@ from kernel.api.campaign_checkpoints import (
 from kernel.api.roster import finalize_member
 from kernel.application import SimulationApplication
 from kernel.branching import ConsequencePackage
+from kernel.campaign_activation import ACTIVATE_CAMPAIGN_REVISION
 from kernel.checkpoint_holds import PostgresCheckpointHolds
 from kernel.checkpoint_schedules import PostgresCheckpointSchedules
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, RunKind
@@ -4308,12 +4309,21 @@ def create_app(
         require_world_access,
     )
     checkpoint_schedules = None
-    if database_dsn and durable_checkpoint_holds is not None and durable_control is not None:
+    if (
+        database_dsn
+        and durable_checkpoint_holds is not None
+        and durable_control is not None
+        and simulation.durable_repository is not None
+    ):
         checkpoint_archives = PostgresCampaignCheckpoints(
             database_dsn, root / "campaign-checkpoints", durable_checkpoint_holds
         )
         revision_activation = PostgresRevisionActivation(
-            checkpoint_archives, durable_control, simulation.snapshot_store
+            checkpoint_archives,
+            durable_control,
+            simulation.snapshot_store,
+            simulation.durable_repository,
+            simulation.bus.definition(ACTIVATE_CAMPAIGN_REVISION),
         )
 
         def refresh_revision_state() -> None:

@@ -2,6 +2,7 @@
 
 - Activate a prepared rewind in one database transaction. Restore the paused branch
   and its retained witnesses, choices and population, then switch the active pointer.
+  The registered activation command records a private event and queues its publication.
 
 - Prepare branch-local copies of retained physical grants and subjective state.
   Rewind plans bind that reconstruction before activation.

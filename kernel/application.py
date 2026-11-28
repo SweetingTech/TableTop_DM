@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domains.tabletop import register_tabletop
 from kernel.branching import BranchManager, promotion_definition
+from kernel.campaign_activation import ACTIVATE_CAMPAIGN_REVISION, campaign_activation_definition
 from kernel.checkpoint_holds import ReferenceCheckpointHolds
 from kernel.command_bus import CommandBus, CommandReceipt
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal, CommandResult, RunKind
@@ -101,6 +102,7 @@ class SimulationApplication:
             None
         )
         self.bus.register(promotion_definition())
+        self.bus.register(campaign_activation_definition())
         self.worlds: dict[uuid.UUID, WorldRecord] = {}
         self.runs: dict[uuid.UUID, RunRecord] = {}
         self.actors: dict[uuid.UUID, Actor] = {}
@@ -367,6 +369,8 @@ class SimulationApplication:
         *,
         before_reference_commit: Callable[[], None] | None = None,
     ) -> CommandReceipt:
+        if proposal.command_type == ACTIVATE_CAMPAIGN_REVISION:
+            raise AuthorizationDenied("campaign activation requires a verified revision plan")
         if self.durable_repository is None:
             with self._reference_command_lock:
                 return self._submit(proposal, before_reference_commit)
