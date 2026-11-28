@@ -40,6 +40,10 @@ Hash canonical serialization in stable key and primary-key order. Bind each comp
 
 The reference adapter applies the same causal checks under its synchronized state boundary. For PostgreSQL, a database-consistent snapshot alone cannot prove that a committed event reached every witness if the projector still owns an unpublished row. Capture success requires the drain check as well as the consistent read.
 
+Reopening an archive verifies the event sequence, command ordinal, and event-time
+perception records against the stored digest. The query stops at the recorded cut
+even if that branch has advanced. Pinned file artifacts must still match their stored hashes.
+
 By default every archive is retained. An operator may set a branch policy and explicitly
 apply it to completed automatic checkpoints. The repository retains manual captures, pins
 and active holds. It verifies the newest completed archives before retiring any older one.

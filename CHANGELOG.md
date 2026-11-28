@@ -1,5 +1,8 @@
 # Changelog
 
+- Verify archived event, command, and perception prefixes and pinned file artifacts when
+  reopening a campaign checkpoint or confirming the retained copies before cleanup.
+
 - Record one active canonical continuation per world, with an epoch and durable lineage.
   World loading, run selection, and clock work follow that continuation.
 

@@ -96,6 +96,8 @@ The migration checks also verify actor-scoped hold access and the release-only u
 The complete capture test combines a frozen body secret, a materialized population member and
 an outbox-delayed observation in one PostgreSQL archive. It checks the scoped receipt, source
 artifact integrity, repeat capture, and reconstruction of private records after restarting the API.
+It also advances the original branch and reopens the earlier archive to verify the exact
+evidence prefix. Corrupting a source file after capture prevents reopening until it is restored.
 
 The automatic checkpoint tests capture the exact event cut and then restart the app while its
 outbox row is leased. They verify archive publication and automatic release after projection.

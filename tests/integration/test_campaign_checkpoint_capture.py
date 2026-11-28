@@ -10,6 +10,7 @@ import psycopg2
 import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
+from psycopg2.extras import RealDictCursor
 
 from cognition.projector import WorldEventProjector
 from infra.migrate import discover, migrate
@@ -98,7 +99,7 @@ def test_capture_uses_one_projected_cut_and_loads_private_state_after_restart(
         PostgresCheckpointHolds(stack.database_url),
     )
     actor = app.extensions["demo_ids"]["actor_id"]
-    _, bundle = archives.load(world, branch, checkpoint_id, actor)
+    receipt_model, bundle = archives.load(world, branch, checkpoint_id, actor)
     assert bundle.entities[archived_body].secret_state == {"identity": "WARDEN_PRIVATE_IDENTITY"}
     minds = bundle.sections[CheckpointSection.MINDS]
     assert isinstance(minds, FrozenComponent)
@@ -130,6 +131,22 @@ def test_capture_uses_one_projected_cut_and_loads_private_state_after_restart(
     assert after.status_code == 200, after.get_json()
     assert restarted_admin.post(capture, json=label).get_json() == receipt
     assert archives.load(world, branch, checkpoint_id, actor)[1] == bundle
+    with transaction(actor_id=actor, dsn=stack.database_url) as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            _, evidence = archives.load_verified_at_cut(cursor, receipt_model.manifest)
+    assert evidence.events[-1]["event_id"] == original["event"]["event_id"]
+    assert len(evidence.commands) == bundle.boundary.command_ordinal
+    assert after.get_json()["event"]["event_id"] not in {
+        row["event_id"] for row in evidence.perceptions
+    }
+    pool.write_bytes(b"bad population artifact after capture")
+    try:
+        unavailable = restarted_admin.get(path)
+        assert unavailable.status_code == 409
+        assert unavailable.get_json()["details"] == "a checkpoint source artifact is unavailable"
+    finally:
+        pool.write_bytes(pool_bytes)
+    assert restarted_admin.get(path).get_json() == receipt
     artifact = tmp_path / "campaign-checkpoints" / base["world_id"] / f"{checkpoint_id}.json.gz"
     artifact.write_bytes(b"corrupt checkpoint")
     corrupted = restarted_admin.get(path)

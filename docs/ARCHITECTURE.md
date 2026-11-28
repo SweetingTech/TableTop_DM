@@ -344,7 +344,8 @@ Private campaign capture reads that ready boundary in a repeatable-read transact
 branch locked. It gathers canonical projections and entity metadata, branch-local minds and
 population sources, runtime assignments, logical schedules, and pinned versioned dependencies.
 The archive names reconstruction inputs for derived narration and knowledge. Its database receipt
-binds the same hold and digest. The metadata route verifies the archive bytes on read.
+binds the same hold and digest. The metadata route verifies the archive bytes, the exact
+event, command, and physical perception prefixes, and the referenced file artifacts.
 
 Automatic checkpoint rules are versioned world-operator records. A deferred outbox trigger
 records the originating event and acquires a hold at the command transaction's final cut before
