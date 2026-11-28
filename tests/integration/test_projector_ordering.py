@@ -114,6 +114,37 @@ def test_branch_head_blocks_later_observations_until_retry(
         assert dict(cursor.fetchall()) == dict.fromkeys(event_ids, 1)
 
 
+def test_publication_survives_a_clock_change_after_claim(integration_stack, monkeypatch, tmp_path):
+    stack = integration_stack
+    app, (admin, _player, _card, _path, _run, target, base) = prepare(stack, monkeypatch, tmp_path)
+    projector = WorldEventProjector(stack.database_url)
+    with monkeypatch.context() as patch:
+        patch.setattr(app.extensions["simulation"], "subjective_projector", None)
+        receipt = api_command(
+            admin,
+            {**base, "embodied_entity_id": target},
+            "tabletop.dialogue.speak",
+            {"text": "The pass is open."},
+            "speak-before-clock-change",
+        )
+    (claim,) = projector._claim(1, topic=f"world.{base['world_id']}.branch.{base['branch_id']}")
+    assert str(claim.event.event_id) == receipt["event"]["event_id"]
+    # Move availability ahead of wall time to simulate a backward clock step after claim.
+    with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE sim.outbox SET available_at=clock_timestamp() + interval '1 minute' "
+            "WHERE id=%s",
+            (claim.outbox_id,),
+        )
+    projector._process_claim(claim)
+    with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT published_at=available_at, claimed_by, last_error FROM sim.outbox WHERE id=%s",
+            (claim.outbox_id,),
+        )
+        assert cursor.fetchone() == (True, None, None)
+
+
 def test_pending_observation_projects_after_roster_control_changes(
     integration_stack, monkeypatch, tmp_path
 ):

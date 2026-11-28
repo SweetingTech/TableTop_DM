@@ -7,11 +7,16 @@ import psycopg2.errors
 from psycopg2.extras import RealDictCursor
 from pydantic import AwareDatetime
 
+from kernel.campaign_activation import CampaignActivationFacts
 from kernel.campaign_checkpoints import CampaignCheckpointManifest, CheckpointModel, Digest
 from kernel.campaign_revisions import PostgresCampaignRevisions, revision_hold_id
 from kernel.checkpoint_holds import CheckpointHoldConflict
+from kernel.command_bus import CommandDefinition
+from kernel.contracts import Actor, ActorKind, CommandProposal
+from kernel.database import unit_of_work
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints, checkpoint_retired
 from kernel.postgres_control_plane import PostgresControlPlane
+from kernel.postgres_repository import PostgresCommandRepository
 from kernel.revision_restore import RestoredCampaign, persist_restored_campaign
 from kernel.snapshots import SnapshotStore
 from kernel.state import stable_hash
@@ -42,11 +47,15 @@ class PostgresRevisionActivation:
         archives: PostgresCampaignCheckpoints,
         control: PostgresControlPlane,
         snapshots: SnapshotStore,
+        commands: PostgresCommandRepository,
+        activation_definition: CommandDefinition,
     ) -> None:
         self.archives = archives
         self.revisions = PostgresCampaignRevisions(archives)
         self.control = control
         self.snapshots = snapshots
+        self.commands = commands
+        self.activation_definition = activation_definition
 
     @staticmethod
     def _receipt(cursor: RealDictCursor, scope: tuple[str, str, str]) -> CommittedRevision | None:
@@ -105,7 +114,10 @@ class PostgresRevisionActivation:
         self, world: uuid.UUID, branch: uuid.UUID, actor: uuid.UUID, request: uuid.UUID
     ) -> RevisionActivation:
         scope = (str(world), str(branch), str(request))
-        with self.revisions._scope(world, branch, actor, write=True) as cursor:
+        with (
+            unit_of_work(actor_id=actor, dsn=self.archives.dsn),
+            self.revisions._scope(world, branch, actor, write=True) as cursor,
+        ):
             previous = self._receipt(cursor, scope)
             if previous is not None:
                 return self._committed(previous)
@@ -127,13 +139,49 @@ class PostgresRevisionActivation:
                 raise CheckpointHoldConflict("revision archive identity changed")
             checkpoint, evidence = self.archives.load_verified_at_cut(cursor, manifest)
             candidate = RestoredCampaign.build(checkpoint, evidence, plan)
+            facts = CampaignActivationFacts(
+                source_branch_id=branch,
+                source_checkpoint_id=plan.source_checkpoint_id,
+                request_id=request,
+                epoch=plan.expected_epoch + 1,
+                state_hash=stable_hash(candidate.projection),
+            )
+            proposal = CommandProposal(
+                command_id=uuid.uuid5(plan.successor_branch_id, "campaign-activation"),
+                command_type=self.activation_definition.command_type,
+                world_id=world,
+                branch_id=plan.successor_branch_id,
+                run_id=plan.successor_run_id,
+                actor_id=actor,
+                input_origin="OPERATOR",
+                parameters=facts.model_dump(mode="json"),
+                idempotency_key=f"campaign-activation:{request}",
+                correlation_id=request,
+                seed=plan.seed,
+            )
             cursor.execute(
                 "SELECT sim.start_campaign_revision(%s,%s,%s,%s,%s)",
-                (*scope, str(revision_hold_id(request)), stable_hash(candidate.projection)),
+                (*scope, str(revision_hold_id(request)), facts.state_hash),
             )
             persist_restored_campaign(cursor, candidate, self.control, self.snapshots)
+            self._commit_activation(cursor, proposal)
             cursor.execute("SELECT sim.finish_campaign_revision(%s,%s,%s)", scope)
             receipt = self._receipt(cursor, scope)
             if receipt is None:
                 raise CheckpointHoldConflict("campaign revision receipt is unavailable")
             return self._committed(receipt)
+
+    def _commit_activation(self, cursor: RealDictCursor, proposal: CommandProposal) -> None:
+        cursor.execute(
+            "SELECT actor_kind,display_name FROM sim.actors WHERE id=%s AND is_active FOR SHARE",
+            (str(proposal.actor_id),),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise PermissionError("campaign activation requires an active operator")
+        actor = Actor(
+            actor_id=proposal.actor_id,
+            kind=ActorKind(row["actor_kind"]),
+            display_name=row["display_name"],
+        )
+        self.commands.execute(proposal, actor, self.activation_definition)

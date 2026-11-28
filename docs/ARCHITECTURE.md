@@ -372,7 +372,9 @@ It preserves body identity and witness-specific payloads and binds the result to
 
 Activation holds the current branch and waits for its outbox. A single transaction
 builds the successor from the verified archive, initializes its replay baseline, and
-switches the canonical pointer. A deferred check rejects an incomplete transaction.
+switches the canonical pointer. The registered activation command writes its ledger, private
+event and outbox row on the successor in that transaction. A deferred check rejects an
+incomplete transaction.
 Private event lineage links retained records to the previously experienced events.
 
 Resume is a separate typed transaction. It rechecks the active epoch, reauthorizes the
