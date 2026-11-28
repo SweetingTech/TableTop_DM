@@ -92,6 +92,7 @@ from domains.tabletop.spatial.presentation import visible_maps
 from domains.tabletop.spatial.refresh import command_scene_cursor, scene_refresh_status
 from domains.tabletop.spatial.scene import PerceivedScene
 from domains.tabletop.spatial.service import build_perceived_scene, require_scene_access
+from domains.tabletop.timeline_corrections import CORRECT
 from experiments.aggregation import compare_reports
 from experiments.calibration import CalibrationEngine, CalibrationStore
 from experiments.executor import ApplicationBranchExecutor
@@ -4332,6 +4333,7 @@ def create_app(
             simulation.snapshot_store,
             simulation.durable_repository,
             simulation.bus.definition(ACTIVATE_CAMPAIGN_REVISION),
+            simulation.bus.definition(CORRECT),
         )
         revision_resume = PostgresRevisionResume(
             checkpoint_archives,

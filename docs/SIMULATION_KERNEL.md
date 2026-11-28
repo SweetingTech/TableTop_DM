@@ -361,6 +361,10 @@ the paused restored run and an exact projection hash. A resurrection is a separa
 physical event. It clears death state and pending death saves within normal body
 limits, keeps earlier committed consequences, and uses frozen spatial perception.
 
+Preplanned corrections are applied inside activation through the same typed repository.
+A deferred database check binds the committed deltas and event to the prepared projection
+hash before the canonical pointer becomes visible.
+
 The resume transaction advances controller epochs, rearms due work through a typed clock
 command, and commits the live run status with its retry receipt. A write to an archived
 canonical branch fails even when submitted by an older asynchronous worker.

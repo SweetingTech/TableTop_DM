@@ -14,6 +14,11 @@ from domains.tabletop.economy import OFFERS
 from domains.tabletop.initiative import ENCOUNTERS
 from domains.tabletop.quests.contracts import QUESTS, Quest
 from domains.tabletop.recovery import VITALS
+from domains.tabletop.timeline_corrections import (
+    CorrectionBatch,
+    CorrectTimelineRequest,
+    resolve_correction,
+)
 from domains.tabletop.world_time import CLOCK, Clock
 from kernel.campaign_checkpoints import (
     CampaignCheckpoint,
@@ -30,7 +35,7 @@ from kernel.checkpoint_knowledge import (
     restore_knowledge,
     restored_identity,
 )
-from kernel.contracts import RunKind
+from kernel.contracts import Actor, ActorKind, BranchKind, RunKind
 from kernel.database import transaction
 from kernel.postgres_campaign_checkpoints import (
     CheckpointEvidence,
@@ -38,7 +43,7 @@ from kernel.postgres_campaign_checkpoints import (
     checkpoint_retired,
     lock_checkpoint_archives,
 )
-from kernel.state import stable_hash
+from kernel.state import BranchState, stable_hash
 from population.runtime import MEMBERS
 
 SeedPolicy = Literal["REUSE_CHECKPOINT_SEED", "FRESH_SEED"]
@@ -58,6 +63,12 @@ class PrepareCampaignRevision(CheckpointModel):
     source_live_run_id: uuid.UUID | None = None
     reason: RevisionReason = Field(repr=False)
     seed_policy: SeedPolicy = "FRESH_SEED"
+    corrections: CorrectionBatch | None = None
+
+
+class PlannedCorrection(CheckpointModel):
+    request: CorrectTimelineRequest = Field(repr=False)
+    resulting_state_hash: Digest
 
 
 class RevisionProvenance(CheckpointModel):
@@ -71,6 +82,9 @@ class RevisionProvenance(CheckpointModel):
     persona_versions: tuple[str, ...]
     policy_versions: tuple[str, ...]
     prompt_versions: tuple[str, ...]
+    planned_correction: PlannedCorrection | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class CampaignRevisionPlan(CheckpointModel):
@@ -241,6 +255,34 @@ def revision_provenance(
     )
 
 
+def revision_operator(
+    cursor: RealDictCursor,
+    world: uuid.UUID,
+    actor: uuid.UUID,
+    operation: Literal["restore", "resume"],
+) -> Actor:
+    cursor.execute(
+        "SELECT id,actor_kind,display_name FROM sim.actors WHERE id=%s AND is_active FOR SHARE",
+        (str(actor),),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        raise PermissionError(f"campaign {operation} requires an active operator")
+    cursor.execute(
+        "SELECT capability FROM sim.actor_capabilities WHERE (world_id,actor_id)=(%s,%s) FOR SHARE",
+        (str(world), str(actor)),
+    )
+    capabilities = frozenset(grant["capability"] for grant in cursor)
+    if not {"entity.control", "mind.write.all"}.issubset(capabilities):
+        raise PermissionError(f"campaign {operation} requires current operator authority")
+    return Actor(
+        actor_id=actor,
+        kind=ActorKind(row["actor_kind"]),
+        display_name=row["display_name"],
+        capabilities=capabilities,
+    )
+
+
 class PostgresCampaignRevisions:
     def __init__(self, archives: PostgresCampaignCheckpoints) -> None:
         self.archives = archives
@@ -289,6 +331,7 @@ class PostgresCampaignRevisions:
         with self._scope(world, branch, actor, write=True) as cursor:
             prior = self._read(cursor, scope)
             if prior is not None:
+                planned = prior.provenance.planned_correction
                 if (
                     prior.actor_id != actor
                     or prior.expected_epoch != body.expected_epoch
@@ -296,6 +339,7 @@ class PostgresCampaignRevisions:
                     or prior.reason != body.reason
                     or prior.seed_policy != body.seed_policy
                     or body.source_live_run_id not in (None, prior.source_live_run_id)
+                    or body.corrections != (planned.request.corrections if planned else None)
                 ):
                     raise CheckpointHoldConflict("revision request identifier was already used")
                 return prior
@@ -331,6 +375,28 @@ class PostgresCampaignRevisions:
                 successor,
                 {str(source): str(restored_run_id(successor, source)) for source in runs},
             )
+            state = BranchState(world, successor, BranchKind.CANONICAL, projection)
+            baseline = state.state_hash
+            provenance = revision_provenance(checkpoint, evidence, restored.digest)
+            if body.corrections is not None:
+                request = CorrectTimelineRequest(
+                    expected_epoch=body.expected_epoch + 1,
+                    expected_state_hash=baseline,
+                    reason=body.reason,
+                    corrections=body.corrections,
+                )
+                operator = revision_operator(cursor, world, actor, "restore")
+                if "action.propose" not in operator.capabilities:
+                    raise PermissionError("campaign correction requires current operator authority")
+                for delta in resolve_correction(state, request).deltas:
+                    state.apply(delta)
+                provenance = provenance.model_copy(
+                    update={
+                        "planned_correction": PlannedCorrection(
+                            request=request, resulting_state_hash=state.state_hash
+                        )
+                    }
+                )
             seed = (
                 (live.seed or 0)
                 if body.seed_policy == "REUSE_CHECKPOINT_SEED"
@@ -358,8 +424,8 @@ class PostgresCampaignRevisions:
                     str(live.id),
                     str(successor),
                     str(restored_run_id(successor, live.id)),
-                    stable_hash(projection),
-                    revision_provenance(checkpoint, evidence, restored.digest).model_dump_json(),
+                    baseline,
+                    provenance.model_dump_json(),
                 ),
             )
             return CampaignRevisionPlan.model_validate(cursor.fetchone())

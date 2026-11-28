@@ -387,6 +387,10 @@ guard checks paused successor scope under the current actor's world grants. The 
 reason stays in the operator command ledger. Resurrection uses the ordinary spatial
 perception pipeline so each witness receives the factual view it can actually see.
 
+A prepared correction runs through the durable command repository inside the activation
+transaction. The database defers validation until commit and requires the expected
+command, event, and corrected projection before publishing the continuation.
+
 Resume is a separate typed transaction. It rechecks the active epoch, reauthorizes the
 archived controller modes, and configures the restored clock through the normal command
 repository. The run status, fresh leases and resume receipt become visible together.

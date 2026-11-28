@@ -228,6 +228,8 @@ Migration 029 adds a database check for the versioned restore hash. Run it with 
 corresponding API build before preparing or activating rewinds that restore pending mechanics.
 Migration 030 installs the durable correction scope guard in PostgreSQL. Correction and
 resurrection use the existing API, database and projector services.
+Migration 031 installs the activation commit check for prepared corrections. Apply it
+before enabling this request field on the API.
 
 ### Scenario job
 

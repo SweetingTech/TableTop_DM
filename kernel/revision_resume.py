@@ -14,11 +14,11 @@ from kernel.campaign_checkpoints import (
     CheckpointModel,
     CheckpointSection,
 )
-from kernel.campaign_revisions import PostgresCampaignRevisions, restored_run_id
+from kernel.campaign_revisions import PostgresCampaignRevisions, restored_run_id, revision_operator
 from kernel.checkpoint_holds import CheckpointHoldConflict, require_checkpoint_open
 from kernel.checkpoint_knowledge import archived_rows
 from kernel.command_bus import CommandDefinition
-from kernel.contracts import Actor, ActorKind, CommandProposal
+from kernel.contracts import Actor, CommandProposal
 from kernel.control import ControllerState, ControlMode, persist_controller
 from kernel.database import unit_of_work
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
@@ -60,30 +60,6 @@ class PostgresRevisionResume:
         self.revisions = PostgresCampaignRevisions(archives)
         self.commands = commands
         self.clock_definition = clock_definition
-
-    @staticmethod
-    def _current_actor(cursor: RealDictCursor, world: uuid.UUID, actor: uuid.UUID) -> Actor:
-        cursor.execute(
-            "SELECT id,actor_kind,display_name FROM sim.actors WHERE id=%s AND is_active FOR SHARE",
-            (str(actor),),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            raise PermissionError("campaign resume requires an active operator")
-        cursor.execute(
-            "SELECT capability FROM sim.actor_capabilities "
-            "WHERE (world_id,actor_id)=(%s,%s) FOR SHARE",
-            (str(world), str(actor)),
-        )
-        capabilities = frozenset(grant["capability"] for grant in cursor)
-        if not {"entity.control", "mind.write.all"}.issubset(capabilities):
-            raise PermissionError("campaign resume requires current operator authority")
-        return Actor(
-            actor_id=actor,
-            kind=ActorKind(row["actor_kind"]),
-            display_name=row["display_name"],
-            capabilities=capabilities,
-        )
 
     @staticmethod
     def _lock_continuation(cursor: RealDictCursor, committed: CommittedRevision) -> dict:
@@ -287,7 +263,7 @@ class PostgresRevisionResume:
         scope = (str(world), str(source_branch), str(revision_id))
         with unit_of_work(actor_id=actor_id, dsn=self.archives.dsn):
             with self.revisions._scope(world, source_branch, actor_id, write=True) as cursor:
-                actor = self._current_actor(cursor, world, actor_id)
+                actor = revision_operator(cursor, world, actor_id, "resume")
                 cursor.execute(
                     "SELECT * FROM sim.campaign_revision_resumes "
                     "WHERE (world_id,source_branch_id,revision_request_id)=(%s,%s,%s)",

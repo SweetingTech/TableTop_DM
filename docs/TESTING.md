@@ -131,6 +131,9 @@ rollback, rejection of a mismatched restore hash, and play inside a restored enc
 `tests/integration/test_campaign_corrections.py` covers raid damage, death and witnessed
 resurrection, an interrupted rewind, restoration of quest escrow and relationships,
 private corrections, invalid scope and batches, and successful play and replay after resume.
+`tests/integration/test_campaign_planned_corrections.py` verifies atomic rollback after
+the correction is staged, database rejection when the write is omitted, restart and
+idempotent retry, deterministic replay, and upgrade from migration 030.
 
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
