@@ -5,16 +5,33 @@ from typing import Literal
 
 import psycopg2.errors
 from psycopg2.extras import RealDictCursor
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, Field
 
 from kernel.campaign_checkpoints import CampaignCheckpointManifest, CheckpointModel, Digest
-from kernel.campaign_revisions import PostgresCampaignRevisions, revision_hold_id
+from kernel.campaign_revisions import (
+    CampaignRevisionPlan,
+    PlannedCorrection,
+    PostgresCampaignRevisions,
+    revision_hold_id,
+    revision_operator,
+)
 from kernel.checkpoint_holds import CheckpointHoldConflict
+from kernel.command_bus import CommandDefinition
+from kernel.contracts import CommandProposal
+from kernel.database import unit_of_work
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints, checkpoint_retired
 from kernel.postgres_control_plane import PostgresControlPlane
+from kernel.postgres_repository import PostgresCommandRepository
 from kernel.revision_restore import RestoredCampaign, persist_restored_campaign
 from kernel.snapshots import SnapshotStore
 from kernel.state import stable_hash
+
+CORRECTION_KEY_PREFIX = "campaign-revision-correction:"
+
+
+class CommittedCorrection(CheckpointModel):
+    event_id: uuid.UUID
+    state_hash: Digest
 
 
 class CommittedRevision(CheckpointModel):
@@ -27,6 +44,9 @@ class CommittedRevision(CheckpointModel):
     epoch: int
     state_hash: Digest
     committed_at: AwareDatetime
+    correction: CommittedCorrection | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class RevisionActivation(CheckpointModel):
@@ -42,21 +62,41 @@ class PostgresRevisionActivation:
         archives: PostgresCampaignCheckpoints,
         control: PostgresControlPlane,
         snapshots: SnapshotStore,
+        commands: PostgresCommandRepository,
+        correction_definition: CommandDefinition,
     ) -> None:
         self.archives = archives
         self.revisions = PostgresCampaignRevisions(archives)
         self.control = control
         self.snapshots = snapshots
+        self.commands = commands
+        self.correction_definition = correction_definition
 
     @staticmethod
     def _receipt(cursor: RealDictCursor, scope: tuple[str, str, str]) -> CommittedRevision | None:
         cursor.execute(
-            """SELECT world_id,source_branch_id,request_id,actor_id,branch_id,run_id,
-                      epoch,state_hash,committed_at
-               FROM sim.campaign_revision_commits
-               WHERE (world_id,source_branch_id,request_id)=(%s,%s,%s)
-                 AND committed_at IS NOT NULL""",
-            scope,
+            """SELECT c.world_id,c.source_branch_id,c.request_id,c.actor_id,c.branch_id,c.run_id,
+                      c.epoch,c.state_hash,c.committed_at,
+                      CASE WHEN e.event_id IS NOT NULL THEN jsonb_build_object(
+                        'event_id',e.event_id,'state_hash',l.resulting_state_hash) END AS correction
+               FROM sim.campaign_revision_commits c
+               JOIN sim.campaign_revision_plans p
+                 ON (p.world_id,p.branch_id,p.request_id)=
+                    (c.world_id,c.source_branch_id,c.request_id)
+               LEFT JOIN sim.command_log l
+                 ON (l.world_id,l.branch_id,l.run_id,l.actor_id)=
+                    (c.world_id,c.branch_id,c.run_id,c.actor_id)
+                 AND l.command_type='tabletop.timeline.correct'
+                 AND l.idempotency_key=%s || c.request_id::text
+                 AND l.parameters=p.provenance->'planned_correction'->'request'
+                 AND l.resulting_state_hash=
+                     p.provenance->'planned_correction'->>'resulting_state_hash'
+               LEFT JOIN sim.events e
+                 ON (e.world_id,e.branch_id,e.run_id,e.actor_id,e.idempotency_key,e.event_type)=
+                    (l.world_id,l.branch_id,l.run_id,l.actor_id,l.idempotency_key,l.command_type)
+               WHERE (c.world_id,c.source_branch_id,c.request_id)=(%s,%s,%s)
+                 AND c.committed_at IS NOT NULL""",
+            (CORRECTION_KEY_PREFIX, *scope),
         )
         row = cursor.fetchone()
         return CommittedRevision.model_validate(row) if row is not None else None
@@ -105,7 +145,10 @@ class PostgresRevisionActivation:
         self, world: uuid.UUID, branch: uuid.UUID, actor: uuid.UUID, request: uuid.UUID
     ) -> RevisionActivation:
         scope = (str(world), str(branch), str(request))
-        with self.revisions._scope(world, branch, actor, write=True) as cursor:
+        with (
+            unit_of_work(actor_id=actor, dsn=self.archives.dsn),
+            self.revisions._scope(world, branch, actor, write=True) as cursor,
+        ):
             previous = self._receipt(cursor, scope)
             if previous is not None:
                 return self._committed(previous)
@@ -133,7 +176,29 @@ class PostgresRevisionActivation:
             )
             persist_restored_campaign(cursor, candidate, self.control, self.snapshots)
             cursor.execute("SELECT sim.finish_campaign_revision(%s,%s,%s)", scope)
+            if plan.provenance.planned_correction is not None:
+                self._commit_correction(cursor, plan, plan.provenance.planned_correction)
             receipt = self._receipt(cursor, scope)
             if receipt is None:
                 raise CheckpointHoldConflict("campaign revision receipt is unavailable")
             return self._committed(receipt)
+
+    def _commit_correction(
+        self, cursor: RealDictCursor, plan: CampaignRevisionPlan, correction: PlannedCorrection
+    ) -> None:
+        actor = revision_operator(cursor, plan.world_id, plan.actor_id, "restore")
+        proposal = CommandProposal(
+            command_id=uuid.uuid5(plan.successor_branch_id, "planned-timeline-correction"),
+            world_id=plan.world_id,
+            branch_id=plan.successor_branch_id,
+            run_id=plan.successor_run_id,
+            actor_id=plan.actor_id,
+            command_type=self.correction_definition.command_type,
+            parameters=correction.request.model_dump(mode="json"),
+            input_origin="OPERATOR",
+            idempotency_key=f"{CORRECTION_KEY_PREFIX}{plan.request_id}",
+            correlation_id=plan.request_id,
+        )
+        receipt = self.commands.execute(proposal, actor, self.correction_definition)
+        if not receipt.result.accepted or receipt.state_hash != correction.resulting_state_hash:
+            raise CheckpointHoldConflict("prepared correction produced a different state")

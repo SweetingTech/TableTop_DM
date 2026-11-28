@@ -47,6 +47,7 @@ REQUIRED_MEMBERS = (
     "infra/sql/migrations/028_campaign_revision_resume.sql",
     "infra/sql/migrations/029_campaign_restore_mechanics.sql",
     "infra/sql/migrations/030_campaign_corrections.sql",
+    "infra/sql/migrations/031_planned_campaign_corrections.sql",
     "static/v2/index.html",
 )
 
@@ -121,6 +122,7 @@ require([item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "028_campaign_revision_resume.sql",
     "029_campaign_restore_mechanics.sql",
     "030_campaign_corrections.sql",
+    "031_planned_campaign_corrections.sql",
 ], "wheel migration discovery differs from the runtime contract")
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

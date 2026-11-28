@@ -729,6 +729,10 @@ The operator can read the receipt with `GET /{request_id}` or cancel their plan 
 `POST /{request_id}/cancel` under the same path. The request ID is idempotent. A
 prepared plan protects the checkpoint while it is available for revision.
 
+Include `corrections` in the prepare request to apply the typed facts below during
+activation. Preparation validates each fact against the restored candidate and binds
+the corrected state hash using the plan's private `reason`.
+
 Use `POST /{request_id}/activate` under the same path to start the rewind. A 202
 response means the current branch is held while its outstanding perception work drains.
 Repeat the request to finish activation. A successful response identifies the successor
@@ -736,6 +740,8 @@ branch, run and epoch. The new branch starts paused and holds the restored state
 An older prepared plan that cannot restore its pending tabletop mechanics returns 409.
 Cancel that plan and prepare a fresh revision from the same checkpoint.
 The request returns the same receipt after a restart or a dropped response.
+If the plan included corrections, `receipt.state_hash` is the restored baseline hash
+and `receipt.correction` returns the committed `event_id` and corrected `state_hash`.
 Cancelling a pending plan releases its hold. Operators can audit the archived branch.
 Once resumed, ordinary commands can target the restored run through any API process.
 

@@ -34,6 +34,7 @@ class PositionCorrection(BaseModel):
 
 
 Correction = Annotated[HitPointCorrection | PositionCorrection, Field(discriminator="fact")]
+CorrectionBatch = Annotated[tuple[Correction, ...], Field(min_length=1, max_length=16)]
 
 
 class CorrectTimelineRequest(BaseModel):
@@ -43,7 +44,7 @@ class CorrectTimelineRequest(BaseModel):
     reason: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
     ] = Field(repr=False)
-    corrections: tuple[Correction, ...] = Field(min_length=1, max_length=16)
+    corrections: CorrectionBatch
 
     @model_validator(mode="after")
     def distinct_facts(self) -> CorrectTimelineRequest:
@@ -102,6 +103,10 @@ def correct_timeline(proposal: CommandProposal, state: BranchState) -> CommandRe
     if proposal.input_origin != "OPERATOR" or proposal.embodied_entity_id is not None:
         raise AuthorizationDenied("a timeline correction requires operator authority")
     request = CorrectTimelineRequest.model_validate(proposal.parameters)
+    return resolve_correction(state, request)
+
+
+def resolve_correction(state: BranchState, request: CorrectTimelineRequest) -> CommandResult:
     if request.expected_state_hash != state.state_hash:
         raise CheckpointHoldConflict("the paused revision state changed before correction")
     deltas: list[StateDelta] = []

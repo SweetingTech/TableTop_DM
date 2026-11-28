@@ -77,6 +77,8 @@ Apply migration 029 so rewinds can resume encounters, offers, death saves, actio
 and timed conditions from the archived moment.
 Apply migration 030 to correct a living body's hit points or position while the restored
 timeline is paused. Use in-world resurrection when the characters should remember the death.
+Apply migration 031 to include selected corrections in the rewind itself and get their receipt
+when the corrected continuation becomes active.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

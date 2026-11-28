@@ -89,6 +89,11 @@ and projection hash, applies the batch atomically, and records the private corre
 reason. The event has no physical witness grants. Once the revision resumes, this
 correction boundary closes.
 
+Preparation can include the same facts as a correction batch and binds both the
+baseline and corrected state hashes. Activation restores that baseline, commits the
+correction, and publishes the continuation together. Its receipt carries the baseline
+hash and the correction's event ID and state hash.
+
 Resume checks the active epoch again and establishes new controller epochs and clock work
 under current grants. A controller that cannot regain its archived mode stays paused.
 The clock resumes from the checkpoint's simulated time and starts its next timeout from
@@ -96,7 +101,7 @@ the resume operation. The resume receipt survives a dropped response or restart.
 
 Prepare and validate the new projection, entity identities, retained source lineage and subjective visibility before switching the active pointer. Restore branch-scoped identities using a consistent mapping for all dependent rows. Record origin references to the historical input while presenting only the restored observations to characters. Rebuild narration and retrieval from the retained prefix. Never borrow current memories or queue entries from the abandoned suffix.
 
-The pointer switch, typed correction receipt, and initial scheduling state must commit together. A failed or interrupted revision leaves the previous timeline active. Resuming the same operation is idempotent. Workers and controllers holding an old branch, continuation epoch, control epoch or run cannot publish new outputs after the switch. New work starts only when the selected timeline and its restored data are ready. A restored checkpoint can stay paused without creating another active history.
+The pointer switch, any prepared correction receipt, and initial scheduling state commit together. A failed or interrupted revision leaves the previous timeline active. Resuming the same operation is idempotent. Workers and controllers holding an old branch, continuation epoch, control epoch or run cannot publish new outputs after the switch. New work starts only when the selected timeline and its restored data are ready. A restored checkpoint can stay paused without creating another active history.
 
 Replaying retained deltas verifies what happened in an existing lineage. Fresh execution after a rewind can diverge and must record its own versioned decisions. Rewind before a death removes later effects from the active story, including death-dependent quests or funeral memories. A typed in-world resurrection changes the living body in the current lineage and retains witnesses' actual experience in that lineage. Both paths use authorized typed mutation and leave distinct causal records.
 

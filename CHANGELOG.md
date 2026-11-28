@@ -1,5 +1,8 @@
 # Changelog
 
+- Apply prepared corrections atomically with rewind activation. The revision returns the
+  archived baseline hash and the committed correction receipt.
+
 - Add audited corrections to a paused rewind and witnessed resurrection on a live
   timeline. Verify both outcomes against the same raid death and affected quest.
 

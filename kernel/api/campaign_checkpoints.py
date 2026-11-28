@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Annotated
 
 from flask import Flask, jsonify, request
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
 from kernel.campaign_revisions import (
     CampaignRevisionPlan,
@@ -110,8 +110,12 @@ def register_checkpoint_capture(
     @app.post(scope + "/timeline-revision-plans")
     def prepare_timeline_revision(world_id: uuid.UUID, branch_id: uuid.UUID):
         require_world_access(world_id)
-        body = PrepareCampaignRevision.model_validate(request.get_json(silent=True) or {})
-        return plan_response(revisions.prepare(world_id, branch_id, current_actor(), body))
+        try:
+            body = PrepareCampaignRevision.model_validate(request.get_json(silent=True) or {})
+            plan = revisions.prepare(world_id, branch_id, current_actor(), body)
+        except ValidationError:
+            raise ValueError("invalid campaign revision parameters") from None
+        return plan_response(plan)
 
     @app.get(scope + "/timeline-revision-plans/<uuid:request_id>")
     def read_timeline_revision(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):
