@@ -368,6 +368,8 @@ hash before the canonical pointer becomes visible.
 The resume transaction advances controller epochs, rearms due work through a typed clock
 command, and commits the live run status with its retry receipt. A write to an archived
 canonical branch fails even when submitted by an older asynchronous worker.
+Derived narration inserts take the same branch lock, including when a request obtained its
+observations before activation. Existing archived narration remains available for operator audit.
 
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,

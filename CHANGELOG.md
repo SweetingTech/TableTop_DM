@@ -1,5 +1,8 @@
 # Changelog
 
+- Fence narration requests that finish after their timeline is archived. Keep existing
+  operator audit entries and verify successor narration and knowledge after restart.
+
 - Apply prepared corrections atomically with rewind activation. The revision returns the
   archived baseline hash and the committed correction receipt.
 

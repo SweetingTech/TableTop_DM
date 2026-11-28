@@ -12,6 +12,7 @@ from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
 from cognition.control import EXECUTOR_CAPABILITIES, execution_actor
+from cognition.postgres_narration import PostgresNarrations
 from cognition.projector import WorldEventProjector
 from infra.migrate import discover, migrate
 from kernel import revision_activation
@@ -252,6 +253,98 @@ def test_revision_rolls_back_then_restores_witness_and_population_after_restart(
     assert uuid.UUID(replay.get_json()["branch_id"]) == uuid.UUID(branch)
 
 
+def test_activation_fences_inflight_narration_and_rebuilds_character_retrieval(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    stack = isolated_integration_stack
+    _, (admin, player, card, _, run, speaker, base) = prepare(stack, monkeypatch, tmp_path)
+    earlier = "The sapphire ferry docks at noon."
+    discarded = "The onyx funeral begins at sunrise."
+
+    def speak(text, key):
+        spoken = admin.post(
+            "/api/v2/commands",
+            json={
+                **base,
+                "embodied_entity_id": speaker,
+                "command_type": "tabletop.dialogue.speak",
+                "parameters": {"text": text},
+                "idempotency_key": key,
+            },
+        )
+        assert spoken.status_code == 200, spoken.get_json()
+
+    roots = f"/api/v2/worlds/{base['world_id']}/branches"
+    old_narration = f"{roots}/{base['branch_id']}/narration"
+    observer = card["entity_id"]
+    options = {"run_id": run, "audience": "CHARACTER", "observer_entity_id": observer}
+    speak(earlier, "narration-before-checkpoint")
+    audit = admin.post(old_narration, json={"run_id": run, "audience": "OPERATOR"})
+    assert audit.status_code == 200, audit.get_json()
+    earlier_entry = next(entry for entry in audit.get_json()["entries"] if earlier in entry["text"])
+    observed = player.post(old_narration, json=options)
+    assert observed.status_code == 200, observed.get_json()
+    player_entry = observed.get_json()["entries"][0]
+    with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT requester_actor_id FROM cognition.narration_entries WHERE narration_id=%s",
+            (player_entry["narration_id"],),
+        )
+        player_actor = uuid.UUID(cursor.fetchone()[0])
+
+    body = request_for(manual_capture(admin, base))
+    speak(discarded, "narration-after-checkpoint")
+    path = revision_path(base)
+    prepared = admin.post(path, json=body)
+    assert prepared.status_code == 200, prepared.get_json()
+    retain = PostgresNarrations.retain
+
+    def activate_before_retention(repository, entries, *, actor_id):
+        assert any(discarded in entry.text for entry in entries)
+        activation = admin.post(f"{path}/{body['request_id']}/activate")
+        assert activation.status_code == 200, activation.get_json()
+        return retain(repository, entries, actor_id=actor_id)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PostgresNarrations, "retain", activate_before_retention)
+        stale = player.post(old_narration, json=options)
+    assert stale.status_code == 403, stale.get_json()
+    assert discarded not in stale.get_data(as_text=True)
+    narration_store = PostgresNarrations(stack.database_url)
+    archived_player_entry = narration_store.get(
+        uuid.UUID(base["world_id"]),
+        uuid.UUID(base["branch_id"]),
+        uuid.UUID(player_entry["narration_id"]),
+        actor_id=player_actor,
+    )
+    assert archived_player_entry is None
+
+    app, restarted_admin = fresh_client(tmp_path)
+    assert restarted_admin.get(f"{old_narration}/{earlier_entry['narration_id']}").get_json() == (
+        earlier_entry
+    )
+    archived_write = restarted_admin.post(
+        old_narration, json={"run_id": run, "audience": "OPERATOR"}
+    )
+    assert archived_write.status_code == 403, archived_write.get_json()
+    restarted_player = app.test_client()
+    restarted_player.set_cookie("ttdm_session", player.get_cookie("ttdm_session").value)
+    plan = prepared.get_json()
+    successor = f"{roots}/{plan['successor_branch_id']}"
+    rebuilt = restarted_player.post(
+        f"{successor}/narration", json={**options, "run_id": plan["successor_run_id"]}
+    )
+    assert rebuilt.status_code == 200, rebuilt.get_json()
+    assert earlier in rebuilt.get_data(as_text=True)
+    assert discarded not in rebuilt.get_data(as_text=True)
+    knowledge = f"{successor}/entities/{observer}/knowledge"
+    recalled = restarted_player.get(knowledge, query_string={"query": "sapphire"})
+    forgotten = restarted_player.get(knowledge, query_string={"query": "onyx"})
+    assert recalled.status_code == forgotten.status_code == 200
+    assert earlier in recalled.get_data(as_text=True)
+    assert forgotten.get_json()["items"] == []
+
+
 def test_activation_keeps_live_hold_until_projected_and_rejects_half_switch(
     isolated_integration_stack, monkeypatch, tmp_path
 ):
@@ -342,6 +435,59 @@ def test_027_upgrade_activates_a_prepared_plan_and_rolls_back_ddl(
                 activated.get_json()["receipt"]["branch_id"]
                 == prepared.get_json()["successor_branch_id"]
             )
+        finally:
+            with maintenance.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name))
+                )
+
+
+def test_032_upgrade_preserves_archived_narration_and_rejects_new_entries(
+    integration_stack, monkeypatch, tmp_path
+):
+    stack = integration_stack
+    name = "ttdm_archive_narration_upgrade_" + uuid.uuid4().hex
+    owner = make_dsn(stack.admin_url, dbname=name)
+    runtime = make_dsn(stack.database_url, dbname=name)
+    prior_stack = replace(stack, admin_url=owner, database_url=runtime)
+    migrations = Path(__file__).resolve().parents[2] / "infra/sql/migrations"
+    prior = tmp_path / "prior"
+    prior.mkdir()
+    for item in discover(migrations)[:31]:
+        shutil.copy2(item.path, prior)
+
+    with closing(psycopg2.connect(stack.admin_url)) as maintenance:
+        maintenance.autocommit = True
+        with maintenance.cursor() as cursor:
+            cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        try:
+            assert migrate(owner, prior) == 31
+            _, (admin, player, card, _, run, _, base) = prepare(prior_stack, monkeypatch, tmp_path)
+            assert player_speech(player, base, card, "narration-before-upgrade").status_code == 200
+            path = revision_path(base)
+            body = request_for(manual_capture(admin, base))
+            assert admin.post(path, json=body).status_code == 200
+            assert admin.post(f"{path}/{body['request_id']}/activate").status_code == 200
+
+            narration = f"/api/v2/worlds/{base['world_id']}/branches/{base['branch_id']}/narration"
+            options = {"run_id": run, "audience": "OPERATOR"}
+            stored = admin.post(narration, json=options)
+            assert stored.status_code == 200, stored.get_json()
+            entry = stored.get_json()["entries"][0]
+
+            migration = migrations / "032_archive_narration_fence.sql"
+            with closing(psycopg2.connect(owner)) as connection, connection.cursor() as cursor:
+                cursor.execute(migration.read_text(encoding="utf-8"))
+                connection.rollback()
+            assert admin.post(narration, json=options).status_code == 200
+            shutil.copy2(migration, prior)
+            assert migrate(owner, prior) == 1
+            assert migrate(owner, prior) == 0
+
+            _, restarted = fresh_client(tmp_path)
+            assert restarted.post(narration, json=options).status_code == 403
+            saved = restarted.get(f"{narration}/{entry['narration_id']}")
+            assert saved.status_code == 200 and saved.get_json() == entry
         finally:
             with maintenance.cursor() as cursor:
                 cursor.execute(

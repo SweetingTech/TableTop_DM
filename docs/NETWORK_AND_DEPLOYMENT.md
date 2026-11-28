@@ -230,6 +230,8 @@ Migration 030 installs the durable correction scope guard in PostgreSQL. Correct
 resurrection use the existing API, database and projector services.
 Migration 031 installs the activation commit check for prepared corrections. Apply it
 before enabling this request field on the API.
+Migration 032 installs the narration insert fence in the existing PostgreSQL database.
+Deploy the matching API after the migration so rejected requests return 403.
 
 ### Scenario job
 

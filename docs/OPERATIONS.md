@@ -87,6 +87,8 @@ and latest state hash. If the state has changed, inspect it and submit a new cor
 with a new request key. A previously committed key still returns its original receipt.
 Migration 031 lets a prepared plan include corrections. If activation is interrupted,
 retry the same request to reuse the hold and recover the correction receipt.
+Migration 032 serializes narration inserts and rewind activation. Existing narration entries
+stay available under current audit grants. Apply it before rolling out the matching API.
 
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
