@@ -325,9 +325,7 @@ class PersonaGenerator:
 
         for target, weights in distributions.items():
             target_rules = [
-                rule
-                for rule in active_rules
-                if target in rule.require or target in rule.forbid
+                rule for rule in active_rules if target in rule.require or target in rule.forbid
             ]
             if not target_rules:
                 continue
