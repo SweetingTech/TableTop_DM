@@ -13,10 +13,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
+    migration_dir = ROOT / "infra" / "sql" / "migrations"
     assert (
         migrate(
             integration_stack.admin_url,
-            ROOT / "infra" / "sql" / "migrations",
+            migration_dir,
             check_only=True,
         )
         == 0
@@ -24,7 +25,7 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
     assert (
         migrate(
             integration_stack.admin_url,
-            ROOT / "infra" / "sql" / "migrations",
+            migration_dir,
             runtime_user=integration_stack.runtime_user,
             runtime_password=integration_stack.runtime_password,
         )
@@ -34,29 +35,10 @@ def test_fresh_baseline_and_idempotent_rerun(integration_stack) -> None:
         psycopg2.connect(integration_stack.admin_url) as connection,
         connection.cursor() as cursor,
     ):
-        cursor.execute("SELECT version FROM infra_meta.schema_migrations")
-        assert cursor.fetchall() == [
-            ("001_simulation_kernel.sql",),
-            ("002_identity_and_tabletop_workspaces.sql",),
-            ("003_spatial_epistemics.sql",),
-            ("004_persona_purpose.sql",),
-            ("005_character_history_and_bindings.sql",),
-            ("006_character_proposal_receipts.sql",),
-            ("007_controller_handoff_runner.sql",),
-            ("008_player_behavior_evidence.sql",),
-            ("009_speech_combat_evidence.sql",),
-            ("010_tactical_choice_evidence.sql",),
-            ("011_population_body_binding.sql",),
-            ("012_snapshot_entity_identity.sql",),
-            ("013_roster_controller_revocation.sql",),
-            ("014_world_due_work.sql",),
-            ("015_scoped_narration.sql",),
-            ("016_decision_origins.sql",),
-            ("017_speech_cadence_evidence.sql",),
-            ("018_controller_presence.sql",),
-            ("019_character_recap_boundaries.sql",),
-            ("020_contextual_support_evidence.sql",),
-        ]
+        cursor.execute("SELECT version FROM infra_meta.schema_migrations ORDER BY version")
+        assert [row[0] for row in cursor.fetchall()] == sorted(
+            path.name for path in migration_dir.glob("*.sql") if path.is_file()
+        )
         cursor.execute(
             """
             SELECT schema_name FROM information_schema.schemata
