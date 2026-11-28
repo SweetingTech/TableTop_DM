@@ -60,6 +60,12 @@ and world runner running for automatic capture. Until projection and archive che
 automatic hold is visible through the same operator hold endpoint. A world manager can release
 that request to resume play or retire its rule after release.
 
+Migration 024 preserves existing archives. To retire old scheduled checkpoints, configure
+and explicitly [apply a retention policy](API_AND_WORKFLOWS.md#checkpoint-retention).
+Keep the private artifact volume available and writable when applying it. Repeat the apply
+request if cleanup remains pending after an interruption. The audited manifest remains in
+PostgreSQL after the file is removed.
+
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally
 on the read transaction. Deploy the matching API/control-plane code. Role changes from a second

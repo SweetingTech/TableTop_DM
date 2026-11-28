@@ -101,6 +101,10 @@ The automatic checkpoint tests capture the exact event cut and then restart the 
 outbox row is leased. They verify archive publication and automatic release after projection.
 The simulated-time test checks that crossing multiple intervals publishes one committed cut.
 
+The retention tests exercise the 023-to-024 upgrade, migration rollback, runtime role
+scope, archive integrity, and retry after a restart between retirement and file cleanup.
+They verify that the newest completed archives, manual captures, and pins survive.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

@@ -697,6 +697,23 @@ uses the same hold and private archive routes for inspection. The world runner c
 releases the hold after the projector drains the prefix. The archived boundary records both the
 originating event and the rule ID.
 
+### Checkpoint retention
+
+World managers can inspect and change the active branch policy with `GET` and `PUT`
+at `/api/v2/worlds/{world_id}/branches/{branch_id}/checkpoint-retention`. Set a fresh
+`policy_id` and `keep_automatic` between 1 and 1000, or use `null` to keep every archive.
+Supply `expected_policy_id` when replacing a policy. Older policy versions remain in the
+audit history.
+
+For the same branch, `PUT /campaign-checkpoints/{checkpoint_id}/pin` accepts
+`{"pinned": true}` or `{"pinned": false}`. Apply the policy explicitly with
+`POST /checkpoint-retention/apply` and its `policy_id`. It verifies the newest
+completed scheduled archives before retiring older unpinned archives. Manual checkpoints
+remain retained. The response lists newly retired checkpoint IDs and the number of archive
+files still pending cleanup. Repeat the apply request after a cleanup failure. Reading a
+retired archive returns 409. The original capture receipt remains available on a same-label
+retry of the capture request.
+
 ### World-scoped reads
 
 Every world-scoped route requires `ADMIN`, or a `DM` or `PLAYER` grant **for that world**. Roles

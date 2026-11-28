@@ -404,6 +404,33 @@ def collect_checkpoint(
     )
 
 
+def lock_checkpoint_archives(
+    cursor: RealDictCursor, world: uuid.UUID, branch: uuid.UUID, *, shared: bool
+) -> None:
+    key = f"tabletop:checkpoint-archives:{world}:{branch}"
+    statement = (
+        "SELECT pg_advisory_xact_lock_shared(hashtextextended(%s,0))"
+        if shared
+        else "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))"
+    )
+    cursor.execute(statement, (key,))
+
+
+def checkpoint_retired(
+    cursor: RealDictCursor, world: uuid.UUID, branch: uuid.UUID, checkpoint: uuid.UUID
+) -> bool:
+    cursor.execute("SELECT to_regclass('sim.campaign_checkpoint_retention_state') AS state_table")
+    version = cursor.fetchone()
+    if version is None or version["state_table"] is None:
+        return False
+    cursor.execute(
+        "SELECT 1 FROM sim.campaign_checkpoint_retention_state "
+        "WHERE (world_id,branch_id,checkpoint_id)=(%s,%s,%s) AND status='RETIRED'",
+        (str(world), str(branch), str(checkpoint)),
+    )
+    return cursor.fetchone() is not None
+
+
 class PostgresCampaignCheckpoints:
     """Manager-only capture and integrity-checked loading at one held boundary."""
 
@@ -457,7 +484,6 @@ class PostgresCampaignCheckpoints:
                         raise CheckpointHoldConflict(
                             "checkpoint request already has a different label"
                         )
-                    self._load_verified(receipt.manifest)
                     return receipt
                 held = self.holds.lock_for_capture(cursor, world, branch, request)
                 if held.status != "READY":
@@ -496,6 +522,9 @@ class PostgresCampaignCheckpoints:
         with transaction(actor_id=actor, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 self.holds.authorize(cursor, world, actor, private=True)
+                lock_checkpoint_archives(cursor, world, branch, shared=True)
+                if checkpoint_retired(cursor, world, branch, checkpoint_id):
+                    raise CheckpointHoldConflict("checkpoint archive was retired by policy")
                 cursor.execute(
                     "SELECT label,manifest,created_at FROM sim.campaign_checkpoints "
                     "WHERE (world_id,branch_id,checkpoint_id)=(%s,%s,%s)",

@@ -212,6 +212,12 @@ class CampaignCheckpointStore:
             raise ValueError("checkpoint artifact differs from its manifest")
         return checkpoint
 
+    def remove_retired(self, manifest: CampaignCheckpointManifest) -> None:
+        path = self._path(manifest)
+        if path.parent.resolve() != path.parent:
+            raise OSError("checkpoint archive directory differs from its scope")
+        path.unlink(missing_ok=True)
+
     @staticmethod
     def _manifest(checkpoint: CampaignCheckpoint, compressed: bytes) -> CampaignCheckpointManifest:
         digests = checkpoint.component_digests()
