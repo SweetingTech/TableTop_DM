@@ -14,6 +14,10 @@ class BranchCheckpointHeld(WorldClockPaused):
     """The branch is paused at an operator checkpoint boundary."""
 
 
+class RestoredCampaignPaused(WorldClockPaused):
+    """The restored run is waiting for its explicit resume operation."""
+
+
 class BodySleeping(AuthorizationDenied):
     """Expected bodily suspension; autonomous actions wait without spending a control step."""
 

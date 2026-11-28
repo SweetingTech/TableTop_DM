@@ -212,9 +212,10 @@ def test_revision_rolls_back_then_restores_witness_and_population_after_restart(
             cursor.execute(
                 """INSERT INTO sim.command_log
                    (command_id,command_type,command_version,world_id,branch_id,run_id,actor_id,
-                    parameters,result,resulting_state_hash,idempotency_key,correlation_id)
+                    parameters,result,resulting_state_hash,idempotency_key,correlation_id,input_origin)
                    SELECT %s,command_type,command_version,world_id,branch_id,run_id,actor_id,
-                          parameters,result,resulting_state_hash,'outside-activation',correlation_id
+                          parameters,result,resulting_state_hash,'outside-activation',
+                          correlation_id,input_origin
                    FROM sim.command_log WHERE branch_id=%s AND command_type=%s""",
                 (str(uuid.uuid4()), branch, ACTIVATE_CAMPAIGN_REVISION),
             )

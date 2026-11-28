@@ -222,6 +222,9 @@ rewind plans. Preparation requires access to the private checkpoint files and so
 Migration 027 uses the existing projector and snapshot volume during activation. The API
 writes an immutable replay baseline to the snapshot volume before it commits the switch.
 
+Migration 028 uses the existing API, world-runner and character-runner services. After
+resume commits, those workers discover due work on the restored timeline.
+
 ### Scenario job
 
 ```mermaid

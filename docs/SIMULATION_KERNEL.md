@@ -354,6 +354,10 @@ The authoritative revision transaction fences the prior continuation and writes 
 successor, replay baseline and receipt together. Transaction-scoped restore authority allows
 only that operation to retain historical authorship. It ends before new actions can commit.
 
+The resume transaction advances controller epochs, rearms due work through a typed clock
+command, and commits the live run status with its retry receipt. A write to an archived
+canonical branch fails even when submitted by an older asynchronous worker.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

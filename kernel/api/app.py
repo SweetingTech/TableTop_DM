@@ -141,6 +141,7 @@ from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
 from kernel.postgres_control_plane import PostgresControlPlane
 from kernel.postgres_repository import PostgresCommandRepository
 from kernel.revision_activation import PostgresRevisionActivation
+from kernel.revision_resume import PostgresRevisionResume
 from kernel.state import InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
 from persona.compilation import PersonaCompiler
@@ -4325,6 +4326,11 @@ def create_app(
             simulation.durable_repository,
             simulation.bus.definition(ACTIVATE_CAMPAIGN_REVISION),
         )
+        revision_resume = PostgresRevisionResume(
+            checkpoint_archives,
+            simulation.durable_repository,
+            simulation.bus.definition("tabletop.clock.configure"),
+        )
 
         def refresh_revision_state() -> None:
             simulation.read_reference(lambda: durable_control.hydrate(simulation))
@@ -4335,6 +4341,7 @@ def create_app(
             current_actor_id,
             require_world_access,
             revision_activation,
+            revision_resume,
             refresh_revision_state,
         )
         checkpoint_schedules = PostgresCheckpointSchedules(
