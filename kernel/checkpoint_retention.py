@@ -176,7 +176,12 @@ class PostgresCheckpointRetention:
         if policy.keep_automatic is None:
             return ()
         cursor.execute(
-            """SELECT c.manifest,s.status FROM sim.campaign_checkpoints c
+            """SELECT c.manifest,s.status,EXISTS (
+                 SELECT 1 FROM sim.campaign_revision_plans plan
+                 WHERE (plan.world_id,plan.branch_id,plan.source_checkpoint_id)=
+                   (c.world_id,c.branch_id,c.checkpoint_id) AND plan.cancelled_at IS NULL
+               ) AS revision_protected
+               FROM sim.campaign_checkpoints c
                JOIN sim.campaign_checkpoint_dispatches AS d USING (world_id,branch_id,request_id)
                JOIN sim.campaign_checkpoint_holds AS h USING (world_id,branch_id,request_id)
                LEFT JOIN sim.campaign_checkpoint_retention_state AS s
@@ -190,7 +195,7 @@ class PostgresCheckpointRetention:
         candidates = [
             CampaignCheckpointManifest.model_validate(row["manifest"])
             for row in rows[policy.keep_automatic :]
-            if row["status"] != "PINNED"
+            if row["status"] != "PINNED" and not row["revision_protected"]
         ]
         if not candidates:
             return ()

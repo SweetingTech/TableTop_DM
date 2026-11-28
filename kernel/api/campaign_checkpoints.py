@@ -7,6 +7,11 @@ from typing import Annotated
 from flask import Flask, jsonify, request
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
+from kernel.campaign_revisions import (
+    CampaignRevisionPlan,
+    PostgresCampaignRevisions,
+    PrepareCampaignRevision,
+)
 from kernel.checkpoint_holds import CheckpointHoldConflict, CheckpointHolds, CheckpointHoldStatus
 from kernel.checkpoint_retention import (
     ApplyRetentionRequest,
@@ -86,6 +91,28 @@ def register_checkpoint_capture(
 ) -> None:
     scope = "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
     retention = PostgresCheckpointRetention(archives)
+    revisions = PostgresCampaignRevisions(archives)
+
+    def plan_response(plan: CampaignRevisionPlan):
+        response = jsonify(plan.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post(scope + "/timeline-revision-plans")
+    def prepare_timeline_revision(world_id: uuid.UUID, branch_id: uuid.UUID):
+        require_world_access(world_id)
+        body = PrepareCampaignRevision.model_validate(request.get_json(silent=True) or {})
+        return plan_response(revisions.prepare(world_id, branch_id, current_actor(), body))
+
+    @app.get(scope + "/timeline-revision-plans/<uuid:request_id>")
+    def read_timeline_revision(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):
+        require_world_access(world_id)
+        return plan_response(revisions.read(world_id, branch_id, current_actor(), request_id))
+
+    @app.post(scope + "/timeline-revision-plans/<uuid:request_id>/cancel")
+    def cancel_timeline_revision(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):
+        require_world_access(world_id)
+        return plan_response(revisions.cancel(world_id, branch_id, current_actor(), request_id))
 
     @app.post(scope + "/checkpoint-holds/<uuid:request_id>/capture")
     def capture_checkpoint(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):

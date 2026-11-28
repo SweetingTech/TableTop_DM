@@ -110,6 +110,10 @@ They verify that the newest completed archives, manual captures, and pins surviv
 Timeline lineage tests cover backfill from 024, DDL rollback, cold hydration, role-scoped
 pointer reads, trial isolation, and receipt replay after a canonical branch becomes archived.
 
+Revision preparation tests cover epoch and role checks, an exact candidate based on an
+earlier cut, durable retry and cancellation, and retention protection for the planned source.
+They verify the 025-to-026 migration, rollback, and cleanup after cancellation.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

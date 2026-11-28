@@ -216,6 +216,9 @@ The API process needs write access to that store to clean up explicitly retired 
 Migration 025 backfills the canonical continuation in PostgreSQL. The API and world runner
 hydrate the same pointer using their existing database connection.
 
+Migration 026 uses those same PostgreSQL and artifact connections to validate and store
+rewind plans. Preparation requires access to the private checkpoint files and source artifacts.
+
 ### Scenario job
 
 ```mermaid

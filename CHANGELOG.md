@@ -1,5 +1,8 @@
 # Changelog
 
+- Prepare private, durable rewind plans from a verified checkpoint. Plans bind the
+  active epoch, new run identity, seed policy and candidate state while play continues.
+
 - Verify archived event, command, and perception prefixes and pinned file artifacts when
   reopening a campaign checkpoint or confirming the retained copies before cleanup.
 
