@@ -346,6 +346,10 @@ receipt from an archived branch. Trial commands retain their proposal-only scope
 Preparing a revision verifies the source and hashes a paused candidate. The prepared
 request remains private and leaves canonical state, worker leases, and the current epoch intact.
 
+Preparation also verifies that subjective references belong to the retained causal cut.
+It rekeys the historical witnesses and mind rows together. It leaves the archived mask
+and the perceived content intact and assigns no fresh request keys to the retained events.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

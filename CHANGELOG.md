@@ -1,5 +1,8 @@
 # Changelog
 
+- Prepare branch-local copies of retained physical grants and subjective state.
+  Rewind plans bind that reconstruction before activation.
+
 - Prepare private, durable rewind plans from a verified checkpoint. Plans bind the
   active epoch, new run identity, seed policy and candidate state while play continues.
 
