@@ -8,6 +8,7 @@ from typing import Any
 import psycopg2.errors
 import psycopg2.extras
 
+from domains.tabletop.timeline_corrections import CORRECT
 from kernel.checkpoint_holds import CheckpointHoldConflict, require_checkpoint_open
 from kernel.command_bus import (
     CommandDefinition,
@@ -87,6 +88,17 @@ class PostgresCommandRepository:
     ) -> CommandReceipt:
         with transaction(actor_id=actor.actor_id, dsn=self.dsn) as connection:
             with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                if proposal.command_type == CORRECT:
+                    # A correction's ledger trigger checks this run under a row lock.
+                    cursor.execute(
+                        "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) "
+                        "FOR NO KEY UPDATE",
+                        tuple(map(str, (proposal.world_id, proposal.branch_id, proposal.run_id))),
+                    )
+                    if cursor.fetchone() is None:
+                        raise BranchIsolationError(
+                            "Proposal run does not belong to the world branch"
+                        )
                 cursor.execute(
                     """
                     SELECT world_id, branch_kind, status

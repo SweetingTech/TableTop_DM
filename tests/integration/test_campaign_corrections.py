@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import shutil
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
+from time import monotonic, sleep
 
 import psycopg2
 import pytest
@@ -326,6 +328,51 @@ def test_correction_rejects_invalid_scope_authority_and_entire_invalid_batches(
     now = {**request, "expected_state_hash": state_at(app, new).state_hash}
     assert submit(admin, new, CORRECT, now, "already-resumed").status_code == 409
     assert api_command(admin, new, CORRECT, request, "valid")["event"] == corrected["event"]
+
+
+def test_correction_waits_for_run_before_locking_branch(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    stack = isolated_integration_stack
+    app, (admin, _player, card, _path, _run, _witness, base) = prepare(stack, monkeypatch, tmp_path)
+    _, new = activate_from(admin, base, manual_capture(admin, base))
+    branch = (new["world_id"], new["branch_id"])
+    body = {
+        "expected_epoch": 1,
+        "expected_state_hash": state_at(app, new).state_hash,
+        "reason": "Repair the restored party member's health.",
+        "corrections": [{"fact": "HIT_POINTS", "entity_id": card["entity_id"], "hit_points": 1}],
+    }
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) "
+                "FOR NO KEY UPDATE",
+                (*branch, new["run_id"]),
+            )
+            pending = workers.submit(submit, admin, new, CORRECT, body, "concurrent-correction")
+            deadline = monotonic() + 10
+            while monotonic() < deadline:
+                if pending.done():
+                    response = pending.result()
+                    pytest.fail(f"correction returned before unlock: {response.status_code}")
+                cursor.execute("SELECT pg_stat_clear_snapshot()")
+                cursor.execute(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                    "WHERE %s = ANY(pg_blocking_pids(pid)))",
+                    (connection.get_backend_pid(),),
+                )
+                if cursor.fetchone()[0]:
+                    break
+                sleep(0.02)
+            else:
+                pytest.fail("correction never waited for the run lock")
+            cursor.execute(
+                "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE NOWAIT",
+                branch,
+            )
+        result = pending.result(timeout=10)
+    assert result.status_code == 200, result.get_json()
 
 
 def test_030_migration_upgrades_and_rolls_back_without_exposing_its_trigger(
