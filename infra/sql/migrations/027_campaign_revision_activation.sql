@@ -315,7 +315,11 @@ BEGIN
       AND ((c.command_type='tabletop.combat.attack' AND NEW.payload->>'chosen_key'='attack:'||(c.parameters->>'target_id'))
         OR (c.command_type='tabletop.spatial.move' AND NEW.payload->>'chosen_key'='move:'||(c.parameters->>'dx')||','||(c.parameters->>'dy'))
         OR (c.command_type='tabletop.dialogue.speak' AND c.parameters->>'language'='common'
-            AND NEW.payload->>'chosen_key' LIKE 'speech:%:'||(c.parameters->>'volume')))
+          AND NEW.payload->>'chosen_key' LIKE 'speech:%:'||(c.parameters->>'volume'))
+        OR (NEW.payload->>'version' IN ('speech-combat-behavior-1.1.0','speech-combat-behavior-1.3.0') AND
+          ((c.command_type='tabletop.combat.guard' AND NEW.payload->>'chosen_key'='guard')
+           OR (c.command_type='tabletop.magic.invoke' AND NEW.payload->>'chosen_key'=
+             'spell:'||(c.parameters->>'spell_id')||':'||(c.parameters->>'target_id')))))
   ) THEN RAISE EXCEPTION 'choice evidence requires a matching committed human action'; END IF;
   IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(NEW.payload->'options') o WHERE o->>'key'=NEW.payload->>'chosen_key')
   THEN RAISE EXCEPTION 'chosen action is absent from perceived options'; END IF;
