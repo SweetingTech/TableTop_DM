@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from cognition.relationships import RelationshipChangeRecord
 from kernel.campaign_checkpoints import CampaignCheckpoint, CheckpointSection, FrozenComponent
 from kernel.checkpoint_holds import CheckpointHoldConflict
 from kernel.postgres_campaign_checkpoints import CheckpointEvidence
@@ -168,6 +169,24 @@ def restore_subjective_rows(
             for row in records
         )
 
+    relationship_changes = copies(
+        changes,
+        ("source_entity_id", "target_entity_id"),
+        {"source_event_id": events},
+        frozenset({"source_event_id"}),
+    )
+    for change in relationship_changes:
+        # The normal reaction endpoint derives its retry key from the new causal scope.
+        change["id"] = str(
+            RelationshipChangeRecord.identity(
+                world_id=checkpoint.boundary.world_id,
+                branch_id=branch,
+                source_entity_id=uuid.UUID(change["source_entity_id"]),
+                target_entity_id=uuid.UUID(change["target_entity_id"]),
+                source_event_id=uuid.UUID(change["source_event_id"]),
+            )
+        )
+
     return {
         "cognition.mind_states": copies(rows("mind_states"), ("entity_id",), {}),
         "cognition.observations": copies(
@@ -213,13 +232,5 @@ def restore_subjective_rows(
             ("source_entity_id", "target_entity_id"),
             {},
         ),
-        "cognition.relationship_changes": copies(
-            changes,
-            ("source_entity_id", "target_entity_id"),
-            {
-                "id": identifier_map(branch, "relationship-change", changes, "id"),
-                "source_event_id": events,
-            },
-            frozenset({"id", "source_event_id"}),
-        ),
+        "cognition.relationship_changes": relationship_changes,
     }

@@ -88,6 +88,13 @@ class PostgresRevisionResume:
     @staticmethod
     def _lock_continuation(cursor: RealDictCursor, committed: CommittedRevision) -> dict:
         scope = (str(committed.world_id), str(committed.branch_id))
+        # Controller handoffs lock the run before the branch.
+        cursor.execute(
+            "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) FOR NO KEY UPDATE",
+            (*scope, str(committed.run_id)),
+        )
+        if cursor.fetchone() is None:
+            raise CheckpointHoldConflict("restored run is unavailable")
         cursor.execute(
             "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE",
             scope,
