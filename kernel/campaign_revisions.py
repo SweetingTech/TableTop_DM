@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from psycopg2.extras import RealDictCursor
 from pydantic import AwareDatetime, Field, JsonValue, StringConstraints
 
+from domains.tabletop.initiative import ENCOUNTERS
 from domains.tabletop.quests.contracts import QUESTS, Quest
 from domains.tabletop.world_time import CLOCK, Clock
 from kernel.campaign_checkpoints import (
@@ -141,7 +142,17 @@ def build_paused_projection(
         result[QUESTS][identity] = quest.model_copy(
             update={"run_id": restored_run_id(successor_branch, quest.run_id)}
         ).model_dump(mode="json")
+    run_ids = {str(source): str(restored_run_id(successor_branch, source)) for source in runs}
+    remap_run_references(result.get(ENCOUNTERS, {}), run_ids)
     return result
+
+
+def remap_run_references(records: dict[str, JsonValue], run_ids: dict[str, str]) -> None:
+    for record in records.values():
+        source = record.get("run_id") if isinstance(record, dict) else None
+        if not isinstance(record, dict) or not isinstance(source, str) or source not in run_ids:
+            raise CheckpointHoldConflict("checkpoint mechanic refers to a run outside its scope")
+        record["run_id"] = run_ids[source]
 
 
 def archived_live_run(
