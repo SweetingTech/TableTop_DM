@@ -736,6 +736,12 @@ branch, run and epoch. The new branch starts paused and holds the restored state
 The request returns the same receipt after a restart or a dropped response.
 Cancelling a pending plan releases its hold. Operators can audit the archived branch.
 
+Use `POST /{request_id}/resume` on the completed revision plan with a fresh resume
+`request_id` and the restored `expected_epoch`. The default resumes the archived
+clock if the branch has one. Set `run_clock: false` to keep time paused. Controller
+modes are reconciled against current ownership and grants. The receipt reports which
+controllers are human, autonomous, or paused. Repeating the same request returns that receipt.
+
 ### World-scoped reads
 
 World records report `canonical_branch_id` and `continuation_epoch`. The current live run

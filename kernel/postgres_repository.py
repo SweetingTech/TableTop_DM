@@ -32,7 +32,12 @@ from kernel.control import (
 )
 from kernel.database import transaction
 from kernel.due_work import replace_clock_work, require_tick_work
-from kernel.errors import AuthorizationDenied, BranchIsolationError, WorldClockPaused
+from kernel.errors import (
+    AuthorizationDenied,
+    BranchIsolationError,
+    RestoredCampaignPaused,
+    WorldClockPaused,
+)
 from kernel.event_factory import EventFactory
 from kernel.perception_contracts import PerceptionGrant
 from kernel.state import BranchState
@@ -65,6 +70,10 @@ class PostgresCommandRepository:
             if receipt is None:
                 raise
             return receipt
+        except psycopg2.errors.CheckViolation as error:
+            if error.diag.constraint_name == "campaign_revision_paused":
+                raise RestoredCampaignPaused("the restored campaign is paused") from None
+            raise
 
     def _execute_once(
         self,

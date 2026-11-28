@@ -375,6 +375,10 @@ builds the successor from the verified archive, initializes its replay baseline,
 switches the canonical pointer. A deferred check rejects an incomplete transaction.
 Private event lineage links retained records to the previously experienced events.
 
+Resume is a separate typed transaction. It rechecks the active epoch, reauthorizes the
+archived controller modes, and configures the restored clock through the normal command
+repository. The run status, fresh leases and resume receipt become visible together.
+
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
 projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
 entity's identity, controller and secret metadata at that boundary. Public body resources remain

@@ -1,5 +1,8 @@
 # Changelog
 
+- Resume an activated timeline with a durable retry receipt. Reauthorize the archived
+  controllers, restart the world clock on the new branch, and fence stale writes.
+
 - Activate a prepared rewind in one database transaction. Restore the paused branch
   and its retained witnesses, choices and population, then switch the active pointer.
 

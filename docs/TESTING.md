@@ -122,6 +122,11 @@ Activation cases interrupt the transaction after writing the restored state, res
 retry the same request. They verify the single active pointer, old receipt retry, the
 retained witnesses and human choices, offscreen population, and replay after restart.
 
+Resume tests interrupt the operation after clock configuration and verify rollback of the
+clock and controller changes. They retry after restart, run real world and character workers
+on the successor, and verify scope, the prior receipt, and upgrade from a paused 027 revision.
+An ordinary player without a controller assignment also waits for the resume boundary.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

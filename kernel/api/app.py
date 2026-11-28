@@ -140,6 +140,7 @@ from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
 from kernel.postgres_control_plane import PostgresControlPlane
 from kernel.postgres_repository import PostgresCommandRepository
 from kernel.revision_activation import PostgresRevisionActivation
+from kernel.revision_resume import PostgresRevisionResume
 from kernel.state import InMemoryStateStore
 from kernel.visibility import VisibilityPolicy
 from persona.compilation import PersonaCompiler
@@ -4308,12 +4309,22 @@ def create_app(
         require_world_access,
     )
     checkpoint_schedules = None
-    if database_dsn and durable_checkpoint_holds is not None and durable_control is not None:
+    if (
+        database_dsn
+        and durable_checkpoint_holds is not None
+        and durable_control is not None
+        and simulation.durable_repository is not None
+    ):
         checkpoint_archives = PostgresCampaignCheckpoints(
             database_dsn, root / "campaign-checkpoints", durable_checkpoint_holds
         )
         revision_activation = PostgresRevisionActivation(
             checkpoint_archives, durable_control, simulation.snapshot_store
+        )
+        revision_resume = PostgresRevisionResume(
+            checkpoint_archives,
+            simulation.durable_repository,
+            simulation.bus.definition("tabletop.clock.configure"),
         )
 
         def refresh_revision_state() -> None:
@@ -4325,6 +4336,7 @@ def create_app(
             current_actor_id,
             require_world_access,
             revision_activation,
+            revision_resume,
             refresh_revision_state,
         )
         checkpoint_schedules = PostgresCheckpointSchedules(

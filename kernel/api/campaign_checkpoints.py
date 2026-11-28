@@ -20,9 +20,10 @@ from kernel.checkpoint_retention import (
     RetentionRequest,
 )
 from kernel.checkpoint_schedules import CheckpointRuleRequest, PostgresCheckpointSchedules
-from kernel.errors import BranchCheckpointHeld
+from kernel.errors import BranchCheckpointHeld, RestoredCampaignPaused
 from kernel.postgres_campaign_checkpoints import PostgresCampaignCheckpoints
 from kernel.revision_activation import PostgresRevisionActivation
+from kernel.revision_resume import PostgresRevisionResume, ResumeCampaignRevision
 
 
 class CheckpointHoldRequest(BaseModel):
@@ -53,6 +54,10 @@ def register_checkpoint_holds(
     @app.errorhandler(BranchCheckpointHeld)
     def branch_held(error: BranchCheckpointHeld):
         return jsonify({"error": "branch_checkpoint_held", "details": str(error)}), 409
+
+    @app.errorhandler(RestoredCampaignPaused)
+    def restored_campaign_paused(error: RestoredCampaignPaused):
+        return jsonify({"error": "restored_campaign_paused", "details": str(error)}), 409
 
     @app.errorhandler(CheckpointHoldConflict)
     def hold_conflict(error: CheckpointHoldConflict):
@@ -90,6 +95,7 @@ def register_checkpoint_capture(
     current_actor: Callable[[], uuid.UUID],
     require_world_access: Callable[[uuid.UUID], None],
     activation: PostgresRevisionActivation,
+    resume: PostgresRevisionResume,
     refresh_simulation: Callable[[], None],
 ) -> None:
     scope = "/api/v2/worlds/<uuid:world_id>/branches/<uuid:branch_id>"
@@ -128,6 +134,16 @@ def register_checkpoint_capture(
         response = jsonify(status.model_dump(mode="json"))
         response.headers["Cache-Control"] = "no-store"
         return response, 202 if status.phase == "DRAINING" else 200
+
+    @app.post(scope + "/timeline-revision-plans/<uuid:request_id>/resume")
+    def resume_timeline_revision(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):
+        require_world_access(world_id)
+        body = ResumeCampaignRevision.model_validate(request.get_json(silent=True) or {})
+        receipt = resume.resume(world_id, branch_id, current_actor(), request_id, body)
+        refresh_simulation()
+        response = jsonify(receipt.model_dump(mode="json"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.post(scope + "/checkpoint-holds/<uuid:request_id>/capture")
     def capture_checkpoint(world_id: uuid.UUID, branch_id: uuid.UUID, request_id: uuid.UUID):
