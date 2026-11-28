@@ -1367,6 +1367,10 @@ have an event earlier than your saved cursor.
 retained entry for the requesting actor under current world and viewpoint permissions. Both
 routes use `Cache-Control: no-store`. Narration is derived locally from typed facts and stays
 outside canonical commands and character cognition.
+If a rewind archives the branch before narration is saved, the POST returns 403.
+Operators with current audit access can retrieve their previously retained archived entries by ID.
+If a rewind archives the branch during a player GET, the durable lookup hides the old entry.
+Narration and character knowledge on the successor use observations retained at the checkpoint.
 
 ## World time and offscreen activities
 

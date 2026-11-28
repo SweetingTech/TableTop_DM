@@ -261,6 +261,9 @@ Scoped narration is a read-side renderer for committed physical events. Operator
 uses selected facts from the event ledger. Spectator and character narration use the body's
 masked observation and frozen perception grant. The append-only presentation store retains
 actor, audience, run, and source lineage. Its text never enters replay or character cognition.
+PostgreSQL serializes narration retention and rewind activation on the same branch row.
+Only retention that wins the lock while the canonical branch is active can commit.
+The read policy checks the current continuation before returning a retained entry.
 
 Autonomous recovery derives from committed commands in the current controller epoch and the
 character's witnessed speech lineage. It narrows the current plan's candidates before local

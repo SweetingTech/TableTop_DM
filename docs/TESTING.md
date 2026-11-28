@@ -134,6 +134,11 @@ private corrections, invalid scope and batches, and successful play and replay a
 `tests/integration/test_campaign_planned_corrections.py` verifies atomic rollback after
 the correction is staged, database rejection when the write is omitted, restart and
 idempotent retry, deterministic replay, and upgrade from migration 030.
+Activation tests also interleave a narration request with the pointer switch. They verify
+that the old request fails, player reads hide the archived entry, an audited entry survives,
+and successor narration and knowledge
+return only retained testimony after restart. A separate case checks upgrade from 031 and
+transactional rollback of the narration fence before the upgrade.
 
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then

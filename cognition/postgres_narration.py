@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from psycopg2.errors import InsufficientPrivilege
+from psycopg2.errors import CheckViolation, InsufficientPrivilege
 from psycopg2.extras import RealDictCursor, execute_values
 
 from cognition.narration import NarrationEntry
@@ -58,6 +58,10 @@ class PostgresNarrations:
                     return tuple(NarrationEntry.model_validate(saved[key]) for key in keys)
         except InsufficientPrivilege:
             raise PermissionError("actor cannot retain this narration") from None
+        except CheckViolation as error:
+            if error.diag.constraint_name == "campaign_branch_archived":
+                raise PermissionError("this continuation is archived") from None
+            raise
 
     def get(
         self,
