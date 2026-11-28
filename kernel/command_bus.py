@@ -43,6 +43,7 @@ class CommandDefinition:
     requires_controlled_entity: bool = False
     emission_builder: EmissionBuilder | None = None
     uses_randomness: bool = False
+    requires_durable_scope: bool = False
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,8 @@ class CommandBus:
         definition = self._definitions.get(proposal.command_type)
         if definition is None:
             raise UnknownCommand(proposal.command_type)
+        if definition.requires_durable_scope:
+            raise AuthorizationDenied("Command requires a durable campaign scope")
         if not actor.has_capabilities(definition.required_capabilities):
             raise AuthorizationDenied(
                 "Missing capabilities: "

@@ -82,6 +82,9 @@ services running. A controller whose owner or executor lost a required grant sta
 The receipt reports controller counts, and the operator can adjust control separately.
 Migration 029 enables remapping pending mechanics during rewind. If activation asks for a
 new plan, cancel the earlier plan and reprepare from its retained checkpoint.
+Migration 030 enables typed corrections before resume. Use the successor run, epoch,
+and latest state hash. If the state has changed, inspect it and submit a new correction
+with a new request key. A previously committed key still returns its original receipt.
 
 Receipt grant freshness needs no migration, grant or stored-result rewrite: the durable API calls
 the existing protected `sim.has_world_capability` function with the submitting actor set locally

@@ -159,6 +159,13 @@ class PostgresRevisionActivation:
                 correlation_id=request,
                 seed=plan.seed,
             )
+            # The pointer switch cancels these runs. Lock them before their branch,
+            # as resume, controller handoff and corrections do.
+            cursor.execute(
+                "SELECT id FROM sim.runs WHERE (world_id,branch_id)=(%s,%s) "
+                "AND status IN ('QUEUED','RUNNING','PAUSED') ORDER BY id FOR NO KEY UPDATE",
+                scope[:2],
+            )
             cursor.execute(
                 "SELECT sim.start_campaign_revision(%s,%s,%s,%s,%s)",
                 (*scope, str(revision_hold_id(request)), facts.state_hash),

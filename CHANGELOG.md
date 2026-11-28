@@ -1,5 +1,8 @@
 # Changelog
 
+- Add audited corrections to a paused rewind and witnessed resurrection on a live
+  timeline. Verify both outcomes against the same raid death and affected quest.
+
 - Restore active encounters, offers, death saves, action reservations and timed conditions
   on the successor run. Preserve their original rolls, sources, and simulated deadlines.
 

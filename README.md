@@ -75,6 +75,8 @@ Apply migration 027 to activate a prepared revision on a paused successor timeli
 Apply migration 028 to resume play and world time on the restored timeline.
 Apply migration 029 so rewinds can resume encounters, offers, death saves, action timing
 and timed conditions from the archived moment.
+Apply migration 030 to correct a living body's hit points or position while the restored
+timeline is paused. Use in-world resurrection when the characters should remember the death.
 
 Durable receipt inspection checks the current database grant, including when another API process
 changes an actor's roles. A long-lived API's cached DM grant cannot preserve private access.

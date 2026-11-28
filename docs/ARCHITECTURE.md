@@ -381,6 +381,12 @@ restored run identities. The restore contract version commits their result to th
 Command submission resolves a newly restored run from durable storage when the receiving
 API process has an older in-memory view.
 
+The typed correction command binds an exact restored run, continuation epoch, and
+projection hash. Its ledger receipt and projection changes commit together. A durable
+guard checks paused successor scope under the current actor's world grants. The private
+reason stays in the operator command ledger. Resurrection uses the ordinary spatial
+perception pipeline so each witness receives the factual view it can actually see.
+
 Resume is a separate typed transaction. It rechecks the active epoch, reauthorizes the
 archived controller modes, and configures the restored clock through the normal command
 repository. The run status, fresh leases and resume receipt become visible together.

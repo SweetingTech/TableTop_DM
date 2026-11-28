@@ -90,6 +90,12 @@ The successor also restores initiative rolls, open offers, death-save progress, 
 reservations, and current timed conditions. These entries keep their simulated deadlines
 and original source command IDs and use the corresponding restored run IDs.
 
+While a successor is paused, `tabletop.timeline.correct` can adjust selected living body
+hit points or coordinates in the current zone. It checks the exact continuation epoch
+and projection hash, applies the batch atomically, and records the private correction
+reason. The event has no physical witness grants. Once the revision resumes, this
+correction boundary closes.
+
 Resume checks the active epoch again and establishes new controller epochs and clock work
 under current grants. A controller that cannot regain its archived mode stays paused.
 The clock resumes from the checkpoint's simulated time and starts its next timeout from

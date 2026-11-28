@@ -356,6 +356,11 @@ only that operation to retain historical authorship. It ends before new actions 
 The versioned restore hash covers run references in initiative, trade, recovery, action
 timing and timed conditions. Committed history keeps the source identifiers and randomness.
 
+Corrections record selected physical deltas with an operator-only reason. They require
+the paused restored run and an exact projection hash. A resurrection is a separate
+physical event. It clears death state and pending death saves within normal body
+limits, keeps earlier committed consequences, and uses frozen spatial perception.
+
 The resume transaction advances controller epochs, rearms due work through a typed clock
 command, and commits the live run status with its retry receipt. A write to an archived
 canonical branch fails even when submitted by an older asynchronous worker.

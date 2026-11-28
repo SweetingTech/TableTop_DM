@@ -128,6 +128,9 @@ on the successor, and verify scope, the prior receipt, and upgrade from a paused
 An ordinary player without a controller assignment also waits for the resume boundary.
 `tests/integration/test_campaign_restore_mechanics.py` covers 028-to-029 upgrade and
 rollback, rejection of a mismatched restore hash, and play inside a restored encounter.
+`tests/integration/test_campaign_corrections.py` covers raid damage, death and witnessed
+resurrection, an interrupted rewind, restoration of quest escrow and relationships,
+private corrections, invalid scope and batches, and successful play and replay after resume.
 
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
