@@ -103,9 +103,9 @@ class PersonaGenerator:
                 value = rng.randint(minimum, maximum)
                 source = "seeded_generator"
             else:
-                minimum = float(spec.minimum if spec.minimum is not None else 0)
-                maximum = float(spec.maximum if spec.maximum is not None else 1)
-                value = round(rng.uniform(minimum, maximum), 4)
+                float_minimum = float(spec.minimum if spec.minimum is not None else 0)
+                float_maximum = float(spec.maximum if spec.maximum is not None else 1)
+                value = round(rng.uniform(float_minimum, float_maximum), 4)
                 source = "seeded_generator"
 
             error = self.registry.validate_value(spec, value)
