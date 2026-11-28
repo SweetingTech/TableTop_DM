@@ -64,6 +64,10 @@ $$;
 REVOKE ALL ON FUNCTION sim.restoring_campaign_branch(uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION sim.restoring_campaign_branch(uuid,uuid) TO tabletop_app;
 
+CREATE POLICY campaign_activation_command_scope ON sim.command_log AS RESTRICTIVE FOR INSERT
+  WITH CHECK (command_type<>'kernel.campaign.activate_revision'
+    OR sim.restoring_campaign_branch(world_id,branch_id));
+
 CREATE POLICY restored_campaign_lineage ON sim.campaign_timeline_lineage FOR INSERT
   WITH CHECK (sim.campaign_timeline_storage_owner() AND epoch>0
     AND sim.restoring_campaign_branch(world_id,branch_id));
@@ -161,11 +165,34 @@ BEGIN
     AND sim.restoring_campaign_branch(w,c.branch_id)
     AND EXISTS (
       SELECT 1 FROM sim.branch_projections p JOIN sim.snapshots s
-        ON (s.world_id,s.source_branch_id,s.projection_version,s.state_hash)=
-           (p.world_id,p.branch_id,p.version,p.state_hash)
+        ON (s.world_id,s.source_branch_id,s.state_hash)=(p.world_id,p.branch_id,p.state_hash)
+        AND p.version=s.projection_version+1
       JOIN sim.runs r ON (r.world_id,r.branch_id,r.id)=(c.world_id,c.branch_id,c.run_id)
       WHERE (p.world_id,p.branch_id,p.state_hash)=(c.world_id,c.branch_id,c.state_hash)
         AND s.through_event_seq=0 AND r.run_kind='LIVE' AND r.status='PAUSED'
+    )
+    AND EXISTS (
+      SELECT 1 FROM sim.command_log command
+      JOIN sim.campaign_revision_plans plan
+        ON (plan.world_id,plan.branch_id,plan.request_id)=(c.world_id,c.source_branch_id,c.request_id)
+      JOIN sim.events event ON (event.world_id,event.branch_id,event.run_id,event.actor_id,
+        event.idempotency_key,event.correlation_id,event.event_type)=
+        (command.world_id,command.branch_id,command.run_id,command.actor_id,
+         command.idempotency_key,command.correlation_id,command.command_type)
+      JOIN sim.outbox publication ON publication.event_id=event.event_id
+      WHERE (command.world_id,command.branch_id,command.run_id,command.actor_id,
+        command.correlation_id,command.resulting_state_hash)=
+        (c.world_id,c.branch_id,c.run_id,c.actor_id,c.request_id,c.state_hash)
+        AND command.command_type='kernel.campaign.activate_revision'
+        AND command.input_origin='OPERATOR'
+        AND command.idempotency_key=format('campaign-activation:%s',c.request_id)
+        AND command.parameters=jsonb_build_object('source_branch_id',c.source_branch_id,
+          'source_checkpoint_id',plan.source_checkpoint_id,'request_id',c.request_id,
+          'epoch',c.epoch,'state_hash',c.state_hash)
+        AND command.result->'accepted'='true'::jsonb AND command.result->'deltas'='[]'::jsonb
+        AND command.result->'result'=event.payload AND event.payload=command.parameters
+        AND event.visible_to=ARRAY[c.actor_id] AND cardinality(event.observed_by)=0
+        AND publication.topic=format('world.%s.branch.%s',c.world_id,c.branch_id)
     );
   IF NOT FOUND THEN
     RAISE EXCEPTION 'the new continuation is incomplete' USING ERRCODE='23514';

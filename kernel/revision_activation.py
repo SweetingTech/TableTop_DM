@@ -7,6 +7,7 @@ import psycopg2.errors
 from psycopg2.extras import RealDictCursor
 from pydantic import AwareDatetime, Field
 
+from kernel.campaign_activation import CampaignActivationFacts
 from kernel.campaign_checkpoints import CampaignCheckpointManifest, CheckpointModel, Digest
 from kernel.campaign_revisions import (
     CampaignRevisionPlan,
@@ -63,6 +64,7 @@ class PostgresRevisionActivation:
         control: PostgresControlPlane,
         snapshots: SnapshotStore,
         commands: PostgresCommandRepository,
+        activation_definition: CommandDefinition,
         correction_definition: CommandDefinition,
     ) -> None:
         self.archives = archives
@@ -70,6 +72,7 @@ class PostgresRevisionActivation:
         self.control = control
         self.snapshots = snapshots
         self.commands = commands
+        self.activation_definition = activation_definition
         self.correction_definition = correction_definition
 
     @staticmethod
@@ -170,11 +173,32 @@ class PostgresRevisionActivation:
                 raise CheckpointHoldConflict("revision archive identity changed")
             checkpoint, evidence = self.archives.load_verified_at_cut(cursor, manifest)
             candidate = RestoredCampaign.build(checkpoint, evidence, plan)
+            facts = CampaignActivationFacts(
+                source_branch_id=branch,
+                source_checkpoint_id=plan.source_checkpoint_id,
+                request_id=request,
+                epoch=plan.expected_epoch + 1,
+                state_hash=stable_hash(candidate.projection),
+            )
+            proposal = CommandProposal(
+                command_id=uuid.uuid5(plan.successor_branch_id, "campaign-activation"),
+                command_type=self.activation_definition.command_type,
+                world_id=world,
+                branch_id=plan.successor_branch_id,
+                run_id=plan.successor_run_id,
+                actor_id=actor,
+                input_origin="OPERATOR",
+                parameters=facts.model_dump(mode="json"),
+                idempotency_key=f"campaign-activation:{request}",
+                correlation_id=request,
+                seed=plan.seed,
+            )
             cursor.execute(
                 "SELECT sim.start_campaign_revision(%s,%s,%s,%s,%s)",
-                (*scope, str(revision_hold_id(request)), stable_hash(candidate.projection)),
+                (*scope, str(revision_hold_id(request)), facts.state_hash),
             )
             persist_restored_campaign(cursor, candidate, self.control, self.snapshots)
+            self._commit_activation(cursor, proposal)
             cursor.execute("SELECT sim.finish_campaign_revision(%s,%s,%s)", scope)
             if plan.provenance.planned_correction is not None:
                 self._commit_correction(cursor, plan, plan.provenance.planned_correction)
@@ -182,6 +206,10 @@ class PostgresRevisionActivation:
             if receipt is None:
                 raise CheckpointHoldConflict("campaign revision receipt is unavailable")
             return self._committed(receipt)
+
+    def _commit_activation(self, cursor: RealDictCursor, proposal: CommandProposal) -> None:
+        actor = revision_operator(cursor, proposal.world_id, proposal.actor_id, "restore")
+        self.commands.execute(proposal, actor, self.activation_definition)
 
     def _commit_correction(
         self, cursor: RealDictCursor, plan: CampaignRevisionPlan, correction: PlannedCorrection

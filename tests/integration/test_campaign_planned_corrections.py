@@ -13,6 +13,7 @@ from psycopg2.extensions import make_dsn
 
 from infra.migrate import discover, migrate
 from kernel import revision_activation
+from kernel.campaign_activation import ACTIVATE_CAMPAIGN_REVISION
 from kernel.checkpoint_holds import CheckpointHoldConflict
 from kernel.database import transaction
 from tests.integration.test_campaign_checkpoint_retention import manual_capture
@@ -123,13 +124,30 @@ def test_prepared_correction_and_pointer_commit_atomically_after_restart(
     assert successor.projections["tabletop.spatial.positions"][target]["x"] == 4
     with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
         cursor.execute(
+            """SELECT c.command_type,c.resulting_state_hash,e.event_id
+               FROM sim.command_log c JOIN sim.events e
+                 ON (e.world_id,e.branch_id,e.run_id,e.actor_id,e.idempotency_key,e.event_type)=
+                    (c.world_id,c.branch_id,c.run_id,c.actor_id,c.idempotency_key,c.command_type)
+               JOIN sim.outbox o ON o.event_id=e.event_id
+               WHERE c.branch_id=%s ORDER BY c.seq_id""",
+            (scope["branch_id"],),
+        )
+        activation_entry, correction_entry = cursor.fetchall()
+        assert activation_entry[:2] == (ACTIVATE_CAMPAIGN_REVISION, receipt["state_hash"])
+        assert correction_entry == (
+            "tabletop.timeline.correct",
+            correction["state_hash"],
+            correction["event_id"],
+        )
+        cursor.execute(
             "SELECT parameters FROM sim.command_log "
             "WHERE branch_id=%s AND command_type='tabletop.timeline.correct'",
             (scope["branch_id"],),
         )
         assert cursor.fetchall() == [(planned["request"],)]
         cursor.execute(
-            "SELECT 1 FROM sim.event_perceptions WHERE event_id=%s", (correction["event_id"],)
+            "SELECT 1 FROM sim.event_perceptions WHERE event_id IN (%s,%s)",
+            (activation_entry[2], correction_entry[2]),
         )
         assert cursor.fetchone() is None
         cursor.execute(

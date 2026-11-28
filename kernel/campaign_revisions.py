@@ -175,6 +175,8 @@ def build_paused_projection(
         result[QUESTS][identity] = quest.model_copy(
             update={"run_id": restored_run_id(successor_branch, quest.run_id)}
         ).model_dump(mode="json")
+    run_ids = {str(source): str(restored_run_id(successor_branch, source)) for source in runs}
+    remap_run_references(result.get(ENCOUNTERS, {}), run_ids)
     if version != "campaign-restore-1.0.0" and result.get(MEMBERS):
         ids = identifier_map(
             successor_branch,
@@ -190,8 +192,7 @@ def build_paused_projection(
                 raise CheckpointHoldConflict("checkpoint population source is missing")
             result[MEMBERS][identity] = {**raw, "population_id": ids[source]}
     if version == "campaign-restore-1.2.0":
-        run_ids = {str(source): str(restored_run_id(successor_branch, source)) for source in runs}
-        for projection in (ENCOUNTERS, OFFERS, VITALS, ACTION_TIME):
+        for projection in (OFFERS, VITALS, ACTION_TIME):
             remap_run_references(result.get(projection, {}), run_ids)
         for body in result.get("tabletop.entities", {}).values():
             if isinstance(body, dict) and "timed_conditions" in body:
