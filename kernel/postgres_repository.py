@@ -8,7 +8,7 @@ from typing import Any
 import psycopg2.errors
 import psycopg2.extras
 
-from kernel.checkpoint_holds import require_checkpoint_open
+from kernel.checkpoint_holds import CheckpointHoldConflict, require_checkpoint_open
 from kernel.command_bus import (
     CommandDefinition,
     CommandReceipt,
@@ -73,6 +73,10 @@ class PostgresCommandRepository:
         except psycopg2.errors.CheckViolation as error:
             if error.diag.constraint_name == "campaign_revision_paused":
                 raise RestoredCampaignPaused("the restored campaign is paused") from None
+            if error.diag.constraint_name == "campaign_correction_requires_paused_revision":
+                raise CheckpointHoldConflict(
+                    "correction requires the paused active revision"
+                ) from None
             raise
 
     def _execute_once(

@@ -226,6 +226,8 @@ Migration 028 uses the existing API, world-runner and character-runner services.
 resume commits, those workers discover due work on the restored timeline.
 Migration 029 adds a database check for the versioned restore hash. Run it with the
 corresponding API build before preparing or activating rewinds that restore pending mechanics.
+Migration 030 installs the durable correction scope guard in PostgreSQL. Correction and
+resurrection use the existing API, database and projector services.
 
 ### Scenario job
 

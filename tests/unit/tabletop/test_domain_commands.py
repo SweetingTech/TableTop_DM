@@ -6,6 +6,7 @@ from domains.tabletop import register_tabletop
 from domains.tabletop.content_rating import ContentPolicy
 from kernel.command_bus import CommandBus
 from kernel.contracts import Actor, ActorKind, BranchKind, CommandProposal
+from kernel.errors import AuthorizationDenied
 from kernel.state import BranchState, InMemoryStateStore
 
 pytestmark = pytest.mark.unit
@@ -179,6 +180,8 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
         "tabletop.spatial.move",
         "tabletop.combat.attack",
         "tabletop.combat.stabilize",
+        "tabletop.recovery.resurrect",
+        "tabletop.timeline.correct",
         "tabletop.rest.start",
         "tabletop.body.configure",
         "tabletop.equipment.equip",
@@ -225,6 +228,33 @@ def test_every_tabletop_command_exposes_a_typed_contract(domain):
     assert all(contract["request_schema"]["type"] == "object" for contract in contracts)
     assert all(contract["result_schema"]["type"] == "object" for contract in contracts)
     assert all(contract["result_schema"].get("properties") for contract in contracts)
+
+
+def test_reference_mode_requires_a_durable_scope_for_timeline_corrections(domain):
+    state = domain["state"]
+    state.kind = BranchKind.CANONICAL
+    actor = domain["actor"]
+    operator = actor.model_copy(
+        update={
+            "capabilities": actor.capabilities | {"action.commit", "run.branch", "world.read.all"}
+        }
+    )
+    proposed = proposal(
+        domain,
+        "tabletop.timeline.correct",
+        {
+            "expected_epoch": 1,
+            "expected_state_hash": state.state_hash,
+            "reason": "Set the right health",
+            "corrections": [
+                {"fact": "HIT_POINTS", "entity_id": str(domain["hero"]), "hit_points": 19}
+            ],
+        },
+        "correction-without-restored-run",
+    ).model_copy(update={"input_origin": "OPERATOR", "embodied_entity_id": None})
+    with pytest.raises(AuthorizationDenied, match="requires a durable campaign scope"):
+        domain["bus"].execute(proposed, operator)
+    assert state.projections["tabletop.entities"][str(domain["hero"])]["hp"] == 20
 
 
 def test_console_and_successful_movement(domain):

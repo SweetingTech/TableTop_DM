@@ -24,12 +24,13 @@ from domains.tabletop.party_coordination import command_definitions as party_coo
 from domains.tabletop.quests import command_definitions as quests
 from domains.tabletop.quests.evidence import EVIDENCE_COMMANDS, with_quest_evidence
 from domains.tabletop.recovery import command_definition as stabilize
-from domains.tabletop.recovery import with_recovery
+from domains.tabletop.recovery import resurrection_definition, with_recovery
 from domains.tabletop.rest import command_definitions as rest
 from domains.tabletop.rest import with_rest_interruptions
 from domains.tabletop.spatial import command_definition as spatial
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from domains.tabletop.spatial.presentation import command_definition as map_presentation
+from domains.tabletop.timeline_corrections import command_definition as timeline_correction
 from domains.tabletop.world_time import command_definitions as world_time
 from kernel.command_bus import CommandBus, CommandDefinition, CommandHandler
 from population.life import command_definitions as life
@@ -58,6 +59,8 @@ def command_definitions(
         map_presentation(),
         combat(),
         stabilize(),
+        resurrection_definition(),
+        timeline_correction(),
         *rest(),
         *initiative(),
         guard(),

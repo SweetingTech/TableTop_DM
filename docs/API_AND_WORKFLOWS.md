@@ -739,6 +739,20 @@ The request returns the same receipt after a restart or a dropped response.
 Cancelling a pending plan releases its hold. Operators can audit the archived branch.
 Once resumed, ordinary commands can target the restored run through any API process.
 
+Before resume, an authorized operator can submit `tabletop.timeline.correct` to
+`POST /api/v2/commands` with the successor world, branch and run. Supply its
+`expected_epoch`, `expected_state_hash`, a private `reason`, and one to sixteen
+`corrections`. Each entry chooses one entity and one fact. `HIT_POINTS` accepts
+`entity_id` and `hit_points` within the living body's hit-point limits. `POSITION`
+accepts `entity_id`, `x`, and `y` within the body's current zone, subject to obstacles.
+The whole command is rejected if a fact is invalid, repeated, or stale. The ordinary
+command idempotency key returns the original receipt on retry.
+
+`tabletop.recovery.resurrect` accepts `target_id` and an optional `hit_points` that
+defaults to 1. It needs operator authority and an existing dead body on the canonical
+timeline. Witnesses in range can see the resurrection. Earlier memories and quest
+outcomes remain part of that timeline.
+
 Use `POST /{request_id}/resume` on the completed revision plan with a fresh resume
 `request_id` and the restored `expected_epoch`. The default resumes the archived
 clock if the branch has one. Set `run_clock: false` to keep time paused. Controller

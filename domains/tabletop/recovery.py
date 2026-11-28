@@ -7,7 +7,7 @@ import random
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from domains.tabletop.action_time import ROUND_SECONDS
 from domains.tabletop.effects import clock_now
@@ -15,6 +15,7 @@ from domains.tabletop.rules import dead
 from domains.tabletop.spatial.perception import GridSpatialPerceptionResolver
 from kernel.command_bus import CommandDefinition, CommandHandler
 from kernel.contracts import BranchKind, CommandProposal, CommandResult, StateDelta
+from kernel.errors import AuthorizationDenied
 from kernel.perception_contracts import EventEmission, SensoryModality, SpatialAnchor
 from kernel.state import BranchState
 
@@ -336,5 +337,85 @@ def command_definition() -> CommandDefinition:
             max_range=2,
             allowed_payload_fields=("target_id", "status"),
             reason_codes=("body.first_aid",),
+        ),
+    )
+
+
+class ResurrectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    target_id: uuid.UUID
+    hit_points: int = Field(default=1, strict=True, ge=1)
+
+
+class ResurrectResult(BaseModel):
+    target_id: uuid.UUID
+    summary: Literal["The body returns to life."] = "The body returns to life."
+
+
+def resurrect(proposal: CommandProposal, state: BranchState) -> CommandResult:
+    if proposal.input_origin != "OPERATOR" or proposal.embodied_entity_id is not None:
+        raise AuthorizationDenied("resurrection requires operator authority")
+    request = ResurrectRequest.model_validate(proposal.parameters)
+    key = str(request.target_id)
+    body = state.projections.get("tabletop.entities", {}).get(key)
+    if body is None or not dead(body):
+        raise ValueError("resurrection requires an existing dead body")
+    if request.hit_points > int(body.get("max_hp", 0)):
+        raise ValueError("resurrection hit points exceed the body's maximum")
+    restored: dict[str, JsonValue] = {
+        "hp": request.hit_points,
+        "dead": False,
+        "defeated": False,
+        "guarded": False,
+        "asleep": False,
+    }
+    conditions = body.get("conditions", ())
+    remaining = [condition for condition in conditions if str(condition).casefold() != "dead"]
+    if len(remaining) != len(conditions):
+        restored["conditions"] = remaining
+    if str(body.get("status", "")).upper() in {"DEAD", "DEFEATED"}:
+        restored["status"] = "ACTIVE"
+    deltas = [
+        StateDelta(
+            projection="tabletop.entities",
+            operation="MERGE",
+            entity_id=request.target_id,
+            values=restored,
+        )
+    ]
+    raw = state.projections.get(VITALS, {}).get(key)
+    if raw is not None:
+        row = VitalState.model_validate(raw).model_copy(
+            update={"status": "RECOVERED", "next_save_seconds": None, "recovery_seconds": None}
+        )
+        deltas.append(
+            StateDelta(
+                projection=VITALS,
+                operation="SET",
+                entity_id=request.target_id,
+                values=row.model_dump(mode="json"),
+            )
+        )
+    return CommandResult(
+        result=ResurrectResult(target_id=request.target_id).model_dump(mode="json"),
+        deltas=tuple(deltas),
+        domain_tags=("tabletop", "recovery", "resurrection"),
+    )
+
+
+def resurrection_definition() -> CommandDefinition:
+    return CommandDefinition(
+        command_type="tabletop.recovery.resurrect",
+        required_capabilities=frozenset({"action.propose", "world.read.all", "entity.control"}),
+        allowed_branch_kinds=frozenset({BranchKind.CANONICAL}),
+        handler=resurrect,
+        request_model=ResurrectRequest,
+        result_model=ResurrectResult,
+        emission_builder=lambda proposal, result, before, after: EventEmission(
+            anchor=SpatialAnchor(entity_id=uuid.UUID(result.result["target_id"]), phase="AFTER"),
+            modalities=(SensoryModality.SIGHT,),
+            max_range=8,
+            allowed_payload_fields=("target_id", "summary"),
+            reason_codes=("body.resurrection",),
         ),
     )
