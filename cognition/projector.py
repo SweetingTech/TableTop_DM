@@ -136,8 +136,8 @@ class WorldEventProjector:
                 cursor.execute(
                     """
                     UPDATE sim.outbox
-                    SET published_at=clock_timestamp(), claimed_at=NULL,
-                        claimed_by=NULL, last_error=NULL
+                    SET published_at=GREATEST(clock_timestamp(), available_at),
+                        claimed_at=NULL, claimed_by=NULL, last_error=NULL
                     WHERE id=%s
                     """,
                     (item.outbox_id,),

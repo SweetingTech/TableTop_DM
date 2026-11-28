@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import shutil
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from queue import Queue
+from time import monotonic, sleep
 
 import psycopg2.errors
 import pytest
@@ -96,7 +99,8 @@ def test_resume_is_atomic_and_restarts_world_clock_and_controller(
     assert restored["epoch"] == 2
     assert restored["mode"] == "AUTONOMOUS"
     assert restored["owner_actor_id"] == original["owner_actor_id"]
-    assert restored["executor_actor_id"] == original["executor_actor_id"]
+    assert restored["executor_actor_id"] == controller["executor_actor_id"]
+    assert restored["executor_actor_id"] != original["executor_actor_id"]
     due = datetime.fromisoformat(clock["next_due"])
     assert restarted_app.extensions["world_runner"].run_once(due) == 1
     assert restarted.get(clock_url).get_json()["clock"]["seconds"] > initial["seconds"]
@@ -131,6 +135,53 @@ def test_resume_is_atomic_and_restarts_world_clock_and_controller(
     assert still_archived.status_code == 409
 
 
+def test_resume_waits_for_run_before_locking_branch(
+    isolated_integration_stack, monkeypatch, tmp_path
+):
+    stack = isolated_integration_stack
+    _, (admin, _player, _card, _path, _run, _witness, base) = prepare(stack, monkeypatch, tmp_path)
+    resume, new = activate_from(admin, base, manual_capture(admin, base))
+    branch = (new["world_id"], new["branch_id"])
+    body = {"request_id": str(uuid.uuid4()), "expected_epoch": 1, "run_clock": False}
+    resume_pid: Queue[int] = Queue()
+    lock_continuation = revision_resume.PostgresRevisionResume._lock_continuation
+
+    def record_resume_pid(cursor, committed):
+        resume_pid.put(cursor.connection.get_backend_pid())
+        return lock_continuation(cursor, committed)
+
+    monkeypatch.setattr(
+        revision_resume.PostgresRevisionResume,
+        "_lock_continuation",
+        staticmethod(record_resume_pid),
+    )
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM sim.runs WHERE (world_id,branch_id,id)=(%s,%s,%s) "
+                "FOR NO KEY UPDATE",
+                (*branch, new["run_id"]),
+            )
+            pending = workers.submit(admin.post, resume, json=body)
+            pid = resume_pid.get(timeout=10)
+            deadline = monotonic() + 10
+            while monotonic() < deadline:
+                cursor.execute(
+                    "SELECT %s = ANY(pg_blocking_pids(%s))", (connection.get_backend_pid(), pid)
+                )
+                if cursor.fetchone()[0]:
+                    break
+                sleep(0.02)
+            else:
+                pytest.fail("resume never waited for the run lock")
+            cursor.execute(
+                "SELECT id FROM sim.branches WHERE (world_id,id)=(%s,%s) FOR UPDATE NOWAIT",
+                branch,
+            )
+        result = pending.result(timeout=10)
+    assert result.status_code == 200, result.get_json()
+
+
 def test_028_upgrade_can_resume_a_preexisting_paused_revision(
     integration_stack, monkeypatch, tmp_path
 ):
@@ -153,8 +204,12 @@ def test_028_upgrade_can_resume_a_preexisting_paused_revision(
             _, (admin, player, _card, path, run, _witness, base) = prepare(
                 old, monkeypatch, tmp_path
             )
-            assignment = handoff(player, path, run, 0, "AUTONOMOUS", "archive-old-executor")
+            handoff(player, path, run, 0, "AUTONOMOUS", "archive-old-executor")
             resume, new = activate_from(admin, base, manual_capture(admin, base))
+            control_path = path.replace(base["branch_id"], new["branch_id"]) + "/control"
+            control = player.get(control_path, query_string={"run_id": new["run_id"]})
+            assert control.status_code == 200, control.get_json()
+            executor = control.get_json()["control"]["executor_actor_id"]
             latest = migrations / "028_campaign_revision_resume.sql"
             with closing(psycopg2.connect(owner)) as connection, connection.cursor() as cursor:
                 cursor.execute(latest.read_text(encoding="utf-8"))
@@ -169,7 +224,7 @@ def test_028_upgrade_can_resume_a_preexisting_paused_revision(
                 cursor.execute(
                     "DELETE FROM sim.actor_capabilities "
                     "WHERE (world_id,actor_id,capability)=(%s,%s,'entity.act')",
-                    (new["world_id"], assignment["executor_actor_id"]),
+                    (new["world_id"], executor),
                 )
                 assert cursor.rowcount == 1
             result = restarted.post(

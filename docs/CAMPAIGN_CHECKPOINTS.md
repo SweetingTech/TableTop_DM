@@ -65,7 +65,7 @@ snapshot lineage and proposal authority.
 
 A prepared plan binds a verified checkpoint to the active epoch and derives deterministic
 successor branch and run IDs. A fresh seed is reproducible from the checkpoint and request.
-The paused candidate preserves simulated time and remaps the clock and quest run references.
+The paused candidate preserves simulated time and remaps clock, quest and encounter run references.
 The plan records a digest and archived versions. It protects its source from retention
 until the operator cancels it or the revision takes ownership of that reference.
 
@@ -76,9 +76,16 @@ content stay unchanged. Earlier event receipts remain on their original timeline
 
 Activation verifies the plan again while holding the source branch. It persists the
 paused clock, archived physical and subjective state, current authorized body control,
-retained human evidence, population sources, and a replay baseline. A materialization
-failure rolls back the pointer change and all staged rows. The current hold can be retried
-after restart or released by cancelling the plan.
+retained human evidence, population sources, and a replay baseline. The registered activation
+command records the checkpoint, source and target timeline, epoch, and restored digest. The
+command, its private event and outbox row commit with the pointer switch. A materialization
+failure rolls back all staged rows. The current hold can be retried after restart or released by
+cancelling the plan.
+
+Paused restored controllers each receive the successor run's execution actor and its standard
+world-scoped grants. The original execution actor and archived decisions remain in the old
+timeline's ledger.
+
 The successor also restores initiative rolls, open offers, death-save progress, action
 reservations, and current timed conditions. These entries keep their simulated deadlines
 and original source command IDs and use the corresponding restored run IDs.

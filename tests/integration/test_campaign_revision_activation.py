@@ -11,15 +11,19 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
+from cognition.control import EXECUTOR_CAPABILITIES, execution_actor
 from cognition.projector import WorldEventProjector
 from infra.migrate import discover, migrate
 from kernel import revision_activation
+from kernel.campaign_activation import ACTIVATE_CAMPAIGN_REVISION
 from kernel.campaign_revisions import revision_hold_id
 from kernel.checkpoint_holds import CheckpointHoldConflict
+from kernel.control import ControlScope
 from kernel.database import transaction
 from tests.integration.test_campaign_checkpoint_retention import manual_capture
 from tests.integration.test_campaign_revision_plans import request_for, revision_path
 from tests.integration.test_relationship_snapshot_repairs import fresh_client
+from tests.integration.test_section_g_campaign import handoff
 from tests.integration.test_world_time import prepare
 from tests.unit.kernel.test_campaign_checkpoint_holds import hold_path, player_speech
 from tests.unit.kernel.test_population_runtime_api import seed_routine
@@ -33,11 +37,15 @@ def test_revision_rolls_back_then_restores_witness_and_population_after_restart(
     isolated_integration_stack, monkeypatch, tmp_path
 ):
     stack = isolated_integration_stack
-    app, (admin, player, card, _path, _run, witness, base) = prepare(stack, monkeypatch, tmp_path)
+    app, (admin, player, card, path_to_body, run, witness, base) = prepare(
+        stack, monkeypatch, tmp_path
+    )
+    original = handoff(player, path_to_body, run, 0, "HUMAN", "control-before-rewind")
+    controlled = {**base, "control_epoch": original["epoch"]}
     seed_routine(app, admin, base, witness)
     prompt(admin, base, witness, "prompt-before-rewind")
     lines = {"text": "Hello friend.", "volume": "WHISPER"}
-    prior = command(player, base, card, "tabletop.dialogue.speak", lines, "before-rewind")
+    prior = command(player, controlled, card, "tabletop.dialogue.speak", lines, "before-rewind")
     assert prior.status_code == 200, prior.get_json()
     with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -48,7 +56,7 @@ def test_revision_rolls_back_then_restores_witness_and_population_after_restart(
     checkpoint = manual_capture(admin, base)
     after = command(
         player,
-        base,
+        controlled,
         card,
         "tabletop.dialogue.speak",
         {"text": "The captain's funeral was held at sunrise."},
@@ -62,14 +70,16 @@ def test_revision_rolls_back_then_restores_witness_and_population_after_restart(
     plan = received.get_json()
     url = f"{path}/{request['request_id']}/activate"
     assert player.post(url).status_code == 403
-    persist = revision_activation.persist_restored_campaign
+    commit_activation = revision_activation.PostgresRevisionActivation._commit_activation
 
     def interrupted(*args):
-        persist(*args)
+        commit_activation(*args)
         raise CheckpointHoldConflict("interrupted test transaction")
 
     with monkeypatch.context() as patch:
-        patch.setattr(revision_activation, "persist_restored_campaign", interrupted)
+        patch.setattr(
+            revision_activation.PostgresRevisionActivation, "_commit_activation", interrupted
+        )
         failed = admin.post(url)
     assert failed.status_code == 409, failed.get_json()
     assert failed.get_json()["details"] == "interrupted test transaction"
@@ -97,12 +107,25 @@ def test_revision_rolls_back_then_restores_witness_and_population_after_restart(
     assert restarted.get(f"/api/v2/worlds/{base['world_id']}").get_json()[
         "canonical_branch_id"
     ] == (branch)
-    retry = command(player, base, card, "tabletop.dialogue.speak", lines, "before-rewind")
+    retry = command(player, controlled, card, "tabletop.dialogue.speak", lines, "before-rewind")
     assert retry.get_json()["event"] == prior.get_json()["event"]
-    assert player_speech(player, base, card, "new-on-abandoned-branch").status_code == 409
+    assert player_speech(player, controlled, card, "new-on-abandoned-branch").status_code == 409
     events = player.get(f"/api/v2/events?world_id={base['world_id']}").get_json()
     assert {event["branch_id"] for event in events} == {branch}
     assert all("funeral" not in str(event["payload"]) for event in events)
+    assert all(event["event_type"] != ACTIVATE_CAMPAIGN_REVISION for event in events)
+    assert (
+        restarted.post(
+            "/api/v2/commands",
+            json={
+                "world_id": receipt["world_id"],
+                "branch_id": branch,
+                "run_id": receipt["run_id"],
+                "command_type": ACTIVATE_CAMPAIGN_REVISION,
+            },
+        ).status_code
+        == 403
+    )
     observer = card["entity_id"]
     scene = f"/api/v2/worlds/{base['world_id']}/branches"
     assert player.get(f"{scene}/{base['branch_id']}/entities/{observer}/scene").status_code == 403
@@ -151,11 +174,76 @@ def test_revision_rolls_back_then_restores_witness_and_population_after_restart(
         assert prior.get_json()["event"]["event_id"] in authored
         assert after.get_json()["event"]["event_id"] not in authored
         cursor.execute(
-            "SELECT count(*) FROM sim.outbox o JOIN sim.events e ON o.event_id=e.event_id "
-            "WHERE e.branch_id=%s",
-            (branch,),
+            """SELECT c.run_id,c.input_origin,c.resulting_state_hash,c.parameters,e.payload,
+                      e.visible_to::text[],e.observed_by::text[],o.payload->'perceptions'
+               FROM sim.outbox o JOIN sim.events e ON o.event_id=e.event_id
+               JOIN sim.command_log c
+                 ON (e.world_id,e.branch_id,e.run_id,e.actor_id,e.idempotency_key)=
+                    (c.world_id,c.branch_id,c.run_id,c.actor_id,c.idempotency_key)
+               WHERE e.branch_id=%s AND e.event_type=%s AND c.command_type=%s""",
+            (branch, ACTIVATE_CAMPAIGN_REVISION, ACTIVATE_CAMPAIGN_REVISION),
         )
-        assert cursor.fetchone() == (0,)
+        facts = {
+            "source_branch_id": base["branch_id"],
+            "source_checkpoint_id": plan["source_checkpoint_id"],
+            "request_id": request["request_id"],
+            "epoch": 1,
+            "state_hash": receipt["state_hash"],
+        }
+        assert cursor.fetchall() == [
+            (
+                receipt["run_id"],
+                "OPERATOR",
+                receipt["state_hash"],
+                facts,
+                facts,
+                [receipt["actor_id"]],
+                [],
+                [],
+            )
+        ]
+    with pytest.raises(psycopg2.errors.InsufficientPrivilege):
+        with (
+            transaction(
+                actor_id=uuid.UUID(receipt["actor_id"]), dsn=stack.database_url
+            ) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                """INSERT INTO sim.command_log
+                   (command_id,command_type,command_version,world_id,branch_id,run_id,actor_id,
+                    parameters,result,resulting_state_hash,idempotency_key,correlation_id,input_origin)
+                   SELECT %s,command_type,command_version,world_id,branch_id,run_id,actor_id,
+                          parameters,result,resulting_state_hash,'outside-activation',
+                          correlation_id,input_origin
+                   FROM sim.command_log WHERE branch_id=%s AND command_type=%s""",
+                (str(uuid.uuid4()), branch, ACTIVATE_CAMPAIGN_REVISION),
+            )
+    successor = ControlScope(
+        world_id=uuid.UUID(receipt["world_id"]),
+        branch_id=uuid.UUID(branch),
+        run_id=uuid.UUID(receipt["run_id"]),
+        entity_id=uuid.UUID(observer),
+    )
+    new_path = path_to_body.replace(base["branch_id"], branch)
+    restored = player.get(new_path + "/control", query_string={"run_id": receipt["run_id"]})
+    assert restored.status_code == 200, restored.get_json()
+    paused_controller = restored.get_json()["control"]
+    assert paused_controller["mode"] == "PAUSED"
+    assert paused_controller["executor_actor_id"] == str(execution_actor(successor))
+    assert paused_controller["executor_actor_id"] != original["executor_actor_id"]
+    with transaction(dsn=stack.admin_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT world_id,capability FROM sim.actor_capabilities WHERE actor_id=%s",
+            (paused_controller["executor_actor_id"],),
+        )
+        assert set(cursor.fetchall()) == {
+            (receipt["world_id"], capability) for capability in EXECUTOR_CAPABILITIES
+        }
+    for epoch, mode in ((1, "HUMAN"), (2, "AUTONOMOUS")):
+        state = handoff(player, new_path, receipt["run_id"], epoch, mode, f"rewind-{mode}")
+        assert state["executor_actor_id"] == paused_controller["executor_actor_id"]
+        assert state["owner_actor_id"] == original["owner_actor_id"]
     _, cold = fresh_client(tmp_path)
     replay = cold.get(f"/api/v2/branches/{branch}/replay")
     assert replay.status_code == 200, replay.get_json()
@@ -199,6 +287,12 @@ def test_activation_keeps_live_hold_until_projected_and_rejects_half_switch(
                         planned.get_json()["candidate_state_hash"],
                     ),
                 )
+    assert admin.get(hold_path(base)).get_json()["status"] == "READY"
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            revision_activation.PostgresRevisionActivation, "_commit_activation", lambda *_: None
+        )
+        assert admin.post(activation).status_code == 409
     assert admin.get(hold_path(base)).get_json()["status"] == "READY"
     cancelled = admin.post(f"{path}/{request['request_id']}/cancel")
     assert cancelled.status_code == 200, cancelled.get_json()
