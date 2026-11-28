@@ -52,7 +52,12 @@ all associated recovery work release it.
 
 ## Restore and revision
 
-A world has one explicit active canonical continuation. A new continuation keeps a source checkpoint and parent branch reference, plus a private correction reason, operator, seed policy, model and rules versions, and expected epoch. Preserve the previous canonical branch and its append-only events for audit. Evaluation trials remain isolated and cannot serve as implicit canonical continuations.
+A durable world has one explicit active canonical continuation at epoch zero on creation.
+The pointer references an append-only lineage entry. Each later epoch requires a checkpoint
+from its immediate parent. The revision operation must also record a private correction
+reason, operator, seed policy, model and rules versions, and the expected epoch. Historical
+canonical branches and events remain available for audit. Evaluation trials keep independent
+snapshot lineage and proposal authority.
 
 Prepare and validate the new projection, entity identities, retained source lineage and subjective visibility before switching the active pointer. Restore branch-scoped identities using a consistent mapping for all dependent rows. Record origin references to the historical input while presenting only the restored observations to characters. Rebuild narration and retrieval from the retained prefix. Never borrow current memories or queue entries from the abandoned suffix.
 

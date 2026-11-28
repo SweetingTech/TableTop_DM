@@ -105,6 +105,9 @@ The retention tests exercise the 023-to-024 upgrade, migration rollback, runtime
 scope, archive integrity, and retry after a restart between retirement and file cleanup.
 They verify that the newest completed archives, manual captures, and pins survive.
 
+Timeline lineage tests cover backfill from 024, DDL rollback, cold hydration, role-scoped
+pointer reads, trial isolation, and receipt replay after a canonical branch becomes archived.
+
 The separate-process receipt-revocation case in `tests/integration/test_quest_evidence.py` first
 proves the database grant is revoked while the original API cache still says read-all. It then
 requires both a new reward response and a cached acceptance receipt to exclude private quest

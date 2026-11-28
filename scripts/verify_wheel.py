@@ -41,6 +41,7 @@ REQUIRED_MEMBERS = (
     "infra/sql/migrations/022_campaign_checkpoints.sql",
     "infra/sql/migrations/023_campaign_checkpoint_schedules.sql",
     "infra/sql/migrations/024_campaign_checkpoint_retention.sql",
+    "infra/sql/migrations/025_campaign_timeline_lineage.sql",
     "static/v2/index.html",
 )
 
@@ -109,6 +110,7 @@ require([item.version for item in discover(DEFAULT_MIGRATIONS_DIR)] == [
     "022_campaign_checkpoints.sql",
     "023_campaign_checkpoint_schedules.sql",
     "024_campaign_checkpoint_retention.sql",
+    "025_campaign_timeline_lineage.sql",
 ], "wheel migration discovery differs from the runtime contract")
 app = create_app(artifact_root=Path("artifacts"))
 client = app.test_client()

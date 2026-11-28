@@ -1,5 +1,8 @@
 # Changelog
 
+- Record one active canonical continuation per world, with an epoch and durable lineage.
+  World loading, run selection, and clock work follow that continuation.
+
 - Add opt-in retention for scheduled campaign checkpoints. Preserve manual and pinned archives,
   verify the newest retained copies, and record retirement before cleaning up archive files.
 

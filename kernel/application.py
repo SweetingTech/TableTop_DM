@@ -47,6 +47,7 @@ class WorldRecord(BaseModel):
     status: str = "ACTIVE"
     domain_packs: tuple[str, ...] = ("tabletop",)
     canonical_branch_id: uuid.UUID
+    continuation_epoch: int = Field(default=0, ge=0)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -406,14 +407,16 @@ class SimulationApplication:
                 raise ValueError("population source changed before binding")
 
     def validate_control(self, proposal: CommandProposal) -> None:
+        state = self.states.get(proposal.branch_id)
+        if (
+            state.kind is BranchKind.CANONICAL
+            and self.worlds[proposal.world_id].canonical_branch_id != proposal.branch_id
+        ):
+            raise BranchIsolationError("canonical continuation was superseded")
         if self.checkpoint_holds.held(proposal.world_id, proposal.branch_id):
             raise BranchCheckpointHeld("branch is paused for a checkpoint")
         if proposal.decision_authorship == "CHARACTER_POLICY":
-            clock = (
-                self.states.get(proposal.branch_id)
-                .projections.get("tabletop.clock", {})
-                .get("singleton")
-            )
+            clock = state.projections.get("tabletop.clock", {}).get("singleton")
             if clock is not None and clock["paused"]:
                 raise WorldClockPaused("world clock is paused")
         if proposal.command_type == "tabletop.clock.configure":

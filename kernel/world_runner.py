@@ -37,6 +37,8 @@ class WorldRunner:
             (clock.next_due, str(state.branch_id), state, clock)
             for state in source.states.all()
             if state.kind is BranchKind.CANONICAL
+            and (world := source.worlds.get(state.world_id)) is not None
+            and world.canonical_branch_id == state.branch_id
             and (clock := read_clock(state)) is not None
             and not clock.paused
             and clock.next_due <= boundary

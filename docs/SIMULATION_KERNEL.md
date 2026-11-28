@@ -339,6 +339,10 @@ Retention can retire older released scheduled archives under the active operator
 The newest verified copies, manual captures, and pinned archives remain available.
 Retirement commits before any file cleanup and preserves the original manifest and ledger.
 
+The durable canonical write policy requires the branch selected by the world's continuation
+pointer. Clock work also selects that branch. Authorized retries may read the existing
+receipt from an archived branch. Trial commands retain their proposal-only scope.
+
 Character proposal generation is an operational read/decision path, never canonical mutation.
 It accepts no client-authored fiction or candidate actions, resolves an exact CHARACTER binding,
 requires actual body control and scoped command capabilities, and waits for dependent perception

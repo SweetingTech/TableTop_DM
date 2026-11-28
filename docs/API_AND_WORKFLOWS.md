@@ -716,6 +716,9 @@ retry of the capture request.
 
 ### World-scoped reads
 
+World records report `canonical_branch_id` and `continuation_epoch`. The current live run
+belongs to that canonical branch. Creating an evaluation trial leaves these fields unchanged.
+
 Every world-scoped route requires `ADMIN`, or a `DM` or `PLAYER` grant **for that world**. Roles
 are never unioned across worlds, so a Player in one world reads nothing of another. Collection
 routes (`/api/v2/worlds`, `/api/v2/runs`, `/api/v2/branches`, `/api/v2/snapshots`,

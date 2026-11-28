@@ -213,6 +213,9 @@ checkpoints. Schedule configuration uses the same world-manager API authority as
 Migration 024 adds checkpoint retention using the same PostgreSQL and private artifact store.
 The API process needs write access to that store to clean up explicitly retired files.
 
+Migration 025 backfills the canonical continuation in PostgreSQL. The API and world runner
+hydrate the same pointer using their existing database connection.
+
 ### Scenario job
 
 ```mermaid

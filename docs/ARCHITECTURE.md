@@ -356,6 +356,10 @@ The repository serializes pin changes, retirement, and archive reads. It verifie
 files that satisfy the keep count before the database commits retirement. File cleanup
 starts after that commit and can be retried from the persisted retirement records.
 
+Every durable world has an explicit canonical continuation pointer. Its epoch identifies
+an immutable lineage entry. World hydration and automatic clock work use that pointer,
+and a separate trial continues to use its own snapshot and proposal authority.
+
 Each world has one canonical branch. A snapshot is a deterministic gzip artifact containing the
 projection, command boundary, contract version, and content hashes. Contract 2.1 also freezes each
 entity's identity, controller and secret metadata at that boundary. Public body resources remain
