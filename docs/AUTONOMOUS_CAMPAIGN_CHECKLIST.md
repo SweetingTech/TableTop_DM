@@ -5,9 +5,8 @@ implementation and verification for the full campaign scope. The README describe
 features and links to the operator guides.
 
 Implementation tracking: [Orderly campaign board](http://jarvis:8080/b/tabletop-dm-autonomous-campaign).
-Checked items mean locally implemented and verified; Orderly acceptance and live deployment are separate.
-Orderly has completed Tasks 1–5. Task 6 tracks offscreen activities. The board shows
-live acceptance and the open items that follow it.
+Checked items record locally verified implementation. Orderly tracks independent acceptance,
+and [operations](OPERATIONS.md) describes how to verify the deployed version.
 
 ## Product contract
 
@@ -27,6 +26,8 @@ live acceptance and the open items that follow it.
 - Models propose typed actions. Authorized kernel code remains the only canonical mutation path.
 
 ## Existing code and verified gaps
+
+This table records the initial review findings. The checked items below record subsequent delivery.
 
 | Area | Existing wiring | Gap established by inspection |
 | --- | --- | --- |
@@ -464,29 +465,36 @@ implementation and verification.
 The [campaign checkpoint contract](CAMPAIGN_CHECKPOINTS.md) specifies the complete manifest,
 the causal capture boundary, and the active continuation and restore rules.
 
-- [ ] I1 — Specify a consistent checkpoint manifest spanning canonical projection and entity metadata,
+- [x] I1 — Specify a consistent checkpoint manifest spanning canonical projection and entity metadata,
   secrets, minds/evidence/memories/relationships, population, control assignments, activities, clock,
   RNG allocation, story state, tasks, narrative/retrieval indexes, and relevant versioned artifacts.
-  Snapshot 2.1 freezes projection plus entity identity/controller/secrets for exact nested trials.
-  Migration 012 preserves metadata-distinct artifacts. This remains a partial foundation: subjective
-  state, population sources, controller assignments and narrative/retrieval stores are not restored.
-- [ ] I2 — Add a pause/quiescence barrier for workers and projector. Checkpoint one causal boundary;
+  The campaign manifest freezes canonical and subjective state, verifies pinned artifacts, and
+  records rebuild inputs for narration and retrieval. It records the story subsystem's availability.
+- [x] I2 — Add a pause/quiescence barrier for workers and projector. Checkpoint one causal boundary;
   identify pending outbox work and prevent a mix of pre-event bodies and post-event minds.
-- [ ] I3 — Extend snapshot storage/repositories and hydrate all checkpoint components. Add scheduled
+- [x] I3 — Extend snapshot storage/repositories and hydrate all checkpoint components. Add scheduled
   and event-boundary checkpoints with operator labels and retention rules.
-- [ ] I4 — Introduce campaign timeline lineage and an explicit active continuation pointer. Current
+- [x] I4 — Introduce campaign timeline lineage and an explicit active continuation pointer. Current
   `BranchKind` is canonical/trial; design revised canonical continuation without abusing evaluation
   branches or weakening their isolation. Preserve append-only abandoned history for operator audit.
-- [ ] I5 — Add typed operator revise/correct/resume commands. Scope corrections to selected facts,
+- [x] I5 — Add typed operator revise/correct/resume commands. Scope corrections to selected facts,
   validate the complete resulting state, and fence all old tasks, leases, requests, and queued outputs.
-- [ ] I6 — Restore/rebuild subjective state and retrieval at the chosen boundary. Do not copy current
+- [x] I6 — Restore/rebuild subjective state and retrieval at the chosen boundary. Do not copy current
   minds into an earlier body snapshot or expose abandoned narration as character memory.
-- [ ] I7 — Distinguish deterministic replay of committed deltas from fresh execution after a patch.
+- [x] I7 — Distinguish deterministic replay of committed deltas from fresh execution after a patch.
   Record correction reason, seed policy, source checkpoint, model versions, and resulting timeline.
-- [ ] I8 — Support both rewind-before-death and explicitly chosen in-world resurrection. Rewind
+- [x] I8 — Support both rewind-before-death and explicitly chosen in-world resurrection. Rewind
   removes subsequent death-dependent consequences; resurrection retains what witnesses really experienced.
-- [ ] I9 — Acceptance: revise a raid death, resume with coherent possessions/relationships/quests;
+- [x] I9 — Acceptance: revise a raid death, resume with coherent possessions/relationships/quests;
   discarded funeral memories never appear; restart mid-revision and recover without two active histories.
+
+The combined PostgreSQL gate passed 49 cases. The
+[raid scenario](../tests/integration/test_campaign_corrections.py) checks restored possessions,
+quest state, and witness memory across rewind and in-world resurrection. The
+[planned correction test](../tests/integration/test_campaign_planned_corrections.py) verifies
+atomic publication of the private activation and correction ledger and outbox rows across failure,
+retry, and restart. The [resume tests](../tests/integration/test_campaign_revision_resume.py)
+check successor controller grants, clock resumption, and serialization with handoffs.
 
 ## J. World setup, factions, gods, and story direction
 
@@ -583,7 +591,7 @@ the causal capture boundary, and the active continuation and restore rules.
   reaches a meaningful ending; set pieces allow divergence and operator knowledge stays private.
 - [ ] MILESTONE 4 — Human joins/leaves/rejoins while companions continue; stand-in follows human
   history or card/backstory fallback; ordinary resident can join and leave the party.
-- [ ] MILESTONE 5 — Operator revises a consequential death, patches history, and resumes; all
+- [x] MILESTONE 5 — Operator revises a consequential death, patches history, and resumes; all
   dependent state agrees and characters have no discarded memories or simulation awareness.
 - [ ] MILESTONE 6 — AI DM completes the same setup/run/revision tasks through natural-language
   instructions, verifies results, and survives interruption without duplicate changes.

@@ -5,6 +5,7 @@ import uuid
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
+from time import monotonic, sleep
 
 import psycopg2
 import psycopg2.errors
@@ -12,6 +13,7 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
+from cognition.projector import WorldEventProjector
 from infra.migrate import discover, migrate
 from kernel.campaign_checkpoints import CampaignCheckpointStore
 from kernel.database import transaction
@@ -46,15 +48,28 @@ def scheduled_captures(stack, app, admin, base, cuts):
         json={"rule_id": str(uuid.uuid4()), "label": "Camp clock", "interval_seconds": 6},
     )
     assert configured.status_code == 200, configured.get_json()
+    worker = app.extensions["world_runner"]
+    projector = WorldEventProjector(stack.database_url)
+    topic = f"world.{base['world_id']}.branch.{base['branch_id']}"
     for cut in cuts:
         advance_clock(admin, base, cut)
-        app.extensions["world_runner"].run_once(NOW)
-        assert admin.get(hold_path(base)).get_json() == {"hold": None}
-    return [
-        manifest["checkpoint_id"]
+        worker.run_once(NOW)
+        status = admin.get(hold_path(base)).get_json()
+        deadline = monotonic() + 10
+        while status.get("status") == "DRAINING" and monotonic() < deadline:
+            projector.run_once(topic=topic)
+            worker.run_once(NOW)
+            status = admin.get(hold_path(base)).get_json()
+            if status.get("status") == "DRAINING":
+                sleep(0.05)
+        assert status == {"hold": None}
+    automatic = [
+        manifest
         for manifest in saved_receipts(stack, base)
         if manifest["boundary"]["trigger_schedule_id"] is not None
     ]
+    automatic.sort(key=lambda manifest: manifest["boundary"]["through_event_seq"])
+    return [manifest["checkpoint_id"] for manifest in automatic]
 
 
 def test_retention_preserves_pinned_manual_and_newest_archives_across_restart(
