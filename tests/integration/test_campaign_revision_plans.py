@@ -13,6 +13,7 @@ import pytest
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
 
+from domains.tabletop.initiative import ENCOUNTERS
 from domains.tabletop.world_time import CLOCK
 from infra.migrate import discover, migrate
 from kernel.checkpoint_holds import PostgresCheckpointHolds
@@ -28,6 +29,7 @@ from tests.integration.test_relationship_snapshot_repairs import fresh_client
 from tests.integration.test_world_time import prepare
 from tests.unit.kernel.test_action_time_api import advance_clock
 from tests.unit.kernel.test_campaign_checkpoint_holds import player_speech
+from tests.unit.kernel.test_initiative_api import start_encounter
 
 pytestmark = pytest.mark.integration
 
@@ -50,7 +52,9 @@ def test_revision_plan_validates_the_archived_cut_and_preserves_current_play(
     isolated_integration_stack, monkeypatch, tmp_path
 ):
     stack = isolated_integration_stack
-    app, (admin, player, card, _path, _run, _resident, base) = prepare(stack, monkeypatch, tmp_path)
+    app, game = prepare(stack, monkeypatch, tmp_path)
+    (admin, player, card, _path, _run, _resident, base), _, encounter = start_encounter(app, game)
+    encounter_id = encounter["result"]["result"]["encounter_id"]
     advance_clock(admin, base, 6)
     checkpoint_id = manual_capture(admin, base)
     world, branch = uuid.UUID(base["world_id"]), uuid.UUID(base["branch_id"])
@@ -98,6 +102,7 @@ def test_revision_plan_validates_the_archived_cut_and_preserves_current_play(
         epoch=clock["epoch"] + 1,
         step=0,
     )
+    candidate[ENCOUNTERS][encounter_id]["run_id"] = plan["successor_run_id"]
     assert plan["candidate_state_hash"] == stable_hash(candidate)
     assert plan["candidate_state_hash"] != current.get_json()["state_hash"]
 
